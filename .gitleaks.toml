@@ -1,0 +1,76 @@
+# Gitleaks configuration for tech-office
+# Generated for Gitleaks v8.30.1
+# Docs: https://github.com/gitleaks/gitleaks?tab=readme-ov-file#configuration
+
+title = "tech-office gitleaks config"
+
+# --- Global Allowlist ---
+[allowlist]
+  description = "Allowlist for known false positives: Firebase public keys, example placeholders, and test fixtures"
+
+  # Stopwords — strings that, if present in the finding, cause it to be ignored
+  stopwords = [
+    "replace-with-",           # Example secrets in K8s/ENV templates
+    "explicit-secret-",        # Test fixture secrets in voice/config_test.go
+    "example",                 # Generic example marker
+  ]
+
+  # Paths to skip entirely
+  paths = [
+    # Firebase config files — contain public API keys by design
+    '''google-services\.json$''',
+    '''GoogleService-Info\.plist$''',
+    '''firebase-config\.json$''',
+
+    # K8s example/template secrets
+    '''secrets\.example\.yaml$''',
+
+    # Environment example files
+    '''\.env\.example$''',
+    '''prod\.env\.example$''',
+
+    # Podfile.lock — contains Expo library checksums, not secrets
+    '''Podfile\.lock$''',
+
+    # Spec/contract documentation with example payloads
+    '''specs/.*\.md$''',
+
+    # Package manager lock files
+    '''pnpm-lock\.yaml$''',
+
+    # Go sum files
+    '''go\.sum$''',
+
+    # Generated files
+    '''\.pb\.go$''',
+  ]
+
+  # Regex patterns — lines matching these regexes are ignored
+  regexes = [
+    # npm package versions that look like API keys (e.g., buf build timestamps)
+    '''"@buf/.*: "\d+\.\d+\.\d+-\d+-[a-f0-9]+\.\d+"''',
+    # Template placeholder patterns
+    '''replace-with-.*''',
+    # Test fixture markers
+    '''explicit-secret-\d+''',
+  ]
+
+  # Specific known fingerprints to ignore (immutable history findings we've reviewed)
+  commits = [
+    # commit 4f756e19 — reviewed: Firebase keys are public, examples are placeholders, specs are test data
+    "4f756e197a50aa40c485b6a6e2b320c5e70de6f8",
+  ]
+
+# --- Rules: Only override rules that we need to customize ---
+# We keep all built-in rules active but allowlist the false-positive patterns above
+[rules]
+  # Gitleaks comes with ~150 built-in rules that are all active by default.
+  # We don't disable any — the allowlist section above handles our false positives.
+  # If you need to add project-specific detection rules, add them here.
+
+  # Example: detect internal service tokens with a specific prefix
+  # [[rules]]
+  #   id = "tech-office-service-token"
+  #   description = "Internal service token pattern"
+  #   regex = '''tech-office_[a-zA-Z0-9]{32}'''
+  #   tags = ["token", "tech-office"]

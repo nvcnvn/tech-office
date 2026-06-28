@@ -1,0 +1,433 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// FileService provides file operations including security validation,
+// access control, search, and PDF conversion.
+//
+// ARCHITECTURE NOTE - Domain-Owned Upload Pattern:
+// FileService DOES NOT provide context-based upload RPCs (chat attachments, project files, etc.)
+// to prevent circular dependencies. Domain services own their upload flows:
+// - Chat attachments: ChatFileService.RequestChannelFileUpload (see chat_files.proto)
+// - Department docs: DocsService.RequestDepartmentFileUpload (future)
+// - Project files: ProjectService.RequestProjectFileUpload (future)
+//
+// FileService ONLY provides avatar upload (no context, public scope, simplified flow).
+// See ARCHITECTURE-REFACTOR.md for full rationale.
+service FileService {
+  rpc GetDownloadUrl(GetDownloadUrlRequest) returns (GetDownloadUrlResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.download"]
+    };
+  }
+
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.viewMetadata"]
+    };
+  }
+
+  rpc GetFileMetadataBatch(GetFileMetadataBatchRequest) returns (GetFileMetadataBatchResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.viewMetadata"]
+    };
+  }
+
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.list"]
+    };
+  }
+
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.delete"]
+    };
+  }
+
+  rpc BatchDeleteFiles(BatchDeleteFilesRequest) returns (BatchDeleteFilesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.delete"]
+    };
+  }
+
+  rpc GetQuota(GetQuotaRequest) returns (GetQuotaResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.viewQuota"]
+    };
+  }
+
+  rpc UpdateQuota(UpdateQuotaRequest) returns (UpdateQuotaResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.updateQuota"]
+    };
+  }
+
+  // ValidateFile checks file type integrity using magic byte detection.
+  // Returns validation result (verified, warning, failed) without blocking upload.
+  // This RPC is called AFTER file is uploaded to R2 to validate type matches MIME type claim.
+  rpc ValidateFile(ValidateFileRequest) returns (ValidateFileResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.validate"]
+    };
+  }
+
+  // SetFileAccessRule creates or updates access control rules for a file.
+  // Links file to upload context (channel, project, etc.) and defines access scope.
+  // Only file uploader or organization admin can set access rules.
+  rpc SetFileAccessRule(SetFileAccessRuleRequest) returns (SetFileAccessRuleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.manageAccess"]
+    };
+  }
+
+  // CheckFileAccess verifies if current user can access a specific file.
+  // Checks context membership (channel, project, department) and access scope.
+  // Returns access decision and reason for denial if applicable.
+  rpc CheckFileAccess(CheckFileAccessRequest) returns (CheckFileAccessResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.manageAccess"]
+    };
+  }
+
+  // SearchFiles searches across filenames and content using full-text search.
+  // Results filtered by user's access permissions (context membership).
+  // Uses PGroonga for multilingual search with fuzzy matching.
+  rpc SearchFiles(SearchFilesRequest) returns (SearchFilesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.search"]
+    };
+  }
+
+  // GetPDFConversionStatus checks status of PDF conversion for an office document.
+  // Returns conversion status, download URL for PDF, or error message if failed.
+  rpc GetPDFConversionStatus(GetPDFConversionStatusRequest) returns (GetPDFConversionStatusResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.pdfConversion"]
+    };
+  }
+
+  // TriggerPDFConversion manually triggers PDF conversion for an office document.
+  // Usually conversion happens automatically on upload, but this allows retry.
+  // Only file uploader or organization admin can trigger conversion.
+  rpc TriggerPDFConversion(TriggerPDFConversionRequest) returns (TriggerPDFConversionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.pdfConversion"]
+    };
+  }
+
+  // GetContentIndexStatus checks status of content extraction and indexing.
+  // Returns indexing status or error message if extraction failed.
+  rpc GetContentIndexStatus(GetContentIndexStatusRequest) returns (GetContentIndexStatusResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["files.contentIndex"]
+    };
+  }
+}
+
+// ========== Validation Messages ==========
+
+message ValidateFileRequest {
+  string file_id = 1;  // File to validate
+}
+
+message ValidateFileResponse {
+  FileValidationResult validation_result = 1;
+}
+
+message FileValidationResult {
+  ValidationStatus status = 1;
+  string message = 2;  // Human-readable message (e.g., "Type mismatch: declared PDF, detected PNG")
+  string declared_mime_type = 3;
+  string detected_mime_type = 4;
+}
+
+enum ValidationStatus {
+  VALIDATION_STATUS_UNSPECIFIED = 0;
+  VALIDATION_STATUS_VERIFIED = 1;    // Type matches declared MIME type
+  VALIDATION_STATUS_WARNING = 2;     // Type mismatch but upload allowed
+  VALIDATION_STATUS_FAILED = 3;      // Validation error (corrupted file, etc.)
+  VALIDATION_STATUS_SKIPPED = 4;     // No validation performed
+}
+
+// ========== Access Control Messages ==========
+
+message SetFileAccessRuleRequest {
+  string file_id = 1;
+  FileContextType context_type = 2;
+  string context_id = 3;  // ID of channel, project, etc.
+  FileAccessScope access_scope = 4;
+}
+
+message SetFileAccessRuleResponse {
+  FileAccessRule access_rule = 1;
+}
+
+message CheckFileAccessRequest {
+  string file_id = 1;
+}
+
+message CheckFileAccessResponse {
+  bool has_access = 1;
+  string denial_reason = 2;  // Human-readable reason if has_access = false
+  FileAccessRule access_rule = 3;  // Context information if has_access = true
+}
+
+message FileAccessRule {
+  string id = 1;
+  string file_id = 2;
+  FileContextType context_type = 3;
+  string context_id = 4;
+  FileAccessScope access_scope = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+enum FileContextType {
+  FILE_CONTEXT_TYPE_UNSPECIFIED = 0;
+  FILE_CONTEXT_TYPE_CHAT_CHANNEL = 1;
+  FILE_CONTEXT_TYPE_PROJECT = 2;
+  FILE_CONTEXT_TYPE_DEPARTMENT_DOCS = 3;
+  FILE_CONTEXT_TYPE_CALENDAR_EVENT = 4;
+  FILE_CONTEXT_TYPE_SUPPORT_TICKET = 5;
+  FILE_CONTEXT_TYPE_CRM_DEAL = 6;
+}
+
+enum FileAccessScope {
+  FILE_ACCESS_SCOPE_UNSPECIFIED = 0;
+  FILE_ACCESS_SCOPE_PUBLIC = 1;      // All organization members
+  FILE_ACCESS_SCOPE_PRIVATE = 2;     // Context members only
+  FILE_ACCESS_SCOPE_DEPARTMENT = 3;  // Department members only
+}
+
+// ========== Search Messages ==========
+
+message SearchFilesRequest {
+  string query = 1;  // Search query (searches filename and content)
+  int32 limit = 2;   // Max results (default 50, max 100)
+  int32 offset = 3;  // Pagination offset
+  repeated FileContextType context_types = 4;  // Filter by context type (optional)
+}
+
+message SearchFilesResponse {
+  repeated FileSearchResult results = 1;
+  int32 total_count = 2;  // Total matching files (for pagination)
+  bool has_more = 3;      // Whether more results available
+}
+
+message FileSearchResult {
+  string file_id = 1;
+  string filename = 2;
+  int64 size_bytes = 3;
+  string mime_type = 4;
+  ValidationStatus validation_status = 5;
+  
+  // Context information
+  FileContextType context_type = 6;
+  string context_id = 7;
+  string context_display_name = 8;  // E.g., "Engineering Team Chat"
+  
+  // Search relevance
+  double relevance_score = 9;  // PGroonga relevance score
+  string excerpt = 10;         // Relevant excerpt from content (if content match)
+  
+  // Metadata
+  string uploaded_by_employee_id = 11;
+  string uploaded_by_name = 12;
+  google.protobuf.Timestamp uploaded_at = 13;
+}
+
+// ========== PDF Conversion Messages ==========
+
+message GetPDFConversionStatusRequest {
+  string file_id = 1;  // Original file ID
+}
+
+message GetPDFConversionStatusResponse {
+  PDFConversionInfo conversion_info = 1;
+}
+
+message TriggerPDFConversionRequest {
+  string file_id = 1;  // Original file ID
+}
+
+message TriggerPDFConversionResponse {
+  PDFConversionInfo conversion_info = 1;
+}
+
+message PDFConversionInfo {
+  string conversion_id = 1;
+  string original_file_id = 2;
+  ConversionStatus status = 3;
+  string pdf_download_url = 4;  // Presigned URL (ONLY in GetPDFConversionStatus response, NOT in metadata)
+  int64 pdf_size_bytes = 5;
+  string error_message = 6;     // Error if conversion failed
+  int32 duration_ms = 7;        // Conversion duration (if completed)
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+enum ConversionStatus {
+  CONVERSION_STATUS_UNSPECIFIED = 0;
+  CONVERSION_STATUS_PENDING = 1;      // Queued for conversion
+  CONVERSION_STATUS_IN_PROGRESS = 2;  // Currently converting
+  CONVERSION_STATUS_COMPLETED = 3;    // Conversion successful
+  CONVERSION_STATUS_FAILED = 4;       // Conversion failed
+}
+
+// ========== Content Indexing Messages ==========
+
+message GetContentIndexStatusRequest {
+  string file_id = 1;
+}
+
+message GetContentIndexStatusResponse {
+  ContentIndexInfo index_info = 1;
+}
+
+message ContentIndexInfo {
+  string index_id = 1;
+  string file_id = 2;
+  IndexingStatus status = 3;
+  ExtractionMethod extraction_method = 4;
+  string error_message = 5;     // Error if indexing failed
+  int32 duration_ms = 6;        // Indexing duration (if completed)
+  int32 text_length = 7;        // Length of extracted text (if completed)
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+enum IndexingStatus {
+  INDEXING_STATUS_UNSPECIFIED = 0;
+  INDEXING_STATUS_PENDING = 1;      // Queued for indexing
+  INDEXING_STATUS_IN_PROGRESS = 2;  // Currently extracting text
+  INDEXING_STATUS_COMPLETED = 3;    // Indexing successful
+  INDEXING_STATUS_FAILED = 4;       // Indexing failed
+}
+
+enum ExtractionMethod {
+  EXTRACTION_METHOD_UNSPECIFIED = 0;
+  EXTRACTION_METHOD_OFFICE_PARSER = 1;  // DOCX/XLSX/PPTX parser
+  EXTRACTION_METHOD_PDF_PARSER = 2;     // PDF text extraction
+  EXTRACTION_METHOD_IMAGE_OCR = 3;      // OCR for images (future)
+  EXTRACTION_METHOD_PLAIN_TEXT = 4;     // Plain text files
+}
+
+// ============================================================================
+// Shared Data Models
+// ============================================================================
+
+message FileMetadata {
+  string id = 1;
+  string original_filename = 2;
+  string storage_key = 3;
+  int64 size_bytes = 4;
+  string mime_type = 5;
+  string validation_status = 6;   // pending, verified, warning, failed, skipped
+  string validation_message = 7;
+  string detected_mime_type = 8;
+  string upload_context = 9;
+  string uploaded_by_employee_id = 10;
+  bool is_deleted = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  google.protobuf.Timestamp uploaded_at = 13;  // Feature 014 compatibility
+  ConversionStatus pdf_conversion_status = 14;  // Optional: PDF conversion status (pending/in_progress/completed/failed) WITHOUT URL for security
+}
+
+message FileDeletionInfo {
+  google.protobuf.Timestamp deleted_at = 1;
+  string deleted_by_employee_id = 2;
+  string deleted_by_employee_name = 3;
+  string deletion_reason = 4;
+}
+
+message GetDownloadUrlRequest {
+  string file_id = 1;
+}
+
+message GetDownloadUrlResponse {
+  string download_url = 1;
+  google.protobuf.Timestamp expires_at = 2;
+  bool is_deleted = 3;
+  FileDeletionInfo deletion_info = 4;
+}
+
+message GetFileMetadataRequest {
+  string file_id = 1;
+}
+
+message GetFileMetadataResponse {
+  FileMetadata file = 1;
+  bool is_deleted = 2;
+  FileDeletionInfo deletion_info = 3;
+}
+
+message GetFileMetadataBatchRequest {
+  repeated string file_ids = 1;
+}
+
+message GetFileMetadataBatchResponse {
+  repeated FileMetadata files = 1;
+  map<string, FileDeletionInfo> deletion_info = 2;  // Map file_id -> deletion info for deleted files
+}
+
+message ListFilesRequest {
+  string upload_context = 1;
+  string sort_by = 2;
+  string sort_order = 3;
+  int32 page_size = 4;
+  int32 page = 5;
+}
+
+message ListFilesResponse {
+  repeated FileMetadata files = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+message DeleteFileRequest {
+  string file_id = 1;
+  string deletion_reason = 2;
+}
+
+message DeleteFileResponse {
+  bool success = 1;
+  int64 reclaimed_bytes = 2;
+}
+
+message BatchDeleteFilesRequest {
+  repeated string file_ids = 1;
+  string deletion_reason = 2;
+}
+
+message BatchDeleteFilesResponse {
+  int32 deleted_count = 1;
+  int64 reclaimed_bytes = 2;
+  repeated string failed_file_ids = 3;
+}
+
+message GetQuotaRequest {}
+
+message GetQuotaResponse {
+  QuotaInfo quota = 1;
+}
+
+message UpdateQuotaRequest {
+  optional int64 quota_bytes = 1;
+  optional int64 max_file_size_bytes = 2;
+}
+
+message UpdateQuotaResponse {
+  QuotaInfo quota = 1;
+}
+
+message QuotaInfo {
+  optional int64 quota_bytes = 1;
+  int64 max_file_size_bytes = 2;
+  int64 current_usage_bytes = 3;
+  double usage_percentage = 4;
+  bool is_quota_exceeded = 5;
+}

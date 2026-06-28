@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: clamav
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: clamav
+  template:
+    metadata:
+      labels:
+        app: clamav
+    spec:
+      containers:
+        - name: clamav
+          image: clamav/clamav-debian:latest
+          ports:
+            - name: tcp
+              containerPort: 3310
+          env:
+            - name: CLAMAV_NO_FRESHCLAM_ON_STARTUP
+              value: "false"
+          readinessProbe:
+            tcpSocket:
+              port: tcp
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 5
+          livenessProbe:
+            tcpSocket:
+              port: tcp
+            initialDelaySeconds: 45
+            periodSeconds: 30
+            failureThreshold: 4
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"

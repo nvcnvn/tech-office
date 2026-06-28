@@ -1,0 +1,96 @@
+appId: com.devguards.TechOffice
+name: "Navigation Shared Routes Smoke"
+tags:
+  - navigation
+  - smoke
+  - shared-routes
+env:
+  TASK_PROJECT_ID: ${MAESTRO_NAV_TASK_PROJECT_ID}
+  TASK_ID: ${MAESTRO_NAV_TASK_ID}
+  CHANNEL_ID: ${MAESTRO_NAV_CHANNEL_ID}
+---
+- runFlow: "auth/signin.yaml"
+
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "menu-navigation-debug"
+- tapOn:
+    id: "navigation-debug-project-id"
+- eraseText: 64
+- inputText: ${TASK_PROJECT_ID}
+- tapOn:
+    id: "navigation-debug-task-id"
+- eraseText: 64
+- inputText: ${TASK_ID}
+- tapOn: "Shared Route Smoke"
+
+- tapOn:
+    id: "navigation-debug-open-task"
+- extendedWaitUntil:
+    visible:
+      id: "task-copy-canonical-link"
+    timeout: 10000
+- assertVisible:
+    id: "task-copy-canonical-link"
+
+- runFlow: "auth/signin.yaml"
+
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "menu-navigation-debug"
+- tapOn:
+    id: "navigation-debug-project-id"
+- eraseText: 64
+- inputText: ${TASK_PROJECT_ID}
+- tapOn:
+    id: "navigation-debug-task-id"
+- eraseText: 64
+- inputText: ${TASK_ID}
+- tapOn:
+    id: "navigation-debug-channel-id"
+- eraseText: 64
+- inputText: ${CHANNEL_ID}
+- tapOn: "Shared Route Smoke"
+
+- tapOn:
+    id: "navigation-debug-open-channel"
+- extendedWaitUntil:
+    visible:
+      id: "channel-header-title"
+    timeout: 10000
+- assertVisible: "Tasks"
+- tapOn: "Tasks"
+- extendedWaitUntil:
+    visible:
+      id: "task-copy-canonical-link"
+    timeout: 10000
+
+- runFlow: "auth/signin.yaml"
+
+- tapOn:
+    id: "tab-more"
+- tapOn:
+    id: "menu-navigation-debug"
+- tapOn:
+    id: "navigation-debug-project-id"
+- eraseText: 64
+- inputText: ${TASK_PROJECT_ID}
+- tapOn:
+    id: "navigation-debug-task-id"
+- eraseText: 64
+- inputText: ${TASK_ID}
+- tapOn: "Shared Route Smoke"
+
+- tapOn:
+    id: "navigation-debug-open-alert-task"
+- extendedWaitUntil:
+    visible:
+      id: "task-copy-canonical-link"
+    timeout: 10000
+- assertVisible: "Alerts"
+- tapOn: "Alerts"
+- extendedWaitUntil:
+    visible: "Alerts"
+    timeout: 10000

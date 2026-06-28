@@ -1,0 +1,154 @@
+// Employee Import Extensions for IAMService
+// Protocol Buffer Definition for Tech Office Employee Import Feature
+//
+// These message types and methods should be added to backend/rpc/v1/iam.proto
+// This file is NOT a standalone service - it documents the additions to IAMService
+
+syntax = "proto3";
+
+package rpc.v1;
+
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// ===============================================
+// ADD THESE METHODS TO IAMService in iam.proto:
+// ===============================================
+//
+// service IAMService {
+//   // Existing methods...
+//   rpc VerifyUserEmail(VerifyUserEmailRequest) returns (VerifyUserEmailResponse);
+//   
+//   // Employee Import Methods (add these)
+//   rpc ParseEmployeeFile(ParseEmployeeFileRequest) returns (ParseEmployeeFileResponse) {
+//     option (rpc.v1.access_control) = {
+//       required_roles: [ROLE_OWNER, ROLE_OPERATOR]
+//     };
+//   }
+//   
+//   rpc PreviewEmployeeImport(PreviewEmployeeImportRequest) returns (PreviewEmployeeImportResponse) {
+//     option (rpc.v1.access_control) = {
+//       required_roles: [ROLE_OWNER, ROLE_OPERATOR]
+//     };
+//   }
+//   
+//   rpc ExecuteEmployeeImport(ExecuteEmployeeImportRequest) returns (ExecuteEmployeeImportResponse) {
+//     option (rpc.v1.access_control) = {
+//       required_roles: [ROLE_OWNER, ROLE_OPERATOR]
+//     };
+//   }
+// }
+
+// ===============================================
+// ParseEmployeeFile - Parse .xlsx file
+// ===============================================
+
+message ParseEmployeeFileRequest {
+  bytes file_content = 1;         // .xlsx file bytes
+  string organization_id = 2;      // Multi-tenant context (UUID)
+}
+
+message ParseEmployeeFileResponse {
+  repeated EmployeeData employees = 1;  // Parsed employee records (max 100)
+  repeated string parse_errors = 2;     // File-level errors (e.g., "Invalid format", "Missing column: Email")
+  bool success = 3;                     // Whether parsing completed without errors
+}
+
+// ===============================================
+// PreviewEmployeeImport - Validate & check duplicates
+// ===============================================
+
+message PreviewEmployeeImportRequest {
+  repeated EmployeeData employees = 1;  // Max 100 employees
+  string organization_id = 2;           // Multi-tenant context (UUID)
+}
+
+message PreviewEmployeeImportResponse {
+  repeated EmployeePreviewItem items = 1;  // Per-employee validation results
+  ImportStats stats = 2;                    // Summary statistics
+}
+
+message EmployeePreviewItem {
+  EmployeeData employee = 1;              // The employee data
+  bool is_duplicate = 2;                  // Email already exists in this org
+  string duplicate_reason = 3;            // E.g., "Email john@example.com already exists"
+  repeated string validation_errors = 4;  // Field-level errors (e.g., "Invalid email format")
+  bool will_be_imported = 5;              // False if duplicate or has validation errors
+}
+
+message ImportStats {
+  int32 total_count = 1;        // Total employees in request
+  int32 valid_count = 2;        // Employees that will be imported
+  int32 duplicate_count = 3;    // Duplicates (will be skipped)
+  int32 invalid_count = 4;      // Invalid records (will be skipped)
+}
+
+// ===============================================
+// ExecuteEmployeeImport - Perform actual import
+// Uses goroutines for parallel Zitadel calls
+// ===============================================
+
+message ExecuteEmployeeImportRequest {
+  repeated EmployeeData employees = 1;  // Only valid employees from preview
+  string organization_id = 2;           // Multi-tenant context (UUID)
+}
+
+message ExecuteEmployeeImportResponse {
+  int32 total_attempted = 1;              // Number of employees attempted
+  int32 success_count = 2;                // Successfully imported
+  int32 failed_count = 3;                 // Failed to import
+  repeated EmployeeImportResult results = 4;  // Per-employee results
+}
+
+message EmployeeImportResult {
+  EmployeeData employee = 1;      // The employee data
+  bool success = 2;               // Whether this employee was imported successfully
+  string identity_id = 3;         // UUID if successful (empty if failed)
+  string zitadel_user_id = 4;     // Zitadel user ID if successful (empty if failed)
+  string error_message = 5;       // Error description if failed (empty if successful)
+  ErrorCode error_code = 6;       // Structured error code if failed
+}
+
+// ===============================================
+// Core Data Structures
+// ===============================================
+
+message EmployeeData {
+  string email = 1;           // Required: user@example.com
+  string given_name = 2;      // Required: First name
+  string family_name = 3;     // Required: Last name
+  int32 row_number = 4;       // Optional: Source row number for error reporting
+}
+
+// ===============================================
+// Enums
+// ===============================================
+
+enum ErrorCode {
+  ERROR_CODE_UNSPECIFIED = 0;
+  ERROR_CODE_VALIDATION = 1;          // Validation failed
+  ERROR_CODE_DUPLICATE = 2;           // Email already exists
+  ERROR_CODE_ZITADEL_CREATE = 3;      // Zitadel CreateUser failed
+  ERROR_CODE_DB_INSERT = 4;           // Database insert failed
+  ERROR_CODE_ROLE_ASSIGNMENT = 5;     // Role assignment failed
+  ERROR_CODE_TRANSACTION = 6;         // Transaction commit failed
+  ERROR_CODE_PERMISSION_DENIED = 7;   // User lacks 'owner' role
+  ERROR_CODE_BATCH_SIZE_EXCEEDED = 8; // More than 100 employees
+}
+
+// ===============================================
+// Implementation Notes
+// ===============================================
+//
+// 1. All methods use existing IAM auth interceptor for 'owner' role check
+// 2. ExecuteEmployeeImport uses goroutines (max 10 concurrent) for Zitadel calls
+// 3. Each employee gets individual DB transaction with compensation on failure
+// 4. Zitadel sends verification emails automatically after CreateUser
+// 5. Multi-tenant isolation via organization_id foreign key constraint
+//
+// Error Handling Strategy:
+// - Zitadel CreateUser fails → Skip DB insert, record in results
+// - DB insert fails → Delete Zitadel user (compensation), record error
+// - Role assignment fails → Rollback DB tx, delete Zitadel user, record error
+// - Partial success supported → Return detailed per-employee results

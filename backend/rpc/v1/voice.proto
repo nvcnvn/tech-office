@@ -1,0 +1,332 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+service VoiceService {
+  rpc StartVoiceCall(StartVoiceCallRequest) returns (StartVoiceCallResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.voiceCall"]
+    };
+  }
+
+  rpc GetActiveVoiceCall(GetActiveVoiceCallRequest) returns (GetActiveVoiceCallResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewChannel"]
+    };
+  }
+
+  rpc JoinVoiceCall(JoinVoiceCallRequest) returns (JoinVoiceCallResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.voiceCall"]
+    };
+  }
+
+  rpc LeaveVoiceCall(LeaveVoiceCallRequest) returns (LeaveVoiceCallResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.voiceCall"]
+    };
+  }
+
+  rpc EndVoiceCall(EndVoiceCallRequest) returns (EndVoiceCallResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.voiceCall"]
+    };
+  }
+
+  rpc InviteToVoiceCall(InviteToVoiceCallRequest) returns (InviteToVoiceCallResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.voiceCall"]
+    };
+  }
+
+  rpc RespondToVoiceCallInvite(RespondToVoiceCallInviteRequest) returns (RespondToVoiceCallInviteResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.voiceCall"]
+    };
+  }
+
+  rpc ListCallRecords(ListCallRecordsRequest) returns (ListCallRecordsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewMessages"]
+    };
+  }
+
+  rpc GetCallRecord(GetCallRecordRequest) returns (GetCallRecordResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewMessages"]
+    };
+  }
+
+  rpc RequestVoiceMessageUpload(RequestVoiceMessageUploadRequest) returns (RequestVoiceMessageUploadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.sendMessage"]
+    };
+  }
+
+  rpc ConfirmVoiceMessageUpload(ConfirmVoiceMessageUploadRequest) returns (ConfirmVoiceMessageUploadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.sendMessage"]
+    };
+  }
+
+  rpc CancelVoiceMessage(CancelVoiceMessageRequest) returns (CancelVoiceMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.sendMessage"]
+    };
+  }
+}
+
+message StartVoiceCallRequest {
+  string channel_id = 1;
+  bool request_recording = 2;
+}
+
+message StartVoiceCallResponse {
+  VoiceCallSession call = 1;
+  VoiceJoinCredentials join_credentials = 2;
+}
+
+message GetActiveVoiceCallRequest {
+  string channel_id = 1;
+}
+
+message GetActiveVoiceCallResponse {
+  VoiceCallSession call = 1;
+  bool has_active_call = 2;
+}
+
+message JoinVoiceCallRequest {
+  string call_id = 1;
+}
+
+message JoinVoiceCallResponse {
+  VoiceCallSession call = 1;
+  VoiceJoinCredentials join_credentials = 2;
+}
+
+message LeaveVoiceCallRequest {
+  string call_id = 1;
+}
+
+message LeaveVoiceCallResponse {
+  VoiceCallSession call = 1;
+}
+
+message EndVoiceCallRequest {
+  string call_id = 1;
+}
+
+message EndVoiceCallResponse {
+  VoiceCallSession call = 1;
+}
+
+message InviteToVoiceCallRequest {
+  string call_id = 1;
+  repeated string employee_ids = 2;
+}
+
+message InviteToVoiceCallResponse {
+  VoiceCallSession call = 1;
+  repeated VoiceCallInvitation invitations = 2;
+}
+
+message RespondToVoiceCallInviteRequest {
+  string invitation_id = 1;
+  VoiceInviteResponse response = 2;
+}
+
+message RespondToVoiceCallInviteResponse {
+  VoiceCallInvitation invitation = 1;
+  VoiceJoinCredentials join_credentials = 2;
+}
+
+message ListCallRecordsRequest {
+  string channel_id = 1;
+  string cursor = 2;
+  int32 limit = 3;
+}
+
+message ListCallRecordsResponse {
+  repeated VoiceCallRecord records = 1;
+  string next_cursor = 2;
+}
+
+message GetCallRecordRequest {
+  string call_id = 1;
+}
+
+message GetCallRecordResponse {
+  VoiceCallRecord record = 1;
+}
+
+message RequestVoiceMessageUploadRequest {
+  string channel_id = 1;
+  string client_deduplication_key = 2;
+  string filename = 3;
+  string mime_type = 4;
+  int64 size_bytes = 5;
+  int64 expected_duration_ms = 6;
+}
+
+message RequestVoiceMessageUploadResponse {
+  string voice_message_id = 1;
+  string file_id = 2;
+  string upload_url = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message ConfirmVoiceMessageUploadRequest {
+  string voice_message_id = 1;
+  string file_id = 2;
+  string client_deduplication_key = 3;
+  int64 duration_ms = 4;
+  repeated float waveform_peaks = 5;
+}
+
+message ConfirmVoiceMessageUploadResponse {
+  VoiceMessage voice_message = 1;
+}
+
+message CancelVoiceMessageRequest {
+  string voice_message_id = 1;
+}
+
+message CancelVoiceMessageResponse {
+  VoiceMessage voice_message = 1;
+}
+
+message VoiceJoinCredentials {
+  reserved 5, 6;
+  reserved "ice_servers", "ice_transport_policy";
+
+  string livekit_url = 1;
+  string livekit_token = 2;
+  string room_name = 3;
+  google.protobuf.Timestamp expires_at = 4;
+}
+
+message VoiceCallSession {
+  string id = 1;
+  string channel_id = 2;
+  string initiator_employee_id = 3;
+  VoiceCallState state = 4;
+  VoiceCallOutcome outcome = 5;
+  repeated VoiceCallParticipant participants = 6;
+  bool recording_permitted = 7;
+  google.protobuf.Timestamp started_at = 8;
+  google.protobuf.Timestamp ended_at = 9;
+}
+
+message VoiceCallRecord {
+  VoiceCallSession call = 1;
+  repeated VoiceCallArtifact artifacts = 2;
+}
+
+message VoiceCallParticipant {
+  string employee_id = 1;
+  VoiceCallParticipantState state = 2;
+  google.protobuf.Timestamp joined_at = 3;
+  google.protobuf.Timestamp left_at = 4;
+}
+
+message VoiceCallInvitation {
+  string id = 1;
+  string call_id = 2;
+  string invitee_employee_id = 3;
+  VoiceInvitationStatus status = 4;
+  google.protobuf.Timestamp expires_at = 5;
+}
+
+message VoiceCallArtifact {
+  string id = 1;
+  VoiceArtifactType type = 2;
+  VoiceArtifactStatus status = 3;
+  string file_id = 4;
+  string mime_type = 5;
+  int64 duration_ms = 6;
+}
+
+message VoiceMessage {
+  string id = 1;
+  string channel_id = 2;
+  string message_id = 3;
+  string file_id = 4;
+  string sender_employee_id = 5;
+  VoiceMessageStatus status = 6;
+  int64 duration_ms = 7;
+  string mime_type = 8;
+  repeated float waveform_peaks = 9;
+}
+
+enum VoiceCallState {
+  VOICE_CALL_STATE_UNSPECIFIED = 0;
+  VOICE_CALL_STATE_RINGING = 1;
+  VOICE_CALL_STATE_ACTIVE = 2;
+  VOICE_CALL_STATE_ENDING = 3;
+  VOICE_CALL_STATE_ENDED = 4;
+}
+
+enum VoiceCallOutcome {
+  VOICE_CALL_OUTCOME_UNSPECIFIED = 0;
+  VOICE_CALL_OUTCOME_ANSWERED = 1;
+  VOICE_CALL_OUTCOME_MISSED = 2;
+  VOICE_CALL_OUTCOME_DECLINED = 3;
+  VOICE_CALL_OUTCOME_CANCELLED = 4;
+  VOICE_CALL_OUTCOME_COMPLETED = 5;
+}
+
+enum VoiceCallParticipantState {
+  VOICE_CALL_PARTICIPANT_STATE_UNSPECIFIED = 0;
+  VOICE_CALL_PARTICIPANT_STATE_INVITED = 1;
+  VOICE_CALL_PARTICIPANT_STATE_RINGING = 2;
+  VOICE_CALL_PARTICIPANT_STATE_JOINING = 3;
+  VOICE_CALL_PARTICIPANT_STATE_JOINED = 4;
+  VOICE_CALL_PARTICIPANT_STATE_DISCONNECTED = 5;
+  VOICE_CALL_PARTICIPANT_STATE_LEFT = 6;
+  VOICE_CALL_PARTICIPANT_STATE_DECLINED = 7;
+  VOICE_CALL_PARTICIPANT_STATE_REMOVED = 8;
+}
+
+enum VoiceInviteResponse {
+  VOICE_INVITE_RESPONSE_UNSPECIFIED = 0;
+  VOICE_INVITE_RESPONSE_ACCEPT = 1;
+  VOICE_INVITE_RESPONSE_DECLINE = 2;
+}
+
+enum VoiceInvitationStatus {
+  VOICE_INVITATION_STATUS_UNSPECIFIED = 0;
+  VOICE_INVITATION_STATUS_PENDING = 1;
+  VOICE_INVITATION_STATUS_ACCEPTED = 2;
+  VOICE_INVITATION_STATUS_DECLINED = 3;
+  VOICE_INVITATION_STATUS_EXPIRED = 4;
+  VOICE_INVITATION_STATUS_REVOKED = 5;
+}
+
+enum VoiceArtifactType {
+  VOICE_ARTIFACT_TYPE_UNSPECIFIED = 0;
+  VOICE_ARTIFACT_TYPE_RECORDING = 1;
+  VOICE_ARTIFACT_TYPE_TRANSCRIPT = 2;
+}
+
+enum VoiceArtifactStatus {
+  VOICE_ARTIFACT_STATUS_UNSPECIFIED = 0;
+  VOICE_ARTIFACT_STATUS_PENDING = 1;
+  VOICE_ARTIFACT_STATUS_PROCESSING = 2;
+  VOICE_ARTIFACT_STATUS_READY = 3;
+  VOICE_ARTIFACT_STATUS_UNAVAILABLE = 4;
+  VOICE_ARTIFACT_STATUS_FAILED = 5;
+}
+
+enum VoiceMessageStatus {
+  VOICE_MESSAGE_STATUS_UNSPECIFIED = 0;
+  VOICE_MESSAGE_STATUS_REQUESTED = 1;
+  VOICE_MESSAGE_STATUS_UPLOADING = 2;
+  VOICE_MESSAGE_STATUS_POSTED = 3;
+  VOICE_MESSAGE_STATUS_FAILED = 4;
+  VOICE_MESSAGE_STATUS_CANCELLED = 5;
+}

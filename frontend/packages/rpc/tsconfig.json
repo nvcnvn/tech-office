@@ -1,0 +1,17 @@
+{
+    "compilerOptions": {
+        "target": "es2018",
+        "module": "esnext",
+        "moduleResolution": "bundler",
+        "declaration": true,
+        "outDir": "dst",
+        "strict": true,
+        "esModuleInterop": true,
+        "allowJs": true,
+        "sourceMap": true,
+    },
+    "include": [
+        "index.ts",
+        "rpc/v1/*.ts"
+    ]
+}

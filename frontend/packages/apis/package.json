@@ -1,0 +1,29 @@
+{
+  "name": "apis",
+  "version": "1.0.0",
+  "react-native": "index.ts",
+  "main": "dst/index.js",
+  "types": "dst/index.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.15.1",
+  "dependencies": {
+    "@buf/googleapis_googleapis.bufbuild_es": "2.10.0-20251009205305-72c8614f3bd0.1",
+    "@bufbuild/protobuf": "^2.10.0",
+    "@connectrpc/connect": "^2.1.0",
+    "@connectrpc/connect-web": "^2.1.0",
+    "firebase": "^12.3.0",
+    "rpc": "workspace:*"
+  },
+  "devDependencies": {
+    "@mui/icons-material": "^5.16.7",
+    "@mui/material": "^5.16.7",
+    "@types/react": "^19.2.14",
+    "react": "^19.2.0",
+    "typescript": "^5.0.0"
+  }
+}

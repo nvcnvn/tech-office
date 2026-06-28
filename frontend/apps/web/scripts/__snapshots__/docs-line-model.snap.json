@@ -1,0 +1,127 @@
+{
+  "markdownModels": {
+    "paragraphsAndBlankLines": {
+      "lineCount": 4,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "lineStart": 0,
+          "lineCount": 2
+        },
+        {
+          "kind": "paragraph",
+          "lineStart": 2,
+          "lineCount": 1
+        },
+        {
+          "kind": "paragraph",
+          "lineStart": 3,
+          "lineCount": 1
+        }
+      ],
+      "rawLines": [
+        "Intro",
+        "Second visual line",
+        "",
+        "After blank"
+      ]
+    },
+    "richMarkdownBlocks": {
+      "lineCount": 9,
+      "blocks": [
+        {
+          "kind": "heading",
+          "lineStart": 0,
+          "lineCount": 1
+        },
+        {
+          "kind": "paragraph",
+          "lineStart": 1,
+          "lineCount": 1
+        },
+        {
+          "kind": "listItem",
+          "lineStart": 2,
+          "lineCount": 1
+        },
+        {
+          "kind": "listItem",
+          "lineStart": 3,
+          "lineCount": 1
+        },
+        {
+          "kind": "blockquote",
+          "lineStart": 4,
+          "lineCount": 2
+        },
+        {
+          "kind": "codeBlock",
+          "lineStart": 6,
+          "lineCount": 2
+        },
+        {
+          "kind": "paragraph",
+          "lineStart": 8,
+          "lineCount": 1
+        }
+      ],
+      "rawLines": [
+        "# Title",
+        "Intro paragraph",
+        "- One",
+        "- Two",
+        "> Quote one",
+        "> Quote two",
+        "```",
+        "alpha",
+        "beta",
+        "```",
+        "After"
+      ]
+    },
+    "embedOccupiesOneAnchor": {
+      "lineCount": 3,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "lineStart": 0,
+          "lineCount": 1
+        },
+        {
+          "kind": "embed",
+          "lineStart": 1,
+          "lineCount": 1
+        },
+        {
+          "kind": "paragraph",
+          "lineStart": 2,
+          "lineCount": 1
+        }
+      ],
+      "rawLines": [
+        "Before",
+        "{{embed:/workspace/docs?slug=source&v=7#L3-L12}}",
+        "After"
+      ]
+    },
+    "trailingGeneratedNewline": {
+      "lineCount": 1,
+      "blocks": [
+        {
+          "kind": "paragraph",
+          "lineStart": 0,
+          "lineCount": 1
+        }
+      ],
+      "rawLines": [
+        "Only paragraph"
+      ]
+    }
+  },
+  "tipTapExtractions": {
+    "allLines": "Title\nIntro\nNext\n[embedded section]\nalpha\nbeta\nFirst item\nSecond item",
+    "embedThroughCode": "[embedded section]\nalpha\nbeta",
+    "listOnly": "First item\nSecond item",
+    "outOfRange": null
+  }
+}

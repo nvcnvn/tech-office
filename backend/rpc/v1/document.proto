@@ -1,0 +1,896 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// DocumentService provides document management operations
+service DocumentService {
+  // CreateDocument creates a new document (root or child)
+  rpc CreateDocument(CreateDocumentRequest) returns (CreateDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.create"]
+    };
+  }
+
+  // GetDocument retrieves a document by ID or slug
+  rpc GetDocument(GetDocumentRequest) returns (GetDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+
+  // UpdateDocument updates document content and metadata
+  rpc UpdateDocument(UpdateDocumentRequest) returns (UpdateDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.update"]
+    };
+  }
+
+  // DeleteDocument soft-deletes a document (orphans children)
+  rpc DeleteDocument(DeleteDocumentRequest) returns (DeleteDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.delete"]
+    };
+  }
+
+  // ListDocuments lists documents with pagination and filters
+  rpc ListDocuments(ListDocumentsRequest) returns (ListDocumentsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+
+  // GetDocumentTree retrieves document hierarchy
+  rpc GetDocumentTree(GetDocumentTreeRequest) returns (GetDocumentTreeResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+
+  // SearchDocuments performs full-text search across documents
+  rpc SearchDocuments(SearchDocumentsRequest) returns (SearchDocumentsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+
+  // UpdateDocumentStatus changes document status (active/outdated/archived)
+  rpc UpdateDocumentStatus(UpdateDocumentStatusRequest) returns (UpdateDocumentStatusResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.update"]
+    };
+  }
+
+  // ResolveSlug resolves a slug to current document (handles redirects)
+  rpc ResolveSlug(ResolveSlugRequest) returns (ResolveSlugResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+}
+
+// DocumentVersionService provides version history operations
+service DocumentVersionService {
+  // ListVersions lists version history for a document
+  rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.viewVersions"]
+    };
+  }
+
+  // GetVersion retrieves a specific version
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.viewVersions"]
+    };
+  }
+
+  // GetVersionDiff computes diff between two versions
+  rpc GetVersionDiff(GetVersionDiffRequest) returns (GetVersionDiffResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.viewVersions"]
+    };
+  }
+
+  // GetBlame computes line-by-line attribution (git blame style)
+  rpc GetBlame(GetBlameRequest) returns (GetBlameResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.viewVersions"]
+    };
+  }
+}
+
+// DocumentAccessService provides permission management
+service DocumentAccessService {
+  // SetAccess grants or updates access for a user/department
+  rpc SetAccess(SetAccessRequest) returns (SetAccessResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.manageAccess"]
+    };
+  }
+
+  // RemoveAccess revokes access for a user/department
+  rpc RemoveAccess(RemoveAccessRequest) returns (RemoveAccessResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.manageAccess"]
+    };
+  }
+
+  // ListAccess lists all access grants for a document
+  rpc ListAccess(ListAccessRequest) returns (ListAccessResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.manageAccess"]
+    };
+  }
+
+  // CheckAccess checks if user has access to a document
+  rpc CheckAccess(CheckAccessRequest) returns (CheckAccessResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.manageAccess"]
+    };
+  }
+}
+
+// DocumentFollowerService provides follow/notification subscription
+service DocumentFollowerService {
+  // FollowDocument subscribes to document updates
+  rpc FollowDocument(FollowDocumentRequest) returns (FollowDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.follow"]
+    };
+  }
+
+  // UnfollowDocument unsubscribes from document updates
+  rpc UnfollowDocument(UnfollowDocumentRequest) returns (UnfollowDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.follow"]
+    };
+  }
+
+  // ListFollowedDocuments lists documents the user follows
+  rpc ListFollowedDocuments(ListFollowedDocumentsRequest) returns (ListFollowedDocumentsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.follow"]
+    };
+  }
+}
+
+// CommentService provides inline commenting
+service CommentService {
+  // AddComment adds an inline comment to a document block
+  rpc AddComment(AddCommentRequest) returns (AddCommentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.comment"]
+    };
+  }
+
+  // AddCommentReply adds a reply to a comment
+  rpc AddCommentReply(AddCommentReplyRequest) returns (AddCommentReplyResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.comment"]
+    };
+  }
+
+  // ResolveComment marks a comment as resolved
+  rpc ResolveComment(ResolveCommentRequest) returns (ResolveCommentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.comment"]
+    };
+  }
+
+  // ListComments lists comments for a document
+  rpc ListComments(ListCommentsRequest) returns (ListCommentsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+
+  // DeleteComment deletes a comment
+  rpc DeleteComment(DeleteCommentRequest) returns (DeleteCommentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.comment"]
+    };
+  }
+}
+
+// SectionEmbedService provides cross-document embedding
+service SectionEmbedService {
+  // CreateEmbed embeds a section from one document into another
+  rpc CreateEmbed(CreateEmbedRequest) returns (CreateEmbedResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.embed"]
+    };
+  }
+
+  // GetEmbeddedSection retrieves the content of an embedded section
+  rpc GetEmbeddedSection(GetEmbeddedSectionRequest) returns (GetEmbeddedSectionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.embed"]
+    };
+  }
+
+  // ListEmbeds lists all embeds in a document (outgoing citations)
+  rpc ListEmbeds(ListEmbedsRequest) returns (ListEmbedsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+
+  // ListIncomingCitations lists all embeds that cite a document (incoming citations)
+  // Shows document owners who is referencing their content
+  rpc ListIncomingCitations(ListIncomingCitationsRequest) returns (ListIncomingCitationsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.view"]
+    };
+  }
+
+  // DeleteEmbed removes an embed
+  rpc DeleteEmbed(DeleteEmbedRequest) returns (DeleteEmbedResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.embed"]
+    };
+  }
+}
+
+// DocumentEditorService provides collaborative editing management
+service DocumentEditorService {
+  // JoinDocument registers as an active editor (checks 10-editor limit)
+  rpc JoinDocument(JoinDocumentRequest) returns (JoinDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.collaborate"]
+    };
+  }
+
+  // LeaveDocument unregisters as an active editor
+  rpc LeaveDocument(LeaveDocumentRequest) returns (LeaveDocumentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.collaborate"]
+    };
+  }
+
+  // UpdateCursor updates editor's cursor position
+  rpc UpdateCursor(UpdateCursorRequest) returns (UpdateCursorResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.collaborate"]
+    };
+  }
+
+  // ListActiveEditors lists current active editors for a document
+  rpc ListActiveEditors(ListActiveEditorsRequest) returns (ListActiveEditorsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.collaborate"]
+    };
+  }
+
+  // Heartbeat maintains editor connection (updates last_heartbeat)
+  rpc Heartbeat(HeartbeatRequest) returns (HeartbeatResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.collaborate"]
+    };
+  }
+}
+
+// DocumentReactionService provides document feedback reactions
+service DocumentReactionService {
+  // AddReaction adds or updates a reaction (thumbs up/down) to a document
+  rpc AddReaction(AddDocumentReactionRequest) returns (AddDocumentReactionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.react"]
+    };
+  }
+
+  // RemoveReaction removes a user's reaction from a document
+  rpc RemoveReaction(RemoveDocumentReactionRequest) returns (RemoveDocumentReactionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.react"]
+    };
+  }
+
+  // GetReactionStats gets reaction counts for a document
+  rpc GetReactionStats(GetDocumentReactionStatsRequest) returns (GetDocumentReactionStatsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["docs.react"]
+    };
+  }
+}
+
+// ============================================================================
+// Enums
+// ============================================================================
+
+enum DocumentStatus {
+  DOCUMENT_STATUS_UNSPECIFIED = 0;
+  DOCUMENT_STATUS_ACTIVE = 1;
+  DOCUMENT_STATUS_OUTDATED = 2;
+  DOCUMENT_STATUS_ARCHIVED = 3;
+}
+
+enum DocumentVisibility {
+  DOCUMENT_VISIBILITY_UNSPECIFIED = 0;
+  DOCUMENT_VISIBILITY_PUBLIC = 1;
+  DOCUMENT_VISIBILITY_PRIVATE = 2;
+}
+
+enum AccessLevel {
+  ACCESS_LEVEL_UNSPECIFIED = 0;
+  ACCESS_LEVEL_READ_COMMENT = 1;
+  ACCESS_LEVEL_WRITE_UPDATE = 2;
+  ACCESS_LEVEL_NONE = 3; // Explicit deny
+}
+
+enum GranteeType {
+  GRANTEE_TYPE_UNSPECIFIED = 0;
+  GRANTEE_TYPE_EMPLOYEE = 1;
+  GRANTEE_TYPE_DEPARTMENT = 2;
+}
+
+enum ReactionType {
+  REACTION_TYPE_UNSPECIFIED = 0;
+  REACTION_TYPE_THUMBS_UP = 1;
+  REACTION_TYPE_THUMBS_DOWN = 2;
+}
+
+// ============================================================================
+// Message Types
+// ============================================================================
+
+message Document {
+  string id = 1;
+  string title = 2;
+  string slug = 3;
+  string parent_document_id = 4; // Empty if root document
+  int32 depth = 5;
+  string content_json = 6; // TipTap JSON as string
+  DocumentStatus status = 7;
+  DocumentVisibility visibility = 8;
+  string owner_employee_id = 9;
+  string owner_name = 10; // Denormalized for display
+  int32 child_count = 11;
+  int32 version_count = 12;
+  int32 follower_count = 13;
+  google.protobuf.Timestamp updated_at = 14;
+  repeated string path = 15; // Ancestor IDs from root to parent
+}
+
+message DocumentSummary {
+  string id = 1;
+  string title = 2;
+  string slug = 3;
+  string parent_document_id = 4;
+  int32 depth = 5;
+  DocumentStatus status = 6;
+  DocumentVisibility visibility = 7;
+  string owner_name = 8;
+  int32 child_count = 9;
+  google.protobuf.Timestamp updated_at = 10;
+}
+
+message DocumentVersion {
+  string id = 1;
+  string document_id = 2;
+  int32 version_number = 3;
+  string content_json = 4;
+  string author_employee_id = 5;
+  string author_name = 6;
+  string summary = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message DocumentAccess {
+  string id = 1;
+  string document_id = 2;
+  GranteeType grantee_type = 3;
+  string grantee_id = 4;
+  string grantee_name = 5; // Denormalized
+  AccessLevel access_level = 6;
+  string granted_by_name = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+message Comment {
+  string id = 1;
+  string document_id = 2;
+  optional string block_id = 3; // Nullable for document-level comments
+  int32 text_selection_start = 4;
+  int32 text_selection_end = 5;
+  string comment_text = 6;
+  string author_employee_id = 7;
+  string author_name = 8;
+  bool is_resolved = 9;
+  string resolved_by_name = 10;
+  google.protobuf.Timestamp resolved_at = 11;
+  int32 reply_count = 12;
+  google.protobuf.Timestamp updated_at = 13;
+  repeated CommentReply replies = 14;
+}
+
+message CommentReply {
+  string id = 1;
+  string comment_id = 2;
+  string reply_text = 3;
+  string author_employee_id = 4;
+  string author_name = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message SectionEmbed {
+  string id = 1;
+  string source_document_id = 2;
+  int32 source_line_start = 3; // Line where embed is placed in source document
+  int32 source_line_end = 4; // End line of embed block in source document
+  string target_document_id = 5;
+  string target_document_title = 6;
+  int32 target_line_start = 7; // First line of embedded content from target document
+  int32 target_line_end = 8; // Last line of embedded content from target document
+  DocumentStatus target_status = 9; // Status of embedded document
+  optional int32 target_version_number = 10; // Version snapshotted at embed creation time
+  optional int32 target_latest_version = 11; // Current latest version of target document
+  bool is_stale = 12; // True if target_version_number < target_latest_version (newer versions exist)
+}
+
+message ActiveEditor {
+  string employee_id = 1;
+  string employee_name = 2;
+  string cursor_block_id = 3;
+  int32 cursor_offset = 4;
+  string color = 5; // Assigned color for cursor display
+  google.protobuf.Timestamp connected_at = 6;
+}
+
+message BlameBlock {
+  string block_id = 1;
+  string author_employee_id = 2;
+  string author_name = 3;
+  int32 version_number = 4;
+  google.protobuf.Timestamp authored_at = 5;
+}
+
+message DiffChange {
+  string change_type = 1; // "add", "remove", "unchanged", "modified"
+  string content = 2; // Plain text content (for add/remove/unchanged)
+  string old_content = 3; // For "modified": content with old formatting (markdown-style)
+  string new_content = 4; // For "modified": content with new formatting (markdown-style)
+}
+
+// ============================================================================
+// Request/Response Messages
+// ============================================================================
+
+// Document CRUD
+message CreateDocumentRequest {
+  string title = 1 ;
+  string parent_document_id = 2; // Empty for root document
+  string content_json = 3; // Initial TipTap JSON
+  DocumentVisibility visibility = 4; // Only for root documents
+}
+
+message CreateDocumentResponse {
+  Document document = 1;
+}
+
+message GetDocumentRequest {
+  oneof identifier {
+    string id = 1;
+    string slug = 2;
+  }
+  bool include_content = 3;
+}
+
+message GetDocumentResponse {
+  Document document = 1;
+  bool is_following = 2;
+  AccessLevel effective_access = 3;
+  int32 active_editor_count = 4;
+}
+
+message UpdateDocumentRequest {
+  string id = 1 ;
+  string title = 2;
+  string content_json = 3;
+  string version_summary = 4; // Optional commit message
+}
+
+message UpdateDocumentResponse {
+  Document document = 1;
+  int32 new_version_number = 2;
+}
+
+message DeleteDocumentRequest {
+  string id = 1 ;
+}
+
+message DeleteDocumentResponse {
+  bool success = 1;
+  int32 orphaned_children_count = 2;
+}
+
+message ListDocumentsRequest {
+  string parent_document_id = 1; // Empty for root documents
+  DocumentStatus status_filter = 2;
+  string cursor = 3;
+  int32 limit = 4 ;
+}
+
+message ListDocumentsResponse {
+  repeated DocumentSummary documents = 1;
+  string next_cursor = 2;
+}
+
+message GetDocumentTreeRequest {
+  string root_document_id = 1; // Empty for full tree
+  int32 max_depth = 2 ;
+}
+
+message GetDocumentTreeResponse {
+  repeated DocumentTreeNode nodes = 1;
+}
+
+message DocumentTreeNode {
+  DocumentSummary document = 1;
+  repeated DocumentTreeNode children = 2;
+}
+
+message SearchDocumentsRequest {
+  string query = 1 ;
+  DocumentStatus status_filter = 2;
+  string cursor = 3;
+  int32 limit = 4 ;
+}
+
+message SearchDocumentsResponse {
+  repeated SearchResult results = 1;
+  string next_cursor = 2;
+}
+
+message SearchResult {
+  DocumentSummary document = 1;
+  string snippet = 2; // Text snippet with match highlighted
+  float score = 3;
+  bool is_embedded = 4; // True if match is in embedded content
+}
+
+message UpdateDocumentStatusRequest {
+  string id = 1 ;
+  DocumentStatus status = 2;
+}
+
+message UpdateDocumentStatusResponse {
+  Document document = 1;
+}
+
+message ResolveSlugRequest {
+  string slug = 1 ;
+}
+
+message ResolveSlugResponse {
+  string current_slug = 1;
+  bool is_redirect = 2;
+  string document_id = 3;
+}
+
+// Version History
+message ListVersionsRequest {
+  string document_id = 1 ;
+  string cursor = 2;
+  int32 limit = 3 ;
+}
+
+message ListVersionsResponse {
+  repeated DocumentVersion versions = 1;
+  string next_cursor = 2;
+}
+
+message GetVersionRequest {
+  string document_id = 1 ;
+  int32 version_number = 2 ;
+}
+
+message GetVersionResponse {
+  DocumentVersion version = 1;
+}
+
+message GetVersionDiffRequest {
+  string document_id = 1 ;
+  int32 from_version = 2 ;
+  int32 to_version = 3 ;
+}
+
+message GetVersionDiffResponse {
+  repeated DiffChange changes = 1;
+  DocumentVersion from_version = 2;
+  DocumentVersion to_version = 3;
+}
+
+message GetBlameRequest {
+  string document_id = 1 ;
+}
+
+message GetBlameResponse {
+  repeated BlameBlock blocks = 1;
+}
+
+// Access Control
+message SetAccessRequest {
+  string document_id = 1 ;
+  GranteeType grantee_type = 2;
+  string grantee_id = 3 ;
+  AccessLevel access_level = 4;
+}
+
+message SetAccessResponse {
+  DocumentAccess access = 1;
+}
+
+message RemoveAccessRequest {
+  string document_id = 1 ;
+  GranteeType grantee_type = 2;
+  string grantee_id = 3 ;
+}
+
+message RemoveAccessResponse {
+  bool success = 1;
+}
+
+message ListAccessRequest {
+  string document_id = 1 ;
+}
+
+message ListAccessResponse {
+  repeated DocumentAccess access_list = 1;
+  DocumentVisibility inherited_visibility = 2;
+}
+
+message CheckAccessRequest {
+  string document_id = 1 ;
+}
+
+message CheckAccessResponse {
+  AccessLevel access_level = 1;
+  bool is_owner = 2;
+}
+
+// Followers
+message FollowDocumentRequest {
+  string document_id = 1 ;
+}
+
+message FollowDocumentResponse {
+  bool success = 1;
+}
+
+message UnfollowDocumentRequest {
+  string document_id = 1 ;
+}
+
+message UnfollowDocumentResponse {
+  bool success = 1;
+}
+
+message ListFollowedDocumentsRequest {
+  string cursor = 1;
+  int32 limit = 2 ;
+}
+
+message ListFollowedDocumentsResponse {
+  repeated DocumentSummary documents = 1;
+  string next_cursor = 2;
+}
+
+// Comments
+message AddCommentRequest {
+  string document_id = 1 ;
+  optional string block_id = 2 ; // Nullable: NULL for document-level comments
+  int32 text_selection_start = 3;
+  int32 text_selection_end = 4;
+  string comment_text = 5 ;
+}
+
+message AddCommentResponse {
+  Comment comment = 1;
+}
+
+message AddCommentReplyRequest {
+  string comment_id = 1 ;
+  string reply_text = 2 ;
+}
+
+message AddCommentReplyResponse {
+  CommentReply reply = 1;
+}
+
+message ResolveCommentRequest {
+  string comment_id = 1 ;
+}
+
+message ResolveCommentResponse {
+  Comment comment = 1;
+}
+
+message ListCommentsRequest {
+  string document_id = 1 ;
+  bool include_resolved = 2;
+}
+
+message ListCommentsResponse {
+  repeated Comment comments = 1;
+}
+
+message DeleteCommentRequest {
+  string comment_id = 1 ;
+}
+
+message DeleteCommentResponse {
+  bool success = 1;
+}
+
+// Section Embeds
+message CreateEmbedRequest {
+  string source_document_id = 1 ;
+  int32 source_line_start = 2; // Line where embed is placed in source document
+  int32 source_line_end = 3; // End line of embed block in source document
+  string target_document_id = 4 ;
+  int32 target_line_start = 5; // First line of embedded content from target document
+  int32 target_line_end = 6; // Last line of embedded content from target document
+  optional int32 target_version_number = 7; // Version to snapshot (omit to auto-snapshot current version)
+}
+
+message CreateEmbedResponse {
+  SectionEmbed embed = 1;
+}
+
+message GetEmbeddedSectionRequest {
+  string embed_id = 1 ;
+}
+
+message GetEmbeddedSectionResponse {
+  SectionEmbed embed = 1;
+  string content_text = 2; // Plain text content from target document (for line extraction)
+  string content_json = 3; // TipTap JSON content from target document
+  bool target_accessible = 4;
+}
+
+message ListEmbedsRequest {
+  string document_id = 1 ;
+}
+
+message ListEmbedsResponse {
+  repeated SectionEmbed embeds = 1;
+}
+
+message DeleteEmbedRequest {
+  string embed_id = 1 ;
+}
+
+message DeleteEmbedResponse {
+  bool success = 1;
+}
+
+// Incoming Citations (shows who cites this document)
+message IncomingCitation {
+  string id = 1;
+  
+  // Source document (the one containing the embed/citation)
+  string source_document_id = 2;
+  string source_document_title = 3;
+  string source_document_slug = 4;
+  string source_owner_name = 5;
+  int32 source_line_start = 6;  // Where the embed is placed in citing document
+  int32 source_line_end = 7;
+  google.protobuf.Timestamp source_updated_at = 8;
+  
+  // Target (this document) line info - what lines are being cited
+  int32 target_line_start = 9;
+  int32 target_line_end = 10;
+  
+  // Version info
+  int32 cited_at_version = 11;     // Version snapshotted when citation was created
+  int32 current_version = 12;      // Current version of this document
+  bool is_stale = 13;              // True if cited_at_version < current_version
+}
+
+message CitedLineRange {
+  int32 start_line = 1;
+  int32 end_line = 2;
+  int32 citation_count = 3; // How many documents cite this line range
+}
+
+message ListIncomingCitationsRequest {
+  string document_id = 1;
+}
+
+message ListIncomingCitationsResponse {
+  repeated IncomingCitation citations = 1;
+  int32 total_count = 2;
+  
+  // Aggregated line ranges for quick display (e.g., line number markers)
+  repeated CitedLineRange cited_line_ranges = 3;
+}
+
+// Collaborative Editing
+message JoinDocumentRequest {
+  string document_id = 1 ;
+}
+
+message JoinDocumentResponse {
+  bool success = 1;
+  string connection_id = 2;
+  repeated ActiveEditor current_editors = 3;
+  bool editor_limit_reached = 4; // True if max 10 editors
+}
+
+message LeaveDocumentRequest {
+  string document_id = 1 ;
+}
+
+message LeaveDocumentResponse {
+  bool success = 1;
+}
+
+message UpdateCursorRequest {
+  string document_id = 1 ;
+  string block_id = 2;
+  int32 offset = 3;
+}
+
+message UpdateCursorResponse {
+  bool success = 1;
+}
+
+message ListActiveEditorsRequest {
+  string document_id = 1 ;
+}
+
+message ListActiveEditorsResponse {
+  repeated ActiveEditor editors = 1;
+  int32 editor_count = 2;
+  int32 max_editors = 3; // Always 10
+}
+
+message HeartbeatRequest {
+  string document_id = 1 ;
+}
+
+message HeartbeatResponse {
+  bool success = 1;
+}
+
+// Reactions
+message AddDocumentReactionRequest {
+  string document_id = 1 ;
+  ReactionType reaction_type = 2 ;
+}
+
+message AddDocumentReactionResponse {
+  DocumentReaction reaction = 1;
+}
+
+message RemoveDocumentReactionRequest {
+  string document_id = 1 ;
+}
+
+message RemoveDocumentReactionResponse {
+  bool success = 1;
+}
+
+message GetDocumentReactionStatsRequest {
+  string document_id = 1 ;
+}
+
+message GetDocumentReactionStatsResponse {
+  int32 thumbs_up_count = 1;
+  int32 thumbs_down_count = 2;
+  optional ReactionType user_reaction = 3; // User's current reaction, if any
+}
+
+message DocumentReaction {
+  string id = 1;
+  string document_id = 2;
+  string employee_id = 3;
+  string employee_name = 4;
+  ReactionType reaction_type = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}

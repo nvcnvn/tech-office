@@ -1,0 +1,899 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// ChatService provides channel-based messaging with threaded replies,
+// reactions, and real-time typing indicators. Designed for reusability
+// across multiple business domains (chat, project comments, CRM notes).
+service ChatService {
+  // Channel Management
+  
+  rpc CreateChannel(CreateChannelRequest) returns (CreateChannelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.createChannel"]
+    };
+  }
+  
+  rpc GetChannel(GetChannelRequest) returns (GetChannelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewChannel"]
+    };
+  }
+  
+  rpc ListChannels(ListChannelsRequest) returns (ListChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewChannel"]
+    };
+  }
+  
+  rpc UpdateChannel(UpdateChannelRequest) returns (UpdateChannelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateChannel"]
+    };
+  }
+  
+  rpc ArchiveChannel(ArchiveChannelRequest) returns (ArchiveChannelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.archiveChannel"]
+    };
+  }
+  
+  rpc UnarchiveChannel(UnarchiveChannelRequest) returns (UnarchiveChannelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.archiveChannel"]
+    };
+  }
+  
+  // Channel Membership
+  
+  rpc JoinChannel(JoinChannelRequest) returns (JoinChannelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.joinChannel"]
+    };
+  }
+  
+  rpc LeaveChannel(LeaveChannelRequest) returns (LeaveChannelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.joinChannel"]
+    };
+  }
+  
+  rpc InviteMember(InviteMemberRequest) returns (InviteMemberResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.manageMember"]
+    };
+  }
+  
+  rpc RemoveMember(RemoveMemberRequest) returns (RemoveMemberResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.manageMember"]
+    };
+  }
+  
+  rpc ListChannelMembers(ListChannelMembersRequest) returns (ListChannelMembersResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.listMembers"]
+    };
+  }
+  
+  rpc UpdateMemberRole(UpdateMemberRoleRequest) returns (UpdateMemberRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.manageMember"]
+    };
+  }
+  
+  rpc UpdateNotificationPreference(UpdateNotificationPreferenceRequest) returns (UpdateNotificationPreferenceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateNotificationPref"]
+    };
+  }
+  
+  // Messaging
+  
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.sendMessage"]
+    };
+  }
+  
+  rpc ReplyToMessage(ReplyToMessageRequest) returns (ReplyToMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.sendMessage"]
+    };
+  }
+  
+  rpc EditMessage(EditMessageRequest) returns (EditMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.editMessage"]
+    };
+  }
+  
+  rpc DeleteMessage(DeleteMessageRequest) returns (DeleteMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.deleteMessage"]
+    };
+  }
+  
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewMessages"]
+    };
+  }
+  
+  rpc GetMessage(GetMessageRequest) returns (GetMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewMessages"]
+    };
+  }
+  
+  rpc ListReplies(ListRepliesRequest) returns (ListRepliesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewMessages"]
+    };
+  }
+  
+  // Message Navigation (for notification deep linking)
+  
+  rpc GetMessageById(GetMessageByIdRequest) returns (GetMessageByIdResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewMessages"]
+    };
+  }
+  
+  // Unread Tracking
+  
+  rpc MarkChannelAsRead(MarkChannelAsReadRequest) returns (MarkChannelAsReadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.markRead"]
+    };
+  }
+  
+  // Reactions
+  
+  rpc AddReaction(AddReactionRequest) returns (AddReactionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.react"]
+    };
+  }
+  
+  rpc RemoveReaction(RemoveReactionRequest) returns (RemoveReactionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.react"]
+    };
+  }
+  
+  rpc ListReactions(ListReactionsRequest) returns (ListReactionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.react"]
+    };
+  }
+  
+  // Typing Indicators (ephemeral, no persistence)
+  
+  rpc StartTyping(StartTypingRequest) returns (StartTypingResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.typing"]
+    };
+  }
+  
+  rpc StopTyping(StopTypingRequest) returns (StopTypingResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.typing"]
+    };
+  }
+
+  // Search Methods (Multilingual Fuzzy Search)
+  
+  rpc SearchChannels(SearchChannelsRequest) returns (SearchChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.search"]
+    };
+  }
+
+  rpc SearchMessages(SearchMessagesRequest) returns (SearchMessagesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.search"]
+    };
+  }
+
+  rpc AutocompleteChannels(AutocompleteChannelsRequest) returns (AutocompleteChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.search"]
+    };
+  }
+
+  // Direct Message Methods
+  
+  rpc CreateOrGetDirectMessage(CreateOrGetDirectMessageRequest) returns (CreateOrGetDirectMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.directMessage"]
+    };
+  }
+
+  // User Chat Configuration (Recent Channels, Pinned, Sidebar State)
+  
+  rpc GetUserChatConfig(GetUserChatConfigRequest) returns (GetUserChatConfigResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewConfig"]
+    };
+  }
+
+  // DEPRECATED: Use AddChannelToCategory instead
+  rpc UpdateRecentChannels(UpdateRecentChannelsRequest) returns (UpdateRecentChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateConfig"]
+    };
+  }
+
+  rpc AddChannelToCategory(AddChannelToCategoryRequest) returns (AddChannelToCategoryResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateConfig"]
+    };
+  }
+
+  rpc UpdateChannelCategories(UpdateChannelCategoriesRequest) returns (UpdateChannelCategoriesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateConfig"]
+    };
+  }
+
+  rpc UpdateCategoryLimits(UpdateCategoryLimitsRequest) returns (UpdateCategoryLimitsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateConfig"]
+    };
+  }
+
+  rpc UpdatePinnedChannels(UpdatePinnedChannelsRequest) returns (UpdatePinnedChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateConfig"]
+    };
+  }
+
+  rpc UpdateSidebarCategoryCollapsed(UpdateSidebarCategoryCollapsedRequest) returns (UpdateSidebarCategoryCollapsedResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.updateConfig"]
+    };
+  }
+
+  rpc ListRecentChannels(ListRecentChannelsRequest) returns (ListRecentChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewConfig"]
+    };
+  }
+
+  // Context Rail Summary
+  rpc GetChannelContextSummary(GetChannelContextSummaryRequest) returns (GetChannelContextSummaryResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["chat.viewChannel"]
+    };
+  }
+}
+
+// Enums
+
+enum ChannelType {
+  CHANNEL_TYPE_UNSPECIFIED = 0;
+  CHANNEL_TYPE_CHAT = 1;
+  CHANNEL_TYPE_DIRECT_MESSAGE = 2;
+  CHANNEL_TYPE_PROJECT_TICKET_THREAD = 3;
+  CHANNEL_TYPE_CRM_DEAL_NOTES = 4;
+  CHANNEL_TYPE_SUPPORT_TICKET = 5;
+}
+
+enum NotificationPreference {
+  NOTIFICATION_PREFERENCE_UNSPECIFIED = 0;
+  NOTIFICATION_PREFERENCE_ALL = 1;
+  NOTIFICATION_PREFERENCE_MENTIONS = 2;
+  NOTIFICATION_PREFERENCE_MUTED = 3;
+}
+
+// Messages - Channel Management
+
+message CreateChannelRequest {
+  string title_slug = 1;  // URL-friendly slug (alphanumeric + hyphen, max 64 chars)
+  string display_name = 2;  // Human-readable name
+  string description = 3;  // Optional description
+  ChannelType channel_type = 4;
+  bool is_private = 5;
+}
+
+message CreateChannelResponse {
+  Channel channel = 1;
+}
+
+message GetChannelRequest {
+  string channel_id = 1;
+}
+
+message GetChannelResponse {
+  Channel channel = 1;
+  LinkedResource linked_resource = 2;
+}
+
+message ListChannelsRequest {
+  ChannelType channel_type = 1;  // Filter by type (optional)
+  bool include_archived = 2;  // Include archived channels
+  int32 page_size = 3;
+  string page_token = 4;  // Cursor for pagination
+}
+
+message ListChannelsResponse {
+  repeated Channel channels = 1;
+  string next_page_token = 2;
+}
+
+message UpdateChannelRequest {
+  string channel_id = 1;
+  optional string display_name = 2;
+  optional string description = 3;
+  optional bool is_private = 4;
+}
+
+message UpdateChannelResponse {
+  Channel channel = 1;
+}
+
+message ArchiveChannelRequest {
+  string channel_id = 1;
+}
+
+message ArchiveChannelResponse {
+  Channel channel = 1;
+}
+
+message UnarchiveChannelRequest {
+  string channel_id = 1;
+}
+
+message UnarchiveChannelResponse {
+  Channel channel = 1;
+}
+
+// Messages - Channel Membership
+
+message JoinChannelRequest {
+  string channel_id = 1;
+}
+
+message JoinChannelResponse {
+  ChannelMembership membership = 1;
+}
+
+message LeaveChannelRequest {
+  string channel_id = 1;
+}
+
+message LeaveChannelResponse {
+  bool success = 1;
+}
+
+message InviteMemberRequest {
+  string channel_id = 1;
+  string employee_id = 2;  // Employee to invite
+}
+
+message InviteMemberResponse {
+  ChannelMembership membership = 1;
+}
+
+message RemoveMemberRequest {
+  string channel_id = 1;
+  string employee_id = 2;  // Employee to remove
+}
+
+message RemoveMemberResponse {
+  bool success = 1;
+}
+
+message ListChannelMembersRequest {
+  string channel_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListChannelMembersResponse {
+  repeated ChannelMembership memberships = 1;
+  string next_page_token = 2;
+}
+
+message UpdateMemberRoleRequest {
+  string channel_id = 1;
+  string employee_id = 2;
+  bool is_admin = 3;
+}
+
+message UpdateMemberRoleResponse {
+  ChannelMembership membership = 1;
+}
+
+message UpdateNotificationPreferenceRequest {
+  string channel_id = 1;
+  NotificationPreference preference = 2;
+}
+
+message UpdateNotificationPreferenceResponse {
+  ChannelMembership membership = 1;
+}
+
+// Messages - Messaging
+
+message SendMessageRequest {
+  string channel_id = 1;
+  string message_text = 2;  // Max ~10k characters
+  repeated string file_ids = 3;  // Optional file attachment IDs from FileService
+}
+
+message SendMessageResponse {
+  Message message = 1;
+}
+
+message ReplyToMessageRequest {
+  string parent_message_id = 1;
+  string message_text = 2;
+  repeated string file_ids = 3;  // Optional file attachment IDs from FileService
+}
+
+message ReplyToMessageResponse {
+  Message message = 1;
+}
+
+message EditMessageRequest {
+  string message_id = 1;
+  string new_text = 2;
+}
+
+message EditMessageResponse {
+  Message message = 1;
+}
+
+message DeleteMessageRequest {
+  string message_id = 1;
+}
+
+message DeleteMessageResponse {
+  bool success = 1;
+}
+
+enum ListMessagesDirection {
+  LIST_MESSAGES_DIRECTION_UNSPECIFIED = 0;
+  LIST_MESSAGES_DIRECTION_OLDER = 1;  // Fetch messages older than the provided cursor (default)
+  LIST_MESSAGES_DIRECTION_NEWER = 2;  // Fetch messages newer than the provided cursor
+}
+
+message ListMessagesRequest {
+  string channel_id = 1;
+  int32 page_size = 2;  // Default 50
+  string page_token = 3;  // UUID v7 cursor of boundary message from previous request
+  ListMessagesDirection direction = 4;  // Pagination direction (older = history, newer = forward)
+  string anchor_message_id = 5;  // Optional message ID to anchor the initial page (ignores page_token)
+}
+
+message ListMessagesResponse {
+  repeated Message messages = 1;
+  string previous_page_token = 2;  // UUID v7 cursor to fetch older messages (empty if no more history)
+  string next_page_token = 3;  // UUID v7 cursor to fetch newer messages when anchored in history
+}
+
+message GetMessageRequest {
+  string message_id = 1;
+}
+
+message GetMessageResponse {
+  Message message = 1;
+}
+
+message ListRepliesRequest {
+  string parent_message_id = 1;
+  int32 page_size = 2;
+  string page_token = 3;
+}
+
+message ListRepliesResponse {
+  repeated Message replies = 1;
+  string next_page_token = 2;
+}
+
+// Messages - Reactions
+
+message AddReactionRequest {
+  string message_id = 1;
+  string emoji_code = 2;  // Unicode emoji or shortcode
+}
+
+message AddReactionResponse {
+  Reaction reaction = 1;
+}
+
+message RemoveReactionRequest {
+  string message_id = 1;
+  string emoji_code = 2;
+}
+
+message RemoveReactionResponse {
+  bool success = 1;
+}
+
+message ListReactionsRequest {
+  string message_id = 1;
+}
+
+message ListReactionsResponse {
+  repeated ReactionSummary reactions = 1;  // Aggregated by emoji
+}
+
+// Messages - Typing Indicators
+
+message StartTypingRequest {
+  string channel_id = 1;
+  string parent_message_id = 2;  // Optional: for thread typing indicators
+}
+
+message StartTypingResponse {
+  bool success = 1;
+}
+
+message StopTypingRequest {
+  string channel_id = 1;
+  string parent_message_id = 2;  // Optional: for thread typing indicators
+}
+
+message StopTypingResponse {
+  bool success = 1;
+}
+
+// Messages - Message Navigation & Unread Tracking
+
+message GetMessageByIdRequest {
+  string message_id = 1;  // UUID of message to fetch
+}
+
+message GetMessageByIdResponse {
+  Message message = 1;  // Full message details
+  Channel channel = 2;  // Channel context (for navigation)
+  bool is_member = 3;  // Whether requesting employee is channel member
+}
+
+message MarkChannelAsReadRequest {
+  string channel_id = 1;
+  string last_read_message_id = 2;  // Optional: specific message to mark as read up to
+}
+
+message MarkChannelAsReadResponse {
+  int32 unread_count = 1;  // Remaining unread count for this channel
+  google.protobuf.Timestamp last_viewed_at = 2;  // Timestamp of mark-as-read
+}
+
+// Entity Messages
+
+message Channel {
+  string id = 1;
+  string organization_id = 2;
+  string title_slug = 3;
+  string display_name = 4;
+  string description = 5;
+  ChannelType channel_type = 6;
+  bool is_private = 7;
+  bool is_archived = 8;
+  string created_by_employee_id = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  
+  // Computed fields (not stored in DB)
+  int32 member_count = 11;
+  bool is_member = 12;  // Whether current user is a member
+  ChannelMembership current_user_membership = 13;  // Current user's membership details
+}
+
+message ChannelMembership {
+  string id = 1;
+  string organization_id = 2;
+  string channel_id = 3;
+  string employee_id = 4;
+  bool is_admin = 5;
+  NotificationPreference notification_preference = 6;
+  google.protobuf.Timestamp joined_at = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  
+  // Populated from organization.employee (via JOIN)
+  string employee_name = 9;
+  string employee_email = 10;
+  
+  // Unread tracking
+  string last_viewed_message_id = 15;  // Last message viewed by this member
+  google.protobuf.Timestamp last_viewed_at = 16;  // When member last viewed channel
+  int32 unread_count = 17;  // Computed: messages since last_viewed_at
+}
+
+message Message {
+  string id = 1;
+  string organization_id = 2;
+  string channel_id = 3;
+  string message_text = 4;
+  string author_employee_id = 5;
+  string parent_message_id = 6;  // NULL for top-level messages
+  bool is_deleted = 7;
+  bool is_edited = 8;
+  google.protobuf.Timestamp updated_at = 9;
+  
+  // Populated from organization.employee (via JOIN)
+  string author_name = 10;
+  string author_email = 11;
+  
+  // Computed fields
+  int32 reply_count = 12;  // Number of replies to this message
+  repeated ReactionSummary reactions = 13;  // Aggregated reactions
+  
+  // Mention metadata
+  repeated string mentioned_employee_ids = 15;  // UUIDs of @mentioned employees
+  repeated string mentioned_emails = 16;  // @emails for display
+  
+  // Thread metadata (for showing reply information in channel view)
+  repeated string thread_participant_ids = 17;  // Employee IDs who have replied to this message
+  google.protobuf.Timestamp last_reply_at = 18;  // Timestamp of most recent reply
+  
+  // File attachments
+  repeated string file_ids = 19;  // File IDs from files.file_metadata table
+
+  // Timeline rendering metadata
+  string message_kind = 20;  // text, voice, system
+  string system_event_type = 21;  // discriminator for system messages
+  string metadata_json = 22;  // JSON object with voice/call-rendering metadata
+}
+
+message Reaction {
+  string id = 1;
+  string organization_id = 2;
+  string message_id = 3;
+  string employee_id = 4;
+  string emoji_code = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message ReactionSummary {
+  string emoji_code = 1;
+  int32 count = 2;  // Number of employees who used this emoji
+  repeated string employee_ids = 3;  // List of employee IDs (for tooltips)
+  bool current_user_reacted = 4;  // Whether current user used this emoji
+  google.protobuf.Timestamp first_reacted_at = 5; // Timestamp of the first reaction for this emoji (ephemeral ordering)
+}
+
+// ============================================================
+// CHANNEL SEARCH
+// ============================================================
+
+message SearchChannelsRequest {
+  string query_text = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message SearchChannelsResponse {
+  repeated ChannelSearchResult results = 1;
+  string next_cursor = 2;
+  int32 query_duration_ms = 3;
+}
+
+message ChannelSearchResult {
+  string id = 1;
+  string display_name = 2;
+  string description = 3;
+  ChannelType channel_type = 4;
+  string title_slug = 5;
+  bool is_private = 6;
+  float relevance_score = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// ============================================================
+// MESSAGE SEARCH
+// ============================================================
+
+message SearchMessagesRequest {
+  string query_text = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message SearchMessagesResponse {
+  repeated MessageSearchResult results = 1;
+  string next_cursor = 2;
+  int32 query_duration_ms = 3;
+}
+
+message MessageSearchResult {
+  string id = 1;
+  string message_text = 2;  // Full message text
+  string author_employee_id = 3;
+  string channel_id = 4;
+  string parent_message_id = 5;  // Empty if top-level message
+  bool is_edited = 6;
+  float relevance_score = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  // Contextual metadata for display
+  string channel_name = 9;
+  bool channel_is_private = 10;
+}
+
+// ============================================================
+// AUTOCOMPLETE
+// ============================================================
+
+message AutocompleteChannelsRequest {
+  string prefix = 1;
+  int32 limit = 2;
+}
+
+message AutocompleteChannelsResponse {
+  repeated ChannelAutocompleteSuggestion suggestions = 1;
+}
+
+message ChannelAutocompleteSuggestion {
+  string id = 1;
+  string display_name = 2;
+  ChannelType channel_type = 3;
+  bool is_private = 4;
+}
+
+// ============================================================
+// DIRECT MESSAGE
+// ============================================================
+
+message CreateOrGetDirectMessageRequest {
+  string other_employee_id = 1;  // ID of the employee to start DM with
+}
+
+message CreateOrGetDirectMessageResponse {
+  Channel channel = 1;  // The DM channel (existing or newly created)
+  bool was_created = 2;  // True if channel was just created, false if existed
+  repeated DirectMessageParticipant participants = 3;  // All participants (for display names)
+}
+
+message DirectMessageParticipant {
+  string id = 1;
+  string given_name = 2;
+  string family_name = 3;
+  string email = 4;
+}
+
+// ============================================================
+// USER CHAT CONFIG (Recent Channels, Pinned, Sidebar State)
+// ============================================================
+
+message GetUserChatConfigRequest {
+  // No parameters - uses authenticated user from context
+}
+
+message GetUserChatConfigResponse {
+  UserChatConfig config = 1;
+}
+
+message UserChatConfig {
+  string id = 1;
+  string organization_id = 2;
+  string employee_id = 3;
+  string channel_categories = 4;  // JSON object: {channel_id: "channels" | "direct_messages" | "archived"}
+  string category_limits = 5;  // JSON object: {"channels": 30, "direct_messages": 20, "archived": 10}
+  repeated string pinned_channel_ids = 6;  // User-ordered pinned channels
+  string sidebar_category_collapsed = 7;  // JSON object: {channels: false, direct_messages: false}
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// DEPRECATED: Use AddChannelToCategory or UpdateChannelCategories instead
+message UpdateRecentChannelsRequest {
+  repeated string channel_ids = 1;  // Deprecated
+}
+
+message UpdateRecentChannelsResponse {
+  bool success = 1;
+}
+
+message AddChannelToCategoryRequest {
+  string channel_id = 1;
+  string category = 2;  // "channels" | "direct_messages" | "archived"
+}
+
+message AddChannelToCategoryResponse {
+  bool success = 1;
+}
+
+message UpdateChannelCategoriesRequest {
+  string channel_categories = 1;  // JSON object: {channel_id: category}
+}
+
+message UpdateChannelCategoriesResponse {
+  bool success = 1;
+}
+
+message UpdateCategoryLimitsRequest {
+  string category_limits = 1;  // JSON object: {"channels": 30, "direct_messages": 20}
+}
+
+// ============================================================
+// CONTEXT RAIL SUMMARIES
+// ============================================================
+
+message GetChannelContextSummaryRequest {
+  string channel_id = 1;
+}
+
+message GetChannelContextSummaryResponse {
+  int32 member_count = 1;
+  repeated ChannelMemberSummary members = 2;
+  repeated PinnedMessageSummary pinned_messages = 3;
+  DirectMessageProfile dm_counterpart = 4; // Optional, only populated for DM channels
+}
+
+message ChannelMemberSummary {
+  string employee_id = 1;
+  string display_name = 2;
+  string email = 3;
+  string avatar_url = 4;
+  string presence_status = 5;
+  string role_label = 6;
+}
+
+message PinnedMessageSummary {
+  string message_id = 1;
+  string author_name = 2;
+  string excerpt = 3;
+  google.protobuf.Timestamp pinned_at = 4;
+  string jump_target = 5;
+}
+
+message DirectMessageProfile {
+  string employee_id = 1;
+  string display_name = 2;
+  string email = 3;
+  string avatar_url = 4;
+  string presence_status = 5;
+  string status_text = 6;
+}
+
+
+message UpdateCategoryLimitsResponse {
+  bool success = 1;
+}
+
+message UpdatePinnedChannelsRequest {
+  repeated string channel_ids = 1;  // New ordered list of pinned channel IDs
+}
+
+message UpdatePinnedChannelsResponse {
+  bool success = 1;
+}
+
+message UpdateSidebarCategoryCollapsedRequest {
+  string collapsed_state = 1;  // JSON object: {channels: false, direct_messages: false}
+}
+
+message UpdateSidebarCategoryCollapsedResponse {
+  bool success = 1;
+}
+
+message ListRecentChannelsRequest {
+  // No parameters - returns user's recent channels in order
+}
+
+message ListRecentChannelsResponse {
+  repeated ChannelWithDetails channels = 1;
+}
+
+message ChannelWithDetails {
+  Channel channel = 1;
+  int32 member_count = 2;
+  repeated DirectMessageParticipant dm_participants = 3;  // Empty for non-DM channels
+  LinkedResource linked_resource = 4;  // Populated for task/CRM/support channels
+}
+
+// Linked resource metadata for channels that are discussion surfaces for other domain objects
+message LinkedResource {
+  string resource_type = 1;        // "task", "crm_deal", "support_ticket"
+  string resource_id = 2;          // Primary resource ID (e.g., task UUID)
+  string parent_id = 3;            // Parent resource ID (e.g., project UUID for tasks)
+  string display_identifier = 4;   // Human-readable identifier (e.g., "PROJ-123")
+  string display_title = 5;        // Resource title
+}

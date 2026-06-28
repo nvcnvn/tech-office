@@ -1,0 +1,98 @@
+{
+  "expo": {
+    "name": "Tech Office",
+    "slug": "tech-office",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "scheme": "techoffice",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.devguards.TechOffice",
+      "associatedDomains": [
+        "applinks:transformar.work"
+      ],
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "Allow Tech Office to connect to the local development server while debugging.",
+        "NSBonjourServices": [
+          "_http._tcp"
+        ]
+      },
+      "usesAppleSignIn": true,
+      "googleServicesFile": "./GoogleService-Info.plist"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0f172a"
+      },
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ],
+          "data": [
+            {
+              "scheme": "https",
+              "host": "transformar.work",
+              "pathPrefix": "/o/"
+            }
+          ]
+        }
+      ],
+      "package": "com.devguards.TechOffice",
+      "permissions": [
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.RECORD_AUDIO",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-apple-authentication",
+      "expo-secure-store",
+      "expo-local-authentication",
+      "./plugins/with-rnfirebase-app.js",
+      "./plugins/with-ios-dev-client-bootstrap.js",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#0f172a"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Tech Office to access your photos.",
+          "cameraPermission": "Allow Tech Office to access your camera."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow Tech Office to access your location for ritual task verification."
+        }
+      ],
+      "expo-web-browser",
+      "expo-font"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e7efcf6b-8b3a-4ef0-ab96-d028bd1720e1"
+      }
+    },
+    "owner": "nvcnvn"
+  }
+}

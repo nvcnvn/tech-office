@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// PinAuthErrorDetail — attached to RESOURCE_EXHAUSTED for lockout errors.
+// Frontend reads: lockout_until_unix (for countdown), tier (for UX copy), admin_reset_required.
+message PinAuthErrorDetail {
+  int32  lockout_tier          = 1;
+  int64  lockout_until_unix    = 2; // Unix seconds; 0 when admin_reset_required=true
+  bool   admin_reset_required  = 3;
+}

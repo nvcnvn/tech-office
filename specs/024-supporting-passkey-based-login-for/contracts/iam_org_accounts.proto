@@ -1,0 +1,230 @@
+// Proto Contract: New RPC methods for org-managed accounts
+// These additions go into backend/rpc/v1/iam.proto
+
+// =============================================================================
+// New RPC Methods (add to IAMService)
+// =============================================================================
+
+// --- PIN Authentication ---
+
+// LoginWithPIN authenticates a worker using org-scoped login_identifier + PIN.
+// Resolves organization from subdomain, then looks up identity by login_identifier.
+rpc LoginWithPIN(LoginWithPINRequest) returns (LoginWithPINResponse) {
+  option (rpc.v1.access_control) = {
+    allow_unauthenticated: true
+  };
+}
+
+// SetPIN sets or changes a worker's PIN credential.
+// Required after first login with a temporary PIN (pin_change_required=true).
+// Also used for voluntary PIN changes.
+rpc SetPIN(SetPINRequest) returns (SetPINResponse) {
+  option (rpc.v1.access_control) = {
+    required_permissions: ["iam.changePassword"]
+  };
+}
+
+// --- Org Account Management (admin operations) ---
+
+// CreateOrgAccount creates a single org-managed worker account.
+// Returns the generated temporary PIN (visible once).
+rpc CreateOrgAccount(CreateOrgAccountRequest) returns (CreateOrgAccountResponse) {
+  option (rpc.v1.access_control) = {
+    required_permissions: ["iam.manageOrgAccounts"]
+  };
+}
+
+// BatchCreateOrgAccounts creates multiple org-managed worker accounts.
+// Returns results with one-time PIN list.
+rpc BatchCreateOrgAccounts(BatchCreateOrgAccountsRequest) returns (BatchCreateOrgAccountsResponse) {
+  option (rpc.v1.access_control) = {
+    required_permissions: ["iam.manageOrgAccounts"]
+  };
+}
+
+// DeactivateOrgAccount deactivates an org-managed worker account.
+// Immediately invalidates all active sessions.
+rpc DeactivateOrgAccount(DeactivateOrgAccountRequest) returns (DeactivateOrgAccountResponse) {
+  option (rpc.v1.access_control) = {
+    required_permissions: ["iam.manageOrgAccounts"]
+  };
+}
+
+// UnlockOrgAccount unlocks an org-managed account locked due to failed PIN attempts.
+// Optionally generates a new temporary PIN.
+rpc UnlockOrgAccount(UnlockOrgAccountRequest) returns (UnlockOrgAccountResponse) {
+  option (rpc.v1.access_control) = {
+    required_permissions: ["iam.manageOrgAccounts"]
+  };
+}
+
+// ResetOrgAccountCredential resets credentials for an org-managed account.
+// Generates a new temporary PIN and revokes existing PIN credentials.
+rpc ResetOrgAccountCredential(ResetOrgAccountCredentialRequest) returns (ResetOrgAccountCredentialResponse) {
+  option (rpc.v1.access_control) = {
+    required_permissions: ["iam.manageOrgAccounts"]
+  };
+}
+
+// ListOrgAccounts lists org-managed worker accounts with status info.
+rpc ListOrgAccounts(ListOrgAccountsRequest) returns (ListOrgAccountsResponse) {
+  option (rpc.v1.access_control) = {
+    required_permissions: ["iam.manageOrgAccounts"]
+  };
+}
+
+// =============================================================================
+// New Messages
+// =============================================================================
+
+// --- PIN Authentication Messages ---
+
+message LoginWithPINRequest {
+  // Organization subdomain for org resolution
+  string organization_subdomain = 1;
+  // Worker's login identifier (badge number, username, etc.)
+  string login_identifier = 2;
+  // PIN (6 numeric digits)
+  string pin = 3;
+}
+
+message LoginWithPINResponse {
+  // Internal JWT token (only set if authentication succeeds and no PIN change required)
+  string access_token = 1;
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+  // If true, client MUST call SetPIN before any other operation
+  bool pin_change_required = 3;
+  // Temporary token for SetPIN call (only set when pin_change_required=true)
+  // This token is short-lived and only valid for the SetPIN endpoint.
+  string pin_change_token = 4;
+}
+
+message SetPINRequest {
+  // New 6-digit numeric PIN
+  string new_pin = 1;
+  // Optional: temporary token from LoginWithPINResponse (for first-time PIN set)
+  // If omitted, uses the standard auth token from header (for voluntary PIN change)
+  optional string pin_change_token = 2;
+  // Optional: current PIN (required for voluntary PIN change, not for first-time set)
+  optional string current_pin = 3;
+}
+
+message SetPINResponse {
+  // Internal JWT token with full org context (issued after successful PIN set)
+  string access_token = 1;
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+}
+
+// --- Org Account Management Messages ---
+
+message CreateOrgAccountRequest {
+  // Worker's login identifier (unique within org)
+  string login_identifier = 1;
+  // Display name
+  string display_name = 2;
+  // Given name
+  string given_name = 3;
+  // Family name
+  string family_name = 4;
+  // Optional: department ID to assign
+  optional string department_id = 5;
+  // Optional: date of birth (for PIN validation — reject PINs matching DOB)
+  optional string date_of_birth = 6;
+  // Optional: phone number (for PIN validation — reject PINs matching phone)
+  optional string phone_number = 7;
+}
+
+message CreateOrgAccountResponse {
+  // Created employee/identity ID
+  string id = 1;
+  // The login identifier (echoed back for confirmation)
+  string login_identifier = 2;
+  // Generated temporary PIN (visible once — client should display prominently)
+  string temporary_pin = 3;
+}
+
+message BatchCreateOrgAccountsRequest {
+  // List of worker accounts to create
+  repeated CreateOrgAccountRequest accounts = 1;
+}
+
+message BatchCreateOrgAccountsResponse {
+  // Per-account results
+  repeated BatchCreateOrgAccountResult results = 1;
+  // Total accounts successfully created
+  int32 success_count = 2;
+  // Total accounts that failed validation
+  int32 failure_count = 3;
+}
+
+message BatchCreateOrgAccountResult {
+  // Login identifier
+  string login_identifier = 1;
+  // Whether account was created successfully
+  bool success = 2;
+  // Error message if failed
+  string error = 3;
+  // Generated temporary PIN (only set if success=true)
+  string temporary_pin = 4;
+  // Created employee/identity ID (only set if success=true)
+  string id = 5;
+}
+
+message DeactivateOrgAccountRequest {
+  // Identity/employee ID to deactivate
+  string id = 1;
+}
+
+message DeactivateOrgAccountResponse {}
+
+message UnlockOrgAccountRequest {
+  // Identity/employee ID to unlock
+  string id = 1;
+  // If true, generate a new temporary PIN (reset credentials)
+  bool reset_pin = 2;
+}
+
+message UnlockOrgAccountResponse {
+  // New temporary PIN (only set if reset_pin=true)
+  optional string temporary_pin = 1;
+}
+
+message ResetOrgAccountCredentialRequest {
+  // Identity/employee ID to reset
+  string id = 1;
+}
+
+message ResetOrgAccountCredentialResponse {
+  // New temporary PIN
+  string temporary_pin = 1;
+}
+
+message ListOrgAccountsRequest {
+  // Cursor-based pagination
+  optional string cursor = 1;
+  int32 limit = 2;
+  // Filter by status
+  optional string status_filter = 3;
+}
+
+message ListOrgAccountsResponse {
+  repeated OrgAccountListItem accounts = 1;
+  optional string next_cursor = 2;
+  int32 total_count = 3;
+}
+
+message OrgAccountListItem {
+  string id = 1;
+  string login_identifier = 2;
+  string display_name = 3;
+  string given_name = 4;
+  string family_name = 5;
+  // 'active', 'deactivated', 'locked'
+  string status = 6;
+  // Whether user has completed first PIN setup
+  bool pin_configured = 7;
+  string created_at = 8;
+  string last_login_at = 9;
+}

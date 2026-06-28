@@ -1,0 +1,43 @@
+appId: com.devguards.TechOffice
+name: "Ritual UX Redesign"
+tags:
+  - rituals
+  - ux-redesign
+  - task-first
+env:
+  RITUAL_PROJECT_LABEL: ${MAESTRO_RITUAL_PROJECT_LABEL}
+  RITUAL_TASK_LABEL: ${MAESTRO_RITUAL_TASK_LABEL}
+  RITUAL_REVIEW_ALERT_LINK: ${MAESTRO_RITUAL_REVIEW_ALERT_LINK}
+    RITUAL_DETAIL_READY_TEXT: ${MAESTRO_RITUAL_DETAIL_READY_TEXT}
+---
+- runFlow: "auth/signin.yaml"
+- tapOn:
+    id: "tab-tasks"
+- extendedWaitUntil:
+    visible: "Task-First Queue"
+    timeout: 8000
+- assertVisible:
+    id: "focus-section-today"
+- tapOn: ${RITUAL_PROJECT_LABEL}
+- extendedWaitUntil:
+    visible: ${RITUAL_TASK_LABEL}
+    timeout: 8000
+- tapOn: ${RITUAL_TASK_LABEL}
+- extendedWaitUntil:
+    visible: ${RITUAL_DETAIL_READY_TEXT}
+    timeout: 10000
+- assertVisible: ${RITUAL_DETAIL_READY_TEXT}
+- assertVisible:
+    id: "ritual-proof-section"
+- tapOn:
+    id: "tab-alerts"
+- extendedWaitUntil:
+    visible: "Alerts"
+    timeout: 8000
+- openLink: ${RITUAL_REVIEW_ALERT_LINK}
+- extendedWaitUntil:
+    visible: ${RITUAL_DETAIL_READY_TEXT}
+    timeout: 10000
+- assertVisible: ${RITUAL_DETAIL_READY_TEXT}
+- assertVisible:
+    id: "ritual-review-section"

@@ -1,0 +1,97 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// PreferenceService manages user-specific application preferences including theme mode.
+// All methods require authentication and operate within the user's organization context.
+service PreferenceService {
+  // GetUserPreference retrieves the current user's preference settings.
+  // Returns default values if no preference record exists.
+  rpc GetUserPreference(GetUserPreferenceRequest) returns (GetUserPreferenceResponse){
+    option (rpc.v1.access_control) = {
+      required_permissions: ["pref.view"]
+    };
+  }
+  
+  // UpdateUserPreference updates the current user's preference settings.
+  // Creates a new preference record if none exists (upsert behavior).
+  rpc UpdateUserPreference(UpdateUserPreferenceRequest) returns (UpdateUserPreferenceResponse){
+    option (rpc.v1.access_control) = {
+      required_permissions: ["pref.update"]
+    };
+  }
+  
+  // ResetUserPreference deletes the current user's preference record,
+  // causing the system to revert to default values and OS preferences.
+  rpc ResetUserPreference(ResetUserPreferenceRequest) returns (ResetUserPreferenceResponse){
+    option (rpc.v1.access_control) = {
+      required_permissions: ["pref.reset"]
+    };
+  }
+}
+
+// Theme mode selection
+enum ThemeMode {
+  THEME_MODE_UNSPECIFIED = 0; // Invalid/default value
+  THEME_MODE_LIGHT = 1;       // Light theme
+  THEME_MODE_DARK = 2;        // Dark theme
+}
+
+// How the theme preference was determined
+enum PreferenceSource {
+  PREFERENCE_SOURCE_UNSPECIFIED = 0; // Invalid/default value
+  PREFERENCE_SOURCE_MANUAL = 1;      // User manually selected via toggle
+  PREFERENCE_SOURCE_OS_DEFAULT = 2;  // Detected from OS/browser preference
+}
+
+// User preference settings
+message UserPreference {
+  string id = 1;                               // UUID v7
+  string employee_id = 2;                      // Employee UUID (identity)
+  ThemeMode theme_mode = 3;                    // Active theme mode
+  PreferenceSource preference_source = 4;      // How theme was selected
+  google.protobuf.Timestamp updated_at = 5;    // Last update timestamp
+  
+  // Future extensibility (locale, timezone, notifications, etc.)
+  // Not exposed in v1 - internal only
+  // map<string, string> additional_preferences = 6;
+}
+
+// GetUserPreference
+
+message GetUserPreferenceRequest {
+  // No fields - uses auth context for employee_id and organization_id
+}
+
+message GetUserPreferenceResponse {
+  UserPreference preference = 1; // Current preference settings or defaults
+  bool exists = 2;               // True if preference record exists, false if returning defaults
+}
+
+// UpdateUserPreference
+
+message UpdateUserPreferenceRequest {
+  ThemeMode theme_mode = 1;              // New theme mode
+  PreferenceSource preference_source = 2; // How the theme was selected
+  
+  // No employee_id or organization_id - extracted from auth context
+}
+
+message UpdateUserPreferenceResponse {
+  UserPreference preference = 1; // Updated preference settings
+}
+
+// ResetUserPreference
+
+message ResetUserPreferenceRequest {
+  // No fields - uses auth context for employee_id and organization_id
+}
+
+message ResetUserPreferenceResponse {
+  bool success = 1; // True if reset was successful
+}

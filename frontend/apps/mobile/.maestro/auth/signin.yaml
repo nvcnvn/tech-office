@@ -1,0 +1,75 @@
+appId: com.devguards.TechOffice
+name: "Auth — Sign In"
+# T12.2: Launch app → enter subdomain → enter email/password → submit from keyboard → assert Chat tab
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- runFlow:
+        when:
+            visible: "Continue"
+        commands:
+            - tapOn: "Continue"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- runFlow:
+        when:
+            visible: "DEVELOPMENT SERVERS"
+        commands:
+            - tapOn:
+                text: "Tech Office"
+                index: 1
+- runFlow:
+        when:
+            visible: "Continue"
+        commands:
+            - tapOn: "Continue"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- runFlow:
+        when:
+            visible: 'How do you sign in\?'
+        commands:
+            - tapOn:
+                id: "signin-method-email"
+- extendedWaitUntil:
+    visible:
+      id: "subdomain-input"
+    timeout: 10000
+
+# Enter org subdomain
+- tapOn:
+    id: "subdomain-input"
+- eraseText: 64
+- inputText: "${MAESTRO_TEST_SUBDOMAIN}"
+- tapOn:
+    id: "email-input"
+
+# Enter email
+- eraseText: 50
+- inputText: "${MAESTRO_TEST_EMAIL}"
+- tapOn: "Sign in to your workspace"
+- tapOn:
+    id: "password-input"
+
+# Enter password and submit via keyboard return
+- eraseText: 20
+- inputText: "${MAESTRO_TEST_PASSWORD}"
+- tapOn: "Sign in to your workspace"
+- tapOn:
+    id: "signin-button"
+
+# Wait for API call to complete and navigate
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 20000

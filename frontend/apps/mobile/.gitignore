@@ -1,0 +1,15 @@
+.expo/
+.expo-shared/
+
+# Local logs
+.direct-ios-build.log
+
+# Native local artifacts
+android/.kotlin/
+android/app/debug.keystore
+
+# Maestro screenshot output
+tmp/maestro-screenshots/
+# Local environment variables
+.env.local
+.env.*.local

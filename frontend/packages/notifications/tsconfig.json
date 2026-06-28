@@ -1,0 +1,36 @@
+{
+	"compilerOptions": {
+		"target": "ES2020",
+		"lib": [
+			"ES2020",
+			"DOM"
+		],
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"declaration": true,
+		"outDir": "./dst",
+		"rootDir": "./src",
+		"strict": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"jsx": "react",
+		"baseUrl": ".",
+		"paths": {
+			"apis/*": [
+				"../apis/dst/*"
+			],
+			"rpc": [
+				"../rpc/dst"
+			]
+		}
+	},
+	"include": [
+		"src/**/*"
+	],
+	"exclude": [
+		"node_modules",
+		"dst"
+	]
+}

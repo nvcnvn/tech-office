@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/access_control.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// ChatFileService provides domain-owned file upload operations for chat attachments.
+// This service owns the upload flow to eliminate circular dependencies and improve security.
+// 
+// ARCHITECTURE NOTE:
+// - ChatService verifies channel membership BEFORE calling FileLogic
+// - Access scope derived from channel.is_private (server-side, not client-controlled)
+// - FileLogic is called internally (not via RPC), preventing File → Chat → File circular dependency
+service ChatFileService {
+  // RequestChannelFileUpload generates presigned R2 upload URL for chat attachment.
+  // Server verifies channel membership and derives access scope from channel privacy setting.
+  // This replaces FileService.RequestUploadUrl for chat attachments (security improvement).
+  rpc RequestChannelFileUpload(RequestChannelFileUploadRequest) returns (RequestChannelFileUploadResponse) {
+    option (access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // ConfirmChannelFileUpload finalizes upload after client uploads to R2.
+  // Triggers async workflows for validation, PDF conversion, and content indexing.
+  // Verifies channel membership again to prevent race conditions.
+  rpc ConfirmChannelFileUpload(ConfirmChannelFileUploadRequest) returns (ConfirmChannelFileUploadResponse) {
+    option (access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+}
+
+// ========== Request/Response Messages ==========
+
+message RequestChannelFileUploadRequest {
+  string channel_id = 1;         // Channel to attach file to
+  string filename = 2;           // Original filename
+  string mime_type = 3;          // Client-declared MIME type
+  int64 size_bytes = 4;          // File size in bytes
+}
+
+message RequestChannelFileUploadResponse {
+  string file_id = 1;            // Generated file ID
+  string upload_url = 2;         // Presigned R2 upload URL
+  google.protobuf.Timestamp expires_at = 3;  // URL expiration time
+}
+
+message ConfirmChannelFileUploadRequest {
+  string channel_id = 1;         // Channel file was attached to
+  string file_id = 2;            // File ID from request response
+}
+
+message ConfirmChannelFileUploadResponse {
+  FileMetadata file = 1;         // Confirmed file metadata
+}
+
+// ========== Supporting Messages ==========
+
+message FileMetadata {
+  string id = 1;
+  string original_filename = 2;
+  string storage_key = 3;
+  int64 size_bytes = 4;
+  string mime_type = 5;
+  string validation_status = 6;   // pending, verified, warning, failed, skipped
+  string validation_message = 7;
+  string detected_mime_type = 8;
+  string upload_context = 9;
+  string uploaded_by_employee_id = 10;
+  bool is_deleted = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}

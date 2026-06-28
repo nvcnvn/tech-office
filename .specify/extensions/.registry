@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "git": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:9731aa8143a72fbebfdb440f155038ab42642517c2b2bdbbf67c8fdbe076ed79",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "codex": [
+          "speckit.git.feature",
+          "speckit.git.validate",
+          "speckit.git.remote",
+          "speckit.git.initialize",
+          "speckit.git.commit"
+        ],
+        "copilot": [
+          "speckit.git.feature",
+          "speckit.git.validate",
+          "speckit.git.remote",
+          "speckit.git.initialize",
+          "speckit.git.commit"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-04-21T09:45:43.514309+00:00"
+    },
+    "iterate": {
+      "version": "2.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:f69d92321c68c54afb56b77947e34b0431e41a0b923e4e69e432abcf5957d95a",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "codex": [
+          "speckit.iterate.define",
+          "speckit.iterate.apply"
+        ],
+        "copilot": [
+          "speckit.iterate.define",
+          "speckit.iterate.apply"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-04-21T09:47:49.497965+00:00"
+    }
+  }
+}

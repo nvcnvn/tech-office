@@ -1,0 +1,152 @@
+appId: com.devguards.TechOffice
+name: "Voice Communication"
+---
+- runFlow: "auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 15000
+- tapOn:
+    text: "Chat"
+- extendedWaitUntil:
+    visible:
+      id: "channel-row-.*"
+    timeout: 15000
+- tapOn:
+    id: "channel-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "channel-header-title"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/voice-01-channel"
+- runFlow:
+    when:
+      visible:
+        id: "incoming-voice-call-banner"
+    commands:
+      - assertVisible:
+          id: "incoming-voice-decline-button"
+      - assertVisible:
+          id: "incoming-voice-accept-button"
+      - takeScreenshot: "tmp/maestro-screenshots/voice-01-incoming-call"
+      - tapOn:
+          id: "incoming-voice-decline-button"
+- runFlow:
+    when:
+      visible:
+        id: "voice-call-join-button"
+    commands:
+      - tapOn:
+          id: "voice-call-join-button"
+      - extendedWaitUntil:
+          visible:
+            id: "voice-call-leave-button"
+          timeout: 10000
+      - takeScreenshot: "tmp/maestro-screenshots/voice-02-joined-existing-call"
+      - tapOn:
+          id: "voice-call-leave-button"
+      - extendedWaitUntil:
+          visible:
+            id: "voice-call-start-button"
+          timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "voice-call-start-button"
+    timeout: 8000
+- tapOn:
+    id: "voice-call-start-button"
+- extendedWaitUntil:
+    visible:
+      id: "voice-call-banner"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "voice-call-leave-button"
+    timeout: 20000
+- takeScreenshot: "tmp/maestro-screenshots/voice-02-active-call"
+- runFlow:
+    when:
+      visible:
+        id: "voice-quality-indicator"
+    commands:
+      - assertVisible:
+          id: "voice-quality-indicator"
+- tapOn:
+    id: "voice-call-leave-button"
+- extendedWaitUntil:
+    visible:
+      id: "voice-call-start-button"
+    timeout: 10000
+- extendedWaitUntil:
+    visible:
+      id: "voice-call-record"
+    timeout: 15000
+- assertVisible:
+    id: "voice-call-record"
+- runFlow:
+    when:
+      visible:
+        id: "voice-transcript-open-button"
+    commands:
+      - tapOn:
+          id: "voice-transcript-open-button"
+- runFlow:
+    when:
+      visible:
+        id: "voice-message-play-button"
+    commands:
+      - tapOn:
+          id: "voice-message-play-button"
+- takeScreenshot: "tmp/maestro-screenshots/voice-03-call-ended"
+- tapOn:
+    id: "voice-message-record-button"
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- extendedWaitUntil:
+    visible:
+      id: "voice-message-recorder"
+    timeout: 10000
+- tapOn:
+    id: "voice-message-cancel-button"
+- extendedWaitUntil:
+    visible:
+      id: "voice-message-record-button"
+    timeout: 10000
+- tapOn:
+    id: "voice-message-record-button"
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+- extendedWaitUntil:
+    visible:
+      id: "voice-message-recorder"
+    timeout: 10000
+- tapOn:
+    id: "voice-message-stop-button"
+- extendedWaitUntil:
+    visible:
+      id: "voice-message-send-button"
+    timeout: 10000
+- tapOn:
+    id: "voice-message-send-button"
+- extendedWaitUntil:
+    visible:
+      id: "voice-message-player"
+    timeout: 15000
+- tapOn:
+    id: "voice-message-play-button"
+- assertVisible:
+    id: "voice-message-player"
+- takeScreenshot: "tmp/maestro-screenshots/voice-04-message-playback"

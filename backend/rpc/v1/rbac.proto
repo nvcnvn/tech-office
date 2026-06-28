@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/descriptor.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// PermissionBasedAccessControl replaces the former RoleBasedAccessControl.
+// Each RPC method declares required permissions via this option.
+// Semantics: user needs ANY ONE of the listed permissions (OR logic).
+// Empty required_permissions + allow_unauthenticated=false means "any authenticated user".
+message PermissionBasedAccessControl {
+  // Permission strings required for access (OR semantics).
+  // Format: "<domain>.<action>" (e.g., "chat.sendMessage").
+  repeated string required_permissions = 1;
+
+  // If true, bypasses all authentication and permission checks.
+  bool allow_unauthenticated = 2;
+}
+
+extend google.protobuf.MethodOptions {
+  optional PermissionBasedAccessControl access_control = 90000;
+}

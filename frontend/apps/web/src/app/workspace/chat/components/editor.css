@@ -1,0 +1,103 @@
+/* TipTap Editor Styles for Message Composer */
+
+/* Code block styling with syntax highlighting */
+.code-block-editor {
+	border-radius: 0.5rem;
+	padding: 1rem;
+	margin-top: 0.5rem;
+	margin-bottom: 0.5rem;
+	overflow-x: auto;
+	background-color: rgb(17 24 39);
+	/* gray-900 for dark code blocks */
+	color: rgb(243 244 246);
+	/* gray-100 */
+	font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
+	font-size: 0.875rem;
+	line-height: 1.5;
+}
+
+.code-block-editor pre {
+	margin: 0;
+	padding: 0;
+	background: transparent !important;
+}
+
+.code-block-editor code {
+	color: rgb(243 244 246);
+	/* gray-100 */
+	background: transparent !important;
+	font-family: inherit;
+}
+
+/* Syntax highlighting colors (lowlight/highlight.js) */
+.code-block-editor .hljs-comment,
+.code-block-editor .hljs-quote {
+	color: rgb(107 114 128);
+	/* gray-500 */
+}
+
+.code-block-editor .hljs-keyword,
+.code-block-editor .hljs-selector-tag,
+.code-block-editor .hljs-literal {
+	color: rgb(244 114 182);
+	/* pink-400 */
+}
+
+.code-block-editor .hljs-string,
+.code-block-editor .hljs-doctag {
+	color: rgb(74 222 128);
+	/* green-400 */
+}
+
+.code-block-editor .hljs-title,
+.code-block-editor .hljs-section,
+.code-block-editor .hljs-selector-id {
+	color: rgb(96 165 250);
+	/* blue-400 */
+}
+
+.code-block-editor .hljs-subst,
+.code-block-editor .hljs-type,
+.code-block-editor .hljs-class .hljs-title {
+	color: rgb(250 204 21);
+	/* yellow-400 */
+}
+
+.code-block-editor .hljs-tag,
+.code-block-editor .hljs-name,
+.code-block-editor .hljs-attribute {
+	color: rgb(251 146 60);
+	/* orange-400 */
+}
+
+.code-block-editor .hljs-regexp,
+.code-block-editor .hljs-link {
+	color: rgb(34 211 238);
+	/* cyan-400 */
+}
+
+.code-block-editor .hljs-symbol,
+.code-block-editor .hljs-bullet,
+.code-block-editor .hljs-built_in,
+.code-block-editor .hljs-builtin-name {
+	color: rgb(192 132 252);
+	/* purple-400 */
+}
+
+.code-block-editor .hljs-number {
+	color: rgb(253 186 116);
+	/* orange-300 */
+}
+
+.code-block-editor .hljs-meta {
+	color: rgb(156 163 175);
+	/* gray-400 */
+}
+
+.code-block-editor .hljs-emphasis {
+	font-style: italic;
+}
+
+.code-block-editor .hljs-strong {
+	font-weight: 700;
+}

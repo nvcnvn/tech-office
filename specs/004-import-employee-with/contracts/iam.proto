@@ -1,0 +1,101 @@
+// RPC Contract Extension: Enhanced Employee Import with Additional Fields
+// File: backend/rpc/v1/iam.proto
+// Status: Extension specification (to be applied to existing file)
+// Version: v2 (adds optional fields to existing EmployeeData message)
+
+syntax = "proto3";
+
+package rpc.v1;
+
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// MODIFICATION: Extend existing EmployeeData message with optional fields
+// Location: Lines 120-131 in existing iam.proto
+// 
+// BEFORE (v1):
+// message EmployeeData {
+//   string email = 1;
+//   string given_name = 2;
+//   string family_name = 3;
+//   int32 row_number = 4;
+// }
+//
+// AFTER (v2):
+message EmployeeData {
+  string email = 1;           // Required: user@example.com
+  string given_name = 2;      // Required: First name
+  string family_name = 3;     // Required: Last name
+  int32 row_number = 4;       // Optional: Source row number for error reporting
+  
+  // NEW OPTIONAL FIELDS (v2 extension):
+  // These fields are backward compatible - existing clients can omit them entirely
+  optional string hire_date = 5;        // Optional: ISO 8601 date string (YYYY-MM-DD)
+                                        // Parsed from Excel using 5 supported formats
+                                        // Transmitted as ISO 8601 for unambiguous serialization
+                                        
+  optional string date_of_birth = 6;    // Optional: ISO 8601 date string (YYYY-MM-DD)
+                                        // Same parsing rules as hire_date
+                                        
+  optional string phone_number = 7;     // Optional: International phone format
+                                        // Validation: only numeric, "+", and "-" characters
+                                        // Length: 7-20 characters
+                                        // Example: "+1-555-123-4567"
+                                        
+  optional string home_address = 8;     // Optional: Free-form text address
+                                        // Max length: 500 characters (UTF-8)
+                                        // Multi-line allowed (CR/LF preserved)
+                                        // Example: "123 Main St\nApt 4B\nCity, State 12345"
+}
+
+// NO CHANGES to these messages - they already support EmployeeData with new fields:
+// - ParseEmployeeFileRequest
+// - ParseEmployeeFileResponse
+// - PreviewEmployeeImportRequest
+// - PreviewEmployeeImportResponse
+// - ExecuteEmployeeImportRequest
+// - ExecuteEmployeeImportResponse
+// - EmployeePreviewItem
+// - EmployeeImportResult
+
+// Backward Compatibility Notes:
+// 1. Existing clients sending only fields 1-4 will continue to work
+// 2. New clients can send fields 5-8 as optional data
+// 3. Old servers (before this change) will ignore unknown fields 5-8
+// 4. New servers (after this change) will accept both old and new message formats
+// 5. Protobuf wire format ensures no breaking changes
+
+// Validation Notes:
+// - Client-side validation (TypeScript): Basic format checks before submission
+// - Server-side validation (Go): Comprehensive validation in PreviewEmployeeImport
+//   - Date parsing: Try 5 formats, return error if all fail
+//   - Phone validation: Regex pattern ^[0-9+\-]{7,20}$
+//   - Address validation: UTF-8 rune count <= 500
+// - Validation errors returned in EmployeePreviewItem.validation_errors array
+
+// Code Generation:
+// Backend:  cd backend && buf generate
+//   Generates: backend/rpc/v1/iam.pb.go
+//   Go types use pointers for optional fields: *string (nil = not provided)
+//
+// Frontend: cd frontend && pnpm -r build
+//   Generates: frontend/packages/rpc/rpc/v1/iam_pb.ts
+//   TypeScript types use optional: field?: string (undefined = not provided)
+
+// Database Mapping:
+// Protobuf (string) -> Go (*time.Time) -> PostgreSQL (DATE)
+//   hire_date: ISO 8601 string "2022-03-15" -> time.Time -> DATE
+//   date_of_birth: ISO 8601 string "1990-06-20" -> time.Time -> DATE
+//
+// Protobuf (string) -> Go (*string) -> PostgreSQL (TEXT)
+//   phone_number: "+1-555-123-4567" -> string -> TEXT
+//   home_address: "123 Main St..." -> string -> TEXT
+
+// Testing Scenarios (post-verification):
+// 1. Import with all optional fields populated
+// 2. Import with no optional fields (backward compatibility)
+// 3. Import with partial optional fields (mix of provided/omitted)
+// 4. Import with invalid date formats (expect validation errors)
+// 5. Import with invalid phone format (expect validation errors)
+// 6. Import with address > 500 chars (expect validation error)

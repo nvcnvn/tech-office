@@ -1,0 +1,302 @@
+// Protocol Buffer extensions for notification.proto
+// These definitions will be added to backend/rpc/v1/notification.proto
+
+syntax = "proto3";
+
+package rpc.v1;
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1";
+
+import "google/protobuf/timestamp.proto";
+
+// ============================================================================
+// ENUMS (Add to notification.proto)
+// ============================================================================
+
+// Presence status of an employee
+enum PresenceStatus {
+  PRESENCE_STATUS_UNSPECIFIED = 0;
+  PRESENCE_STATUS_ONLINE = 1;          // Tab focused, actively viewing app
+  PRESENCE_STATUS_ONLINE_HIDDEN = 2;   // App open but tab not focused
+  PRESENCE_STATUS_IDLE = 3;            // No interaction for 5+ minutes
+  PRESENCE_STATUS_OFFLINE = 4;         // No SSE connection or stale heartbeat
+}
+
+// Browser notification permission state
+enum PermissionState {
+  PERMISSION_STATE_UNSPECIFIED = 0;
+  PERMISSION_STATE_PROMPT = 1;     // Not yet requested
+  PERMISSION_STATE_GRANTED = 2;    // Permission granted
+  PERMISSION_STATE_DENIED = 3;     // Permission denied/blocked
+}
+
+// Presence visibility mode
+enum VisibilityMode {
+  VISIBILITY_MODE_UNSPECIFIED = 0;
+  VISIBILITY_MODE_EVERYONE = 1;     // Visible to all organization members
+  VISIBILITY_MODE_DEPARTMENTS = 2;  // Visible only to same departments
+  VISIBILITY_MODE_OFFLINE = 3;      // Always appear offline
+}
+
+// ============================================================================
+// MESSAGES (Add to notification.proto)
+// ============================================================================
+
+// Request to update employee presence status
+message UpdatePresenceStatusRequest {
+  // Presence status to set
+  PresenceStatus status = 1;
+  
+  // UUID of channel currently viewing (empty if not in chat)
+  string active_channel_id = 2;
+  
+  // Timestamp of last user interaction (for idle detection)
+  google.protobuf.Timestamp last_interaction_at = 3;
+}
+
+// Response for presence status update
+message UpdatePresenceStatusResponse {
+  // Confirmed presence status
+  PresenceStatus status = 1;
+  
+  // Server timestamp
+  google.protobuf.Timestamp updated_at = 2;
+}
+
+// Request to register browser push notification token
+message RegisterPushTokenRequest {
+  // FCM registration token
+  string fcm_token = 1;
+  
+  // Browser/device unique identifier (UUID)
+  string device_identifier = 2;
+  
+  // Push service endpoint URL
+  string endpoint = 3;
+  
+  // VAPID encryption keys (JSON: {p256dh: string, auth: string})
+  string keys_json = 4;
+}
+
+// Response for push token registration
+message RegisterPushTokenResponse {
+  // Token ID (UUID)
+  string token_id = 1;
+  
+  // Registration timestamp
+  google.protobuf.Timestamp registered_at = 2;
+  
+  // Whether token is valid
+  bool is_valid = 3;
+}
+
+// Request to revoke a push notification token
+message RevokePushTokenRequest {
+  // Token ID to revoke (UUID)
+  string token_id = 1;
+  
+  // Or revoke by device identifier
+  string device_identifier = 2;
+}
+
+// Response for push token revocation
+message RevokePushTokenResponse {
+  // Number of tokens revoked
+  int32 revoked_count = 1;
+}
+
+// Request to list employee's push tokens
+message ListPushTokensRequest {
+  // No parameters - returns current employee's tokens
+}
+
+// Push token information
+message PushTokenInfo {
+  // Token ID (UUID)
+  string token_id = 1;
+  
+  // Device identifier (UUID)
+  string device_identifier = 2;
+  
+  // Whether token is valid
+  bool is_valid = 3;
+  
+  // Registration timestamp
+  google.protobuf.Timestamp registered_at = 4;
+  
+  // Last successful push send timestamp
+  google.protobuf.Timestamp last_used_at = 5;
+}
+
+// Response for listing push tokens
+message ListPushTokensResponse {
+  // Employee's push tokens
+  repeated PushTokenInfo tokens = 1;
+}
+
+// Request to set presence visibility settings
+message SetPresenceVisibilityRequest {
+  // Visibility mode
+  VisibilityMode visibility_mode = 1;
+  
+  // Custom status text (e.g., "In meeting")
+  string custom_status_text = 2;
+  
+  // Custom status emoji (e.g., "📅")
+  string custom_status_emoji = 3;
+}
+
+// Response for setting presence visibility
+message SetPresenceVisibilityResponse {
+  // Confirmed visibility mode
+  VisibilityMode visibility_mode = 1;
+  
+  // Custom status text
+  string custom_status_text = 2;
+  
+  // Custom status emoji
+  string custom_status_emoji = 3;
+  
+  // Update timestamp
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+// Request to get presence settings
+message GetPresenceSettingsRequest {
+  // No parameters - returns current employee's settings
+}
+
+// Response for getting presence settings
+message GetPresenceSettingsResponse {
+  // Visibility mode
+  VisibilityMode visibility_mode = 1;
+  
+  // Custom status text
+  string custom_status_text = 2;
+  
+  // Custom status emoji
+  string custom_status_emoji = 3;
+  
+  // Last update timestamp
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+// Request to get another employee's visible presence
+message GetEmployeePresenceRequest {
+  // Employee ID to check
+  string employee_id = 1;
+}
+
+// Employee presence information
+message EmployeePresence {
+  // Employee ID
+  string employee_id = 1;
+  
+  // Visible presence status (respects visibility settings)
+  PresenceStatus status = 2;
+  
+  // Custom status text
+  string custom_status_text = 3;
+  
+  // Custom status emoji
+  string custom_status_emoji = 4;
+  
+  // Last update timestamp
+  google.protobuf.Timestamp updated_at = 5;
+}
+
+// Response for getting employee presence
+message GetEmployeePresenceResponse {
+  // Employee presence information
+  EmployeePresence presence = 1;
+}
+
+// Request to get presence for multiple employees (batch)
+message GetBatchEmployeePresenceRequest {
+  // Employee IDs to check (max 100)
+  repeated string employee_ids = 1;
+}
+
+// Response for batch employee presence
+message GetBatchEmployeePresenceResponse {
+  // Presence information for requested employees
+  repeated EmployeePresence presences = 1;
+}
+
+// ============================================================================
+// SSE EVENT TYPES (for documentation, not proto)
+// ============================================================================
+
+// These event types will be sent via SSE (Server-Sent Events) channel:
+//
+// 1. presence_update (PresenceUpdateEvent):
+//    - employee_id: string
+//    - status: PresenceStatus enum value
+//    - custom_status_text: string
+//    - custom_status_emoji: string
+//    - updated_at: ISO timestamp
+//
+// 2. typing_indicator (TypingIndicatorEvent) - EPHEMERAL, priority=4:
+//    - channel_id: string
+//    - employee_id: string
+//    - employee_name: string
+//    - event_type: "typing" | "stopped_typing"
+//    - timestamp: ISO timestamp
+//    - Routing: ONLY sent to connections with active_channel_id = channel_id AND presence_status = "online"
+//
+// 3. reaction_update (ReactionUpdateEvent) - EPHEMERAL, priority=4:
+//    - channel_id: string
+//    - message_id: string
+//    - employee_id: string
+//    - reaction_emoji: string
+//    - action: "added" | "removed"
+//    - timestamp: ISO timestamp
+//    - Routing: ONLY sent to connections with active_channel_id = channel_id AND presence_status = "online"
+
+// ============================================================================
+// SERVICE EXTENSIONS (Add to NotificationService in notification.proto)
+// ============================================================================
+
+// service NotificationService {
+//   // ... existing RPCs ...
+//
+//   // Update employee's presence status
+//   rpc UpdatePresenceStatus(UpdatePresenceStatusRequest) returns (UpdatePresenceStatusResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+//
+//   // Register browser push notification token
+//   rpc RegisterPushToken(RegisterPushTokenRequest) returns (RegisterPushTokenResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+//
+//   // Revoke push notification token
+//   rpc RevokePushToken(RevokePushTokenRequest) returns (RevokePushTokenResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+//
+//   // List employee's push tokens
+//   rpc ListPushTokens(ListPushTokensRequest) returns (ListPushTokensResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+//
+//   // Set presence visibility settings
+//   rpc SetPresenceVisibility(SetPresenceVisibilityRequest) returns (SetPresenceVisibilityResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+//
+//   // Get own presence settings
+//   rpc GetPresenceSettings(GetPresenceSettingsRequest) returns (GetPresenceSettingsResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+//
+//   // Get another employee's visible presence
+//   rpc GetEmployeePresence(GetEmployeePresenceRequest) returns (GetEmployeePresenceResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+//
+//   // Get batch employee presence (for member lists, channel participants)
+//   rpc GetBatchEmployeePresence(GetBatchEmployeePresenceRequest) returns (GetBatchEmployeePresenceResponse) {
+//     option (access_control.required_roles) = ROLE_EMPLOYEE;
+//   }
+// }

@@ -1,0 +1,15 @@
+.git/
+.env*
+.dev-keys/
+.vscode/
+.idea/
+tmp/
+test/
+docs/
+docker/
+docker-compose.yml
+*.log
+*.log*
+*.tmp
+*.swp
+**/*_test.go

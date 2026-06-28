@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+/*
+ * Theme transitions for smooth light/dark mode switching
+ * Applied to :root to affect all elements
+ * Disabled on initial load via .no-transition class to prevent flash
+ */
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Custom theme colors - Light mode */
+  --bg-default: 249 250 251;
+  /* gray-50 as RGB */
+  --bg-paper: 255 255 255;
+  /* white as RGB */
+  --bg-elevated: 255 255 255;
+  --bg-active: 243 244 246;
+  /* gray-100 as RGB */
+
+  --text-primary: 17 24 39;
+  /* gray-900 as RGB */
+  --text-secondary: 75 85 99;
+  /* gray-600 as RGB */
+  --text-disabled: 156 163 175;
+  /* gray-400 as RGB */
+
+  --border-default: 229 231 235;
+  /* gray-200 as RGB */
+  --border-light: 243 244 246;
+  /* gray-100 as RGB */
+  --border-dark: 209 213 219;
+  /* gray-300 as RGB */
+
+  --primary-main: 37 99 235;
+  /* blue-600 as RGB */
+  --primary-light: 219 234 254;
+  /* blue-100 as RGB */
+  --primary-text: 37 99 235;
+
+  /* Smooth 700ms transitions for theme changes */
+  transition-property: background-color, color, border-color, box-shadow, fill, stroke;
+  transition-duration: 700ms;
+  transition-timing-function: ease-in-out;
+}
+
+/* Disable transitions during initial load to prevent flash */
+:root.no-transition,
+:root.no-transition * {
+  transition: none !important;
+}
+
+/* Dark mode theme colors */
+:root.dark {
+  --background: #0a0a0a;
+  --foreground: #ededed;
+
+  /* Custom theme colors - Dark mode */
+  --bg-default: 9 9 11;
+  /* zinc-950 as RGB */
+  --bg-paper: 24 24 27;
+  /* zinc-900 as RGB */
+  --bg-elevated: 39 39 42;
+  /* zinc-800 as RGB */
+  --bg-active: 63 63 70;
+  /* zinc-700 as RGB */
+
+  --text-primary: 255 255 255;
+  /* white with opacity applied in usage */
+  --text-secondary: 255 255 255;
+  /* white with opacity applied in usage */
+  --text-disabled: 255 255 255;
+  /* white with opacity applied in usage */
+
+  --border-default: 255 255 255;
+  /* white with opacity applied in usage */
+  --border-light: 255 255 255;
+  --border-dark: 255 255 255;
+
+  --primary-main: 96 165 250;
+  /* blue-400 as RGB */
+  --primary-light: 23 37 84;
+  /* blue-950 as RGB */
+  --primary-text: 96 165 250;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Register custom theme color variables */
+  --color-bg-default: rgb(var(--bg-default));
+  --color-bg-paper: rgb(var(--bg-paper));
+  --color-bg-elevated: rgb(var(--bg-elevated));
+  --color-bg-active: rgb(var(--bg-active));
+
+  --color-text-primary: rgb(var(--text-primary));
+  --color-text-secondary: rgb(var(--text-secondary));
+  --color-text-disabled: rgb(var(--text-disabled));
+
+  --color-border-default: rgb(var(--border-default));
+  --color-border-light: rgb(var(--border-light));
+  --color-border-dark: rgb(var(--border-dark));
+
+  --color-primary-main: rgb(var(--primary-main));
+  --color-primary-light: rgb(var(--primary-light));
+  --color-primary-text: rgb(var(--primary-text));
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+
+    /* Auto dark mode from OS preference */
+    --bg-default: 9 9 11;
+    --bg-paper: 24 24 27;
+    --bg-elevated: 39 39 42;
+    --bg-active: 63 63 70;
+
+    --text-primary: 255 255 255;
+    --text-secondary: 255 255 255;
+    --text-disabled: 255 255 255;
+
+    --border-default: 255 255 255;
+    --border-light: 255 255 255;
+    --border-dark: 255 255 255;
+
+    --primary-main: 96 165 250;
+    --primary-light: 23 37 84;
+    --primary-text: 96 165 250;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}

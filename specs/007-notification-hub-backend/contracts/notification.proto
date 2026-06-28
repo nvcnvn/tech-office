@@ -1,0 +1,225 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// NotificationService provides notification publishing, listing, and real-time streaming
+// for the centralized notification hub.
+service NotificationService {
+  // PublishNotification creates and sends notifications to target employees.
+  // BACKEND SERVICES ONLY - not accessible to end users.
+  // Uses AdminPool for system-scope cross-tenant publishing.
+  rpc PublishNotification(PublishNotificationRequest) returns (PublishNotificationResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_SYSTEM] // Backend services only
+      allow_unauthenticated: false
+    };
+  }
+
+  // PublishBatchNotification creates and sends multiple notifications in a single batch.
+  // BACKEND SERVICES ONLY - not accessible to end users.
+  // Uses AdminPool for system-scope cross-tenant publishing.
+  rpc PublishBatchNotification(PublishBatchNotificationRequest) returns (PublishBatchNotificationResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_SYSTEM] // Backend services only
+      allow_unauthenticated: false
+    };
+  }
+
+  // ListNotifications returns paginated list of notifications for the authenticated employee.
+  // Filters by organization context from auth token. Uses TenantPool.
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE] // Employee-facing
+      allow_unauthenticated: false
+    };
+  }
+
+  // MarkAsRead marks one or more notifications as read for the authenticated employee.
+  // Validates ownership and organization context. Uses TenantPool.
+  rpc MarkAsRead(MarkAsReadRequest) returns (MarkAsReadResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // MarkAllBeforeTimestampAsRead bulk marks all notifications before a timestamp as read.
+  // Uses TenantPool with organization context validation.
+  rpc MarkAllBeforeTimestampAsRead(MarkAllBeforeTimestampAsReadRequest) returns (MarkAllBeforeTimestampAsReadResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // DeleteNotification removes a notification from the employee's view (soft delete).
+  // Uses TenantPool with organization context validation.
+  rpc DeleteNotification(DeleteNotificationRequest) returns (DeleteNotificationResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // StreamNotifications establishes Server-Sent Events (SSE) connection for real-time notifications.
+  // Registers connection in active_connection registry and streams new notifications.
+  // Uses TenantPool for employee operations.
+  rpc StreamNotifications(StreamNotificationsRequest) returns (stream NotificationEvent) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // GetUnreadCount returns the count of unread notifications for the authenticated employee.
+  // Uses TenantPool with organization context from auth token.
+  rpc GetUnreadCount(GetUnreadCountRequest) returns (GetUnreadCountResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+}
+
+// ============================================================================
+// Publishing API (Backend Services Only)
+// ============================================================================
+
+message PublishNotificationRequest {
+  string organization_id = 1; // Target organization UUID
+  
+  // Recipient targeting
+  NotificationRecipients recipients = 2;
+  
+  // Notification content
+  string source_domain = 3; // chat, crm, projects, hr, support, finance, system
+  string notification_type = 4; // message, mention, task_assigned, deal_updated, etc.
+  string title = 5;
+  string message = 6;
+  
+  // Action data for deep linking (flexible JSON)
+  map<string, string> action_data = 7; // e.g., {"chatThreadId": "uuid", "messageId": "uuid"}
+  string action_category = 8; // For deduplication: react, comment, update, assign
+  
+  // Delivery configuration
+  int32 priority = 9; // 0=always, 1=not offline (default), 2=online only, 4=silent
+  
+  // Publishing service identification
+  string publishing_service_id = 10; // Backend service identifier
+}
+
+message NotificationRecipients {
+  // At least one of the following must be provided
+  repeated string employee_ids = 1; // Direct employee UUID list
+  repeated string department_ids = 2; // Department UUID list (resolved to employees)
+}
+
+message PublishNotificationResponse {
+  string notification_id = 1; // Created notification UUID
+  int32 recipient_count = 2; // Total recipients resolved
+  repeated string recipient_employee_ids = 3; // Resolved employee UUIDs
+}
+
+message PublishBatchNotificationRequest {
+  string organization_id = 1;
+  repeated PublishNotificationRequest notifications = 2; // Batch of notifications
+  string batch_key = 3; // For deduplication: "action_category:source_user:resource"
+}
+
+message PublishBatchNotificationResponse {
+  string batch_id = 1; // Created batch UUID
+  int32 notification_count = 2; // Number of notifications created
+  int32 total_recipient_count = 3; // Total recipients across all notifications
+}
+
+// ============================================================================
+// Employee-Facing API
+// ============================================================================
+
+message ListNotificationsRequest {
+  // Filters
+  bool unread_only = 1; // Default: false (show all)
+  repeated string source_domains = 2; // Filter by source domain (empty = all)
+  
+  // Pagination
+  int32 page_size = 3; // Default: 50, max: 100
+  string page_token = 4; // Cursor for next page (empty for first page)
+}
+
+message ListNotificationsResponse {
+  repeated NotificationSummary notifications = 1;
+  string next_page_token = 2; // Empty if no more pages
+  int32 total_unread_count = 3; // Total unread across all notifications
+}
+
+message NotificationSummary {
+  string notification_id = 1;
+  string notification_recipient_id = 2; // For mark as read operations
+  
+  // Content
+  string source_domain = 3;
+  string notification_type = 4;
+  string title = 5;
+  string message = 6;
+  map<string, string> action_data = 7;
+  
+  // Status
+  bool read_status = 8;
+  google.protobuf.Timestamp read_at = 9;
+  
+  // Delivery info
+  string delivery_status = 10; // pending, delivered, failed
+  google.protobuf.Timestamp delivered_at = 11;
+  
+  // Timestamps
+  google.protobuf.Timestamp created_at = 12; // From notification.updated_at
+}
+
+message MarkAsReadRequest {
+  repeated string notification_recipient_ids = 1; // UUIDs of notification_recipient rows
+}
+
+message MarkAsReadResponse {
+  int32 updated_count = 1; // Number of notifications marked as read
+}
+
+message MarkAllBeforeTimestampAsReadRequest {
+  google.protobuf.Timestamp before_timestamp = 1; // Mark all notifications before this time as read
+}
+
+message MarkAllBeforeTimestampAsReadResponse {
+  int32 updated_count = 1; // Number of notifications marked as read
+}
+
+message DeleteNotificationRequest {
+  string notification_recipient_id = 1; // UUID of notification_recipient row
+}
+
+message DeleteNotificationResponse {
+  bool success = 1;
+}
+
+message StreamNotificationsRequest {
+  string last_event_id = 1; // Last received event ID for replay (optional)
+}
+
+message NotificationEvent {
+  string event_id = 1; // Unique event ID for SSE (UUIDv7)
+  string event_type = 2; // "notification", "heartbeat", "connection_established"
+  NotificationSummary notification = 3; // Only present for "notification" event_type
+  google.protobuf.Timestamp timestamp = 4;
+}
+
+message GetUnreadCountRequest {
+  // No parameters - uses employee_id and organization_id from auth context
+}
+
+message GetUnreadCountResponse {
+  int32 unread_count = 1;
+  map<string, int32> unread_by_source_domain = 2; // Breakdown by source domain
+}

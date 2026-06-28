@@ -1,0 +1,88 @@
+appId: com.devguards.TechOffice
+name: "Canonical Resource Links"
+tags:
+  - links
+  - canonical
+  - routing
+env:
+    CANONICAL_TASK_LINK: ${MAESTRO_CANONICAL_TASK_LINK}
+    CANONICAL_TASK_OPEN_LINK: ${MAESTRO_CANONICAL_TASK_OPEN_LINK}
+    CANONICAL_ACCESS_DENIED_OPEN_LINK: ${MAESTRO_CANONICAL_ACCESS_DENIED_OPEN_LINK}
+    CANONICAL_NOT_FOUND_OPEN_LINK: ${MAESTRO_CANONICAL_NOT_FOUND_OPEN_LINK}
+    CANONICAL_TASK_READY_TEXT: ${MAESTRO_CANONICAL_TASK_READY_TEXT}
+    CANONICAL_TASK_TITLE: ${MAESTRO_CANONICAL_TASK_TITLE}
+    CANONICAL_PREVIEW_CHANNEL_ID: ${MAESTRO_CANONICAL_PREVIEW_CHANNEL_ID}
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- extendedWaitUntil:
+    visible: 'How do you sign in\?'
+    timeout: 15000
+- openLink: ${CANONICAL_TASK_OPEN_LINK}
+- runFlow:
+    when:
+      visible: "Open"
+    commands:
+      - tapOn: "Open"
+- runFlow:
+        when:
+            visible: "Tech Office"
+        commands:
+            - tapOn:
+                    point: "5%,6%"
+- extendedWaitUntil:
+    visible: 'How do you sign in\?'
+    timeout: 15000
+- tapOn:
+    id: "signin-method-email"
+- extendedWaitUntil:
+    visible: "Sign in to your workspace"
+    timeout: 10000
+- tapOn:
+    id: "subdomain-input"
+- eraseText: 20
+- inputText: "${MAESTRO_TEST_SUBDOMAIN}"
+- tapOn:
+    id: "email-input"
+- eraseText: 50
+- inputText: "${MAESTRO_TEST_EMAIL}"
+- tapOn: "Sign in to your workspace"
+- tapOn:
+    id: "password-input"
+- eraseText: 20
+- inputText: "${MAESTRO_TEST_PASSWORD}"
+- tapOn: "Sign in to your workspace"
+- tapOn:
+    id: "signin-button"
+- extendedWaitUntil:
+    visible: ${CANONICAL_TASK_READY_TEXT}
+    timeout: 10000
+- assertVisible: ${CANONICAL_TASK_READY_TEXT}
+- runFlow:
+        when:
+            visible: "Recent Conversations"
+        commands:
+            - tapOn: ${CANONICAL_TASK_READY_TEXT}
+            - extendedWaitUntil:
+                    visible: "Task: ${CANONICAL_TASK_TITLE}"
+                    timeout: 10000
+            - assertVisible: "Task: ${CANONICAL_TASK_TITLE}"
+            - tapOn:
+                    id: "channel-back-button"
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 10000
+- tapOn: "Chat"
+- tapOn:
+    id: "channel-row-${CANONICAL_PREVIEW_CHANNEL_ID}"
+- extendedWaitUntil:
+    visible:
+      id: "canonical-link-preview-card"
+    timeout: 10000
+- tapOn:
+    id: "canonical-link-preview-card"
+- extendedWaitUntil:
+    visible: ${CANONICAL_TASK_READY_TEXT}
+    timeout: 10000
+- assertVisible: ${CANONICAL_TASK_READY_TEXT}

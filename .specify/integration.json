@@ -1,0 +1,7 @@
+{
+  "integration": "agy",
+  "version": "0.7.2",
+  "scripts": {
+    "update-context": ".specify/integrations/agy/scripts/update-context.sh"
+  }
+}

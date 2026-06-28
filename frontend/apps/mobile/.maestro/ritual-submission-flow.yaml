@@ -1,0 +1,41 @@
+appId: com.devguards.TechOffice
+name: "Ritual Submission Flow"
+tags:
+  - rituals
+  - happy-path
+env:
+  RITUAL_TASK_LABEL: ${MAESTRO_RITUAL_TASK_LABEL}
+  RITUAL_REQUIREMENT_LABEL: ${MAESTRO_RITUAL_REQUIREMENT_LABEL}
+  RITUAL_SUCCESS_TEXT: ${MAESTRO_RITUAL_SUCCESS_TEXT}
+  RITUAL_NOTIFICATION_LINK: ${MAESTRO_RITUAL_NOTIFICATION_LINK}
+---
+- runFlow: "auth/signin.yaml"
+- tapOn:
+    id: "tab-tasks"
+- extendedWaitUntil:
+    visible: "Focus"
+    timeout: 8000
+- tapOn: ${RITUAL_TASK_LABEL}
+- extendedWaitUntil:
+    visible: "What to know"
+    timeout: 8000
+- assertVisible: "Proof checklist"
+- tapOn: ${RITUAL_REQUIREMENT_LABEL}
+- extendedWaitUntil:
+    visible: ${RITUAL_SUCCESS_TEXT}
+    timeout: 12000
+- tapOn: "OK"
+- extendedWaitUntil:
+    visible: "What to know"
+    timeout: 8000
+- assertVisible: "Proof checklist"
+- tapOn:
+    id: "tab-alerts"
+- extendedWaitUntil:
+    visible: "Alerts"
+    timeout: 8000
+- openLink: ${RITUAL_NOTIFICATION_LINK}
+- extendedWaitUntil:
+    visible: "Proof checklist"
+    timeout: 8000
+- assertVisible: "Proof checklist"

@@ -1,0 +1,272 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// DepartmentService manages organizational departments with hierarchical tree structure.
+// Supports CRUD operations, employee assignment, and tree reorganization.
+service DepartmentService {
+  // GetDepartmentTree retrieves the full department hierarchy for an organization.
+  // Returns departments in depth-first order with path and depth information.
+  // Available to all authenticated users (read-only).
+  rpc GetDepartmentTree(GetDepartmentTreeRequest) returns (GetDepartmentTreeResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.view"]
+    };
+  }
+
+  // GetDepartment retrieves a single department by ID with member/manager counts.
+  // Available to all authenticated users (read-only).
+  rpc GetDepartment(GetDepartmentRequest) returns (GetDepartmentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.view"]
+    };
+  }
+
+  // GetDepartmentMembers lists all employees in a department with their roles.
+  // Returns managers first, then alphabetically sorted members.
+  // Available to all authenticated users (read-only).
+  rpc GetDepartmentMembers(GetDepartmentMembersRequest) returns (GetDepartmentMembersResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.view"]
+    };
+  }
+
+  // GetUnassignedEmployees lists employees not assigned to any department.
+  // Used by managers to see available employees for assignment.
+  // Available to OWNER, OPERATOR, and department managers.
+  rpc GetUnassignedEmployees(GetUnassignedEmployeesRequest) returns (GetUnassignedEmployeesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.view"]
+    };
+  }
+
+  // CreateDepartment creates a new department with optional parent.
+  // Only OWNER and OPERATOR can create departments.
+  rpc CreateDepartment(CreateDepartmentRequest) returns (CreateDepartmentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.create"]
+    };
+  }
+
+  // UpdateDepartment updates department name and/or description.
+  // Only OWNER and OPERATOR can update departments.
+  rpc UpdateDepartment(UpdateDepartmentRequest) returns (UpdateDepartmentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.update"]
+    };
+  }
+
+  // MoveDepartment changes a department's parent (restructuring hierarchy).
+  // Validates against circular references before moving.
+  // Only OWNER and OPERATOR can move departments.
+  rpc MoveDepartment(MoveDepartmentRequest) returns (MoveDepartmentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.move"]
+    };
+  }
+
+  // DeleteDepartment removes a department.
+  // Fails if department has members (must migrate out first) or children.
+  // Only OWNER and OPERATOR can delete departments.
+  rpc DeleteDepartment(DeleteDepartmentRequest) returns (DeleteDepartmentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.delete"]
+    };
+  }
+
+  // AssignEmployeeToDepartment adds an employee to a department as member or manager.
+  // OWNER/OPERATOR can assign any employee to any department.
+  // Department managers can only assign unassigned employees to their own department.
+  // If employee already assigned elsewhere, they are moved (OWNER/OPERATOR only).
+  rpc AssignEmployeeToDepartment(AssignEmployeeToDepartmentRequest) returns (AssignEmployeeToDepartmentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.assignEmployee"]
+    };
+  }
+
+  // RemoveEmployeeFromDepartment unassigns an employee from their current department.
+  // Only OWNER and OPERATOR can remove employees from departments.
+  rpc RemoveEmployeeFromDepartment(RemoveEmployeeFromDepartmentRequest) returns (RemoveEmployeeFromDepartmentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.removeEmployee"]
+    };
+  }
+
+  // SetDepartmentManager designates an employee as manager of a department.
+  // Employee must be a member of the department (manager is also a member).
+  // Only OWNER and OPERATOR can set managers.
+  rpc SetDepartmentManager(SetDepartmentManagerRequest) returns (SetDepartmentManagerResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.setManager"]
+    };
+  }
+
+  // ClearDepartmentManager removes manager designation from a department.
+  // Employee remains a member of the department.
+  // Only OWNER and OPERATOR can clear managers.
+  rpc ClearDepartmentManager(ClearDepartmentManagerRequest) returns (ClearDepartmentManagerResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["dept.setManager"]
+    };
+  }
+}
+
+// Department represents an organizational unit with hierarchical structure.
+message Department {
+  string id = 1;                        // UUID v7
+  string organization_id = 2;           // Tenant isolation
+  string name = 3;                      // Department name (e.g., "Engineering")
+  string description = 4;               // Optional description
+  string parent_department_id = 5;      // NULL for root departments
+  int32 member_count = 6;               // Cached count of employees
+  int32 manager_count = 7;              // Cached count of managers (0 or 1 expected)
+  int32 child_count = 8;                // Cached count of child departments
+  string updated_at = 9;                // ISO 8601 timestamp
+  
+  // Computed fields for tree display
+  repeated string path = 10;            // Array of ancestor IDs (root to this dept)
+  int32 depth = 11;                     // Tree depth (0 = root)
+  string full_path = 12;                // Human-readable path (e.g., "Engineering > Backend")
+}
+
+// DepartmentMember represents an employee's membership in a department.
+message DepartmentMember {
+  string id = 1;                        // UUID v7
+  string organization_id = 2;           // Tenant isolation
+  string department_id = 3;             // Which department
+  string employee_id = 4;               // Which employee
+  string role = 5;                      // "member" or "manager"
+  string updated_at = 6;                // ISO 8601 timestamp
+  
+  // Embedded employee info for convenience
+  string employee_first_name = 7;
+  string employee_last_name = 8;
+  string employee_email = 9;
+}
+
+// GetDepartmentTree: Retrieve full department hierarchy
+message GetDepartmentTreeRequest {
+  // organization_id extracted from auth token (not in request body)
+}
+
+message GetDepartmentTreeResponse {
+  repeated Department departments = 1;  // Ordered by path (depth-first)
+}
+
+// GetDepartment: Retrieve single department by ID
+message GetDepartmentRequest {
+  string department_id = 1;
+}
+
+message GetDepartmentResponse {
+  Department department = 1;
+}
+
+// GetDepartmentMembers: List employees in a department
+message GetDepartmentMembersRequest {
+  string department_id = 1;
+}
+
+message GetDepartmentMembersResponse {
+  repeated DepartmentMember members = 1;  // Managers first, then alphabetical
+}
+
+// GetUnassignedEmployees: List employees without department
+message GetUnassignedEmployeesRequest {
+  // organization_id extracted from auth token
+}
+
+message GetUnassignedEmployeesResponse {
+  repeated UnassignedEmployee employees = 1;
+}
+
+message UnassignedEmployee {
+  string id = 1;
+  string first_name = 2;
+  string last_name = 3;
+  string email = 4;
+}
+
+// CreateDepartment: Create new department
+message CreateDepartmentRequest {
+  string name = 1;                      // Required: Department name
+  string description = 2;               // Optional: Description
+  string parent_department_id = 3;      // Optional: Parent for nesting (NULL = root)
+}
+
+message CreateDepartmentResponse {
+  Department department = 1;
+}
+
+// UpdateDepartment: Update department name/description
+message UpdateDepartmentRequest {
+  string department_id = 1;
+  string name = 2;                      // Optional: New name (if changing)
+  string description = 3;               // Optional: New description (if changing)
+}
+
+message UpdateDepartmentResponse {
+  Department department = 1;
+}
+
+// MoveDepartment: Change department's parent
+message MoveDepartmentRequest {
+  string department_id = 1;             // Department to move
+  string new_parent_id = 2;             // New parent (NULL = move to root)
+}
+
+message MoveDepartmentResponse {
+  Department department = 1;
+}
+
+// DeleteDepartment: Remove empty department
+message DeleteDepartmentRequest {
+  string department_id = 1;
+}
+
+message DeleteDepartmentResponse {
+  bool success = 1;
+}
+
+// AssignEmployeeToDepartment: Add employee to department
+message AssignEmployeeToDepartmentRequest {
+  string department_id = 1;
+  string employee_id = 2;
+  string role = 3;                      // "member" or "manager"
+}
+
+message AssignEmployeeToDepartmentResponse {
+  DepartmentMember member = 1;
+}
+
+// RemoveEmployeeFromDepartment: Unassign employee
+message RemoveEmployeeFromDepartmentRequest {
+  string employee_id = 1;
+}
+
+message RemoveEmployeeFromDepartmentResponse {
+  bool success = 1;
+}
+
+// SetDepartmentManager: Designate employee as manager
+message SetDepartmentManagerRequest {
+  string department_id = 1;
+  string employee_id = 2;               // Must be member of this department
+}
+
+message SetDepartmentManagerResponse {
+  DepartmentMember manager = 1;
+}
+
+// ClearDepartmentManager: Remove manager designation
+message ClearDepartmentManagerRequest {
+  string department_id = 1;
+}
+
+message ClearDepartmentManagerResponse {
+  bool success = 1;
+}

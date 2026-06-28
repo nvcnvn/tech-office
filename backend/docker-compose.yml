@@ -1,0 +1,75 @@
+name: tech-office-backend
+services:
+  postgres:
+    build:
+      context: ./docker
+      dockerfile: postgres.Dockerfile
+    image: tech-office-postgres:latest
+    command:
+      - postgres
+      - -c
+      - shared_preload_libraries=citus,pg_textsearch
+    environment:
+      POSTGRES_DB: tech_office_db
+      POSTGRES_PASSWORD: tech_office_password
+    ports:
+      - "${TECH_OFFICE_PG_PORT:-15432}:5432"
+
+  livekit:
+    image: livekit/livekit-server:v1.12.0
+    command: ["--config", "/etc/livekit.yaml"]
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "5349:5349"
+      - "50000-50100:50000-50100/udp"
+    volumes:
+      - ./docker/livekit.yaml:/etc/livekit.yaml:ro
+  
+  clamav:
+    image: clamav/clamav-debian:latest
+    ports:
+      - "3310:3310"
+    environment:
+      CLAMAV_NO_FRESHCLAM_ON_STARTUP: "true" # Speed up startup for dev
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    ports:
+      - "18081:8081"
+    # Gotenberg configuration for office document to PDF conversion
+    # Used for Feature 015: File Storage Security and Access
+    command:
+      - "gotenberg"
+      - "--api-timeout=30s"
+      - "--api-port=8081"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    ports:
+      - "18000:8000"
+    environment:
+      # Model downloaded from HuggingFace on first use.
+      # Options: tiny, base, small, medium (larger = more accurate, slower)
+      WHISPER__MODEL: base
+      HF_HOME: /app/hf-cache
+    volumes:
+      - whisper-hf-cache:/app/hf-cache
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  whisper-hf-cache:

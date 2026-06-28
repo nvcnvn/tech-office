@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Pre-commit hook: Run Gitleaks secret scanner on staged changes
+# Docs: https://github.com/gitleaks/gitleaks#pre-commit-hook
+
+set -euo pipefail
+
+echo "🔍 Running Gitleaks secret scanner..."
+
+# Detect staged changes and scan only those
+gitleaks protect \
+    --config=".gitleaks.toml" \
+    --staged \
+    --verbose \
+    --redact
+
+if [ $? -eq 0 ]; then
+    echo "✅ Gitleaks: No secrets found in staged changes."
+    exit 0
+else
+    echo "❌ Gitleaks: Secrets detected! Commit blocked."
+    echo ""
+    echo "If this is a false positive, check .gitleaks.toml to allowlist the pattern."
+    echo "Or run: gitleaks protect --staged --verbose to see details."
+    exit 1
+fi

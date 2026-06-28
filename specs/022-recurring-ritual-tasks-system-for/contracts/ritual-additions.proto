@@ -1,0 +1,610 @@
+// Ritual Tasks — Proto Contract Additions
+// These are ADDITIONS to the existing CollaborationService in backend/rpc/v1/collaboration.proto
+// They extend the existing service, not replace it.
+
+syntax = "proto3";
+package rpc.v1;
+
+// ============================================================
+// NEW ENUMS
+// ============================================================
+
+enum TaskKind {
+  TASK_KIND_UNSPECIFIED = 0;
+  TASK_KIND_STANDARD = 1;
+  TASK_KIND_RITUAL_INSTANCE = 2;
+}
+
+enum CollaborationMode {
+  COLLABORATION_MODE_UNSPECIFIED = 0;
+  COLLABORATION_MODE_STANDARD = 1;
+  COLLABORATION_MODE_RITUAL = 2;
+  COLLABORATION_MODE_MIXED = 3;
+}
+
+enum EvidenceType {
+  EVIDENCE_TYPE_UNSPECIFIED = 0;
+  EVIDENCE_TYPE_PHOTO = 1;
+  EVIDENCE_TYPE_VOICE_MEMO = 2;
+  EVIDENCE_TYPE_PDF = 3;
+  EVIDENCE_TYPE_FILE = 4;
+  EVIDENCE_TYPE_LINK = 5;
+  EVIDENCE_TYPE_TEXT_NOTE = 6;
+  EVIDENCE_TYPE_GPS_CHECKIN = 7;
+}
+
+enum ApprovalMode {
+  APPROVAL_MODE_UNSPECIFIED = 0;
+  APPROVAL_MODE_MANUAL = 1;
+  APPROVAL_MODE_AUTO_APPROVE = 2;
+}
+
+enum ApprovalStatus {
+  APPROVAL_STATUS_UNSPECIFIED = 0;
+  APPROVAL_STATUS_PENDING_REVIEW = 1;
+  APPROVAL_STATUS_APPROVED = 2;
+  APPROVAL_STATUS_REJECTED = 3;
+}
+
+enum RecurrenceType {
+  RECURRENCE_TYPE_UNSPECIFIED = 0;
+  RECURRENCE_TYPE_DAILY = 1;
+  RECURRENCE_TYPE_WEEKLY = 2;
+  RECURRENCE_TYPE_MONTHLY = 3;
+  RECURRENCE_TYPE_CUSTOM_INTERVAL = 4;
+}
+
+// ============================================================
+// NEW MESSAGES — Ritual Definitions
+// ============================================================
+
+message RecurrenceRule {
+  RecurrenceType type = 1;
+  int32 interval = 2;                 // every N days/weeks/months
+  repeated int32 days_of_week = 3;    // 1=Mon..7=Sun (for weekly)
+  int32 day_of_month = 4;             // 1-31 (for monthly)
+  NthWeekday nth_weekday = 5;        // e.g., 2nd Monday (for monthly)
+  string time_of_day = 6;            // "HH:MM" format
+}
+
+message NthWeekday {
+  int32 week = 1;  // 1-5
+  int32 day = 2;   // 1=Mon..7=Sun
+}
+
+message RitualDefinition {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  string description = 4;
+  RecurrenceRule recurrence_rule = 5;
+  int32 completion_window_hours = 6;
+  string timezone = 7;
+  bool is_archived = 8;
+  string created_by_employee_id = 9;
+  repeated string default_assignee_ids = 10;
+  repeated EvidenceRequirement evidence_requirements = 11;
+  google.protobuf.Timestamp updated_at = 12;
+}
+
+message EvidenceRequirement {
+  string id = 1;
+  string ritual_definition_id = 2;
+  string name = 3;
+  string description = 4;
+  repeated EvidenceType evidence_types = 5;
+  bool is_required = 6;
+  ApprovalMode approval_mode = 7;
+  AutoApproveConfig auto_approve_config = 8;
+  int32 position = 9;
+  int32 deadline_offset_hours = 10;
+}
+
+message AutoApproveConfig {
+  GpsTarget gps_target = 1;
+  int32 gps_radius_meters = 2;
+  string deadline_time = 3; // "HH:MM"
+}
+
+message GpsTarget {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+// ============================================================
+// NEW MESSAGES — Evidence Submissions
+// ============================================================
+
+message EvidenceSubmission {
+  string id = 1;
+  string task_id = 2;
+  string evidence_requirement_id = 3;
+  string submitted_by_employee_id = 4;
+  EvidenceType evidence_type = 5;
+
+  // Content (one of)
+  string file_id = 6;
+  string text_content = 7;
+  string link_url = 8;
+
+  // Device metadata
+  google.protobuf.Timestamp device_timestamp = 9;
+  google.protobuf.Timestamp server_timestamp = 10;
+  GpsCoordinates gps_coordinates = 11;
+
+  // Approval
+  ApprovalStatus approval_status = 12;
+  string reviewed_by_employee_id = 13;
+  google.protobuf.Timestamp reviewed_at = 14;
+  string reviewer_comment = 15;
+}
+
+message GpsCoordinates {
+  double latitude = 1;
+  double longitude = 2;
+  double accuracy_meters = 3;
+}
+
+// ============================================================
+// NEW MESSAGES — Operational Health
+// ============================================================
+
+message OperationalHealthSummary {
+  string project_id = 1;
+  int32 total_instances = 2;
+  int32 on_time_count = 3;
+  int32 overdue_count = 4;
+  int32 missed_count = 5;
+  int32 pending_review_count = 6;
+  double completion_rate = 7;     // 0.0-1.0
+  double on_time_rate = 8;        // 0.0-1.0
+}
+
+message RitualHealthDetail {
+  string ritual_definition_id = 1;
+  string ritual_name = 2;
+  int32 total_instances = 3;
+  int32 verified_count = 4;
+  int32 overdue_count = 5;
+  int32 missed_count = 6;
+  double health_score = 7;  // 0.0-1.0
+}
+
+message EmployeeComplianceSummary {
+  string employee_id = 1;
+  string employee_name = 2;
+  int32 total_assigned = 3;
+  int32 completed_on_time = 4;
+  int32 completed_late = 5;
+  int32 missed = 6;
+  double compliance_rate = 7;
+}
+
+// ============================================================
+// NEW RPCs — Added to CollaborationService
+// ============================================================
+
+// === Ritual Definitions ===
+
+message CreateRitualDefinitionRequest {
+  string project_id = 1;
+  string name = 2;
+  string description = 3;
+  RecurrenceRule recurrence_rule = 4;
+  int32 completion_window_hours = 5;
+  string timezone = 6;
+  repeated string default_assignee_ids = 7;
+  repeated CreateEvidenceRequirementInput evidence_requirements = 8;
+}
+
+message CreateEvidenceRequirementInput {
+  string name = 1;
+  string description = 2;
+  repeated EvidenceType evidence_types = 3;
+  bool is_required = 4;
+  ApprovalMode approval_mode = 5;
+  AutoApproveConfig auto_approve_config = 6;
+  int32 deadline_offset_hours = 7;
+}
+
+message CreateRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message GetRitualDefinitionRequest {
+  string ritual_definition_id = 1;
+}
+
+message GetRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message UpdateRitualDefinitionRequest {
+  string ritual_definition_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional RecurrenceRule recurrence_rule = 4;
+  optional int32 completion_window_hours = 5;
+  optional string timezone = 6;
+  repeated string default_assignee_ids = 7;
+}
+
+message UpdateRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message ArchiveRitualDefinitionRequest {
+  string ritual_definition_id = 1;
+  bool archive = 2;
+}
+
+message ArchiveRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message ListRitualDefinitionsRequest {
+  string project_id = 1;
+  bool include_archived = 2;
+}
+
+message ListRitualDefinitionsResponse {
+  repeated RitualDefinition ritual_definitions = 1;
+}
+
+// === Evidence Requirements ===
+
+message CreateEvidenceRequirementRequest {
+  string ritual_definition_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated EvidenceType evidence_types = 4;
+  bool is_required = 5;
+  ApprovalMode approval_mode = 6;
+  AutoApproveConfig auto_approve_config = 7;
+  int32 deadline_offset_hours = 8;
+}
+
+message CreateEvidenceRequirementResponse {
+  EvidenceRequirement evidence_requirement = 1;
+}
+
+message UpdateEvidenceRequirementRequest {
+  string evidence_requirement_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  repeated EvidenceType evidence_types = 4;
+  optional bool is_required = 5;
+  optional ApprovalMode approval_mode = 6;
+  optional AutoApproveConfig auto_approve_config = 7;
+  optional int32 deadline_offset_hours = 8;
+}
+
+message UpdateEvidenceRequirementResponse {
+  EvidenceRequirement evidence_requirement = 1;
+}
+
+message DeleteEvidenceRequirementRequest {
+  string evidence_requirement_id = 1;
+}
+
+message DeleteEvidenceRequirementResponse {}
+
+message ListEvidenceRequirementsRequest {
+  string ritual_definition_id = 1;
+}
+
+message ListEvidenceRequirementsResponse {
+  repeated EvidenceRequirement evidence_requirements = 1;
+}
+
+// === Evidence Submissions ===
+
+message SubmitEvidenceRequest {
+  string task_id = 1;
+  string evidence_requirement_id = 2;
+  EvidenceType evidence_type = 3;
+
+  // Content (one of, depending on type)
+  string file_id = 4;
+  string text_content = 5;
+  string link_url = 6;
+
+  // Device metadata
+  google.protobuf.Timestamp device_timestamp = 7;
+  GpsCoordinates gps_coordinates = 8;
+}
+
+message SubmitEvidenceResponse {
+  EvidenceSubmission evidence_submission = 1;
+}
+
+message ApproveEvidenceRequest {
+  string evidence_submission_id = 1;
+  string comment = 2;
+}
+
+message ApproveEvidenceResponse {
+  EvidenceSubmission evidence_submission = 1;
+}
+
+message RejectEvidenceRequest {
+  string evidence_submission_id = 1;
+  string comment = 2;  // required for rejection
+}
+
+message RejectEvidenceResponse {
+  EvidenceSubmission evidence_submission = 1;
+}
+
+message ListEvidenceSubmissionsRequest {
+  string task_id = 1;
+}
+
+message ListEvidenceSubmissionsResponse {
+  repeated EvidenceSubmission evidence_submissions = 1;
+}
+
+// === Evidence File Upload (domain-owned pattern) ===
+
+message RequestEvidenceFileUploadRequest {
+  string task_id = 1;
+  string evidence_requirement_id = 2;
+  string file_name = 3;
+  string content_type = 4;
+  int64 file_size_bytes = 5;
+}
+
+message RequestEvidenceFileUploadResponse {
+  string file_id = 1;
+  string upload_url = 2;
+}
+
+message ConfirmEvidenceFileUploadRequest {
+  string file_id = 1;
+  string task_id = 2;
+}
+
+message ConfirmEvidenceFileUploadResponse {
+  string file_id = 1;
+}
+
+// === Skip Ritual Instance ===
+
+message SkipRitualInstanceRequest {
+  string task_id = 1;
+  string reason = 2;  // required
+}
+
+message SkipRitualInstanceResponse {
+  Task task = 1;
+}
+
+// === Operational Health ===
+
+message GetOperationalHealthRequest {
+  string project_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+message GetOperationalHealthResponse {
+  OperationalHealthSummary summary = 1;
+  repeated RitualHealthDetail ritual_details = 2;
+}
+
+message GetRitualComplianceSummaryRequest {
+  string project_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+  string ritual_definition_id = 4;  // optional: filter by specific ritual
+}
+
+message GetRitualComplianceSummaryResponse {
+  repeated EmployeeComplianceSummary employee_summaries = 1;
+}
+
+message ExportRitualComplianceCSVRequest {
+  string project_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+message ExportRitualComplianceCSVResponse {
+  bytes csv_data = 1;
+}
+
+// ============================================================
+// SERVICE ADDITIONS — these RPCs are ADDED to CollaborationService
+// ============================================================
+
+// Add these to the existing CollaborationService:
+//
+// // === Ritual Definitions ===
+// rpc CreateRitualDefinition(CreateRitualDefinitionRequest) returns (CreateRitualDefinitionResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc GetRitualDefinition(GetRitualDefinitionRequest) returns (GetRitualDefinitionResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+// rpc UpdateRitualDefinition(UpdateRitualDefinitionRequest) returns (UpdateRitualDefinitionResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc ArchiveRitualDefinition(ArchiveRitualDefinitionRequest) returns (ArchiveRitualDefinitionResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc ListRitualDefinitions(ListRitualDefinitionsRequest) returns (ListRitualDefinitionsResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+//
+// // === Evidence Requirements ===
+// rpc CreateEvidenceRequirement(CreateEvidenceRequirementRequest) returns (CreateEvidenceRequirementResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc UpdateEvidenceRequirement(UpdateEvidenceRequirementRequest) returns (UpdateEvidenceRequirementResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc DeleteEvidenceRequirement(DeleteEvidenceRequirementRequest) returns (DeleteEvidenceRequirementResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc ListEvidenceRequirements(ListEvidenceRequirementsRequest) returns (ListEvidenceRequirementsResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+//
+// // === Evidence Submissions ===
+// rpc SubmitEvidence(SubmitEvidenceRequest) returns (SubmitEvidenceResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+// rpc ApproveEvidence(ApproveEvidenceRequest) returns (ApproveEvidenceResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc RejectEvidence(RejectEvidenceRequest) returns (RejectEvidenceResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+// rpc ListEvidenceSubmissions(ListEvidenceSubmissionsRequest) returns (ListEvidenceSubmissionsResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+//
+// // === Evidence File Upload ===
+// rpc RequestEvidenceFileUpload(RequestEvidenceFileUploadRequest) returns (RequestEvidenceFileUploadResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+// rpc ConfirmEvidenceFileUpload(ConfirmEvidenceFileUploadRequest) returns (ConfirmEvidenceFileUploadResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+//
+// // === Ritual Instance Operations ===
+// rpc SkipRitualInstance(SkipRitualInstanceRequest) returns (SkipRitualInstanceResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+//   };
+// }
+//
+// // === Operational Health ===
+// rpc GetOperationalHealth(GetOperationalHealthRequest) returns (GetOperationalHealthResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+// rpc GetRitualComplianceSummary(GetRitualComplianceSummaryRequest) returns (GetRitualComplianceSummaryResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+// rpc ExportRitualComplianceCSV(ExportRitualComplianceCSVRequest) returns (ExportRitualComplianceCSVResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }
+
+// ============================================================
+// NEW MESSAGES — Task Evidence Progress
+// ============================================================
+
+// Lightweight evidence progress for embedding in Task responses.
+// Avoids the need for a separate ListEvidenceSubmissions call
+// when rendering task lists/cards in the UI.
+message TaskEvidenceProgress {
+  int32 total_requirements = 1;     // total evidence requirements from ritual definition
+  int32 required_count = 2;         // how many are is_required=true
+  int32 submitted_count = 3;        // how many have at least one submission
+  int32 approved_count = 4;         // how many have an approved submission
+  int32 rejected_count = 5;         // how many have a rejected submission (needs resubmit)
+  int32 pending_review_count = 6;   // how many submitted but awaiting review
+  bool all_required_approved = 7;   // true when all required evidence is approved
+}
+
+// Evidence requirement with its latest submission status for a specific task.
+// Used in task detail views to show the evidence checklist.
+message TaskEvidenceRequirementStatus {
+  EvidenceRequirement requirement = 1;
+  ApprovalStatus status = 2;                      // current status for this task
+  repeated EvidenceSubmission submissions = 3;    // submissions for this requirement on this task
+}
+
+// ============================================================
+// MODIFICATIONS TO EXISTING MESSAGES
+// ============================================================
+
+// CreateProjectRequest — add:
+//   CollaborationMode collaboration_mode = N;  // default STANDARD
+
+// Project message — add:
+//   CollaborationMode collaboration_mode = N;
+
+// Task message — add:
+//   TaskKind task_kind = N;
+//   string ritual_definition_id = N;             // set when task_kind = RITUAL_INSTANCE
+//   google.protobuf.Timestamp scheduled_date = N;
+//   google.protobuf.Timestamp completion_deadline = N;
+//   string skip_reason = N;
+//   TaskEvidenceProgress evidence_progress = N;  // populated for ritual instances (nullable for standard tasks)
+//   string ritual_definition_name = N;           // denormalized for display — avoids extra lookup
+//
+// NOTE: The full evidence checklist (requirements + submissions) is fetched via
+// GetTaskEvidenceDetails RPC below, not embedded in the Task list response
+// to keep list queries lightweight.
+
+// ListTasksRequest — add:
+//   TaskKind task_kind_filter = N;  // optional filter
+
+// STATE CATEGORY enum — add:
+//   STATE_CATEGORY_SCHEDULED = 5;
+//   STATE_CATEGORY_SUBMITTED = 6;
+//   STATE_CATEGORY_VERIFIED = 7;
+//   STATE_CATEGORY_OVERDUE = 8;
+//   STATE_CATEGORY_MISSED = 9;
+//   STATE_CATEGORY_SKIPPED = 10;
+
+// VIEW TYPE enum — add:
+//   VIEW_TYPE_TODAY = 5;
+//   VIEW_TYPE_HEALTH = 6;
+
+// ============================================================
+// NEW RPC — Task Evidence Details (full checklist for task detail view)
+// ============================================================
+
+message GetTaskEvidenceDetailsRequest {
+  string task_id = 1;
+}
+
+message GetTaskEvidenceDetailsResponse {
+  repeated TaskEvidenceRequirementStatus requirements = 1;
+  TaskEvidenceProgress progress = 2;
+}
+
+// Add to CollaborationService:
+// rpc GetTaskEvidenceDetails(GetTaskEvidenceDetailsRequest) returns (GetTaskEvidenceDetailsResponse) {
+//   option (rpc.v1.access_control) = {
+//     allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+//   };
+// }

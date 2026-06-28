@@ -1,0 +1,97 @@
+// Search Methods to ADD to rpc/v1/chat.proto
+// These methods should be added to the existing ChatService definition
+
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/access_control.proto";
+
+option go_package = "techoffice/backend/rpc/v1;rpcv1";
+
+// ADD these methods to existing ChatService:
+// service ChatService {
+//   // ... existing methods ...
+//   
+//   rpc SearchChannels(SearchChannelsRequest) returns (SearchChannelsResponse);
+//   rpc SearchMessages(SearchMessagesRequest) returns (SearchMessagesResponse);
+//   rpc AutocompleteChannels(AutocompleteChannelsRequest) returns (AutocompleteChannelsResponse);
+// }
+
+// ============================================================
+// CHANNEL SEARCH
+// ============================================================
+
+message SearchChannelsRequest {
+  string query_text = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message SearchChannelsResponse {
+  repeated ChannelSearchResult results = 1;
+  string next_cursor = 2;
+  int32 query_duration_ms = 3;
+}
+
+message ChannelSearchResult {
+  string id = 1;
+  string display_name = 2;
+  string description = 3;
+  string channel_type = 4;  // "topic", "direct", "group"
+  string title_slug = 5;
+  bool is_private = 6;
+  float relevance_score = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// ============================================================
+// MESSAGE SEARCH
+// ============================================================
+
+message SearchMessagesRequest {
+  string query_text = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message SearchMessagesResponse {
+  repeated MessageSearchResult results = 1;
+  string next_cursor = 2;
+  int32 query_duration_ms = 3;
+}
+
+message MessageSearchResult {
+  string id = 1;
+  string message_text = 2;  // Full message text
+  string author_employee_id = 3;
+  string channel_id = 4;
+  string parent_message_id = 5;  // Empty if top-level message
+  bool is_edited = 6;
+  float relevance_score = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  // Contextual metadata for display
+  string channel_name = 9;
+  bool channel_is_private = 10;
+}
+
+// ============================================================
+// AUTOCOMPLETE
+// ============================================================
+
+message AutocompleteChannelsRequest {
+  string prefix = 1;
+  int32 limit = 2;
+}
+
+message AutocompleteChannelsResponse {
+  repeated ChannelAutocompleteSuggestion suggestions = 1;
+}
+
+message ChannelAutocompleteSuggestion {
+  string id = 1;
+  string display_name = 2;
+  string channel_type = 3;
+  bool is_private = 4;
+}

@@ -1,0 +1,558 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// ============================================================================
+// Shared Enums
+// ============================================================================
+
+enum PresenceStatus {
+  PRESENCE_STATUS_UNSPECIFIED = 0;
+  PRESENCE_STATUS_ONLINE = 1;
+  PRESENCE_STATUS_ONLINE_HIDDEN = 2;
+  PRESENCE_STATUS_IDLE = 3;
+  PRESENCE_STATUS_OFFLINE = 4;
+}
+
+enum PermissionState {
+  PERMISSION_STATE_UNSPECIFIED = 0;
+  PERMISSION_STATE_PROMPT = 1;
+  PERMISSION_STATE_GRANTED = 2;
+  PERMISSION_STATE_DENIED = 3;
+}
+
+enum VisibilityMode {
+  VISIBILITY_MODE_UNSPECIFIED = 0;
+  VISIBILITY_MODE_EVERYONE = 1;
+  VISIBILITY_MODE_DEPARTMENTS = 2;
+  VISIBILITY_MODE_OFFLINE = 3;
+}
+
+// NotificationService provides notification publishing, listing, and real-time streaming
+// for the centralized notification hub.
+service NotificationService {
+  // PublishNotification creates and sends notifications to target employees.
+  // BACKEND SERVICES ONLY - not accessible to end users.
+  // Uses AdminPool for system-scope cross-tenant publishing.
+  rpc PublishNotification(PublishNotificationRequest) returns (PublishNotificationResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.publish"]
+    };
+  }
+
+  // ListNotifications returns paginated list of notifications for the authenticated employee.
+  // Filters by organization context from auth token. Uses TenantPool.
+  rpc ListNotifications(ListNotificationsRequest) returns (ListNotificationsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.view"]
+    };
+  }
+
+  // MarkAsRead marks one or more notifications as read for the authenticated employee.
+  // Validates ownership and organization context. Uses TenantPool.
+  rpc MarkAsRead(MarkAsReadRequest) returns (MarkAsReadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.markRead"]
+    };
+  }
+
+  // MarkAllBeforeTimestampAsRead bulk marks all notifications before a timestamp as read.
+  // Uses TenantPool with organization context validation.
+  rpc MarkAllBeforeTimestampAsRead(MarkAllBeforeTimestampAsReadRequest) returns (MarkAllBeforeTimestampAsReadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.markRead"]
+    };
+  }
+
+  // DeleteNotification removes a notification from the employee's view (soft delete).
+  // Uses TenantPool with organization context validation.
+  rpc DeleteNotification(DeleteNotificationRequest) returns (DeleteNotificationResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.delete"]
+    };
+  }
+
+  // StreamNotifications establishes Server-Sent Events (SSE) connection for real-time notifications.
+  // Registers connection in active_connection registry and streams new notifications.
+  // Uses TenantPool for employee operations.
+  rpc StreamNotifications(StreamNotificationsRequest) returns (stream NotificationEvent) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.stream"]
+    };
+  }
+
+  // ConfirmNotificationReceipt records client-side receipt of persistent SSE notifications.
+  // This is a transport receipt only; it does not mark notifications read or acknowledged.
+  rpc ConfirmNotificationReceipt(ConfirmNotificationReceiptRequest) returns (ConfirmNotificationReceiptResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.stream"]
+    };
+  }
+
+  // GetUnreadCount returns the count of unread notifications for the authenticated employee.
+  // Uses TenantPool with organization context from auth token.
+  rpc GetUnreadCount(GetUnreadCountRequest) returns (GetUnreadCountResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.view"]
+    };
+  }
+
+  // UpdatePresenceStatus records the employee's presence state and active channel context.
+  rpc UpdatePresenceStatus(UpdatePresenceStatusRequest) returns (UpdatePresenceStatusResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.updatePresence"]
+    };
+  }
+
+  // GetEmployeePresence returns the latest presence signal for a specific employee.
+  rpc GetEmployeePresence(GetEmployeePresenceRequest) returns (GetEmployeePresenceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.viewPresence"]
+    };
+  }
+
+  // GetBatchEmployeePresence returns presence information for multiple employees.
+  rpc GetBatchEmployeePresence(GetBatchEmployeePresenceRequest) returns (GetBatchEmployeePresenceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.viewPresence"]
+    };
+  }
+
+  // RegisterPushToken registers or refreshes an employee's push notification token.
+  rpc RegisterPushToken(RegisterPushTokenRequest) returns (RegisterPushTokenResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.managePushToken"]
+    };
+  }
+
+  // RevokePushToken revokes a stored push token for the authenticated employee.
+  rpc RevokePushToken(RevokePushTokenRequest) returns (RevokePushTokenResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.managePushToken"]
+    };
+  }
+
+  // ListPushTokens lists the authenticated employee's registered push tokens.
+  rpc ListPushTokens(ListPushTokensRequest) returns (ListPushTokensResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.managePushToken"]
+    };
+  }
+
+  // SetPresenceVisibility updates the employee's presence visibility preferences.
+  rpc SetPresenceVisibility(SetPresenceVisibilityRequest) returns (SetPresenceVisibilityResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.presenceSettings"]
+    };
+  }
+
+  // GetPresenceSettings retrieves the employee's current presence visibility preferences.
+  rpc GetPresenceSettings(GetPresenceSettingsRequest) returns (GetPresenceSettingsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.presenceSettings"]
+    };
+  }
+
+  // AcknowledgeNotifications marks one or more notifications as acknowledged.
+  // Acknowledgement occurs when the user opens the linked destination or explicitly dismisses.
+  // Popup display alone does NOT acknowledge.
+  rpc AcknowledgeNotifications(AcknowledgeNotificationsRequest) returns (AcknowledgeNotificationsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.markRead"]
+    };
+  }
+
+  // AcknowledgeAllBeforeTimestamp acknowledges all pending notifications before a timestamp.
+  rpc AcknowledgeAllBeforeTimestamp(AcknowledgeAllBeforeTimestampRequest) returns (AcknowledgeAllBeforeTimestampResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.markRead"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // V2 Resource Subscription Preferences
+  // -------------------------------------------------------------------------
+
+  // GetResourceSubscription returns the authenticated user's subscription state
+  // and notification preference for a specific resource (task or document).
+  rpc GetResourceSubscription(GetResourceSubscriptionRequest) returns (GetResourceSubscriptionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.view"]
+    };
+  }
+
+  // SetResourceSubscriptionPreference updates the notification preference level
+  // for the authenticated user's subscription to a specific resource.
+  // Only valid for active subscriptions (follow the resource first).
+  rpc SetResourceSubscriptionPreference(SetResourceSubscriptionPreferenceRequest) returns (SetResourceSubscriptionPreferenceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["notif.view"]
+    };
+  }
+}
+
+// ============================================================================
+// Publishing API (Backend Services Only)
+// ============================================================================
+
+message PublishNotificationRequest {
+  string organization_id = 1; // Target organization UUID
+  
+  // Recipient targeting
+  NotificationRecipients recipients = 2;
+  
+  // Notification content
+  string source_domain = 3; // chat, crm, projects, hr, support, finance, system
+  string notification_type = 4; // message, mention, task_assigned, deal_updated, etc.
+  string title = 5;
+  string message = 6;
+  
+  // Action data for deep linking (flexible JSON) - legacy; use navigation_target for new code
+  map<string, string> action_data = 7; // e.g., {"chatThreadId": "uuid", "messageId": "uuid"}
+  string action_category = 8; // For deduplication: react, comment, update, assign
+  
+  // Delivery configuration
+  int32 priority = 9; // 0=always, 1=not offline (default), 2=online only, 4=silent
+  
+  // Publishing service identification
+  string publishing_service_id = 10; // Backend service identifier
+  
+  // Channel-based targeting (optional, legacy)
+  // When provided, only sends to employees actively viewing this channel
+  // Overrides recipients.employee_ids for ephemeral channel events (typing, reactions)
+  string active_channel_id = 11; // Target channel UUID for channel-scoped events
+
+  // Notification lifecycle policy fields (aligned with data-model.md)
+  string policy_key = 12; // Business policy: chat_message, task_assignment, document_comment, etc.
+  string delivery_class = 13; // "persistent" (stored in center) or "live_only" (ephemeral signal)
+  NavigationTarget navigation_target = 14; // Typed deep-link destination
+  string source_category = 15; // "activity", "mention", or "system"
+  
+  // Audience context for live-only context-scoped routing
+  // When delivery_class is live_only and audience_context is set, recipients are resolved
+  // from active_context instead of the explicit recipients field.
+  AudienceContext audience_context = 16;
+}
+
+message NotificationRecipients {
+  // At least one of the following must be provided
+  repeated string employee_ids = 1; // Direct employee UUID list
+  repeated string department_ids = 2; // Department UUID list (resolved to employees)
+}
+
+// NavigationTarget provides typed deep-link destination for notification actions.
+// Used for consistent popup and notification center navigation.
+message NavigationTarget {
+  string domain = 1;        // "chat", "docs", "projects"
+  string resource_type = 2; // "channel", "message", "document", "task", "comment"
+  string resource_id = 3;   // Primary UUID of the target resource
+  string secondary_id = 4;  // Optional: comment_id, reply_id, etc.
+  string action = 5;        // "open", "open_comment", "open_reply" — action to perform on navigation
+}
+
+// AudienceContext enables live-only notifications to resolve recipients
+// from shared active context (viewing pattern) instead of explicit lists.
+message AudienceContext {
+  string context_type = 1; // "channel", "document", or "task"
+  string context_id = 2;   // UUID of the resource being actively viewed
+}
+
+message PublishNotificationResponse {
+  string notification_id = 1; // Created notification UUID
+  int32 recipient_count = 2; // Total recipients resolved
+  repeated string recipient_employee_ids = 3; // Resolved employee UUIDs
+}
+
+// ============================================================================
+// Employee-Facing API
+// ============================================================================
+
+message ListNotificationsRequest {
+  // Filters
+  bool unread_only = 1; // Default: false (show all)
+  repeated string source_domains = 2; // Filter by source domain (empty = all)
+  
+  // Pagination
+  int32 page_size = 3; // Default: 50, max: 100
+  string page_token = 4; // Cursor for next page (empty for first page)
+}
+
+message ListNotificationsResponse {
+  repeated NotificationSummary notifications = 1;
+  string next_page_token = 2; // Empty if no more pages
+  int32 total_unread_count = 3; // Total unread across all notifications
+}
+
+message NotificationSummary {
+  string notification_id = 1;
+  string notification_recipient_id = 2; // For mark as read / acknowledge operations
+  
+  // Content
+  string source_domain = 3;
+  string notification_type = 4;
+  string title = 5;
+  string message = 6;
+  map<string, string> action_data = 7;
+  
+  // Legacy read status (kept for backward compatibility)
+  bool read_status = 8;
+  google.protobuf.Timestamp read_at = 9;
+  
+  // Delivery info
+  string delivery_status = 10; // pending, delivered, failed
+  google.protobuf.Timestamp delivered_at = 11;
+  
+  // Timestamps
+  google.protobuf.Timestamp created_at = 12; // From notification.updated_at
+
+  // Acknowledgement lifecycle (authoritative unread state)
+  string acknowledgement_status = 13; // "pending" or "acknowledged"
+  google.protobuf.Timestamp acknowledged_at = 14;
+  string acknowledgement_action = 15; // "destination_open" or "explicit_ack"
+
+  // Fallback delivery summary
+  string fallback_status = 16; // "not_applicable", "queued", "sent", "skipped", "failed"
+  string fallback_reason = 17; // Why fallback was skipped or failed
+
+  // Policy and navigation metadata
+  string policy_key = 18;           // Evaluated delivery policy key
+  string source_category = 19;      // "activity", "mention", "system"
+  NavigationTarget navigation_target = 20; // Typed deep-link destination
+}
+
+message MarkAsReadRequest {
+  repeated string notification_recipient_ids = 1; // UUIDs of notification_recipient rows
+}
+
+message MarkAsReadResponse {
+  int32 updated_count = 1; // Number of notifications marked as read
+}
+
+message MarkAllBeforeTimestampAsReadRequest {
+  google.protobuf.Timestamp before_timestamp = 1; // Mark all notifications before this time as read
+}
+
+message MarkAllBeforeTimestampAsReadResponse {
+  int32 updated_count = 1; // Number of notifications marked as read
+}
+
+message DeleteNotificationRequest {
+  string notification_recipient_id = 1; // UUID of notification_recipient row
+}
+
+message DeleteNotificationResponse {
+  bool success = 1;
+}
+
+message StreamNotificationsRequest {
+  string last_event_id = 1; // Last received event ID for replay (optional)
+}
+
+message NotificationEvent {
+  string event_id = 1; // Unique event ID for SSE (UUIDv7)
+  string event_type = 2; // "notification", "heartbeat", "connection_established"
+  NotificationSummary notification = 3; // Only present for "notification" event_type
+  google.protobuf.Timestamp timestamp = 4;
+  string connection_id = 5; // Present on connection_established heartbeats for presence tracking
+}
+
+message ConfirmNotificationReceiptRequest {
+  repeated string notification_recipient_ids = 1;
+  string connection_id = 2;
+  string platform = 3;          // web | mobile
+  string app_state = 4;         // foreground | background
+  string visibility_state = 5;  // visible | hidden | empty for mobile
+  google.protobuf.Timestamp received_at = 6;
+}
+
+message ConfirmNotificationReceiptResponse {
+  int32 confirmed_count = 1;
+}
+
+message GetUnreadCountRequest {
+  // No parameters - uses employee_id and organization_id from auth context
+}
+
+message GetUnreadCountResponse {
+  int32 unread_count = 1;
+  map<string, int32> unread_by_source_domain = 2; // Breakdown by source domain
+}
+
+// ============================================================================
+// Presence & Push Token API
+// ============================================================================
+
+message UpdatePresenceStatusRequest {
+  PresenceStatus status = 1;
+  string active_channel_id = 2; // Optional - null/empty when not viewing a channel
+  google.protobuf.Timestamp last_interaction_at = 3;
+  string connection_id = 4;
+}
+
+message UpdatePresenceStatusResponse {
+  PresenceStatus status = 1;
+  string active_channel_id = 2;
+  google.protobuf.Timestamp updated_at = 3;
+  string connection_id = 4;
+}
+
+message GetEmployeePresenceRequest {
+  string employee_id = 1;
+}
+
+message GetEmployeePresenceResponse {
+  EmployeePresence presence = 1;
+}
+
+message GetBatchEmployeePresenceRequest {
+  repeated string employee_ids = 1;
+}
+
+message GetBatchEmployeePresenceResponse {
+  repeated EmployeePresence presences = 1;
+}
+
+message EmployeePresence {
+  string employee_id = 1;
+  PresenceStatus status = 2;
+  string active_channel_id = 3;
+  google.protobuf.Timestamp last_interaction_at = 4;
+  google.protobuf.Timestamp last_heartbeat = 5;
+  PresenceVisibility visibility = 6;
+}
+
+message RegisterPushTokenRequest {
+  string fcm_token = 1;
+  string device_identifier = 2;
+  PermissionState permission_state = 3;
+  string endpoint = 4;
+  string keys_json = 5; // Raw Web Push subscription keys (JSON payload)
+  string user_agent = 6;
+  map<string, string> token_metadata = 7;
+}
+
+message RegisterPushTokenResponse {
+  string token_id = 1;
+  bool is_valid = 2;
+  google.protobuf.Timestamp registered_at = 3;
+}
+
+message RevokePushTokenRequest {
+  oneof target {
+    string token_id = 1;
+    string device_identifier = 2;
+  }
+}
+
+message RevokePushTokenResponse {
+  int32 revoked_count = 1;
+}
+
+message ListPushTokensRequest {}
+
+message PushTokenInfo {
+  string token_id = 1;
+  string device_identifier = 2;
+  PermissionState permission_state = 3;
+  bool is_valid = 4;
+  google.protobuf.Timestamp registered_at = 5;
+  google.protobuf.Timestamp last_used_at = 6;
+  string user_agent = 7;
+  map<string, string> token_metadata = 8;
+}
+
+message ListPushTokensResponse {
+  repeated PushTokenInfo tokens = 1;
+}
+
+message SetPresenceVisibilityRequest {
+  VisibilityMode visibility_mode = 1;
+  string custom_status_text = 2;
+  string custom_status_emoji = 3;
+}
+
+message SetPresenceVisibilityResponse {
+  PresenceVisibility visibility = 1;
+}
+
+message GetPresenceSettingsRequest {}
+
+message GetPresenceSettingsResponse {
+  PresenceVisibility visibility = 1;
+}
+
+message PresenceVisibility {
+  VisibilityMode visibility_mode = 1;
+  string custom_status_text = 2;
+  string custom_status_emoji = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+// ============================================================================
+// Acknowledgement API
+// ============================================================================
+
+// AcknowledgeNotificationsRequest marks one or more notifications as acknowledged.
+// Acknowledgement occurs when the user opens the linked destination (destination_open)
+// or explicitly dismisses via an action (explicit_ack).
+// Popup display alone MUST NOT call this endpoint.
+message AcknowledgeNotificationsRequest {
+  repeated string notification_recipient_ids = 1; // UUIDs of notification_recipient rows
+  // How acknowledgement was triggered:
+  // "destination_open" - user navigated to the linked resource
+  // "explicit_ack" - user clicked dismiss/acknowledge button
+  string acknowledgement_action = 2;
+}
+
+message AcknowledgeNotificationsResponse {
+  int32 acknowledged_count = 1; // Number of notifications newly acknowledged
+}
+
+message AcknowledgeAllBeforeTimestampRequest {
+  google.protobuf.Timestamp before_timestamp = 1;
+  string acknowledgement_action = 2; // "destination_open" or "explicit_ack"
+}
+
+message AcknowledgeAllBeforeTimestampResponse {
+  int32 acknowledged_count = 1;
+}
+
+// ============================================================================
+// V2 Resource Subscription Preference API
+// ============================================================================
+
+// SubscriptionPreferenceLevel controls how notifications are filtered for a resource.
+enum SubscriptionPreferenceLevel {
+  SUBSCRIPTION_PREFERENCE_LEVEL_UNSPECIFIED = 0;
+  SUBSCRIPTION_PREFERENCE_LEVEL_ALL = 1;      // Receive all notifications
+  SUBSCRIPTION_PREFERENCE_LEVEL_MENTIONS = 2;  // Only direct-targeted events (@mention, assignment)
+  SUBSCRIPTION_PREFERENCE_LEVEL_MUTED = 3;     // Suppress subscribed activity
+}
+
+message GetResourceSubscriptionRequest {
+  string resource_domain = 1; // "task" or "document"
+  string resource_id = 2;     // UUID of the task or document
+}
+
+message GetResourceSubscriptionResponse {
+  bool subscribed = 1;                             // true if subscription exists and is active
+  string subscription_state = 2;                   // "active" or "unfollowed"
+  SubscriptionPreferenceLevel preference_level = 3; // Current preference
+  repeated string reasons = 4;                      // Subscription reasons (e.g., "creator", "manual_follow")
+}
+
+message SetResourceSubscriptionPreferenceRequest {
+  string resource_domain = 1; // "task" or "document"
+  string resource_id = 2;     // UUID of the task or document
+  SubscriptionPreferenceLevel preference_level = 3; // New preference level
+}
+
+message SetResourceSubscriptionPreferenceResponse {
+  bool success = 1;
+  SubscriptionPreferenceLevel preference_level = 2; // Confirmed preference level
+}

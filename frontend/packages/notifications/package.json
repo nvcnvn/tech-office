@@ -1,0 +1,24 @@
+{
+	"name": "@tech-office/notifications",
+	"version": "0.1.0",
+	"react-native": "src/index.ts",
+	"main": "dst/index.js",
+	"types": "dst/index.d.ts",
+	"scripts": {
+		"build": "tsc",
+		"dev": "tsc --watch"
+	},
+	"dependencies": {
+		"date-fns": "^3.0.0"
+	},
+	"devDependencies": {
+		"typescript": "^5.0.0",
+		"@types/react": "^19.2.14",
+		"@types/node": "^20.0.0"
+	},
+	"peerDependencies": {
+		"react": "^19.0.0",
+		"rpc": "workspace:*",
+		"apis": "workspace:*"
+	}
+}

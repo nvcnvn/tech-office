@@ -1,0 +1,229 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/access_control.proto";
+
+option go_package = "techoffice/backend/rpc/v1;rpcv1";
+
+// SearchService provides global multilingual fuzzy search across all business entities
+// Uses federated search: separate RPC methods per entity type
+// Frontend can call methods individually or in parallel (Promise.all)
+service SearchService {
+  // SearchEmployees searches users by email/name
+  rpc SearchEmployees(SearchEmployeesRequest) returns (SearchEmployeesResponse) {
+    option (rpc.v1.access_control) = {
+      role: ROLE_EMPLOYEE
+      require_org: true
+    };
+  }
+
+  // SearchDepartments searches departments by name/description
+  rpc SearchDepartments(SearchDepartmentsRequest) returns (SearchDepartmentsResponse) {
+    option (rpc.v1.access_control) = {
+      role: ROLE_EMPLOYEE
+      require_org: true
+    };
+  }
+
+  // SearchChannels searches channels by name/description (with permission filtering)
+  rpc SearchChannels(SearchChannelsRequest) returns (SearchChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      role: ROLE_EMPLOYEE
+      require_org: true
+    };
+  }
+
+  // SearchMessages searches message content (with permission filtering)
+  rpc SearchMessages(SearchMessagesRequest) returns (SearchMessagesResponse) {
+    option (rpc.v1.access_control) = {
+      role: ROLE_EMPLOYEE
+      require_org: true
+    };
+  }
+
+  // AutocompleteEmployees provides prefix-based suggestions for employee selection
+  rpc AutocompleteEmployees(AutocompleteEmployeesRequest) returns (AutocompleteEmployeesResponse) {
+    option (rpc.v1.access_control) = {
+      role: ROLE_EMPLOYEE
+      require_org: true
+    };
+  }
+
+  // AutocompleteDepartments provides prefix-based suggestions for department selection
+  rpc AutocompleteDepartments(AutocompleteDepartmentsRequest) returns (AutocompleteDepartmentsResponse) {
+    option (rpc.v1.access_control) = {
+      role: ROLE_EMPLOYEE
+      require_org: true
+    };
+  }
+
+  // AutocompleteChannels provides prefix-based suggestions for channel selection
+  rpc AutocompleteChannels(AutocompleteChannelsRequest) returns (AutocompleteChannelsResponse) {
+    option (rpc.v1.access_control) = {
+      role: ROLE_EMPLOYEE
+      require_org: true
+    };
+  }
+}
+
+// ============================================================
+// EMPLOYEE SEARCH
+// ============================================================
+
+message SearchEmployeesRequest {
+  string query_text = 1;  // User's search query
+  int32 limit = 2;        // Max results (default: 50, max: 100)
+  string cursor = 3;      // Pagination cursor (UUID from last result)
+}
+
+message SearchEmployeesResponse {
+  repeated EmployeeSearchResult results = 1;
+  string next_cursor = 2;  // Empty if no more results
+  int32 query_duration_ms = 3;
+}
+
+message EmployeeSearchResult {
+  string id = 1;
+  string email = 2;
+  string given_name = 3;
+  string family_name = 4;
+  bool is_active = 5;
+  float relevance_score = 6;  // Trigram similarity score (0-1)
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// ============================================================
+// DEPARTMENT SEARCH
+// ============================================================
+
+message SearchDepartmentsRequest {
+  string query_text = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message SearchDepartmentsResponse {
+  repeated DepartmentSearchResult results = 1;
+  string next_cursor = 2;
+  int32 query_duration_ms = 3;
+}
+
+message DepartmentSearchResult {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  int32 member_count = 4;
+  string parent_department_id = 5;  // Empty if root department
+  float relevance_score = 6;
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+// ============================================================
+// CHANNEL SEARCH
+// ============================================================
+
+message SearchChannelsRequest {
+  string query_text = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message SearchChannelsResponse {
+  repeated ChannelSearchResult results = 1;
+  string next_cursor = 2;
+  int32 query_duration_ms = 3;
+}
+
+message ChannelSearchResult {
+  string id = 1;
+  string display_name = 2;
+  string description = 3;
+  string channel_type = 4;  // "topic", "direct", "group"
+  string title_slug = 5;
+  bool is_private = 6;
+  float relevance_score = 7;
+  google.protobuf.Timestamp updated_at = 8;
+}
+
+// ============================================================
+// MESSAGE SEARCH
+// ============================================================
+
+message SearchMessagesRequest {
+  string query_text = 1;
+  int32 limit = 2;
+  string cursor = 3;
+}
+
+message SearchMessagesResponse {
+  repeated MessageSearchResult results = 1;
+  string next_cursor = 2;
+  int32 query_duration_ms = 3;
+}
+
+message MessageSearchResult {
+  string id = 1;
+  string message_text = 2;  // Full message text
+  string author_employee_id = 3;
+  string channel_id = 4;
+  string parent_message_id = 5;  // Empty if top-level message
+  bool is_edited = 6;
+  float relevance_score = 7;
+  google.protobuf.Timestamp updated_at = 8;
+  // Contextual metadata for display
+  string channel_name = 9;
+  bool channel_is_private = 10;
+}
+
+// ============================================================
+// AUTOCOMPLETE
+// ============================================================
+
+message AutocompleteEmployeesRequest {
+  string prefix = 1;  // Prefix to match (e.g., "joh")
+  int32 limit = 2;    // Max suggestions (default: 10, max: 20)
+}
+
+message AutocompleteEmployeesResponse {
+  repeated EmployeeAutocompleteSuggestion suggestions = 1;
+}
+
+message EmployeeAutocompleteSuggestion {
+  string id = 1;
+  string email = 2;
+  string given_name = 3;
+  string family_name = 4;
+}
+
+message AutocompleteDepartmentsRequest {
+  string prefix = 1;
+  int32 limit = 2;
+}
+
+message AutocompleteDepartmentsResponse {
+  repeated DepartmentAutocompleteSuggestion suggestions = 1;
+}
+
+message DepartmentAutocompleteSuggestion {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+}
+
+message AutocompleteChannelsRequest {
+  string prefix = 1;
+  int32 limit = 2;
+}
+
+message AutocompleteChannelsResponse {
+  repeated ChannelAutocompleteSuggestion suggestions = 1;
+}
+
+message ChannelAutocompleteSuggestion {
+  string id = 1;
+  string display_name = 2;
+  string channel_type = 3;
+  bool is_private = 4;
+}

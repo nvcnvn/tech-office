@@ -1,0 +1,1924 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/chat.proto";
+import "rpc/v1/files.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// =============================================================================
+// COLLABORATION SERVICE - Task Management
+// =============================================================================
+
+service CollaborationService {
+  // -------------------------------------------------------------------------
+  // Project CRUD
+  // -------------------------------------------------------------------------
+
+  rpc CreateProject(CreateProjectRequest) returns (CreateProjectResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.createProject"]
+    };
+  }
+
+  rpc GetProject(GetProjectRequest) returns (GetProjectResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  rpc UpdateProject(UpdateProjectRequest) returns (UpdateProjectResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.updateProject"]
+    };
+  }
+
+  rpc ListProjects(ListProjectsRequest) returns (ListProjectsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  rpc ArchiveProject(ArchiveProjectRequest) returns (ArchiveProjectResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.archiveProject"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Project States
+  // -------------------------------------------------------------------------
+
+  rpc CreateProjectState(CreateProjectStateRequest) returns (CreateProjectStateResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageProjectState"]
+    };
+  }
+
+  rpc UpdateProjectState(UpdateProjectStateRequest) returns (UpdateProjectStateResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageProjectState"]
+    };
+  }
+
+  rpc DeleteProjectState(DeleteProjectStateRequest) returns (DeleteProjectStateResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageProjectState"]
+    };
+  }
+
+  rpc ReorderProjectStates(ReorderProjectStatesRequest) returns (ReorderProjectStatesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageProjectState"]
+    };
+  }
+
+  rpc ListProjectStates(ListProjectStatesRequest) returns (ListProjectStatesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Task Levels
+  // -------------------------------------------------------------------------
+
+  rpc CreateTaskLevel(CreateTaskLevelRequest) returns (CreateTaskLevelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageTaskLevel"]
+    };
+  }
+
+  rpc UpdateTaskLevel(UpdateTaskLevelRequest) returns (UpdateTaskLevelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageTaskLevel"]
+    };
+  }
+
+  rpc DeleteTaskLevel(DeleteTaskLevelRequest) returns (DeleteTaskLevelResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageTaskLevel"]
+    };
+  }
+
+  rpc ListTaskLevels(ListTaskLevelsRequest) returns (ListTaskLevelsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Task CRUD
+  // -------------------------------------------------------------------------
+
+  rpc CreateTask(CreateTaskRequest) returns (CreateTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.createTask"]
+    };
+  }
+
+  rpc GetTask(GetTaskRequest) returns (GetTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  rpc UpdateTask(UpdateTaskRequest) returns (UpdateTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.updateTask"]
+    };
+  }
+
+  rpc DeleteTask(DeleteTaskRequest) returns (DeleteTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.deleteTask"]
+    };
+  }
+
+  rpc ListTasks(ListTasksRequest) returns (ListTasksResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  rpc GetAssignedWorkSummary(GetAssignedWorkSummaryRequest) returns (GetAssignedWorkSummaryResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  rpc MoveTask(MoveTaskRequest) returns (MoveTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.updateTask"]
+    };
+  }
+
+  rpc GetTaskByIdentifier(GetTaskByIdentifierRequest) returns (GetTaskByIdentifierResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Task Assignment
+  // -------------------------------------------------------------------------
+
+  rpc AssignTask(AssignTaskRequest) returns (AssignTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.assignTask"]
+    };
+  }
+
+  rpc UnassignTask(UnassignTaskRequest) returns (UnassignTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.assignTask"]
+    };
+  }
+
+  rpc WatchTask(WatchTaskRequest) returns (WatchTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.watchTask"]
+    };
+  }
+
+  rpc UnwatchTask(UnwatchTaskRequest) returns (UnwatchTaskResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.watchTask"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Custom Fields
+  // -------------------------------------------------------------------------
+
+  rpc CreateCustomField(CreateCustomFieldRequest) returns (CreateCustomFieldResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageCustomField"]
+    };
+  }
+
+  rpc UpdateCustomField(UpdateCustomFieldRequest) returns (UpdateCustomFieldResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageCustomField"]
+    };
+  }
+
+  rpc ArchiveCustomField(ArchiveCustomFieldRequest) returns (ArchiveCustomFieldResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageCustomField"]
+    };
+  }
+
+  rpc ListCustomFields(ListCustomFieldsRequest) returns (ListCustomFieldsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  rpc SetCustomFieldValue(SetCustomFieldValueRequest) returns (SetCustomFieldValueResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.setCustomFieldValue"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Workflow Rules
+  // -------------------------------------------------------------------------
+
+  rpc CreateWorkflowRule(CreateWorkflowRuleRequest) returns (CreateWorkflowRuleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageWorkflowRule"]
+    };
+  }
+
+  rpc UpdateWorkflowRule(UpdateWorkflowRuleRequest) returns (UpdateWorkflowRuleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageWorkflowRule"]
+    };
+  }
+
+  rpc DeleteWorkflowRule(DeleteWorkflowRuleRequest) returns (DeleteWorkflowRuleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageWorkflowRule"]
+    };
+  }
+
+  rpc ListWorkflowRules(ListWorkflowRulesRequest) returns (ListWorkflowRulesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Project Membership
+  // -------------------------------------------------------------------------
+
+  rpc AddProjectMember(AddProjectMemberRequest) returns (AddProjectMemberResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageProjectMember"]
+    };
+  }
+
+  rpc RemoveProjectMember(RemoveProjectMemberRequest) returns (RemoveProjectMemberResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageProjectMember"]
+    };
+  }
+
+  rpc UpdateProjectMemberRole(UpdateProjectMemberRoleRequest) returns (UpdateProjectMemberRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageProjectMember"]
+    };
+  }
+
+  rpc ListProjectMembers(ListProjectMembersRequest) returns (ListProjectMembersResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Saved Views
+  // -------------------------------------------------------------------------
+
+  rpc CreateSavedView(CreateSavedViewRequest) returns (CreateSavedViewResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageSavedView"]
+    };
+  }
+
+  rpc UpdateSavedView(UpdateSavedViewRequest) returns (UpdateSavedViewResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageSavedView"]
+    };
+  }
+
+  rpc DeleteSavedView(DeleteSavedViewRequest) returns (DeleteSavedViewResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageSavedView"]
+    };
+  }
+
+  rpc ListSavedViews(ListSavedViewsRequest) returns (ListSavedViewsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Analytics
+  // -------------------------------------------------------------------------
+
+  rpc GetTaskAnalytics(GetTaskAnalyticsRequest) returns (GetTaskAnalyticsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewAnalytics"]
+    };
+  }
+
+  rpc ExportTasksCSV(ExportTasksCSVRequest) returns (ExportTasksCSVResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.exportTasks"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Task File Upload (Domain-owned upload pattern)
+  // -------------------------------------------------------------------------
+
+  // RequestTaskFileUpload generates presigned R2 upload URL for task attachment.
+  // Server verifies project membership and derives access scope from project visibility.
+  // Following the same domain-owned upload pattern as ChatFileService.
+  rpc RequestTaskFileUpload(RequestTaskFileUploadRequest) returns (RequestTaskFileUploadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.taskFileUpload"]
+    };
+  }
+
+  // ConfirmTaskFileUpload finalizes upload after client uploads to R2.
+  // Triggers async workflows for validation, PDF conversion, and content indexing.
+  // Verifies project membership again and adds file ID to task.file_ids array.
+  rpc ConfirmTaskFileUpload(ConfirmTaskFileUploadRequest) returns (ConfirmTaskFileUploadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.taskFileUpload"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Ritual Definitions
+  // -------------------------------------------------------------------------
+
+  rpc CreateRitualDefinition(CreateRitualDefinitionRequest) returns (CreateRitualDefinitionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageRitualDefinition"]
+    };
+  }
+
+  rpc GetRitualDefinition(GetRitualDefinitionRequest) returns (GetRitualDefinitionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewRitualDefinition"]
+    };
+  }
+
+  rpc UpdateRitualDefinition(UpdateRitualDefinitionRequest) returns (UpdateRitualDefinitionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageRitualDefinition"]
+    };
+  }
+
+  rpc ArchiveRitualDefinition(ArchiveRitualDefinitionRequest) returns (ArchiveRitualDefinitionResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageRitualDefinition"]
+    };
+  }
+
+  rpc ListRitualDefinitions(ListRitualDefinitionsRequest) returns (ListRitualDefinitionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewRitualDefinition"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Evidence Requirements
+  // -------------------------------------------------------------------------
+
+  rpc CreateEvidenceRequirement(CreateEvidenceRequirementRequest) returns (CreateEvidenceRequirementResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageEvidenceRequirement"]
+    };
+  }
+
+  rpc UpdateEvidenceRequirement(UpdateEvidenceRequirementRequest) returns (UpdateEvidenceRequirementResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageEvidenceRequirement"]
+    };
+  }
+
+  rpc DeleteEvidenceRequirement(DeleteEvidenceRequirementRequest) returns (DeleteEvidenceRequirementResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageEvidenceRequirement"]
+    };
+  }
+
+  rpc ListEvidenceRequirements(ListEvidenceRequirementsRequest) returns (ListEvidenceRequirementsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewEvidenceRequirement"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Evidence Submissions
+  // -------------------------------------------------------------------------
+
+  rpc SubmitEvidence(SubmitEvidenceRequest) returns (SubmitEvidenceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.submitEvidence"]
+    };
+  }
+
+  rpc ApproveEvidence(ApproveEvidenceRequest) returns (ApproveEvidenceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.reviewEvidence"]
+    };
+  }
+
+  rpc RejectEvidence(RejectEvidenceRequest) returns (RejectEvidenceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.reviewEvidence"]
+    };
+  }
+
+  rpc ListEvidenceSubmissions(ListEvidenceSubmissionsRequest) returns (ListEvidenceSubmissionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Evidence File Upload
+  // -------------------------------------------------------------------------
+
+  rpc RequestEvidenceFileUpload(RequestEvidenceFileUploadRequest) returns (RequestEvidenceFileUploadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.submitEvidence"]
+    };
+  }
+
+  rpc ConfirmEvidenceFileUpload(ConfirmEvidenceFileUploadRequest) returns (ConfirmEvidenceFileUploadResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.submitEvidence"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Ritual Instance Operations
+  // -------------------------------------------------------------------------
+
+  rpc SkipRitualInstance(SkipRitualInstanceRequest) returns (SkipRitualInstanceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageRitualDefinition"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Ritual Schedule Change
+  // -------------------------------------------------------------------------
+
+  rpc GetScheduleChangeImpact(GetScheduleChangeImpactRequest) returns (GetScheduleChangeImpactResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageRitualDefinition"]
+    };
+  }
+
+  rpc ChangeRitualDefinitionSchedule(ChangeRitualDefinitionScheduleRequest) returns (ChangeRitualDefinitionScheduleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.manageRitualDefinition"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Operational Health
+  // -------------------------------------------------------------------------
+
+  rpc GetOperationalHealth(GetOperationalHealthRequest) returns (GetOperationalHealthResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  rpc GetRitualComplianceSummary(GetRitualComplianceSummaryRequest) returns (GetRitualComplianceSummaryResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  rpc ExportRitualComplianceCSV(ExportRitualComplianceCSVRequest) returns (ExportRitualComplianceCSVResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum ProjectVisibility {
+  PROJECT_VISIBILITY_UNSPECIFIED = 0;
+  PROJECT_VISIBILITY_PUBLIC = 1;
+  PROJECT_VISIBILITY_PRIVATE = 2;
+}
+
+enum StateCategory {
+  STATE_CATEGORY_UNSPECIFIED = 0;
+  STATE_CATEGORY_TODO = 1;
+  STATE_CATEGORY_IN_PROGRESS = 2;
+  STATE_CATEGORY_DONE = 3;
+  STATE_CATEGORY_CANCELLED = 4;
+  STATE_CATEGORY_SCHEDULED = 5;
+  STATE_CATEGORY_SUBMITTED = 6;
+  STATE_CATEGORY_VERIFIED = 7;
+  STATE_CATEGORY_OVERDUE = 8;
+  STATE_CATEGORY_MISSED = 9;
+  STATE_CATEGORY_SKIPPED = 10;
+}
+
+enum StateType {
+  STATE_TYPE_UNSPECIFIED = 0;
+  STATE_TYPE_STANDARD = 1;
+  STATE_TYPE_RITUAL = 2;
+}
+
+enum CustomFieldType {
+  CUSTOM_FIELD_TYPE_UNSPECIFIED = 0;
+  CUSTOM_FIELD_TYPE_TEXT = 1;
+  CUSTOM_FIELD_TYPE_NUMBER = 2;
+  CUSTOM_FIELD_TYPE_SINGLE_SELECT = 3;
+  CUSTOM_FIELD_TYPE_MULTI_SELECT = 4;
+  CUSTOM_FIELD_TYPE_DATE = 5;
+  CUSTOM_FIELD_TYPE_USER = 6;
+  CUSTOM_FIELD_TYPE_CHECKBOX = 7;
+}
+
+enum WorkflowTriggerType {
+  WORKFLOW_TRIGGER_TYPE_UNSPECIFIED = 0;
+  WORKFLOW_TRIGGER_TYPE_STATE_ENTERED = 1;
+  WORKFLOW_TRIGGER_TYPE_STATE_EXITED = 2;
+  WORKFLOW_TRIGGER_TYPE_FIELD_CHANGED = 3;
+  WORKFLOW_TRIGGER_TYPE_TASK_CREATED = 4;
+}
+
+enum WorkflowActionType {
+  WORKFLOW_ACTION_TYPE_UNSPECIFIED = 0;
+  WORKFLOW_ACTION_TYPE_SET_STATE = 1;
+  WORKFLOW_ACTION_TYPE_SET_FIELD = 2;
+  WORKFLOW_ACTION_TYPE_ASSIGN_USER = 3;
+  WORKFLOW_ACTION_TYPE_NOTIFY = 4;
+  WORKFLOW_ACTION_TYPE_CLOSE_TASK = 5;
+}
+
+enum ProjectMemberRole {
+  PROJECT_MEMBER_ROLE_UNSPECIFIED = 0;
+  PROJECT_MEMBER_ROLE_OWNER = 1;
+  PROJECT_MEMBER_ROLE_ADMIN = 2;
+  PROJECT_MEMBER_ROLE_MEMBER = 3;
+  PROJECT_MEMBER_ROLE_VIEWER = 4;
+}
+
+enum TaskAssigneeRole {
+  TASK_ASSIGNEE_ROLE_UNSPECIFIED = 0;
+  TASK_ASSIGNEE_ROLE_ASSIGNEE = 1;
+  TASK_ASSIGNEE_ROLE_REVIEWER = 2;
+  TASK_ASSIGNEE_ROLE_APPROVER = 3;
+}
+
+enum ViewType {
+  VIEW_TYPE_UNSPECIFIED = 0;
+  VIEW_TYPE_BOARD = 1;
+  VIEW_TYPE_LIST = 2;
+  VIEW_TYPE_GANTT = 3;
+  VIEW_TYPE_CALENDAR = 4;
+  VIEW_TYPE_TODAY = 5;
+  VIEW_TYPE_HEALTH = 6;
+}
+
+enum TaskKind {
+  TASK_KIND_UNSPECIFIED = 0;
+  TASK_KIND_STANDARD = 1;
+  TASK_KIND_RITUAL_INSTANCE = 2;
+}
+
+enum CollaborationMode {
+  COLLABORATION_MODE_UNSPECIFIED = 0;
+  COLLABORATION_MODE_STANDARD = 1;
+  COLLABORATION_MODE_RITUAL = 2;
+  COLLABORATION_MODE_MIXED = 3;
+}
+
+enum EvidenceType {
+  EVIDENCE_TYPE_UNSPECIFIED = 0;
+  EVIDENCE_TYPE_PHOTO = 1;
+  EVIDENCE_TYPE_VOICE_MEMO = 2;
+  EVIDENCE_TYPE_PDF = 3;
+  EVIDENCE_TYPE_FILE = 4;
+  EVIDENCE_TYPE_LINK = 5;
+  EVIDENCE_TYPE_TEXT_NOTE = 6;
+  EVIDENCE_TYPE_GPS_CHECKIN = 7;
+}
+
+enum ApprovalMode {
+  APPROVAL_MODE_UNSPECIFIED = 0;
+  APPROVAL_MODE_MANUAL = 1;
+  APPROVAL_MODE_AUTO_APPROVE = 2;
+}
+
+enum ApprovalStatus {
+  APPROVAL_STATUS_UNSPECIFIED = 0;
+  APPROVAL_STATUS_PENDING_REVIEW = 1;
+  APPROVAL_STATUS_APPROVED = 2;
+  APPROVAL_STATUS_REJECTED = 3;
+}
+
+enum RecurrenceType {
+  RECURRENCE_TYPE_UNSPECIFIED = 0;
+  RECURRENCE_TYPE_DAILY = 1;
+  RECURRENCE_TYPE_WEEKLY = 2;
+  RECURRENCE_TYPE_MONTHLY = 3;
+  RECURRENCE_TYPE_CUSTOM_INTERVAL = 4;
+}
+
+// NotificationPreference is imported from chat.proto
+
+// =============================================================================
+// MESSAGES - Project
+// =============================================================================
+
+message Project {
+  string id = 1;
+  string name = 2;
+  string key = 3;
+  string description = 4;
+  ProjectVisibility visibility = 5;
+  bool is_archived = 6;
+  string owner_employee_id = 7;
+  int32 member_count = 8;
+  int32 task_count = 9;
+  google.protobuf.Timestamp updated_at = 10;
+  CollaborationMode collaboration_mode = 11;
+}
+
+message CreateProjectRequest {
+  string name = 1;
+  string key = 2;
+  string description = 3;
+  ProjectVisibility visibility = 4;
+  repeated DefaultState default_states = 5; // Optional: create with default states
+  CollaborationMode collaboration_mode = 6;
+}
+
+message DefaultState {
+  string name = 1;
+  string color = 2;
+  StateCategory category = 3;
+  bool is_initial = 4;
+  bool is_closed = 5;
+}
+
+message CreateProjectResponse {
+  Project project = 1;
+  repeated ProjectState states = 2;
+  repeated TaskLevel levels = 3;
+}
+
+message GetProjectRequest {
+  string project_id = 1;
+}
+
+message GetProjectResponse {
+  Project project = 1;
+  repeated ProjectState states = 2;
+  repeated TaskLevel levels = 3;
+  ProjectMemberRole current_user_role = 4;
+}
+
+message UpdateProjectRequest {
+  string project_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional ProjectVisibility visibility = 4;
+}
+
+message UpdateProjectResponse {
+  Project project = 1;
+}
+
+message ListProjectsRequest {
+  optional bool include_archived = 1;
+  optional string cursor = 2;
+  optional int32 limit = 3;
+}
+
+message ListProjectsResponse {
+  repeated Project projects = 1;
+  optional string next_cursor = 2;
+}
+
+message ArchiveProjectRequest {
+  string project_id = 1;
+  bool archive = 2; // true = archive, false = unarchive
+}
+
+message ArchiveProjectResponse {
+  Project project = 1;
+}
+
+// =============================================================================
+// MESSAGES - Project State
+// =============================================================================
+
+message ProjectState {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  string color = 4;
+  StateCategory category = 5;
+  int32 position = 6;
+  bool is_initial = 7;
+  bool is_closed = 8;
+  StateType state_type = 9;
+}
+
+message CreateProjectStateRequest {
+  string project_id = 1;
+  string name = 2;
+  string color = 3;
+  StateCategory category = 4;
+  optional int32 position = 5;
+  optional bool is_initial = 6;
+  optional bool is_closed = 7;
+  optional StateType state_type = 8;
+}
+
+message CreateProjectStateResponse {
+  ProjectState state = 1;
+}
+
+message UpdateProjectStateRequest {
+  string state_id = 1;
+  optional string name = 2;
+  optional string color = 3;
+  optional StateCategory category = 4;
+  optional bool is_initial = 5;
+  optional bool is_closed = 6;
+  optional StateType state_type = 7;
+}
+
+message UpdateProjectStateResponse {
+  ProjectState state = 1;
+}
+
+message DeleteProjectStateRequest {
+  string state_id = 1;
+  string migrate_to_state_id = 2; // Move existing tasks to this state
+}
+
+message DeleteProjectStateResponse {
+  int32 tasks_migrated = 1;
+}
+
+message ReorderProjectStatesRequest {
+  string project_id = 1;
+  repeated string state_ids = 2; // New order
+}
+
+message ReorderProjectStatesResponse {
+  repeated ProjectState states = 1;
+}
+
+message ListProjectStatesRequest {
+  string project_id = 1;
+}
+
+message ListProjectStatesResponse {
+  repeated ProjectState states = 1;
+}
+
+// =============================================================================
+// MESSAGES - Task Level
+// =============================================================================
+
+message TaskLevel {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  string icon = 4;
+  string color = 5;
+  int32 depth = 6;
+}
+
+message CreateTaskLevelRequest {
+  string project_id = 1;
+  string name = 2;
+  optional string icon = 3;
+  optional string color = 4;
+  int32 depth = 5;
+}
+
+message CreateTaskLevelResponse {
+  TaskLevel level = 1;
+}
+
+message UpdateTaskLevelRequest {
+  string level_id = 1;
+  optional string name = 2;
+  optional string icon = 3;
+  optional string color = 4;
+}
+
+message UpdateTaskLevelResponse {
+  TaskLevel level = 1;
+}
+
+message DeleteTaskLevelRequest {
+  string level_id = 1;
+  string migrate_to_level_id = 2; // Move existing tasks to this level
+}
+
+message DeleteTaskLevelResponse {
+  int32 tasks_migrated = 1;
+}
+
+message ListTaskLevelsRequest {
+  string project_id = 1;
+}
+
+message ListTaskLevelsResponse {
+  repeated TaskLevel levels = 1;
+}
+
+// =============================================================================
+// MESSAGES - Task
+// =============================================================================
+
+message Task {
+  string id = 1;
+  string project_id = 2;
+  string identifier = 3; // e.g., "PROJ-123"
+  string title = 4;
+
+  // Hierarchy
+  optional string parent_task_id = 5;
+  int32 depth = 6;
+  string level_id = 7;
+  int32 child_count = 8;
+
+  // Workflow
+  string state_id = 9;
+
+  // Scheduling
+  optional string start_date = 10; // ISO date string
+  optional string due_date = 11;
+  optional double estimated_hours = 12;
+
+  // Integrations
+  optional string channel_id = 13;
+  optional string description_document_id = 14;
+  repeated string file_ids = 15;
+
+  // People
+  string reporter_employee_id = 16;
+  repeated TaskAssignee assignees = 17;
+
+  // Metadata
+  int32 comment_count = 18;
+  google.protobuf.Timestamp updated_at = 19;
+
+  // Custom fields (populated if requested)
+  repeated CustomFieldValue custom_field_values = 20;
+
+  // Ritual fields
+  TaskKind task_kind = 21;
+  string ritual_definition_id = 22;
+  string scheduled_date = 23;
+  google.protobuf.Timestamp completion_deadline = 24;
+  string skip_reason = 25;
+  TaskEvidenceProgress evidence_progress = 26;
+  bool detached_from_ritual = 27;
+}
+
+message TaskAssignee {
+  string employee_id = 1;
+  TaskAssigneeRole role = 2;
+  google.protobuf.Timestamp assigned_at = 3;
+}
+
+message CreateTaskRequest {
+  string project_id = 1;
+  string title = 2;
+  string level_id = 3;
+
+  optional string parent_task_id = 4;
+  optional string state_id = 5; // Uses initial state if not provided
+  optional string start_date = 6;
+  optional string due_date = 7;
+  optional double estimated_hours = 8;
+
+  repeated string assignee_employee_ids = 9;
+  repeated CreateCustomFieldValueInput custom_fields = 10;
+
+  // Ritual fields (optional, used when creating ritual instances)
+  optional TaskKind task_kind = 11;
+  optional string ritual_definition_id = 12;
+  optional string scheduled_date = 13;
+  optional google.protobuf.Timestamp completion_deadline = 14;
+}
+
+message CreateCustomFieldValueInput {
+  string field_id = 1;
+
+  // Value as oneof for type safety
+  oneof value {
+    string string_value = 2;
+    double number_value = 3;
+    bool bool_value = 4;
+    StringArray string_array_value = 5; // For multi_select
+  }
+}
+
+message CreateTaskResponse {
+  Task task = 1;
+}
+
+message GetTaskRequest {
+  string task_id = 1;
+  bool include_custom_fields = 2;
+}
+
+message GetTaskResponse {
+  Task task = 1;
+  repeated TaskWatcher watchers = 2;
+}
+
+message TaskWatcher {
+  string employee_id = 1;
+  string watch_reason = 2;
+}
+
+message UpdateTaskRequest {
+  string task_id = 1;
+  optional string title = 2;
+  optional string state_id = 3;
+  optional string start_date = 4;
+  optional string due_date = 5;
+  optional double estimated_hours = 6;
+  optional string level_id = 7;
+  optional string parent_task_id = 8;
+  optional string skip_reason = 9;
+}
+
+message UpdateTaskResponse {
+  Task task = 1;
+  repeated WorkflowRuleExecution rule_executions = 2;
+}
+
+message WorkflowRuleExecution {
+  string rule_id = 1;
+  string rule_name = 2;
+  string status = 3;
+  optional string error_message = 4;
+}
+
+message DeleteTaskRequest {
+  string task_id = 1;
+  bool delete_children = 2; // If true, cascade delete children
+}
+
+message DeleteTaskResponse {
+  int32 tasks_deleted = 1;
+}
+
+message ListTasksRequest {
+  string project_id = 1;
+
+  // Filters
+  optional string state_id = 2;
+  optional string assignee_employee_id = 3;
+  optional string reporter_employee_id = 4;
+  optional string level_id = 5;
+  optional string parent_task_id = 6;
+  optional bool root_only = 7; // Only return tasks without parent
+
+  // Search
+  optional string search_query = 8;
+
+  // Pagination
+  optional string cursor = 9;
+  optional int32 limit = 10;
+
+  // Options
+  bool include_custom_fields = 11;
+
+  // Ritual filter
+  optional TaskKind task_kind = 12;
+}
+
+message ListTasksResponse {
+  repeated Task tasks = 1;
+  optional string next_cursor = 2;
+}
+
+message GetAssignedWorkSummaryRequest {
+  optional int32 limit = 1;
+  bool include_ritual_instances = 2;
+}
+
+message AssignedWorkSummaryItem {
+  string task_id = 1;
+  string project_id = 2;
+  string project_key = 3;
+  string title = 4;
+  optional string due_date = 5;
+  string urgency_bucket = 6;
+  optional string state_name = 7;
+}
+
+message GetAssignedWorkSummaryResponse {
+  string as_of_date = 1;
+  int32 due_today_count = 2;
+  int32 overdue_count = 3;
+  repeated AssignedWorkSummaryItem items = 4;
+}
+
+message MoveTaskRequest {
+  string task_id = 1;
+  string new_state_id = 2;
+  optional int32 position_in_state = 3; // Optional ordering within state
+}
+
+message MoveTaskResponse {
+  Task task = 1;
+  repeated WorkflowRuleExecution rule_executions = 2;
+}
+
+message GetTaskByIdentifierRequest {
+  string project_id = 1;
+  string identifier = 2; // e.g., "PROJ-123"
+}
+
+message GetTaskByIdentifierResponse {
+  Task task = 1;
+}
+
+// =============================================================================
+// MESSAGES - Task Assignment
+// =============================================================================
+
+message AssignTaskRequest {
+  string task_id = 1;
+  string employee_id = 2;
+  TaskAssigneeRole role = 3;
+}
+
+message AssignTaskResponse {
+  Task task = 1;
+}
+
+message UnassignTaskRequest {
+  string task_id = 1;
+  string employee_id = 2;
+  optional TaskAssigneeRole role = 3; // If provided, only remove this role
+}
+
+message UnassignTaskResponse {
+  Task task = 1;
+}
+
+message WatchTaskRequest {
+  string task_id = 1;
+}
+
+message WatchTaskResponse {
+  bool watching = 1;
+}
+
+message UnwatchTaskRequest {
+  string task_id = 1;
+}
+
+message UnwatchTaskResponse {
+  bool watching = 1;
+}
+
+// =============================================================================
+// MESSAGES - Custom Fields
+// =============================================================================
+
+// StringArray wrapper for repeated strings in oneof
+message StringArray {
+  repeated string values = 1;
+}
+
+// FieldValue - Unified typed value container for custom fields and analytics filters
+// Replaces google.protobuf.Value with explicit type-safe oneof
+message FieldValue {
+  oneof value {
+    string string_value = 1;
+    double number_value = 2;
+    bool bool_value = 3;
+    StringArray string_array_value = 4;
+  }
+}
+
+message CustomFieldDefinition {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  string description = 4;
+  CustomFieldType field_type = 5;
+  repeated string options = 6; // For select types
+
+  // Default value as oneof for type safety
+  oneof default_value {
+    string default_string_value = 7;
+    double default_number_value = 8;
+    bool default_bool_value = 9;
+    StringArray default_string_array_value = 10; // For multi_select
+  }
+
+  bool is_required = 11;
+  optional double min_value = 12;
+  optional double max_value = 13;
+  int32 position = 14;
+  bool is_archived = 15;
+}
+
+message CustomFieldValue {
+  string field_id = 1;
+  string field_name = 2;
+  CustomFieldType field_type = 3;
+
+  // Value stored as unified FieldValue for type safety
+  FieldValue value = 4;
+}
+
+message CreateCustomFieldRequest {
+  string project_id = 1;
+  string name = 2;
+  optional string description = 3;
+  CustomFieldType field_type = 4;
+  repeated string options = 5;
+
+  // Default value as oneof for type safety (optional)
+  oneof default_value {
+    string default_string_value = 6;
+    double default_number_value = 7;
+    bool default_bool_value = 8;
+    StringArray default_string_array_value = 9; // For multi_select
+  }
+
+  optional bool is_required = 10;
+  optional double min_value = 11;
+  optional double max_value = 12;
+}
+
+message CreateCustomFieldResponse {
+  CustomFieldDefinition field = 1;
+}
+
+message UpdateCustomFieldRequest {
+  string field_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  repeated string options = 4;
+
+  // Default value as oneof for type safety (optional)
+  oneof default_value {
+    string default_string_value = 5;
+    double default_number_value = 6;
+    bool default_bool_value = 7;
+    StringArray default_string_array_value = 8; // For multi_select
+  }
+
+  optional bool is_required = 9;
+  optional double min_value = 10;
+  optional double max_value = 11;
+}
+
+message UpdateCustomFieldResponse {
+  CustomFieldDefinition field = 1;
+}
+
+message ArchiveCustomFieldRequest {
+  string field_id = 1;
+  bool archive = 2;
+}
+
+message ArchiveCustomFieldResponse {
+  CustomFieldDefinition field = 1;
+}
+
+message ListCustomFieldsRequest {
+  string project_id = 1;
+  optional bool include_archived = 2;
+}
+
+message ListCustomFieldsResponse {
+  repeated CustomFieldDefinition fields = 1;
+}
+
+message SetCustomFieldValueRequest {
+  string task_id = 1;
+  string field_id = 2;
+
+  // Value as oneof for type safety
+  oneof value {
+    string string_value = 3;
+    double number_value = 4;
+    bool bool_value = 5;
+    StringArray string_array_value = 6; // For multi_select
+  }
+}
+
+message SetCustomFieldValueResponse {
+  Task task = 1;
+}
+
+// =============================================================================
+// MESSAGES - Workflow Rules
+// =============================================================================
+
+message WorkflowRule {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  string description = 4;
+  WorkflowTriggerType trigger_type = 5;
+  optional string trigger_state_id = 6;
+  optional string trigger_field_id = 7;
+  google.protobuf.Struct trigger_condition = 8;
+  WorkflowActionType action_type = 9;
+  google.protobuf.Struct action_payload = 10;
+  int32 position = 11;
+  bool is_enabled = 12;
+}
+
+message CreateWorkflowRuleRequest {
+  string project_id = 1;
+  string name = 2;
+  optional string description = 3;
+  WorkflowTriggerType trigger_type = 4;
+  optional string trigger_state_id = 5;
+  optional string trigger_field_id = 6;
+  optional google.protobuf.Struct trigger_condition = 7;
+  WorkflowActionType action_type = 8;
+  google.protobuf.Struct action_payload = 9;
+  optional int32 position = 10;
+}
+
+message CreateWorkflowRuleResponse {
+  WorkflowRule rule = 1;
+}
+
+message UpdateWorkflowRuleRequest {
+  string rule_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional WorkflowTriggerType trigger_type = 4;
+  optional string trigger_state_id = 5;
+  optional string trigger_field_id = 6;
+  optional google.protobuf.Struct trigger_condition = 7;
+  optional WorkflowActionType action_type = 8;
+  optional google.protobuf.Struct action_payload = 9;
+  optional int32 position = 10;
+  optional bool is_enabled = 11;
+}
+
+message UpdateWorkflowRuleResponse {
+  WorkflowRule rule = 1;
+}
+
+message DeleteWorkflowRuleRequest {
+  string rule_id = 1;
+}
+
+message DeleteWorkflowRuleResponse {}
+
+message ListWorkflowRulesRequest {
+  string project_id = 1;
+  optional bool include_disabled = 2;
+}
+
+message ListWorkflowRulesResponse {
+  repeated WorkflowRule rules = 1;
+}
+
+// =============================================================================
+// MESSAGES - Project Membership
+// =============================================================================
+
+message ProjectMember {
+  string id = 1;
+  string project_id = 2;
+  string employee_id = 3;
+  ProjectMemberRole role = 4;
+  NotificationPreference notification_preference = 5;
+  google.protobuf.Timestamp joined_at = 6;
+  optional string invited_by_employee_id = 7;
+}
+
+message AddProjectMemberRequest {
+  string project_id = 1;
+  string employee_id = 2;
+  ProjectMemberRole role = 3;
+}
+
+message AddProjectMemberResponse {
+  ProjectMember member = 1;
+}
+
+message RemoveProjectMemberRequest {
+  string project_id = 1;
+  string employee_id = 2;
+}
+
+message RemoveProjectMemberResponse {}
+
+message UpdateProjectMemberRoleRequest {
+  string project_id = 1;
+  string employee_id = 2;
+  ProjectMemberRole role = 3;
+}
+
+message UpdateProjectMemberRoleResponse {
+  ProjectMember member = 1;
+}
+
+message ListProjectMembersRequest {
+  string project_id = 1;
+}
+
+message ListProjectMembersResponse {
+  repeated ProjectMember members = 1;
+}
+
+// =============================================================================
+// MESSAGES - Saved Views
+// =============================================================================
+
+message SavedView {
+  string id = 1;
+  string project_id = 2;
+  optional string employee_id = 3; // NULL = shared view
+  string name = 4;
+  ViewType view_type = 5;
+  google.protobuf.Struct config = 6; // Filters, groupBy, columns, sortBy
+  bool is_default = 7;
+  int32 position = 8;
+}
+
+message CreateSavedViewRequest {
+  string project_id = 1;
+  string name = 2;
+  ViewType view_type = 3;
+  google.protobuf.Struct config = 4;
+  optional bool is_shared = 5; // If true, creates shared view (requires admin)
+  optional bool is_default = 6;
+}
+
+message CreateSavedViewResponse {
+  SavedView view = 1;
+}
+
+message UpdateSavedViewRequest {
+  string view_id = 1;
+  optional string name = 2;
+  optional google.protobuf.Struct config = 3;
+  optional bool is_default = 4;
+  optional int32 position = 5;
+}
+
+message UpdateSavedViewResponse {
+  SavedView view = 1;
+}
+
+message DeleteSavedViewRequest {
+  string view_id = 1;
+}
+
+message DeleteSavedViewResponse {}
+
+message ListSavedViewsRequest {
+  string project_id = 1;
+}
+
+message ListSavedViewsResponse {
+  repeated SavedView views = 1;
+}
+
+// =============================================================================
+// MESSAGES - Analytics
+// =============================================================================
+
+message GetTaskAnalyticsRequest {
+  string project_id = 1;
+
+  // Group by dimensions
+  repeated string group_by = 2; // "state", "assignee", "level", "custom_field:{field_id}"
+
+  // Aggregations
+  repeated AnalyticsAggregation aggregations = 3;
+
+  // Filters
+  repeated AnalyticsFilter filters = 4;
+
+  // Date range
+  optional string start_date = 5;
+  optional string end_date = 6;
+}
+
+message AnalyticsAggregation {
+  string field = 1; // "count", "custom_field:{field_id}"
+  string function = 2; // "count", "sum", "avg", "min", "max"
+  string alias = 3;
+}
+
+message AnalyticsFilter {
+  string field = 1;
+  string operator = 2; // "eq", "ne", "gt", "lt", "gte", "lte", "in", "not_in"
+  FieldValue value = 3; // Unified typed value (was google.protobuf.Value)
+}
+
+message GetTaskAnalyticsResponse {
+  repeated AnalyticsRow rows = 1;
+  AnalyticsSummary summary = 2;
+}
+
+message AnalyticsRow {
+  map<string, google.protobuf.Value> dimensions = 1;
+  map<string, double> metrics = 2;
+}
+
+message AnalyticsSummary {
+  int32 total_tasks = 1;
+  int32 completed_tasks = 2;
+  int32 open_tasks = 3;
+  double completion_rate = 4;
+}
+
+message ExportTasksCSVRequest {
+  string project_id = 1;
+  repeated string columns = 2; // Column names to include
+  repeated AnalyticsFilter filters = 3;
+}
+
+message ExportTasksCSVResponse {
+  bytes csv_data = 1;
+  string filename = 2;
+}
+
+// =============================================================================
+// MESSAGES - Task File Upload
+// =============================================================================
+
+// RequestTaskFileUploadRequest for generating presigned R2 upload URL.
+// Following domain-owned upload pattern from ChatFileService.
+message RequestTaskFileUploadRequest {
+  string task_id = 1; // Task to attach file to
+  string filename = 2; // Original filename
+  string mime_type = 3; // Client-declared MIME type
+  int64 size_bytes = 4; // File size in bytes
+}
+
+message RequestTaskFileUploadResponse {
+  string file_id = 1; // Generated file ID
+  string upload_url = 2; // Presigned R2 upload URL
+  google.protobuf.Timestamp expires_at = 3; // URL expiration time
+}
+
+// ConfirmTaskFileUploadRequest to finalize upload after R2 upload completes.
+// Triggers async workflows for validation, PDF conversion, and content indexing.
+// Adds file ID to task.file_ids array.
+message ConfirmTaskFileUploadRequest {
+  string task_id = 1; // Task file was attached to
+  string file_id = 2; // File ID from request response
+}
+
+message ConfirmTaskFileUploadResponse {
+  FileMetadata file = 1; // Confirmed file metadata (imported from files.proto)
+  Task task = 2; // Updated task with new file_ids
+}
+
+// =============================================================================
+// MESSAGES - Ritual Definitions
+// =============================================================================
+
+message RecurrenceRule {
+  RecurrenceType type = 1;
+  int32 interval = 2;                 // every N days/weeks/months
+  repeated int32 days_of_week = 3;    // 1=Mon..7=Sun (for weekly)
+  int32 day_of_month = 4;             // 1-31 (for monthly)
+  NthWeekday nth_weekday = 5;         // e.g., 2nd Monday (for monthly)
+  string time_of_day = 6;             // "HH:MM" format
+}
+
+message NthWeekday {
+  int32 week = 1;  // 1-5
+  int32 day = 2;   // 1=Mon..7=Sun
+}
+
+message RitualDefinition {
+  string id = 1;
+  string project_id = 2;
+  string name = 3;
+  string description = 4;
+  RecurrenceRule recurrence_rule = 5;
+  int32 completion_window_hours = 6;
+  string timezone = 7;
+  bool is_archived = 8;
+  string created_by_employee_id = 9;
+  repeated string default_assignee_ids = 10;
+  repeated EvidenceRequirementDetail evidence_requirements = 11;
+  google.protobuf.Timestamp updated_at = 12;
+  int32 schedule_version = 13;
+  repeated RitualDepartmentPool default_department_pools = 14;
+}
+
+message RitualDepartmentPool {
+  string id = 1;
+  string department_id = 2;
+  string department_name = 3;
+  string assignment_strategy = 4;
+  string last_assigned_employee_id = 5;
+}
+
+message RitualDepartmentPoolInput {
+  string department_id = 1;
+  string assignment_strategy = 2;
+}
+
+message EvidenceRequirementDetail {
+  string id = 1;
+  string ritual_definition_id = 2;
+  string name = 3;
+  string description = 4;
+  repeated EvidenceType evidence_types = 5;
+  bool is_required = 6;
+  ApprovalMode approval_mode = 7;
+  AutoApproveConfig auto_approve_config = 8;
+  int32 position = 9;
+  int32 deadline_offset_hours = 10;
+}
+
+message AutoApproveConfig {
+  GpsTarget gps_target = 1;
+  int32 gps_radius_meters = 2;
+  string deadline_time = 3; // "HH:MM"
+}
+
+message GpsTarget {
+  double latitude = 1;
+  double longitude = 2;
+}
+
+// =============================================================================
+// MESSAGES - Evidence Submissions
+// =============================================================================
+
+message EvidenceSubmission {
+  string id = 1;
+  string task_id = 2;
+  string evidence_requirement_id = 3;
+  string submitted_by_employee_id = 4;
+  EvidenceType evidence_type = 5;
+
+  // Content (one of)
+  string file_id = 6;
+  string text_content = 7;
+  string link_url = 8;
+
+  // Device metadata
+  google.protobuf.Timestamp device_timestamp = 9;
+  google.protobuf.Timestamp server_timestamp = 10;
+  GpsCoordinates gps_coordinates = 11;
+
+  // Approval
+  ApprovalStatus approval_status = 12;
+  string reviewed_by_employee_id = 13;
+  google.protobuf.Timestamp reviewed_at = 14;
+  string reviewer_comment = 15;
+}
+
+message GpsCoordinates {
+  double latitude = 1;
+  double longitude = 2;
+  double accuracy_meters = 3;
+}
+
+// =============================================================================
+// MESSAGES - Operational Health
+// =============================================================================
+
+message OperationalHealthSummary {
+  string project_id = 1;
+  int32 total_instances = 2;
+  int32 on_time_count = 3;
+  int32 overdue_count = 4;
+  int32 missed_count = 5;
+  int32 pending_review_count = 6;
+  double completion_rate = 7;     // 0.0-1.0
+  double on_time_rate = 8;        // 0.0-1.0
+}
+
+message RitualHealthDetail {
+  string ritual_definition_id = 1;
+  string ritual_name = 2;
+  int32 total_instances = 3;
+  int32 verified_count = 4;
+  int32 overdue_count = 5;
+  int32 missed_count = 6;
+  double health_score = 7;  // 0.0-1.0
+}
+
+message EmployeeComplianceSummary {
+  string employee_id = 1;
+  string employee_name = 2;
+  int32 total_assigned = 3;
+  int32 completed_on_time = 4;
+  int32 completed_late = 5;
+  int32 missed = 6;
+  double compliance_rate = 7;
+}
+
+// =============================================================================
+// MESSAGES - Task Evidence Progress
+// =============================================================================
+
+message TaskEvidenceProgress {
+  int32 total_requirements = 1;
+  int32 required_count = 2;
+  int32 submitted_count = 3;
+  int32 approved_count = 4;
+  int32 rejected_count = 5;
+  int32 pending_review_count = 6;
+  bool all_required_approved = 7;
+}
+
+message TaskEvidenceRequirementStatus {
+  EvidenceRequirementDetail requirement = 1;
+  ApprovalStatus status = 2;
+  EvidenceSubmission latest_submission = 3;
+}
+
+// =============================================================================
+// MESSAGES - Ritual Definition Requests/Responses
+// =============================================================================
+
+message CreateRitualDefinitionRequest {
+  string project_id = 1;
+  string name = 2;
+  string description = 3;
+  RecurrenceRule recurrence_rule = 4;
+  int32 completion_window_hours = 5;
+  string timezone = 6;
+  repeated string default_assignee_ids = 7;
+  repeated CreateEvidenceRequirementInput evidence_requirements = 8;
+  repeated RitualDepartmentPoolInput default_department_pools = 9;
+}
+
+message CreateEvidenceRequirementInput {
+  string name = 1;
+  string description = 2;
+  repeated EvidenceType evidence_types = 3;
+  bool is_required = 4;
+  ApprovalMode approval_mode = 5;
+  AutoApproveConfig auto_approve_config = 6;
+  int32 deadline_offset_hours = 7;
+}
+
+message CreateRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message GetRitualDefinitionRequest {
+  string ritual_definition_id = 1;
+}
+
+message GetRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message UpdateRitualDefinitionRequest {
+  string ritual_definition_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  optional RecurrenceRule recurrence_rule = 4;
+  optional int32 completion_window_hours = 5;
+  optional string timezone = 6;
+  repeated string default_assignee_ids = 7;
+  repeated RitualDepartmentPoolInput default_department_pools = 8;
+}
+
+message UpdateRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message ArchiveRitualDefinitionRequest {
+  string ritual_definition_id = 1;
+  bool archive = 2;
+}
+
+message ArchiveRitualDefinitionResponse {
+  RitualDefinition ritual_definition = 1;
+}
+
+message ListRitualDefinitionsRequest {
+  string project_id = 1;
+  bool include_archived = 2;
+}
+
+message ListRitualDefinitionsResponse {
+  repeated RitualDefinition ritual_definitions = 1;
+}
+
+// =============================================================================
+// MESSAGES - Evidence Requirement Requests/Responses
+// =============================================================================
+
+message CreateEvidenceRequirementRequest {
+  string ritual_definition_id = 1;
+  string name = 2;
+  string description = 3;
+  repeated EvidenceType evidence_types = 4;
+  bool is_required = 5;
+  ApprovalMode approval_mode = 6;
+  AutoApproveConfig auto_approve_config = 7;
+  int32 deadline_offset_hours = 8;
+}
+
+message CreateEvidenceRequirementResponse {
+  EvidenceRequirementDetail evidence_requirement = 1;
+}
+
+message UpdateEvidenceRequirementRequest {
+  string evidence_requirement_id = 1;
+  optional string name = 2;
+  optional string description = 3;
+  repeated EvidenceType evidence_types = 4;
+  optional bool is_required = 5;
+  optional ApprovalMode approval_mode = 6;
+  optional AutoApproveConfig auto_approve_config = 7;
+  optional int32 deadline_offset_hours = 8;
+}
+
+message UpdateEvidenceRequirementResponse {
+  EvidenceRequirementDetail evidence_requirement = 1;
+}
+
+message DeleteEvidenceRequirementRequest {
+  string evidence_requirement_id = 1;
+}
+
+message DeleteEvidenceRequirementResponse {}
+
+message ListEvidenceRequirementsRequest {
+  string ritual_definition_id = 1;
+}
+
+message ListEvidenceRequirementsResponse {
+  repeated EvidenceRequirementDetail evidence_requirements = 1;
+}
+
+// =============================================================================
+// MESSAGES - Evidence Submission Requests/Responses
+// =============================================================================
+
+message SubmitEvidenceRequest {
+  string task_id = 1;
+  string evidence_requirement_id = 2;
+  EvidenceType evidence_type = 3;
+
+  // Content (one of, depending on type)
+  string file_id = 4;
+  string text_content = 5;
+  string link_url = 6;
+
+  // Device metadata
+  google.protobuf.Timestamp device_timestamp = 7;
+  GpsCoordinates gps_coordinates = 8;
+}
+
+message SubmitEvidenceResponse {
+  EvidenceSubmission evidence_submission = 1;
+}
+
+message ApproveEvidenceRequest {
+  string evidence_submission_id = 1;
+  string comment = 2;
+}
+
+message ApproveEvidenceResponse {
+  EvidenceSubmission evidence_submission = 1;
+}
+
+message RejectEvidenceRequest {
+  string evidence_submission_id = 1;
+  string comment = 2;
+}
+
+message RejectEvidenceResponse {
+  EvidenceSubmission evidence_submission = 1;
+}
+
+message ListEvidenceSubmissionsRequest {
+  string task_id = 1;
+}
+
+message ListEvidenceSubmissionsResponse {
+  repeated EvidenceSubmission evidence_submissions = 1;
+}
+
+// =============================================================================
+// MESSAGES - Evidence File Upload
+// =============================================================================
+
+message RequestEvidenceFileUploadRequest {
+  string task_id = 1;
+  string evidence_requirement_id = 2;
+  string file_name = 3;
+  string content_type = 4;
+  int64 file_size_bytes = 5;
+}
+
+message RequestEvidenceFileUploadResponse {
+  string file_id = 1;
+  string upload_url = 2;
+}
+
+message ConfirmEvidenceFileUploadRequest {
+  string file_id = 1;
+  string task_id = 2;
+}
+
+message ConfirmEvidenceFileUploadResponse {
+  string file_id = 1;
+}
+
+// =============================================================================
+// MESSAGES - Skip Ritual Instance
+// =============================================================================
+
+message SkipRitualInstanceRequest {
+  string task_id = 1;
+  string reason = 2;
+}
+
+message SkipRitualInstanceResponse {
+  Task task = 1;
+}
+
+// =============================================================================
+// MESSAGES - Ritual Schedule Change
+// =============================================================================
+
+message GetScheduleChangeImpactRequest {
+  string ritual_definition_id = 1;
+  RecurrenceRule new_recurrence_rule = 2;
+}
+
+message GetScheduleChangeImpactResponse {
+  int32 instances_to_remove = 1;
+  int32 instances_to_detach = 2;
+  int32 instances_to_create = 3;
+}
+
+message ChangeRitualDefinitionScheduleRequest {
+  string ritual_definition_id = 1;
+  RecurrenceRule new_recurrence_rule = 2;
+  bool confirmed = 3;
+}
+
+message ChangeRitualDefinitionScheduleResponse {
+  RitualDefinition ritual_definition = 1;
+  int32 instances_removed = 2;
+  int32 instances_detached = 3;
+  int32 instances_created = 4;
+}
+
+// =============================================================================
+// MESSAGES - Operational Health Requests/Responses
+// =============================================================================
+
+message GetOperationalHealthRequest {
+  string project_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+message GetOperationalHealthResponse {
+  OperationalHealthSummary summary = 1;
+  repeated RitualHealthDetail ritual_details = 2;
+}
+
+message GetRitualComplianceSummaryRequest {
+  string project_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+  string ritual_definition_id = 4;
+}
+
+message GetRitualComplianceSummaryResponse {
+  repeated EmployeeComplianceSummary employee_summaries = 1;
+}
+
+message ExportRitualComplianceCSVRequest {
+  string project_id = 1;
+  google.protobuf.Timestamp start_date = 2;
+  google.protobuf.Timestamp end_date = 3;
+}
+
+message ExportRitualComplianceCSVResponse {
+  bytes csv_data = 1;
+}

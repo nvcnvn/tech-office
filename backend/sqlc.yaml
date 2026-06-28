@@ -1,0 +1,42 @@
+version: "2"
+plugins:
+  - name: golang
+    wasm:
+      url: https://github.com/nvcnvn/sqlc-gen-go-crud/releases/download/v0.0.1/sqlc-gen-go.wasm
+      sha256: 42b5aee0d46701fd8e91bcb38056799dcc8bed53108bb73b5809cb6ccfef4329
+sql:
+  - engine: "postgresql"
+    schema:
+      - ./database/scripts/schema.sql
+    queries:
+      - ./database/scripts/public.query.sql
+      - ./database/scripts/iam.query.sql
+      - ./database/scripts/organization.query.sql
+      - ./database/scripts/notification.query.sql
+      - ./database/scripts/chat.query.sql
+      - ./database/scripts/files.query.sql
+      - ./database/scripts/files_security.query.sql
+      - ./database/scripts/docs.query.sql
+      - ./database/scripts/collaboration.query.sql
+      - ./database/scripts/calendar.query.sql
+      - ./database/scripts/voice.query.sql
+    codegen:
+    - plugin: golang
+      out: ./database/
+      options:
+        package: "database"
+        sql_package: "pgx/v5"
+        emit_json_tags: true
+        emit_result_struct_pointers: true
+        emit_params_struct_pointers: true
+        emit_methods_with_db_argument: true
+        overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/nvcnvn/tech-office/backend/database/dbuuid"
+              type: "UUID"
+          - db_type: "uuid"
+            nullable: true
+            go_type:
+              import: "github.com/nvcnvn/tech-office/backend/database/dbuuid"
+              type: "NullUUID"

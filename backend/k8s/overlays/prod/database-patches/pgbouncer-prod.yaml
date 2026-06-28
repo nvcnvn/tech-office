@@ -1,0 +1,24 @@
+- op: replace
+  path: /spec/replicas  
+  value: 3
+- op: replace
+  path: /spec/template/spec/containers/0/env/8/value  # DEFAULT_POOL_SIZE
+  value: "50"
+- op: replace
+  path: /spec/template/spec/containers/0/env/9/value  # MAX_CLIENT_CONN
+  value: "2000"
+- op: replace
+  path: /spec/template/spec/containers/0/env/12/value # MAX_DB_CONNECTIONS
+  value: "100"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/memory
+  value: "128Mi"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/requests/cpu
+  value: "100m"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/memory
+  value: "256Mi"
+- op: replace
+  path: /spec/template/spec/containers/0/resources/limits/cpu
+  value: "500m"

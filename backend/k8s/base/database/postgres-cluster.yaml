@@ -1,0 +1,171 @@
+---
+apiVersion: stackgres.io/v1
+kind: SGInstanceProfile
+metadata:
+  name: size-small
+spec:
+  cpu: "500m"
+  memory: "512Mi"
+---
+apiVersion: stackgres.io/v1
+kind: SGPostgresConfig
+metadata:
+  name: postgresconf
+spec:
+  postgresVersion: "17"
+  postgresql.conf:
+    password_encryption: "scram-sha-256"
+    random_page_cost: "1.5"
+    shared_buffers: "256MB"
+    wal_compression: "on"
+---
+apiVersion: stackgres.io/v1
+kind: SGPoolingConfig
+metadata:
+  name: pgbouncerconf
+spec:
+  pgBouncer:
+    pgbouncer.ini:
+      pgbouncer:
+        max_client_conn: "2000"
+        default_pool_size: "50"
+        ignore_startup_parameters: "extra_float_digits,search_path"
+      databases:
+        office:
+          max_db_connections: 1000
+          pool_size: 20
+          dbname: "office"
+          reserve_pool: 5
+      users:
+        postgres:
+          pool_mode: session
+          max_user_connections: 50
+        office:
+          pool_mode: transaction
+          max_user_connections: 950
+# ---
+# apiVersion: stackgres.io/v1beta1
+# kind: SGObjectStorage
+# metadata:
+#   name: objectstorage
+# spec:
+#   type: s3Compatible
+#   s3Compatible:
+#     bucket: stackgres
+#     region: k8s
+#     enablePathStyleAddressing: true
+#     endpoint: http://my-cluster-minio:9000
+#     awsCredentials:
+#       secretKeySelectors:
+#         accessKeyId:
+#           key: accesskey
+#           name: my-cluster-minio
+#         secretAccessKey:
+#           key: secretkey
+#           name: my-cluster-minio
+---
+apiVersion: stackgres.io/v1
+kind: SGScript
+metadata:
+  name: cluster-setup-scripts
+spec:
+  scripts:
+  - name: create-uuidv7-function-if-not-exist
+    database: office
+    user: postgres
+    script: |
+      CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+      -- Simple UUIDv7 function for PostgreSQL 16 compatibility
+      create or replace function uuidv7(p_timestamp timestamp with time zone default clock_timestamp()) returns uuid as $$
+      declare
+
+        v_time double precision := null;
+
+        v_unix_t bigint := null;
+        v_rand_a bigint := null;
+        v_rand_b bigint := null;
+
+        v_unix_t_hex varchar := null;
+        v_rand_a_hex varchar := null;
+        v_rand_b_hex varchar := null;
+
+        c_milli double precision := 10^3;  -- 1 000
+        c_micro double precision := 10^6;  -- 1 000 000
+        c_scale double precision := 4.096; -- 4.0 * (1024 / 1000)
+        
+        c_version bigint := x'0000000000007000'::bigint; -- RFC-9562 version: b'0111...'
+        c_variant bigint := x'8000000000000000'::bigint; -- RFC-9562 variant: b'10xx...'
+
+      begin
+
+        v_time := extract(epoch from p_timestamp);
+
+        v_unix_t := trunc(v_time * c_milli);
+        v_rand_a := trunc((v_time * c_micro - v_unix_t * c_milli) * c_scale);
+        -- v_rand_b := secure_random_bigint(); -- use when pgcrypto extension is installed
+        v_rand_b := trunc(random() * 2^30)::bigint << 32 | trunc(random() * 2^32)::bigint;
+
+        v_unix_t_hex := lpad(to_hex(v_unix_t), 12, '0');
+        v_rand_a_hex := lpad(to_hex((v_rand_a | c_version)::bigint), 4, '0');
+        v_rand_b_hex := lpad(to_hex((v_rand_b | c_variant)::bigint), 16, '0');
+
+        return (v_unix_t_hex || v_rand_a_hex || v_rand_b_hex)::uuid;
+        
+      end $$ language plpgsql;
+---
+apiVersion: stackgres.io/v1alpha1
+kind: SGShardedCluster
+metadata:
+  name: cluster
+spec:
+  # metadata:
+  #   annotations:
+  #     primaryService:
+  #       netbird.io/expose: "true"
+  #       netbird.io/groups: "app-access"
+  postgresServices:
+    coordinator:
+      primary:
+        type: LoadBalancer
+      any:
+        type: NodePort
+    shards:
+      primaries:
+        type: NodePort
+  profile: "development"
+  type: citus
+  database: office
+  postgres:
+    version: "17"
+    extensions:
+      - name: 'uuid-ossp'
+  coordinator:
+    instances: 1
+    sgInstanceProfile: "size-small"
+    pods:
+      persistentVolume:
+        size: "10Gi"
+    configurations:
+      sgPostgresConfig: "postgresconf"
+      sgPoolingConfig: "pgbouncerconf"
+    managedSql:
+      scripts:
+        - sgScript: cluster-setup-scripts
+  shards:
+    clusters: 2
+    instancesPerCluster: 1
+    sgInstanceProfile: "size-small"
+    pods:
+      persistentVolume:
+        size: "10Gi"
+    configurations:
+      sgPostgresConfig: "postgresconf"
+      sgPoolingConfig: "pgbouncerconf"
+    managedSql:
+      scripts:
+        - sgScript: cluster-setup-scripts
+  # configurations:
+  #   backups:
+  #     - sgObjectStorage: "objectstorage"
+  #       cronSchedule: "*/5 * * * *"
+  #       retention: 6

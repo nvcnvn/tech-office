@@ -1,0 +1,1287 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// =============================================================================
+// IAM Service - Authentication and Authorization
+// =============================================================================
+
+service IAMService {
+  // === SSO Authentication ===
+
+  // ExchangeToken: Exchange SSO provider token for internal JWT
+  // - Verifies Google/Apple JWKS signature
+  // - Creates user if not exists (find-or-create)
+  // - Links SSO identity
+  // - Issues internal JWT
+  // Public endpoint (no authentication required)
+  rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {
+    option (rpc.v1.access_control) = {allow_unauthenticated: true};
+  }
+
+  // === Password Authentication ===
+
+  // Login: Authenticate with email and password
+  // - Verifies email exists
+  // - Checks bcrypt password hash
+  // - Returns internal JWT
+  // Public endpoint (no authentication required)
+  rpc Login(LoginRequest) returns (LoginResponse) {
+    option (rpc.v1.access_control) = {allow_unauthenticated: true};
+  }
+
+  // === Password Management ===
+
+  // ChangePassword: Update password for authenticated user
+  // - Verifies current password
+  // - Hashes new password
+  // - Invalidates all sessions
+  // Requires authentication
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.changePassword"]
+    };
+  }
+
+  // RequestPasswordReset: Initiate password reset flow
+  // - Sends reset email with token
+  // - Does NOT reveal if email exists (security)
+  // Public endpoint (no authentication required)
+  rpc RequestPasswordReset(RequestPasswordResetRequest) returns (RequestPasswordResetResponse) {
+    option (rpc.v1.access_control) = {allow_unauthenticated: true};
+  }
+
+  // ResetPassword: Complete password reset with token
+  // - Verifies reset token validity
+  // - Updates password
+  // - Invalidates all sessions
+  // Public endpoint (no authentication required)
+  rpc ResetPassword(ResetPasswordRequest) returns (ResetPasswordResponse) {
+    option (rpc.v1.access_control) = {allow_unauthenticated: true};
+  }
+
+  // === Session Management ===
+
+  // Logout: Invalidate current session
+  // - Marks session as invalidated
+  // - Token remains valid until expiry (stateless JWT)
+  // Requires authentication
+  rpc Logout(LogoutRequest) returns (LogoutResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageSessions"]
+    };
+  }
+
+  // LogoutAllSessions: Invalidate all user sessions
+  // - Used for security incidents
+  // - Marks all sessions as invalidated
+  // Requires authentication
+  rpc LogoutAllSessions(LogoutAllSessionsRequest) returns (LogoutAllSessionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageSessions"]
+    };
+  }
+
+  // GetActiveSessions: List user's active sessions
+  // - Shows last activity, IP, user agent
+  // - Allows selective session termination
+  // Requires authentication
+  rpc GetActiveSessions(GetActiveSessionsRequest) returns (GetActiveSessionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageSessions"]
+    };
+  }
+
+  // === User Profile ===
+
+  // GetProfile: Get current user profile
+  // - Returns user info + SSO identities
+  // Requires authentication
+  rpc GetProfile(GetProfileRequest) returns (GetProfileResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.viewProfile"]
+    };
+  }
+
+  // UpdateProfile: Update user profile
+  // - Display name, profile picture
+  // Requires authentication
+  rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.updateProfile"]
+    };
+  }
+
+  // === SSO Identity Management ===
+
+  // LinkSSOIdentity: Link additional SSO provider to account
+  // - Verifies SSO token
+  // - Creates sso_identity record
+  // Requires authentication
+  rpc LinkSSOIdentity(LinkSSOIdentityRequest) returns (LinkSSOIdentityResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.linkSSO"]
+    };
+  }
+
+  // UnlinkSSOIdentity: Remove SSO provider link
+  // - Must have password or another SSO provider
+  // - Deletes sso_identity record
+  // Requires authentication
+  rpc UnlinkSSOIdentity(UnlinkSSOIdentityRequest) returns (UnlinkSSOIdentityResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.linkSSO"]
+    };
+  }
+
+  // === Organization Membership ===
+
+  // GetUserOrganizations: List organizations user belongs to
+  // - Returns org info + user's role
+  // Requires authentication
+  rpc GetUserOrganizations(GetUserOrganizationsRequest) returns (GetUserOrganizationsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.viewOrganizations"]
+    };
+  }
+
+  // SwitchOrganization: Change active organization context
+  // - Issues new JWT with organization_id
+  // - Used for multi-tenant context switching
+  // Requires authentication
+  rpc SwitchOrganization(SwitchOrganizationRequest) returns (SwitchOrganizationResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.switchOrganization"]
+    };
+  }
+
+  // === Invitations (Org Admin) ===
+
+  // InviteUser: Send invitation to join organization
+  // - Creates invitation record
+  // - Sends invitation email
+  // Requires: admin or owner role in organization
+  rpc InviteUser(InviteUserRequest) returns (InviteUserResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.inviteUser"]
+    };
+  }
+
+  // CancelInvitation: Cancel pending invitation
+  // Requires: admin or owner role in organization
+  rpc CancelInvitation(CancelInvitationRequest) returns (CancelInvitationResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.cancelInvitation"]
+    };
+  }
+
+  // ListInvitations: List pending invitations for organization
+  // Requires: admin or owner role in organization
+  rpc ListInvitations(ListInvitationsRequest) returns (ListInvitationsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.listInvitations"]
+    };
+  }
+
+  // AcceptInvitation: Accept invitation and join organization
+  // - Creates organization_membership
+  // - Marks invitation as accepted
+  // - If new user: creates account with provided SSO or password
+  // Public endpoint (creates account if needed)
+  rpc AcceptInvitation(AcceptInvitationRequest) returns (AcceptInvitationResponse) {
+    option (rpc.v1.access_control) = {allow_unauthenticated: true};
+  }
+
+  // ListEmployees: List organization employees with pagination, sorting, and optional email filter
+  // Returns employees from organization.employee table
+  // Requires: any authenticated organization member
+  rpc ListEmployees(ListEmployeesRequest) returns (ListEmployeesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.listEmployees"]
+    };
+  }
+
+  // GetEmployeeCards: Fetch lightweight display data for a batch of employees by ID.
+  // Returns name, email, department, and presence status for rendering UserCard components.
+  // Designed for frontend UI resolution — use instead of exposing full employee records.
+  // Accepts up to 100 employee IDs per request.
+  // Requires: any authenticated organization member
+  rpc GetEmployeeCards(GetEmployeeCardsRequest) returns (GetEmployeeCardsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.listEmployees"]
+    };
+  }
+
+  // PreviewEmployeeImport: Validate and preview a list of employees before import.
+  // Returns each employee with a willBeImported flag (false if duplicate email detected).
+  // Requires: ADMIN or OWNER
+  rpc PreviewEmployeeImport(PreviewEmployeeImportRequest) returns (PreviewEmployeeImportResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.importEmployees"]
+    };
+  }
+
+  // ExecuteEmployeeImport: Bulk-create organization.employee records and send invitation emails.
+  // Only employees with willBeImported=true should be submitted.
+  // Requires: ADMIN or OWNER
+  rpc ExecuteEmployeeImport(ExecuteEmployeeImportRequest) returns (ExecuteEmployeeImportResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.importEmployees"]
+    };
+  }
+
+  // === Permission & Role Management ===
+
+  // ListPermissions: Returns all system-defined permissions grouped by domain.
+  // Reads from public.permission reference table (global data).
+  rpc ListPermissions(ListPermissionsRequest) returns (ListPermissionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.viewRoles"]
+    };
+  }
+
+  // CreateRole: Create a custom role with selected permissions.
+  rpc CreateRole(CreateRoleRequest) returns (CreateRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageRoles"]
+    };
+  }
+
+  // UpdateRole: Modify a role's name, description, or permissions.
+  // Cannot remove lockout-prevention permissions from the Owner system role.
+  rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageRoles"]
+    };
+  }
+
+  // DeleteRole: Delete a custom role (system roles cannot be deleted).
+  // Cascades: removes all employee assignments and permission mappings.
+  rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageRoles"]
+    };
+  }
+
+  // ListRoles: List all roles for the organization (system + custom).
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.viewRoles"]
+    };
+  }
+
+  // GetRole: Get a single role with its permissions.
+  rpc GetRole(GetRoleRequest) returns (GetRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.viewRoles"]
+    };
+  }
+
+  // AssignRole: Assign a role to an employee.
+  rpc AssignRole(AssignRoleRequest) returns (AssignRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageRoles"]
+    };
+  }
+
+  // RevokeRole: Remove a role from an employee.
+  rpc RevokeRole(RevokeRoleRequest) returns (RevokeRoleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageRoles"]
+    };
+  }
+
+  // ListEmployeeRoles: List all roles assigned to a specific employee.
+  rpc ListEmployeeRoles(ListEmployeeRolesRequest) returns (ListEmployeeRolesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.viewRoles"]
+    };
+  }
+
+  // GetEmployeePermissions: Returns the effective permission set for an employee.
+  // Computes the union of permissions from all assigned roles.
+  rpc GetEmployeePermissions(GetEmployeePermissionsRequest) returns (GetEmployeePermissionsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.viewRoles"]
+    };
+  }
+
+  // === Org-Managed Accounts (PIN-Based Workers) ===
+
+  // LoginWithPIN authenticates a worker using org-scoped login_identifier + PIN.
+  // Resolves organization from subdomain, then looks up identity by login_identifier.
+  rpc LoginWithPIN(LoginWithPINRequest) returns (LoginWithPINResponse) {
+    option (rpc.v1.access_control) = {allow_unauthenticated: true};
+  }
+
+  // SetPIN sets or changes a worker's PIN credential.
+  // Required after first login with a temporary PIN (pin_change_required=true).
+  // Can be called with a pin_change_token (no auth header) or with a valid JWT.
+  rpc SetPIN(SetPINRequest) returns (SetPINResponse) {
+    option (rpc.v1.access_control) = {allow_unauthenticated: true};
+  }
+
+  // CreateOrgAccount creates a single org-managed worker account.
+  // Returns the generated temporary PIN (visible once).
+  rpc CreateOrgAccount(CreateOrgAccountRequest) returns (CreateOrgAccountResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageOrgAccounts"]
+    };
+  }
+
+  // BatchCreateOrgAccounts creates multiple org-managed worker accounts.
+  // Returns results with one-time PIN list.
+  rpc BatchCreateOrgAccounts(BatchCreateOrgAccountsRequest) returns (BatchCreateOrgAccountsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageOrgAccounts"]
+    };
+  }
+
+  // DeactivateOrgAccount deactivates an org-managed worker account.
+  // Immediately invalidates all active sessions.
+  rpc DeactivateOrgAccount(DeactivateOrgAccountRequest) returns (DeactivateOrgAccountResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageOrgAccounts"]
+    };
+  }
+
+  // UnlockOrgAccount unlocks an org-managed account locked due to failed PIN attempts.
+  // Optionally generates a new temporary PIN.
+  rpc UnlockOrgAccount(UnlockOrgAccountRequest) returns (UnlockOrgAccountResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageOrgAccounts"]
+    };
+  }
+
+  // ResetOrgAccountCredential resets credentials for an org-managed account.
+  // Generates a new temporary PIN and revokes existing PIN credentials.
+  rpc ResetOrgAccountCredential(ResetOrgAccountCredentialRequest) returns (ResetOrgAccountCredentialResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageOrgAccounts"]
+    };
+  }
+
+  // ListOrgAccounts lists org-managed worker accounts with status info.
+  rpc ListOrgAccounts(ListOrgAccountsRequest) returns (ListOrgAccountsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.manageOrgAccounts"]
+    };
+  }
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+// SSO provider types
+enum SSOProvider {
+  SSO_PROVIDER_UNSPECIFIED = 0;
+  SSO_PROVIDER_GOOGLE = 1;
+  SSO_PROVIDER_APPLE = 2;
+}
+
+// User account status
+enum UserStatus {
+  USER_STATUS_UNSPECIFIED = 0;
+  USER_STATUS_ACTIVE = 1;
+  USER_STATUS_SUSPENDED = 2;
+  USER_STATUS_DELETED = 3;
+}
+
+// Invitation status
+enum InvitationStatus {
+  INVITATION_STATUS_UNSPECIFIED = 0;
+  INVITATION_STATUS_PENDING = 1;
+  INVITATION_STATUS_ACCEPTED = 2;
+  INVITATION_STATUS_CANCELLED = 3;
+  INVITATION_STATUS_EXPIRED = 4;
+}
+
+// =============================================================================
+// Messages - SSO Authentication
+// =============================================================================
+
+message ExchangeTokenRequest {
+  // SSO provider (google, apple)
+  SSOProvider provider = 1;
+
+  // ID token from SSO provider (JWT)
+  string id_token = 2;
+
+  // Organization context to embed in the issued token.
+  // Should match the subdomain the user is signing into.
+  optional string organization_id = 3;
+}
+
+message ExchangeTokenResponse {
+  // Internal JWT token
+  string access_token = 1;
+
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+
+  // User info
+  User user = 3;
+
+  // Whether this was a new user registration
+  bool is_new_user = 4;
+}
+
+// =============================================================================
+// Messages - Password Authentication
+// =============================================================================
+
+message LoginRequest {
+  // User email
+  string email = 1;
+
+  // Password (plaintext - TLS encrypted)
+  string password = 2;
+
+  // Organization context to embed in the issued token.
+  // Should match the subdomain the user is signing into.
+  // If omitted, the server will attempt to use the user's first org.
+  optional string organization_id = 3;
+}
+
+message LoginResponse {
+  // Internal JWT token
+  string access_token = 1;
+
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+
+  // User info
+  User user = 3;
+}
+
+// =============================================================================
+// Messages - Password Management
+// =============================================================================
+
+message ChangePasswordRequest {
+  // Current password (for verification)
+  string current_password = 1;
+
+  // New password
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {
+  // Success message
+  string message = 1;
+}
+
+message RequestPasswordResetRequest {
+  // User email
+  string email = 1;
+}
+
+message RequestPasswordResetResponse {
+  // Generic success message (does NOT reveal if email exists)
+  string message = 1;
+}
+
+message ResetPasswordRequest {
+  // Reset token from email
+  string token = 1;
+
+  // New password
+  string new_password = 2;
+}
+
+message ResetPasswordResponse {
+  // Success message
+  string message = 1;
+}
+
+// =============================================================================
+// Messages - Session Management
+// =============================================================================
+
+message LogoutRequest {
+  // Empty - user ID from JWT
+}
+
+message LogoutResponse {
+  // Success message
+  string message = 1;
+}
+
+message LogoutAllSessionsRequest {
+  // Empty - user ID from JWT
+}
+
+message LogoutAllSessionsResponse {
+  // Number of sessions invalidated
+  int32 sessions_invalidated = 1;
+}
+
+message GetActiveSessionsRequest {
+  // Empty - user ID from JWT
+}
+
+message GetActiveSessionsResponse {
+  // List of active sessions
+  repeated Session sessions = 1;
+}
+
+// =============================================================================
+// Messages - User Profile
+// =============================================================================
+
+message GetProfileRequest {
+  // Empty - user ID from JWT
+}
+
+message GetProfileResponse {
+  // User info
+  User user = 1;
+
+  // Linked SSO identities
+  repeated SSOIdentity sso_identities = 2;
+
+  // Has password credential
+  bool has_password = 3;
+
+  // Organizations user belongs to
+  repeated OrganizationMembership organizations = 4;
+}
+
+message UpdateProfileRequest {
+  // Display name (optional)
+  optional string display_name = 1;
+
+  // Profile picture URL (optional)
+  optional string profile_picture_url = 2;
+}
+
+message UpdateProfileResponse {
+  // Updated user info
+  User user = 1;
+}
+
+// =============================================================================
+// Messages - SSO Identity Management
+// =============================================================================
+
+message LinkSSOIdentityRequest {
+  // SSO provider (google, apple)
+  SSOProvider provider = 1;
+
+  // ID token from SSO provider (JWT)
+  string id_token = 2;
+}
+
+message LinkSSOIdentityResponse {
+  // Linked SSO identity
+  SSOIdentity sso_identity = 1;
+}
+
+message UnlinkSSOIdentityRequest {
+  // SSO identity ID to unlink
+  string sso_identity_id = 1;
+}
+
+message UnlinkSSOIdentityResponse {
+  // Success message
+  string message = 1;
+}
+
+// =============================================================================
+// Messages - Organization Membership
+// =============================================================================
+
+message GetUserOrganizationsRequest {
+  // Empty - user ID from JWT
+}
+
+message GetUserOrganizationsResponse {
+  // List of organizations with user's role
+  repeated OrganizationMembership organizations = 1;
+}
+
+message SwitchOrganizationRequest {
+  // Organization ID to switch to
+  string organization_id = 1;
+}
+
+message SwitchOrganizationResponse {
+  // New JWT with organization context
+  string access_token = 1;
+
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+
+  // User's role names in this organization
+  repeated string role_names = 3;
+}
+
+// =============================================================================
+// Messages - Invitations
+// =============================================================================
+
+message InviteUserRequest {
+  // Organization ID (from JWT context)
+  string organization_id = 1;
+
+  // Email to invite
+  string email = 2;
+
+  // Role ID to assign (UUID of org role)
+  string role_id = 3;
+}
+
+message InviteUserResponse {
+  // Created invitation
+  Invitation invitation = 1;
+}
+
+message CancelInvitationRequest {
+  // Organization ID (from JWT context)
+  string organization_id = 1;
+
+  // Invitation ID to cancel
+  string invitation_id = 2;
+}
+
+message CancelInvitationResponse {
+  // Success message
+  string message = 1;
+}
+
+message ListInvitationsRequest {
+  // Organization ID (from JWT context)
+  string organization_id = 1;
+
+  // Filter by status (optional)
+  optional InvitationStatus status = 2;
+}
+
+message ListInvitationsResponse {
+  // List of invitations
+  repeated Invitation invitations = 1;
+}
+
+message AcceptInvitationRequest {
+  // Invitation token from email
+  string token = 1;
+
+  // User info for account creation (if new user)
+  optional string display_name = 2;
+  optional SSOProvider sso_provider = 3;
+  optional string sso_id_token = 4;
+  optional string password = 5;
+}
+
+message AcceptInvitationResponse {
+  // Internal JWT token
+  string access_token = 1;
+
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+
+  // User info
+  User user = 3;
+
+  // Organization joined
+  OrganizationMembership membership = 4;
+}
+
+// =============================================================================
+// Entity Messages
+// =============================================================================
+
+message User {
+  // User ID (UUID)
+  string id = 1;
+
+  // Email address
+  string email = 2;
+
+  // Display name
+  string display_name = 3;
+
+  // Profile picture URL
+  string profile_picture_url = 4;
+
+  // Account status
+  UserStatus status = 5;
+
+  // Last login timestamp
+  google.protobuf.Timestamp last_login_at = 6;
+
+  // Account creation timestamp
+  google.protobuf.Timestamp created_at = 7;
+}
+
+message SSOIdentity {
+  // SSO identity ID (UUID)
+  string id = 1;
+
+  // SSO provider
+  SSOProvider provider = 2;
+
+  // Email from provider
+  string email = 3;
+
+  // Creation timestamp
+  google.protobuf.Timestamp created_at = 4;
+
+  // Last used timestamp
+  google.protobuf.Timestamp last_used_at = 5;
+}
+
+message OrganizationMembership {
+  // Membership ID (UUID) — derived from employee ID
+  string id = 1;
+
+  // Organization ID
+  string organization_id = 2;
+
+  // Organization name
+  string organization_name = 3;
+
+  // Organization subdomain
+  string organization_subdomain = 4;
+
+  // User's role names in this organization
+  repeated string role_names = 5;
+
+  // When user joined
+  google.protobuf.Timestamp joined_at = 6;
+}
+
+message Invitation {
+  // Invitation ID (UUID)
+  string id = 1;
+
+  // Email invited
+  string email = 2;
+
+  // Role ID to be assigned (UUID)
+  string role_id = 3;
+
+  // Human-readable role name for display
+  string role_name = 4;
+
+  // Invitation status
+  InvitationStatus status = 5;
+
+  // Expiration timestamp
+  google.protobuf.Timestamp expires_at = 6;
+
+  // Creation timestamp
+  google.protobuf.Timestamp created_at = 7;
+
+  // Invited by user ID
+  string invited_by_id = 8;
+
+  // Invited by user name
+  string invited_by_name = 9;
+}
+
+message Session {
+  // Session ID (UUID)
+  string id = 1;
+
+  // Session issued timestamp
+  google.protobuf.Timestamp issued_at = 2;
+
+  // Session expiration timestamp
+  google.protobuf.Timestamp expires_at = 3;
+
+  // Last activity timestamp
+  google.protobuf.Timestamp last_activity_at = 4;
+
+  // IP address
+  string ip_address = 5;
+
+  // User agent string
+  string user_agent = 6;
+}
+
+message ListEmployeesRequest {
+  // Organization ID (from JWT context)
+  string organization_id = 1;
+
+  // Optional email filter (exact match, case-insensitive)
+  optional string email_filter = 2;
+
+  // Sort field: "hire_date" or "date_of_birth" (default: "hire_date")
+  optional string sort_by = 3;
+
+  // Sort direction: "ASC" or "DESC" (default: "ASC")
+  optional string sort_direction = 4;
+
+  // Page number (1-based, default: 1)
+  int32 page_number = 5;
+
+  // Page size: 20, 50, 100, or 200 (default: 50)
+  int32 page_size = 6;
+}
+
+message EmployeeListItem {
+  // Employee ID (UUID)
+  string id = 1;
+
+  // Email address (from organization.employee — may be empty for org-managed workers)
+  string email = 2;
+
+  // Given name (first name)
+  string given_name = 3;
+
+  // Family name (last name)
+  string family_name = 4;
+
+  // Hire date (ISO 8601 date string, optional)
+  optional string hire_date = 5;
+
+  // Date of birth (ISO 8601 date string, optional)
+  optional string date_of_birth = 6;
+
+  // Phone number (optional)
+  optional string phone_number = 7;
+
+  // Home address (optional)
+  optional string home_address = 8;
+
+  // Whether employee is active
+  bool is_active = 9;
+
+  // Role names assigned to this employee (e.g., ["Owner", "Employee"])
+  repeated string role_names = 10;
+
+  // Whether this is an org-managed account (PIN-based worker, no email)
+  bool is_org_managed = 11;
+
+  // Login identifier for org-managed workers (badge number, username, etc.)
+  // Only set when is_org_managed=true
+  optional string login_identifier = 12;
+
+  // User account email from iam.user (the global user account email)
+  // May differ from organization email; NULL/empty for org-managed workers without email
+  optional string user_account_email = 13;
+}
+
+message EmployeeListPagination {
+  // Total count of matching employees
+  int64 total_count = 1;
+
+  // Current page number (1-based)
+  int32 page_number = 2;
+
+  // Page size
+  int32 page_size = 3;
+
+  // Total pages
+  int32 total_pages = 4;
+
+  // Whether there is a previous page
+  bool has_previous_page = 5;
+
+  // Whether there is a next page
+  bool has_next_page = 6;
+}
+
+message ListEmployeesResponse {
+  // List of employees
+  repeated EmployeeListItem employees = 1;
+
+  // Pagination metadata
+  EmployeeListPagination pagination = 2;
+}
+
+// =============================================================================
+// Employee Import Messages
+// =============================================================================
+
+// ImportEmployeeData holds the HR data for a single employee in an import batch.
+message ImportEmployeeData {
+  string email = 1;
+  string given_name = 2;
+  string family_name = 3;
+  // ISO 8601 date strings (YYYY-MM-DD), optional
+  optional string hire_date = 4;
+  optional string date_of_birth = 5;
+  optional string phone_number = 6;
+  optional string home_address = 7;
+}
+
+// EmployeeImportPreviewItem is one employee row in the preview response.
+message EmployeeImportPreviewItem {
+  ImportEmployeeData employee = 1;
+  // true when this employee will be imported (not a duplicate)
+  bool will_be_imported = 2;
+  // true when an employee with the same email already exists in the organisation
+  bool is_duplicate = 3;
+  // Human-readable validation errors, if any
+  repeated string errors = 4;
+}
+
+message PreviewEmployeeImportRequest {
+  repeated ImportEmployeeData employees = 1;
+}
+
+message PreviewEmployeeImportResponse {
+  repeated EmployeeImportPreviewItem items = 1;
+  // Number of employees that will be imported
+  int32 import_count = 2;
+  // Number of duplicates that will be skipped
+  int32 duplicate_count = 3;
+}
+
+message ExecuteEmployeeImportRequest {
+  // Only employees that passed preview (will_be_imported=true) should be sent here.
+  repeated ImportEmployeeData employees = 1;
+}
+
+message EmployeeImportResult {
+  string email = 1;
+  bool success = 2;
+  string error = 3;
+}
+
+message ExecuteEmployeeImportResponse {
+  repeated EmployeeImportResult results = 1;
+  int32 success_count = 2;
+  int32 failure_count = 3;
+}
+
+// =============================================================================
+// Messages - Permission & Role Management
+// =============================================================================
+
+// Permission represents a single system-defined capability.
+message Permission {
+  // Permission ID (format: "<domain>.<action>")
+  string id = 1;
+
+  // Domain grouping (e.g., "chat", "iam", "docs")
+  string domain = 2;
+
+  // Human-readable description
+  string description = 3;
+}
+
+// PermissionGroup represents permissions grouped by domain.
+message PermissionGroup {
+  // Domain name
+  string domain = 1;
+
+  // Permissions in this domain
+  repeated Permission permissions = 2;
+}
+
+message ListPermissionsRequest {
+  // Optional domain filter (e.g., "chat" to list only chat permissions)
+  optional string domain = 1;
+}
+
+message ListPermissionsResponse {
+  // Permissions grouped by domain
+  repeated PermissionGroup groups = 1;
+
+  // Total permission count
+  int32 total_count = 2;
+}
+
+// OrgRole represents an organization-specific role (system or custom).
+message OrgRole {
+  // Role ID (UUID)
+  string id = 1;
+
+  // Display name
+  string name = 2;
+
+  // Description
+  string description = 3;
+
+  // Whether this is a system role (cannot be deleted)
+  bool is_system = 4;
+
+  // Permission IDs assigned to this role
+  repeated string permission_ids = 5;
+
+  // Number of employees assigned to this role
+  int32 employee_count = 6;
+}
+
+message CreateRoleRequest {
+  // Display name for the role
+  string name = 1;
+
+  // Description of the role
+  string description = 2;
+
+  // Permission IDs to assign to the role
+  repeated string permission_ids = 3;
+}
+
+message CreateRoleResponse {
+  // Created role
+  OrgRole role = 1;
+}
+
+message UpdateRoleRequest {
+  // Role ID to update
+  string role_id = 1;
+
+  // Updated display name (optional)
+  optional string name = 2;
+
+  // Updated description (optional)
+  optional string description = 3;
+
+  // Full list of permission IDs (replaces existing set).
+  // Only applied when update_permissions is true.
+  repeated string permission_ids = 4;
+
+  // When true, permission_ids is treated as the definitive replacement list
+  // (even if empty, which clears all permissions from the role).
+  // Required because proto3 repeated fields cannot distinguish "not set" from "empty".
+  bool update_permissions = 5;
+}
+
+message UpdateRoleResponse {
+  // Updated role
+  OrgRole role = 1;
+}
+
+message DeleteRoleRequest {
+  // Role ID to delete (must not be a system role)
+  string role_id = 1;
+}
+
+message DeleteRoleResponse {
+  // Success message
+  string message = 1;
+}
+
+message ListRolesRequest {
+  // Empty — organization derived from auth context
+}
+
+message ListRolesResponse {
+  // All roles for the organization (system first, then custom, alphabetical)
+  repeated OrgRole roles = 1;
+}
+
+message GetRoleRequest {
+  // Role ID (UUID)
+  string role_id = 1;
+}
+
+message GetRoleResponse {
+  // Role with permissions
+  OrgRole role = 1;
+}
+
+message AssignRoleRequest {
+  // Employee ID to assign the role to
+  string employee_id = 1;
+
+  // Role ID to assign
+  string role_id = 2;
+}
+
+message AssignRoleResponse {
+  // Success message
+  string message = 1;
+}
+
+message RevokeRoleRequest {
+  // Employee ID to revoke the role from
+  string employee_id = 1;
+
+  // Role ID to revoke
+  string role_id = 2;
+}
+
+message RevokeRoleResponse {
+  // Success message
+  string message = 1;
+}
+
+message ListEmployeeRolesRequest {
+  // Employee ID (UUID)
+  string employee_id = 1;
+}
+
+message ListEmployeeRolesResponse {
+  // Roles assigned to the employee
+  repeated OrgRole roles = 1;
+}
+
+message GetEmployeePermissionsRequest {
+  // Employee ID (UUID)
+  string employee_id = 1;
+}
+
+message GetEmployeePermissionsResponse {
+  // Effective permissions (union of all assigned roles)
+  repeated string permission_ids = 1;
+
+  // Permissions grouped by domain (for UI display)
+  repeated PermissionGroup groups = 2;
+}
+
+// =============================================================================
+// Employee Cards — lightweight display data for UI components
+// =============================================================================
+
+message GetEmployeeCardsRequest {
+  // Employee IDs to resolve (max 100 per request).
+  repeated string employee_ids = 1;
+}
+
+// EmployeeCard contains only the fields needed to render a user avatar/card widget.
+message EmployeeCard {
+  string id = 1;
+  string given_name = 2;
+  string family_name = 3;
+  string email = 4;
+  bool is_active = 5;
+  // Department/team name, empty when employee has no department membership.
+  optional string department_name = 6;
+  // Presence status string: "online" | "idle" | "offline".
+  // online_hidden is normalized to "offline" (same as peer visibility rule).
+  string presence_status = 7;
+}
+
+message GetEmployeeCardsResponse {
+  repeated EmployeeCard cards = 1;
+}
+
+// =============================================================================
+// Org-Managed Accounts — PIN Authentication Messages
+// =============================================================================
+
+message LoginWithPINRequest {
+  // Organization subdomain for org resolution
+  string organization_subdomain = 1;
+  // Worker's login identifier (badge number, username, etc.)
+  string login_identifier = 2;
+  // PIN (6 numeric digits)
+  string pin = 3;
+}
+
+message LoginWithPINResponse {
+  // Internal JWT token (only set if authentication succeeds and no PIN change required)
+  string access_token = 1;
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+  // If true, client MUST call SetPIN before any other operation
+  bool pin_change_required = 3;
+  // Temporary token for SetPIN call (only set when pin_change_required=true)
+  string pin_change_token = 4;
+}
+
+message SetPINRequest {
+  // New 6-digit numeric PIN
+  string new_pin = 1;
+  // Optional: temporary token from LoginWithPINResponse (for first-time PIN set)
+  optional string pin_change_token = 2;
+  // Optional: current PIN (required for voluntary PIN change, not for first-time set)
+  optional string current_pin = 3;
+}
+
+message SetPINResponse {
+  // Internal JWT token with full org context (issued after successful PIN set)
+  string access_token = 1;
+  // Token expiration (Unix timestamp)
+  int64 expires_at = 2;
+}
+
+// =============================================================================
+// Org-Managed Accounts — Admin Management Messages
+// =============================================================================
+
+message CreateOrgAccountRequest {
+  string login_identifier = 1;
+  string display_name = 2;
+  string given_name = 3;
+  string family_name = 4;
+  optional string department_id = 5;
+  optional string date_of_birth = 6;
+  optional string phone_number = 7;
+}
+
+message CreateOrgAccountResponse {
+  string id = 1;
+  string login_identifier = 2;
+  string temporary_pin = 3;
+}
+
+message BatchCreateOrgAccountsRequest {
+  repeated CreateOrgAccountRequest accounts = 1;
+}
+
+message BatchCreateOrgAccountsResponse {
+  repeated BatchCreateOrgAccountResult results = 1;
+  int32 success_count = 2;
+  int32 failure_count = 3;
+}
+
+message BatchCreateOrgAccountResult {
+  string login_identifier = 1;
+  bool success = 2;
+  string error = 3;
+  string temporary_pin = 4;
+  string id = 5;
+}
+
+message DeactivateOrgAccountRequest {
+  string id = 1;
+}
+
+message DeactivateOrgAccountResponse {}
+
+message UnlockOrgAccountRequest {
+  string id = 1;
+  bool reset_pin = 2;
+}
+
+message UnlockOrgAccountResponse {
+  optional string temporary_pin = 1;
+}
+
+message ResetOrgAccountCredentialRequest {
+  string id = 1;
+}
+
+message ResetOrgAccountCredentialResponse {
+  string temporary_pin = 1;
+}
+
+message ListOrgAccountsRequest {
+  optional string cursor = 1;
+  int32 limit = 2;
+  optional string status_filter = 3;
+}
+
+message ListOrgAccountsResponse {
+  repeated OrgAccountListItem accounts = 1;
+  optional string next_cursor = 2;
+  int32 total_count = 3;
+}
+
+message OrgAccountListItem {
+  string id = 1;
+  string login_identifier = 2;
+  string display_name = 3;
+  string given_name = 4;
+  string family_name = 5;
+  // 'active', 'deactivated', 'locked'
+  string status = 6;
+  bool pin_configured = 7;
+  string created_at = 8;
+  string last_login_at = 9;
+}
+
+// Access control options defined in rpc/v1/rbac.proto

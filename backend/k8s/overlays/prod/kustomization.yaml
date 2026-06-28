@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+metadata:
+  name: tech-office-prod-environment
+
+namespace: tech-office-prod
+
+resources:
+  - namespace.yaml
+  - ../../base/backend
+  - ../../base/clamav
+  - ../../base/gotenberg
+  - ../../base/livekit
+  - ../../base/web
+
+images:
+  - name: tech-office-backend
+    newName: docker.io/nvcnvn/tech-office-backend
+    newTag: "20260712103428"
+  - name: tech-office-backend-migrate
+    newName: docker.io/nvcnvn/tech-office-backend-migrate
+    newTag: "20260712103428"
+  - name: tech-office-web
+    newName: docker.io/nvcnvn/tech-office-web
+    newTag: "20260712103428"
+
+labels:
+  - pairs:
+      environment: prod
+      app: tech-office

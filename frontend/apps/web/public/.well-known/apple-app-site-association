@@ -1,0 +1,13 @@
+{
+	"applinks": {
+		"apps": [],
+		"details": [
+			{
+					"appID": "352TFKTTP2.com.devguards.TechOffice",
+				"paths": [
+					"/o/*/r/*"
+				]
+			}
+		]
+	}
+}

@@ -1,0 +1,228 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/access_control.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// FileService manages file uploads, downloads, and storage quota
+service FileService {
+  // RequestUploadUrl generates presigned URL for direct client upload to R2
+  // Client must confirm upload completion via ConfirmUpload after successful upload
+  rpc RequestUploadUrl(RequestUploadUrlRequest) returns (RequestUploadUrlResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // ConfirmUpload records file metadata after successful R2 upload
+  // Must be called after client completes upload to presigned URL
+  rpc ConfirmUpload(ConfirmUploadRequest) returns (ConfirmUploadResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // GetDownloadUrl generates presigned URL for file download from R2
+  // Returns error with deletion details if file was deleted
+  rpc GetDownloadUrl(GetDownloadUrlRequest) returns (GetDownloadUrlResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // GetFileMetadata retrieves file information without generating download URL
+  rpc GetFileMetadata(GetFileMetadataRequest) returns (GetFileMetadataResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
+      allow_unauthenticated: false
+    };
+  }
+
+  // ListFiles returns paginated list of files (owner/operator only)
+  // Supports filtering by upload context and sorting
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+      allow_unauthenticated: false
+    };
+  }
+
+  // DeleteFile soft-deletes file and removes from R2 (owner/operator only)
+  // Records deletion reason in audit log
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+      allow_unauthenticated: false
+    };
+  }
+
+  // BatchDeleteFiles deletes multiple files with shared reason (owner/operator only)
+  rpc BatchDeleteFiles(BatchDeleteFilesRequest) returns (BatchDeleteFilesResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+      allow_unauthenticated: false
+    };
+  }
+
+  // GetQuota returns organization storage quota and usage
+  rpc GetQuota(GetQuotaRequest) returns (GetQuotaResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+      allow_unauthenticated: false
+    };
+  }
+
+  // UpdateQuota modifies organization storage limits (owner/operator only)
+  rpc UpdateQuota(UpdateQuotaRequest) returns (UpdateQuotaResponse) {
+    option (rpc.v1.access_control) = {
+      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR]
+      allow_unauthenticated: false
+    };
+  }
+}
+
+// ============================================================================
+// Request/Response Messages
+// ============================================================================
+
+// RequestUploadUrl
+message RequestUploadUrlRequest {
+  string filename = 1;         // Original filename (e.g., "report.pdf")
+  int64 size_bytes = 2;        // File size in bytes
+  string mime_type = 3;        // MIME type (e.g., "application/pdf")
+  string upload_context = 4;   // Where file is uploaded: chat, avatar, docs, project
+}
+
+message RequestUploadUrlResponse {
+  string file_id = 1;          // UUID for file reference
+  string upload_url = 2;       // Presigned PUT URL (valid 15 minutes)
+  google.protobuf.Timestamp expires_at = 3;  // URL expiration time
+}
+
+// ConfirmUpload
+message ConfirmUploadRequest {
+  string file_id = 1;          // UUID returned from RequestUploadUrl
+}
+
+message ConfirmUploadResponse {
+  FileMetadata file = 1;       // Confirmed file metadata
+}
+
+// GetDownloadUrl
+message GetDownloadUrlRequest {
+  string file_id = 1;          // File UUID
+}
+
+message GetDownloadUrlResponse {
+  string download_url = 1;     // Presigned GET URL (valid 1 hour)
+  google.protobuf.Timestamp expires_at = 2;  // URL expiration time
+  
+  // If file was deleted, returns deletion details
+  bool is_deleted = 3;
+  FileDeletionInfo deletion_info = 4;
+}
+
+// GetFileMetadata
+message GetFileMetadataRequest {
+  string file_id = 1;
+}
+
+message GetFileMetadataResponse {
+  FileMetadata file = 1;
+  
+  // If file was deleted, includes deletion details
+  bool is_deleted = 2;
+  FileDeletionInfo deletion_info = 3;
+}
+
+// ListFiles
+message ListFilesRequest {
+  string upload_context = 1;   // Filter by context (empty = all)
+  string sort_by = 2;          // "size" or "updated_at" (default: updated_at)
+  string sort_order = 3;       // "asc" or "desc" (default: desc)
+  int32 page_size = 4;         // Max 100, default 50
+  int32 page = 5;              // Page number (1-indexed)
+}
+
+message ListFilesResponse {
+  repeated FileMetadata files = 1;
+  int32 total_count = 2;
+  int32 page = 3;
+  int32 page_size = 4;
+}
+
+// DeleteFile
+message DeleteFileRequest {
+  string file_id = 1;
+  string deletion_reason = 2;  // Optional reason for audit log
+}
+
+message DeleteFileResponse {
+  bool success = 1;
+  int64 reclaimed_bytes = 2;   // Storage space freed
+}
+
+// BatchDeleteFiles
+message BatchDeleteFilesRequest {
+  repeated string file_ids = 1;     // Up to 100 files per batch
+  string deletion_reason = 2;       // Shared reason for all files
+}
+
+message BatchDeleteFilesResponse {
+  int32 deleted_count = 1;
+  int64 reclaimed_bytes = 2;
+  repeated string failed_file_ids = 3;  // Files that failed to delete
+}
+
+// GetQuota
+message GetQuotaRequest {}
+
+message GetQuotaResponse {
+  QuotaInfo quota = 1;
+}
+
+// UpdateQuota
+message UpdateQuotaRequest {
+  optional int64 quota_bytes = 1;          // NULL = unlimited
+  optional int64 max_file_size_bytes = 2;  // Per-file size limit
+}
+
+message UpdateQuotaResponse {
+  QuotaInfo quota = 1;
+}
+
+// ============================================================================
+// Data Models
+// ============================================================================
+
+message FileMetadata {
+  string id = 1;
+  string original_filename = 2;
+  int64 size_bytes = 3;
+  string mime_type = 4;
+  string upload_context = 5;       // chat, avatar, docs, project
+  string uploaded_by_employee_id = 6;
+  google.protobuf.Timestamp uploaded_at = 7;
+  bool is_deleted = 8;
+}
+
+message FileDeletionInfo {
+  google.protobuf.Timestamp deleted_at = 1;
+  string deleted_by_employee_id = 2;
+  string deleted_by_employee_name = 3;    // Denormalized for display
+  string deletion_reason = 4;
+}
+
+message QuotaInfo {
+  optional int64 quota_bytes = 1;          // NULL = unlimited
+  int64 max_file_size_bytes = 2;
+  int64 current_usage_bytes = 3;
+  double usage_percentage = 4;             // 0-100, -1 if unlimited
+  bool is_quota_exceeded = 5;
+}

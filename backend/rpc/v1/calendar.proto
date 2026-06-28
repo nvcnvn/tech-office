@@ -1,0 +1,712 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// ─────────────────────────────────────────────
+// Shared Messages
+// ─────────────────────────────────────────────
+
+message CalendarEvent {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  string event_type = 4;       // meeting | shift | deadline | reminder | out_of_office | company_event | training | maintenance_window
+  string visibility = 5;       // private | personal_shared | team | org_wide
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp end_time = 7;
+  bool all_day = 8;
+  string location_text = 9;
+  string virtual_link = 10;
+  string organizer_employee_id = 11;
+  string recurrence_rule = 12;              // RFC 5545 RRULE string, empty if one-time
+  bool is_exception_instance = 13;
+  google.protobuf.Timestamp original_start_time = 14;
+  string description_document_id = 15;     // nullable
+  string discussion_channel_id = 16;       // nullable
+  bool requires_check_in = 17;
+  bool requires_evidence = 18;
+  google.protobuf.Timestamp cancelled_at = 19;
+  google.protobuf.Timestamp updated_at = 20;
+  repeated EventAttendee attendees = 21;
+  repeated ResourceBooking resource_bookings = 22;
+  string series_id = 23;                   // nullable
+}
+
+// EventEditScope specifies how a recurring series is edited.
+enum EventEditScope {
+  EVENT_EDIT_SCOPE_UNSPECIFIED = 0;
+  EVENT_EDIT_SCOPE_THIS_INSTANCE = 1;
+  EVENT_EDIT_SCOPE_THIS_AND_FOLLOWING = 2;
+  EVENT_EDIT_SCOPE_ALL = 3;
+}
+
+// RSVPResponse mirrors the attendee rsvp_status field.
+enum RSVPResponse {
+  RSVP_RESPONSE_UNSPECIFIED = 0;
+  RSVP_RESPONSE_ACCEPTED = 1;
+  RSVP_RESPONSE_DECLINED = 2;
+  RSVP_RESPONSE_TENTATIVE = 3;
+}
+
+message EventAttendee {
+  string id = 1;
+  string employee_id = 2;
+  string employee_name = 3;
+  string employee_avatar_url = 4;
+  string role = 5;            // required | optional | organizer
+  string rsvp_status = 6;     // pending | accepted | declined | tentative
+  google.protobuf.Timestamp response_time = 7;
+  string response_note = 8;
+}
+
+message CalendarResource {
+  string id = 1;
+  string name = 2;
+  string resource_type = 3;   // room | vehicle | equipment | desk | lab
+  string location = 4;
+  int32 capacity = 5;
+  bool is_active = 6;
+}
+
+message ResourceBooking {
+  string id = 1;
+  string resource_id = 2;
+  string resource_name = 3;
+  string event_id = 4;
+  google.protobuf.Timestamp start_time = 5;
+  google.protobuf.Timestamp end_time = 6;
+  string booked_by_id = 7;
+}
+
+message WorkingHours {
+  string id = 1;
+  int32 day_of_week = 2;      // ISO 1=Mon..7=Sun
+  string start_time = 3;       // HH:MM
+  string end_time = 4;         // HH:MM
+  bool is_working_day = 5;
+  string timezone = 6;         // IANA timezone name
+}
+
+message BookingLink {
+  string id = 1;
+  string token = 2;
+  string title = 3;
+  int32 duration_minutes = 4;
+  string valid_from = 5;       // ISO date
+  string valid_until = 6;      // ISO date
+  google.protobuf.Timestamp expires_at = 7;
+  string status = 8;           // active | expired | claimed
+}
+
+message FreeBusySlot {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  bool is_free = 3;
+}
+
+message CalendarCheckIn {
+  string id = 1;
+  string event_id = 2;
+  string employee_id = 3;
+  google.protobuf.Timestamp checked_in_at = 4;
+  bool is_late = 5;
+  repeated string evidence_file_ids = 6;
+  google.protobuf.Timestamp submitted_at = 7;
+}
+
+message CalendarAuditEntry {
+  string id = 1;
+  string event_id = 2;
+  string actor_id = 3;
+  string actor_name = 4;
+  string delegate_id = 5;     // nullable
+  string action_type = 6;
+  bytes diff_snapshot = 7;    // JSON
+  google.protobuf.Timestamp occurred_at = 8;
+}
+
+message OverlayItem {
+  string source_id = 1;               // ID in source domain (task_id, ritual_id, etc.)
+  string source_domain = 2;           // "task" | "ritual" | "doc_deadline" | "project_milestone"
+  string title = 3;
+  google.protobuf.Timestamp due_at = 4;
+  string status = 5;                  // e.g., "in_progress", "done", "scheduled"
+  string url_path = 6;                // Frontend route to navigate to source record
+}
+
+// ─────────────────────────────────────────────
+// CalendarService
+// ─────────────────────────────────────────────
+
+service CalendarService {
+
+  // ── Event CRUD ──────────────────────────────
+
+  rpc CreateEvent(CreateEventRequest) returns (CreateEventResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc GetEvent(GetEventRequest) returns (GetEventResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ListEvents returns events visible to the caller in the requested time range.
+  // Applies visibility scoping (private = own only, personal_shared = free/busy only, etc.)
+  rpc ListEvents(ListEventsRequest) returns (ListEventsResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc UpdateEvent(UpdateEventRequest) returns (UpdateEventResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc CancelEvent(CancelEventRequest) returns (CancelEventResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── RSVP ────────────────────────────────────
+
+  rpc RespondToInvite(RespondToInviteRequest) returns (RespondToInviteResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ListEventAttendees returns attendees and their RSVP status for a given event.
+  rpc ListEventAttendees(ListEventAttendeesRequest) returns (ListEventAttendeesResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // EditSeriesScope specifies whether the edit applies to one instance, this-and-following, or all.
+  rpc EditEventSeries(EditEventSeriesRequest) returns (EditEventSeriesResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Working Hours ────────────────────────
+
+  rpc GetWorkingHours(GetWorkingHoursRequest) returns (GetWorkingHoursResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc SetWorkingHours(SetWorkingHoursRequest) returns (SetWorkingHoursResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Scheduling Assistant ───────────────────
+
+  // GetFreeBusy returns merged free/busy for a list of attendees.
+  rpc GetFreeBusy(GetFreeBusyRequest) returns (GetFreeBusyResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // SuggestSlots returns available meeting slots satisfying all attendees.
+  rpc SuggestSlots(SuggestSlotsRequest) returns (SuggestSlotsResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Resources ────────────────────────────
+
+  rpc ListResources(ListResourcesRequest) returns (ListResourcesResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc CreateResource(CreateResourceRequest) returns (CreateResourceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["calendar.manageResources"]
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc UpdateResource(UpdateResourceRequest) returns (UpdateResourceResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["calendar.manageResources"]
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc SetResourceACL(SetResourceACLRequest) returns (SetResourceACLResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["calendar.manageResources"]
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Booking Links ─────────────────────────
+
+  rpc CreateBookingLink(CreateBookingLinkRequest) returns (CreateBookingLinkResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // GetBookingLinkByToken is used by the recipient to view available slots.
+  // The token is in the URL; caller must be authenticated (internal only).
+  rpc GetBookingLinkByToken(GetBookingLinkByTokenRequest) returns (GetBookingLinkByTokenResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ClaimBookingSlot creates the meeting event and marks the link as claimed.
+  rpc ClaimBookingSlot(ClaimBookingSlotRequest) returns (ClaimBookingSlotResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Calendar Delegation ───────────────────
+
+  rpc GrantDelegation(GrantDelegationRequest) returns (GrantDelegationResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc ListDelegations(ListDelegationsRequest) returns (ListDelegationsResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  rpc RevokeDelegation(RevokeDelegationRequest) returns (RevokeDelegationResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Operational / Compliance ──────────────
+
+  // CheckInToEvent creates a check_in record for a compliance event.
+  rpc CheckInToEvent(CheckInToEventRequest) returns (CheckInToEventResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // SubmitCheckInEvidence attaches file evidence to a check_in record.
+  rpc SubmitCheckInEvidence(SubmitCheckInEvidenceRequest) returns (SubmitCheckInEvidenceResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ListAuditEntries returns the compliance audit trail for an event.
+  rpc ListAuditEntries(ListAuditEntriesRequest) returns (ListAuditEntriesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["calendar.manageResources"]
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Cross-Domain Overlays ─────────────────
+
+  // ListOverlayItems returns overlay items (tasks, rituals, doc deadlines) for a date range.
+  rpc ListOverlayItems(ListOverlayItemsRequest) returns (ListOverlayItemsResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+
+  // ── Search ───────────────────────────────
+
+  rpc SearchEvents(SearchEventsRequest) returns (SearchEventsResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+}
+
+// ─────────────────────────────────────────────
+// Request / Response Messages
+// ─────────────────────────────────────────────
+
+// ── Event CRUD ──
+
+message CreateEventRequest {
+  string title = 1;
+  string description = 2;
+  string event_type = 3;
+  string visibility = 4;
+  google.protobuf.Timestamp start_time = 5;
+  google.protobuf.Timestamp end_time = 6;
+  bool all_day = 7;
+  string location_text = 8;
+  string virtual_link = 9;
+  string recurrence_rule = 10;             // RFC 5545 RRULE string, empty if one-time
+  repeated string required_attendee_ids = 11;
+  repeated string optional_attendee_ids = 12;
+  repeated string resource_ids = 13;
+  bool requires_check_in = 14;
+  bool requires_evidence = 15;
+  // If organizer_override_id is set, this is a delegated create (Connect layer verifies delegation).
+  string organizer_override_id = 16;
+}
+
+message CreateEventResponse {
+  CalendarEvent event = 1;
+}
+
+message GetEventRequest {
+  string event_id = 1;
+}
+
+message GetEventResponse {
+  CalendarEvent event = 1;
+}
+
+message ListEventsRequest {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  // If target_employee_id is set: fetch events for that employee (free/busy respects visibility rules).
+  string target_employee_id = 3;
+  // Overlay calendars to include (department, project, org_wide events)
+  repeated string overlay_calendar_ids = 4;
+}
+
+message ListEventsResponse {
+  repeated CalendarEvent events = 1;
+}
+
+message UpdateEventRequest {
+  string event_id = 1;
+  string title = 2;
+  string description = 3;
+  string event_type = 4;
+  string visibility = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp end_time = 7;
+  bool all_day = 8;
+  string location_text = 9;
+  string virtual_link = 10;
+  repeated string required_attendee_ids = 11;
+  repeated string optional_attendee_ids = 12;
+  repeated string resource_ids = 13;
+}
+
+message UpdateEventResponse {
+  CalendarEvent event = 1;
+}
+
+message CancelEventRequest {
+  string event_id = 1;
+  string cancel_reason = 2;
+}
+
+message CancelEventResponse {
+  bool success = 1;
+}
+
+// ── RSVP ──
+
+message RespondToInviteRequest {
+  string event_id = 1;
+  RSVPResponse rsvp_status = 2;
+  string response_note = 3;
+}
+
+message RespondToInviteResponse {
+  EventAttendee attendee = 1;
+}
+
+// ── Recurrence editing ──
+
+message EditEventSeriesRequest {
+  string event_id = 1;                   // The specific instance to edit from (for exceptions)
+  google.protobuf.Timestamp instance_start_time = 2;   // Original start time of the instance
+  EventEditScope change_scope = 3;
+
+  // Fields to update (same as UpdateEventRequest)
+  string title = 4;
+  string description = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp end_time = 7;
+  string location_text = 8;
+  string virtual_link = 9;
+  repeated string required_attendee_ids = 10;
+  repeated string optional_attendee_ids = 11;
+  bool skip_instance = 12;              // If true, mark this instance as skipped
+}
+
+message EditEventSeriesResponse {
+  CalendarEvent event = 1;              // Updated or new event record
+}
+
+// ── Working Hours ──
+
+message GetWorkingHoursRequest {
+  string employee_id = 1;   // defaults to caller if empty
+}
+
+message GetWorkingHoursResponse {
+  repeated WorkingHours working_hours = 1;
+}
+
+message SetWorkingHoursRequest {
+  repeated WorkingHours working_hours = 1;   // Full replacement; 7 entries (one per day)
+}
+
+message SetWorkingHoursResponse {
+  repeated WorkingHours working_hours = 1;
+}
+
+// ── Scheduling Assistant ──
+
+message GetFreeBusyRequest {
+  repeated string employee_ids = 1;
+  google.protobuf.Timestamp start = 2;
+  google.protobuf.Timestamp end = 3;
+}
+
+message GetFreeBusyResponse {
+  repeated EmployeeFreeBusy free_busy = 1;
+}
+
+message EmployeeFreeBusy {
+  string employee_id = 1;
+  repeated FreeBusySlot slots = 2;
+}
+
+message SuggestSlotsRequest {
+  repeated string employee_ids = 1;
+  int32 duration_minutes = 2;
+  google.protobuf.Timestamp search_from = 3;
+  google.protobuf.Timestamp search_until = 4;
+  int32 max_suggestions = 5;           // defaults to 5
+}
+
+message SuggestSlotsResponse {
+  repeated FreeBusySlot suggested_slots = 1;
+  bool no_slots_available = 2;          // true if no conflict-free slot exists in range
+}
+
+// ── Resources ──
+
+message ListResourcesRequest {
+  string resource_type = 1;             // filter by type (optional)
+  google.protobuf.Timestamp check_from = 2;   // availability window start (optional)
+  google.protobuf.Timestamp check_until = 3;  // availability window end (optional)
+  int32 min_capacity = 4;               // optional
+}
+
+message ListResourcesResponse {
+  repeated CalendarResource resources = 1;
+}
+
+message CreateResourceRequest {
+  string name = 1;
+  string resource_type = 2;
+  string location = 3;
+  int32 capacity = 4;
+}
+
+message CreateResourceResponse {
+  CalendarResource resource = 1;
+}
+
+message UpdateResourceRequest {
+  string resource_id = 1;
+  string name = 2;
+  string location = 3;
+  int32 capacity = 4;
+  bool is_active = 5;
+}
+
+message UpdateResourceResponse {
+  CalendarResource resource = 1;
+}
+
+// ── Booking Links ──
+
+message CreateBookingLinkRequest {
+  string title = 1;
+  int32 duration_minutes = 2;
+  string valid_from = 3;               // ISO date
+  string valid_until = 4;              // ISO date
+  google.protobuf.Timestamp expires_at = 5;
+  repeated BookingWindow available_windows = 6;
+}
+
+message BookingWindow {
+  int32 day_of_week = 1;              // ISO 1=Mon..7=Sun
+  string start_time = 2;              // HH:MM
+  string end_time = 3;                // HH:MM
+}
+
+message CreateBookingLinkResponse {
+  BookingLink booking_link = 1;
+  string share_url = 2;               // Full URL the recipient uses
+}
+
+message GetBookingLinkByTokenRequest {
+  string token = 1;
+}
+
+message GetBookingLinkByTokenResponse {
+  BookingLink booking_link = 1;
+  repeated FreeBusySlot available_slots = 2;   // Pre-computed free slots within configured windows
+}
+
+message ClaimBookingSlotRequest {
+  string token = 1;
+  google.protobuf.Timestamp slot_start = 2;
+}
+
+message ClaimBookingSlotResponse {
+  CalendarEvent event = 1;            // The created meeting event
+}
+
+// ── Delegation ──
+
+message GrantDelegationRequest {
+  string delegate_id = 1;
+  google.protobuf.Timestamp expires_at = 2;   // null = indefinite
+}
+
+message GrantDelegationResponse {
+  bool success = 1;
+}
+
+message RevokeDelegationRequest {
+  string delegate_id = 1;
+}
+
+message RevokeDelegationResponse {
+  bool success = 1;
+}
+
+// ── Operational / Compliance ──
+
+message CheckInToEventRequest {
+  string event_id = 1;
+}
+
+message CheckInToEventResponse {
+  CalendarCheckIn check_in = 1;
+}
+
+message SubmitCheckInEvidenceRequest {
+  string event_id = 1;
+  repeated string file_ids = 2;        // Files already uploaded via files service
+}
+
+message SubmitCheckInEvidenceResponse {
+  CalendarCheckIn check_in = 1;
+}
+
+message ListAuditEntriesRequest {
+  string event_id = 1;
+  string cursor = 2;                   // UUID cursor for pagination
+  int32 limit = 3;
+}
+
+message ListAuditEntriesResponse {
+  repeated CalendarAuditEntry entries = 1;
+  string next_cursor = 2;
+}
+
+// ── Cross-Domain Overlays ──
+
+message ListOverlayItemsRequest {
+  google.protobuf.Timestamp start = 1;
+  google.protobuf.Timestamp end = 2;
+  bool include_tasks = 3;
+  bool include_rituals = 4;
+  bool include_doc_deadlines = 5;
+}
+
+message ListOverlayItemsResponse {
+  repeated OverlayItem items = 1;
+}
+
+// ── Search ──
+
+message SearchEventsRequest {
+  string query = 1;
+  string event_type = 2;           // optional filter
+  string resource_id = 3;          // optional filter
+  string attendee_id = 4;          // optional filter
+  google.protobuf.Timestamp from = 5;
+  google.protobuf.Timestamp until = 6;
+  int32 limit = 7;
+  string cursor = 8;
+}
+
+message SearchEventsResponse {
+  repeated CalendarEvent events = 1;
+  string next_cursor = 2;
+}
+
+// ── RSVP / Attendees ──
+
+message ListEventAttendeesRequest {
+  string event_id = 1;
+}
+
+message ListEventAttendeesResponse {
+  repeated EventAttendee attendees = 1;
+}
+
+// ── Resource ACL ──
+
+message ResourceACLEntry {
+  string employee_id = 1;
+  string role = 2;   // owner | manager | viewer
+}
+
+message SetResourceACLRequest {
+  string resource_id = 1;
+  repeated ResourceACLEntry entries = 2;
+}
+
+message SetResourceACLResponse {
+  bool success = 1;
+}
+
+// ── Delegation ──
+
+message CalendarDelegation {
+  string id = 1;
+  string delegator_employee_id = 2;
+  string delegate_employee_id = 3;
+  google.protobuf.Timestamp expires_at = 4;   // nullable
+  google.protobuf.Timestamp granted_at = 5;
+}
+
+message ListDelegationsRequest {
+  // If empty, returns delegations granted by and to the caller.
+  string employee_id = 1;
+}
+
+message ListDelegationsResponse {
+  repeated CalendarDelegation granted_by_me = 1;
+  repeated CalendarDelegation granted_to_me = 2;
+}

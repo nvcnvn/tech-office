@@ -1,0 +1,74 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+**/node_modules
+**/.pnp
+.pnp.js
+
+# testing
+**/coverage
+
+# next.js
+**/.next/
+**/out/
+
+# production
+**/build
+**/dist
+**/dst
+
+# misc
+.DS_Store
+Thumbs.db
+*.tmp
+*.swp
+.vscode/
+.idea/
+**/.expo/
+*.pem
+*.p8
+*firebase-adminsdk*.json
+*service-account*.json
+credentials.json
+
+# Firebase & Google service configs (public API keys, but defense-in-depth)
+**/google-services.json
+**/GoogleService-Info.plist
+**/firebase-config.json
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env.*
+.env
+!.env.example
+!.env.*.example
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Database
+postgres_data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Docker
+.docker/
+
+**/tmp
+**/.dev-keys
+*.out
+*.test
+*.exe
+vendor/
+**/*.log
+*.ipa

@@ -1,0 +1,24 @@
+{
+  "name": "rpc",
+  "version": "0.0.1",
+  "description": "Your package description",
+  "react-native": "index.ts",
+  "main": "dst/index.js",
+  "types": "dst/index.d.ts",
+  "files": [
+    "dst"
+  ],
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com"
+  },
+  "scripts": {
+    "build": "tsc",
+    "prepublish": "npm run build"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.11.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
