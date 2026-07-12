@@ -23,3 +23,5 @@ We wanted a secure, simple, and beautifully designed alternative that keeps team
 * **Mobile Apps:** Publishing the mobile app to app stores for demo/testing.
 * **CI/CD:** Automating build pipelines for the backend, web client, and Android app.
 * **Testing:** Writing and expanding backend integration and frontend E2E test coverage.
+* **Paid plans:** Actually let see if there is real demands but I do hope for some pocket change for keep the sever running.
+* **AI Integrations:** BYOK with features like auto transcript, auto chat channel summary... and yes, MCP
