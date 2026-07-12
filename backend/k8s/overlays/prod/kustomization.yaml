@@ -17,13 +17,13 @@ resources:
 images:
   - name: tech-office-backend
     newName: docker.io/nvcnvn/tech-office-backend
-    newTag: "20260712103428"
+    newTag: "20260712145344"
   - name: tech-office-backend-migrate
     newName: docker.io/nvcnvn/tech-office-backend-migrate
-    newTag: "20260712103428"
+    newTag: "20260712145344"
   - name: tech-office-web
     newName: docker.io/nvcnvn/tech-office-web
-    newTag: "20260712103428"
+    newTag: "20260712151511"
 
 labels:
   - pairs:
