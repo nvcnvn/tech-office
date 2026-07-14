@@ -120,9 +120,7 @@ export function useNotifications({
 				notificationType: proto.notificationType,
 				title: proto.title,
 				message: proto.message,
-				actionData: typeof proto.actionData === 'string'
-					? JSON.parse(proto.actionData)
-					: proto.actionData || null,
+				payload: proto.payload ?? null,
 				readStatus: proto.readStatus,
 				readAt: timestampToDate(proto.readAt),
 				deliveryStatus: proto.deliveryStatus as any,
@@ -212,9 +210,7 @@ export function useNotifications({
 				notificationType: proto.notificationType,
 				title: proto.title,
 				message: proto.message,
-				actionData: typeof proto.actionData === 'string'
-					? JSON.parse(proto.actionData)
-					: proto.actionData || null,
+				payload: proto.payload ?? null,
 				readStatus: proto.readStatus,
 				readAt: timestampToDate(proto.readAt),
 				deliveryStatus: proto.deliveryStatus as any,

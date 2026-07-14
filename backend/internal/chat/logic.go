@@ -1530,9 +1530,38 @@ func (s *chatLogicImpl) bridgeTaskChannelMessage(
 	if fullMessage.AuthorName != "" {
 		authorName = fullMessage.AuthorName
 	}
+	taskChannel, channelErr := s.Queries.GetChannelByID(ctx, tx, &database.GetChannelByIDParams{
+		ID:             channelID,
+		OrganizationID: orgID,
+	})
+	if channelErr != nil {
+		slog.WarnContext(ctx, "failed to load channel context for task discussion notification payload",
+			"error", channelErr, "channelID", channelID,
+		)
+		taskChannel = &database.ChatChannel{
+			ID:          channelID,
+			ChannelType: ChannelTypeChat,
+			TitleSlug:   "task-discussion",
+		}
+	}
 
 	// Emit task_commented to parent-task subscribers.
 	if len(recipientIDs) > 0 {
+		taskCommentActionData := buildChatNotificationActionData(
+			taskChannel,
+			fullMessage.ID,
+			authorID,
+			authorName,
+			"view_message",
+			map[string]string{},
+		)
+		taskCommentActionData["projectId"] = projectID.String()
+		taskCommentActionData["taskId"] = parentTaskID.String()
+		taskCommentActionData["deepLink"] = chatDeepLink
+		if fullMessage.ParentMessageID.Valid {
+			taskCommentActionData["parentMessageId"] = fullMessage.ParentMessageID.UUID.String()
+			taskCommentActionData["action"] = "view_thread"
+		}
 		_, err = s.NotificationPublisher.PublishNotification(ctx, tx, &rpcv1.PublishNotificationRequest{
 			OrganizationId:   orgID.String(),
 			SourceDomain:     notification.SourceDomainProjects,
@@ -1546,13 +1575,7 @@ func (s *chatLogicImpl) bridgeTaskChannelMessage(
 			PolicyKey:      notification.PolicyKeyTaskComment,
 			DeliveryClass:  notification.DeliveryClassPersistent,
 			SourceCategory: notification.SourceCategoryActivity,
-			ActionData: map[string]string{
-				"projectId": projectID.String(),
-				"taskId":    parentTaskID.String(),
-				"channelId": channelID.String(),
-				"messageId": fullMessage.ID.String(),
-				"deepLink":  chatDeepLink,
-			},
+			ActionData:     taskCommentActionData,
 			NavigationTarget: &rpcv1.NavigationTarget{
 				Domain:       notification.SourceDomainProjects,
 				ResourceType: "task",
@@ -1594,6 +1617,21 @@ func (s *chatLogicImpl) bridgeTaskChannelMessage(
 			mentionedIDs = append(mentionedIDs, empID.String())
 		}
 		if len(mentionedIDs) > 0 {
+			taskMentionActionData := buildChatNotificationActionData(
+				taskChannel,
+				fullMessage.ID,
+				authorID,
+				authorName,
+				"view_message",
+				map[string]string{},
+			)
+			taskMentionActionData["projectId"] = projectID.String()
+			taskMentionActionData["taskId"] = parentTaskID.String()
+			taskMentionActionData["deepLink"] = chatDeepLink
+			if fullMessage.ParentMessageID.Valid {
+				taskMentionActionData["parentMessageId"] = fullMessage.ParentMessageID.UUID.String()
+				taskMentionActionData["action"] = "view_thread"
+			}
 			_, err = s.NotificationPublisher.PublishNotification(ctx, tx, &rpcv1.PublishNotificationRequest{
 				OrganizationId:   orgID.String(),
 				SourceDomain:     notification.SourceDomainProjects,
@@ -1607,13 +1645,7 @@ func (s *chatLogicImpl) bridgeTaskChannelMessage(
 				PolicyKey:      notification.PolicyKeyTaskMention,
 				DeliveryClass:  notification.DeliveryClassPersistent,
 				SourceCategory: notification.SourceCategoryMention,
-				ActionData: map[string]string{
-					"projectId": projectID.String(),
-					"taskId":    parentTaskID.String(),
-					"channelId": channelID.String(),
-					"messageId": fullMessage.ID.String(),
-					"deepLink":  chatDeepLink,
-				},
+				ActionData:     taskMentionActionData,
 				NavigationTarget: &rpcv1.NavigationTarget{
 					Domain:       notification.SourceDomainProjects,
 					ResourceType: "task",
@@ -2659,9 +2691,11 @@ func (s *chatLogicImpl) AddReaction(ctx context.Context, tx database.DBTX, orgID
 		ActionCategory:   notification.NotificationTypeReaction,
 		ActionData: func() map[string]string {
 			actionData := map[string]string{
-				"channelId": message.ChannelID.String(),
-				"messageId": message.ID.String(),
-				"emojiCode": req.EmojiCode,
+				"channelId":  message.ChannelID.String(),
+				"messageId":  message.ID.String(),
+				"emojiCode":  req.EmojiCode,
+				"employeeId": employeeID.String(),
+				"action":     "added",
 			}
 			if message.ParentMessageID.Valid {
 				actionData["parentMessageId"] = message.ParentMessageID.UUID.String()
@@ -2756,10 +2790,11 @@ func (s *chatLogicImpl) RemoveReaction(ctx context.Context, tx database.DBTX, or
 		ActionCategory:   notification.NotificationTypeReaction,
 		ActionData: func() map[string]string {
 			actionData := map[string]string{
-				"channelId": message.ChannelID.String(),
-				"messageId": message.ID.String(),
-				"emojiCode": req.EmojiCode,
-				"action":    "removed",
+				"channelId":  message.ChannelID.String(),
+				"messageId":  message.ID.String(),
+				"emojiCode":  req.EmojiCode,
+				"employeeId": employeeID.String(),
+				"action":     "removed",
 			}
 			if message.ParentMessageID.Valid {
 				actionData["parentMessageId"] = message.ParentMessageID.UUID.String()

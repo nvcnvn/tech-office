@@ -4,6 +4,18 @@ This document captures the current backend notification contract plus the intend
 
 ## Chat Payload Metadata
 
+SSE and notification-list responses now expose a typed `payload` envelope on `NotificationSummary`. Clients should prefer `payload` over raw `actionData` and keep `actionData` only as a backward-compatible fallback.
+
+The envelope includes:
+
+- `schemaVersion`
+- notification identity and policy fields
+- `navigationTarget`
+- legacy `actionData`
+- typed domain sections such as `chat`, `voiceCall`, `task`, `document`, and `calendar`
+
+For chat and voice events, this means clients can read `payload.chat.channelId` and `payload.voiceCall.callId` instead of guessing string keys from an untyped map. The backend still stores the original `action_data` JSONB so older clients and existing notification center behavior continue to work.
+
 Chat SSE and persisted notification payloads should include these `actionData` fields when the notification type is `message`, `mention`, or `reply`:
 
 - `channelId`
@@ -31,6 +43,8 @@ These fields let mobile foreground notification logic classify busy channels, DM
 - `alreadyInAnotherCall`
 
 The `NavigationTarget` must use domain `chat`, resource type `channel`, the chat channel ID as `resourceId`, the invitation ID as `secondaryId`, and action `join_voice_call`. Mobile notification routing should resolve this notification type explicitly to the chat channel and should fall back to Alerts home when route-critical channel data is missing.
+
+The backend validates this high-risk notification type at publish time. A `voice_call_incoming` notification must be priority `0`, persistent, source domain `chat`, include the required call/channel/invitation/caller fields, and provide a matching `NavigationTarget`. This keeps future native call UI integrations from depending on best-effort metadata.
 
 ## Mobile Live Rules
 

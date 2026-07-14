@@ -762,6 +762,9 @@ func (s *NotificationService) validatePublishRequest(req *rpcv1.PublishNotificat
 	if req.Priority < 0 || req.Priority > 4 {
 		return fmt.Errorf("priority must be 0, 1, 2, or 4")
 	}
+	if err := validateVoiceCallIncomingPayload(req); err != nil {
+		return err
+	}
 	return nil
 }
 

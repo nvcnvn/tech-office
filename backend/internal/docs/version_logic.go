@@ -842,6 +842,7 @@ func (l *documentLogicImpl) bridgeTaskDescriptionModified(
 			"projectId": projectID.String(),
 			"taskId":    parentTaskID.String(),
 			"deepLink":  fmt.Sprintf("tasks/%s/%s", projectID.String(), parentTaskID.String()),
+			"taskTitle": parentTask.Title,
 		},
 		NavigationTarget: &rpcv1.NavigationTarget{
 			Domain:       notification.SourceDomainProjects,

@@ -161,6 +161,7 @@ func (l *logicImpl) notifyEvidenceSubmitted(ctx context.Context, tx database.DBT
 		"deepLink":      fmt.Sprintf("tasks/%s/%s", dbuuid.UUID(task.ProjectID).String(), taskID.String()),
 		"focusIntent":   "review_pending",
 		"requirementId": requirementID.String(),
+		"taskTitle":     messageTaskTitle,
 	}
 	navigationTarget := &rpcv1.NavigationTarget{
 		Domain:       notification.SourceDomainProjects,

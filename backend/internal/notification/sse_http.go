@@ -172,26 +172,92 @@ type timestampJSON struct {
 }
 
 type notificationSummaryJSON struct {
-	NotificationID          string                `json:"notificationId"`
-	NotificationRecipientID string                `json:"notificationRecipientId"`
-	SourceDomain            string                `json:"sourceDomain"`
-	NotificationType        string                `json:"notificationType"`
-	Title                   string                `json:"title"`
-	Message                 string                `json:"message"`
-	ActionData              map[string]string     `json:"actionData,omitempty"`
-	ReadStatus              bool                  `json:"readStatus"`
-	ReadAt                  *timestampJSON        `json:"readAt,omitempty"`
-	DeliveryStatus          string                `json:"deliveryStatus"`
-	DeliveredAt             *timestampJSON        `json:"deliveredAt,omitempty"`
-	CreatedAt               *timestampJSON        `json:"createdAt,omitempty"`
-	AcknowledgementStatus   string                `json:"acknowledgementStatus,omitempty"`
-	AcknowledgedAt          *timestampJSON        `json:"acknowledgedAt,omitempty"`
-	AcknowledgementAction   string                `json:"acknowledgementAction,omitempty"`
-	FallbackStatus          string                `json:"fallbackStatus,omitempty"`
-	FallbackReason          string                `json:"fallbackReason,omitempty"`
-	PolicyKey               string                `json:"policyKey,omitempty"`
-	SourceCategory          string                `json:"sourceCategory,omitempty"`
-	NavigationTarget        *navigationTargetJSON `json:"navigationTarget,omitempty"`
+	NotificationID          string                   `json:"notificationId"`
+	NotificationRecipientID string                   `json:"notificationRecipientId"`
+	SourceDomain            string                   `json:"sourceDomain"`
+	NotificationType        string                   `json:"notificationType"`
+	Title                   string                   `json:"title"`
+	Message                 string                   `json:"message"`
+	ActionData              map[string]string        `json:"actionData,omitempty"`
+	ReadStatus              bool                     `json:"readStatus"`
+	ReadAt                  *timestampJSON           `json:"readAt,omitempty"`
+	DeliveryStatus          string                   `json:"deliveryStatus"`
+	DeliveredAt             *timestampJSON           `json:"deliveredAt,omitempty"`
+	CreatedAt               *timestampJSON           `json:"createdAt,omitempty"`
+	AcknowledgementStatus   string                   `json:"acknowledgementStatus,omitempty"`
+	AcknowledgedAt          *timestampJSON           `json:"acknowledgedAt,omitempty"`
+	AcknowledgementAction   string                   `json:"acknowledgementAction,omitempty"`
+	FallbackStatus          string                   `json:"fallbackStatus,omitempty"`
+	FallbackReason          string                   `json:"fallbackReason,omitempty"`
+	PolicyKey               string                   `json:"policyKey,omitempty"`
+	SourceCategory          string                   `json:"sourceCategory,omitempty"`
+	NavigationTarget        *navigationTargetJSON    `json:"navigationTarget,omitempty"`
+	Payload                 *notificationPayloadJSON `json:"payload,omitempty"`
+}
+
+type notificationPayloadJSON struct {
+	SchemaVersion           int32                      `json:"schemaVersion"`
+	NotificationID          string                     `json:"notificationId"`
+	NotificationRecipientID string                     `json:"notificationRecipientId,omitempty"`
+	SourceDomain            string                     `json:"sourceDomain"`
+	NotificationType        string                     `json:"notificationType"`
+	PolicyKey               string                     `json:"policyKey,omitempty"`
+	SourceCategory          string                     `json:"sourceCategory,omitempty"`
+	DeliveryClass           string                     `json:"deliveryClass,omitempty"`
+	NavigationTarget        *navigationTargetJSON      `json:"navigationTarget,omitempty"`
+	ActionData              map[string]string          `json:"actionData,omitempty"`
+	Chat                    *chatNotificationJSON      `json:"chat,omitempty"`
+	VoiceCall               *voiceCallNotificationJSON `json:"voiceCall,omitempty"`
+	Task                    *taskNotificationJSON      `json:"task,omitempty"`
+	Document                *documentNotificationJSON  `json:"document,omitempty"`
+	Calendar                *calendarNotificationJSON  `json:"calendar,omitempty"`
+}
+
+type chatNotificationJSON struct {
+	ChannelID        string `json:"channelId,omitempty"`
+	ChannelType      string `json:"channelType,omitempty"`
+	ChannelName      string `json:"channelName,omitempty"`
+	MessageID        string `json:"messageId,omitempty"`
+	ParentMessageID  string `json:"parentMessageId,omitempty"`
+	SenderEmployeeID string `json:"senderEmployeeId,omitempty"`
+	SenderName       string `json:"senderName,omitempty"`
+	Action           string `json:"action,omitempty"`
+}
+
+type voiceCallNotificationJSON struct {
+	ChannelID            string `json:"channelId,omitempty"`
+	ChannelType          string `json:"channelType,omitempty"`
+	ChannelName          string `json:"channelName,omitempty"`
+	CallID               string `json:"callId,omitempty"`
+	InvitationID         string `json:"invitationId,omitempty"`
+	SenderEmployeeID     string `json:"senderEmployeeId,omitempty"`
+	SenderName           string `json:"senderName,omitempty"`
+	InitiatorEmployeeID  string `json:"initiatorEmployeeId,omitempty"`
+	State                string `json:"state,omitempty"`
+	ParticipantCount     int32  `json:"participantCount,omitempty"`
+	AlreadyInAnotherCall bool   `json:"alreadyInAnotherCall,omitempty"`
+	Action               string `json:"action,omitempty"`
+	Outcome              string `json:"outcome,omitempty"`
+}
+
+type taskNotificationJSON struct {
+	ProjectID     string `json:"projectId,omitempty"`
+	TaskID        string `json:"taskId,omitempty"`
+	TaskTitle     string `json:"taskTitle,omitempty"`
+	RequirementID string `json:"requirementId,omitempty"`
+	FocusIntent   string `json:"focusIntent,omitempty"`
+	EntryContext  string `json:"entryContext,omitempty"`
+}
+
+type documentNotificationJSON struct {
+	DocumentID string `json:"documentId,omitempty"`
+	CommentID  string `json:"commentId,omitempty"`
+	ReplyID    string `json:"replyId,omitempty"`
+}
+
+type calendarNotificationJSON struct {
+	EventID    string `json:"eventId,omitempty"`
+	EventTitle string `json:"eventTitle,omitempty"`
 }
 
 type navigationTargetJSON struct {
@@ -247,20 +313,123 @@ func marshalNotificationEvent(event *rpcv1.NotificationEvent) ([]byte, error) {
 			FallbackReason:          event.Notification.FallbackReason,
 			PolicyKey:               event.Notification.PolicyKey,
 			SourceCategory:          event.Notification.SourceCategory,
+			Payload:                 notificationPayloadJSONFromProto(event.Notification.Payload),
 		}
 		if target := event.Notification.NavigationTarget; target != nil {
-			notificationPayload.NavigationTarget = &navigationTargetJSON{
-				Domain:       target.Domain,
-				ResourceType: target.ResourceType,
-				ResourceID:   target.ResourceId,
-				SecondaryID:  target.SecondaryId,
-				Action:       target.Action,
-			}
+			notificationPayload.NavigationTarget = navigationTargetJSONFromProto(target)
 		}
 		payload.Notification = notificationPayload
 	}
 
 	return json.Marshal(payload)
+}
+
+func notificationPayloadJSONFromProto(payload *rpcv1.NotificationPayload) *notificationPayloadJSON {
+	if payload == nil {
+		return nil
+	}
+	return &notificationPayloadJSON{
+		SchemaVersion:           payload.SchemaVersion,
+		NotificationID:          payload.NotificationId,
+		NotificationRecipientID: payload.NotificationRecipientId,
+		SourceDomain:            payload.SourceDomain,
+		NotificationType:        payload.NotificationType,
+		PolicyKey:               payload.PolicyKey,
+		SourceCategory:          payload.SourceCategory,
+		DeliveryClass:           payload.DeliveryClass,
+		NavigationTarget:        navigationTargetJSONFromProto(payload.NavigationTarget),
+		ActionData:              cloneStringMap(payload.ActionData),
+		Chat:                    chatNotificationJSONFromProto(payload.Chat),
+		VoiceCall:               voiceCallNotificationJSONFromProto(payload.VoiceCall),
+		Task:                    taskNotificationJSONFromProto(payload.Task),
+		Document:                documentNotificationJSONFromProto(payload.Document),
+		Calendar:                calendarNotificationJSONFromProto(payload.Calendar),
+	}
+}
+
+func navigationTargetJSONFromProto(target *rpcv1.NavigationTarget) *navigationTargetJSON {
+	if target == nil {
+		return nil
+	}
+	return &navigationTargetJSON{
+		Domain:       target.Domain,
+		ResourceType: target.ResourceType,
+		ResourceID:   target.ResourceId,
+		SecondaryID:  target.SecondaryId,
+		Action:       target.Action,
+	}
+}
+
+func chatNotificationJSONFromProto(chat *rpcv1.ChatNotificationPayload) *chatNotificationJSON {
+	if chat == nil {
+		return nil
+	}
+	return &chatNotificationJSON{
+		ChannelID:        chat.ChannelId,
+		ChannelType:      chat.ChannelType,
+		ChannelName:      chat.ChannelName,
+		MessageID:        chat.MessageId,
+		ParentMessageID:  chat.ParentMessageId,
+		SenderEmployeeID: chat.SenderEmployeeId,
+		SenderName:       chat.SenderName,
+		Action:           chat.Action,
+	}
+}
+
+func voiceCallNotificationJSONFromProto(voiceCall *rpcv1.VoiceCallNotificationPayload) *voiceCallNotificationJSON {
+	if voiceCall == nil {
+		return nil
+	}
+	return &voiceCallNotificationJSON{
+		ChannelID:            voiceCall.ChannelId,
+		ChannelType:          voiceCall.ChannelType,
+		ChannelName:          voiceCall.ChannelName,
+		CallID:               voiceCall.CallId,
+		InvitationID:         voiceCall.InvitationId,
+		SenderEmployeeID:     voiceCall.SenderEmployeeId,
+		SenderName:           voiceCall.SenderName,
+		InitiatorEmployeeID:  voiceCall.InitiatorEmployeeId,
+		State:                voiceCall.State,
+		ParticipantCount:     voiceCall.ParticipantCount,
+		AlreadyInAnotherCall: voiceCall.AlreadyInAnotherCall,
+		Action:               voiceCall.Action,
+		Outcome:              voiceCall.Outcome,
+	}
+}
+
+func taskNotificationJSONFromProto(task *rpcv1.TaskNotificationPayload) *taskNotificationJSON {
+	if task == nil {
+		return nil
+	}
+	return &taskNotificationJSON{
+		ProjectID:     task.ProjectId,
+		TaskID:        task.TaskId,
+		TaskTitle:     task.TaskTitle,
+		RequirementID: task.RequirementId,
+		FocusIntent:   task.FocusIntent,
+		EntryContext:  task.EntryContext,
+	}
+}
+
+func documentNotificationJSONFromProto(document *rpcv1.DocumentNotificationPayload) *documentNotificationJSON {
+	if document == nil {
+		return nil
+	}
+	return &documentNotificationJSON{
+		DocumentID: document.DocumentId,
+		CommentID:  document.CommentId,
+		ReplyID:    document.ReplyId,
+	}
+}
+
+func calendarNotificationJSONFromProto(calendar *rpcv1.CalendarNotificationPayload) *calendarNotificationJSON {
+	if calendar == nil {
+		return nil
+	}
+	return &calendarNotificationJSON{
+		EventID:    calendar.EventId,
+		EventTitle: calendar.EventTitle,
+	}
 }
 
 func toTimestampJSON(ts *timestamppb.Timestamp) *timestampJSON {

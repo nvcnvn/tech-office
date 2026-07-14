@@ -1,13 +1,18 @@
+import type { notification as NotificationProto } from "rpc";
+
+type RawNotificationPayload = {
+  chat?: Partial<NotificationProto.ChatNotificationPayload>;
+  voiceCall?: Partial<NotificationProto.VoiceCallNotificationPayload>;
+};
+
 interface ChatStreamPayload {
   notification?: {
     sourceDomain?: string;
     notificationType?: string;
-    actionData?: Record<string, string | undefined>;
+    payload?: RawNotificationPayload;
   };
   sourceDomain?: string;
   notificationType?: string;
-  actionData?: Record<string, string | undefined>;
-  action_data?: Record<string, string | undefined>;
   channelId?: string;
   channel_id?: string;
   callId?: string;
@@ -45,34 +50,42 @@ export interface ChatStreamEventMeta {
 
 export function parseChatStreamEvent(rawData: string): ChatStreamEventMeta | null {
   const payload = JSON.parse(rawData) as ChatStreamPayload;
-  const actionData =
-    payload.notification?.actionData ?? payload.actionData ?? payload.action_data;
+  const typedPayload = payload.notification?.payload;
+  const typedChat = typedPayload?.chat;
+  const typedVoiceCall = typedPayload?.voiceCall;
 
   return {
     sourceDomain: payload.notification?.sourceDomain ?? payload.sourceDomain,
     notificationType:
       payload.notification?.notificationType ?? payload.notificationType,
-    channelId: actionData?.channelId ?? payload.channelId ?? payload.channel_id,
-    callId: actionData?.callId ?? payload.callId ?? payload.call_id,
+    channelId:
+      typedVoiceCall?.channelId ??
+      typedChat?.channelId ??
+      payload.channelId ??
+      payload.channel_id,
+    callId: typedVoiceCall?.callId ?? payload.callId ?? payload.call_id,
     invitationId:
-      actionData?.invitationId ?? payload.invitationId ?? payload.invitation_id,
+      typedVoiceCall?.invitationId ??
+      payload.invitationId ??
+      payload.invitation_id,
     initiatorEmployeeId:
-      actionData?.initiatorEmployeeId ??
+      typedVoiceCall?.initiatorEmployeeId ??
       payload.initiatorEmployeeId ??
       payload.initiator_employee_id,
     alreadyInAnotherCall:
-      (actionData?.alreadyInAnotherCall ??
-        payload.alreadyInAnotherCall ??
-        payload.already_in_another_call) === "true",
-    state: actionData?.state ?? payload.state,
-    action: actionData?.action ?? payload.action,
+      typedVoiceCall?.alreadyInAnotherCall ??
+      ((payload.alreadyInAnotherCall ?? payload.already_in_another_call) === "true"),
+    state: typedVoiceCall?.state ?? payload.state,
+    action: typedVoiceCall?.action ?? typedChat?.action ?? payload.action,
     participantCount:
-      actionData?.participantCount || payload.participantCount || payload.participant_count
-        ? Number(actionData?.participantCount ?? payload.participantCount ?? payload.participant_count)
-        : undefined,
-    messageId: actionData?.messageId ?? payload.messageId ?? payload.message_id,
+      typedVoiceCall?.participantCount ??
+      (payload.participantCount || payload.participant_count
+        ? Number(payload.participantCount ?? payload.participant_count)
+        : undefined),
+    messageId:
+      typedChat?.messageId ?? payload.messageId ?? payload.message_id,
     parentMessageId:
-      actionData?.parentMessageId ??
+      typedChat?.parentMessageId ??
       payload.parentMessageId ??
       payload.parent_message_id,
   };

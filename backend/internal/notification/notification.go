@@ -509,6 +509,7 @@ func (s *NotificationService) notificationRowToProto(ctx context.Context, n *dat
 		}
 	}
 
+	navigationTarget := navigationTargetFromJSON(n.NavigationTarget)
 	return &rpcv1.NotificationSummary{
 		NotificationRecipientId: n.RecipientID.String(),
 		NotificationId:          n.NotificationID.String(),
@@ -532,7 +533,18 @@ func (s *NotificationService) notificationRowToProto(ctx context.Context, n *dat
 		// Policy and routing metadata
 		PolicyKey:        n.PolicyKey,
 		SourceCategory:   n.SourceCategory,
-		NavigationTarget: navigationTargetFromJSON(n.NavigationTarget),
+		NavigationTarget: navigationTarget,
+		Payload: buildNotificationPayload(
+			n.NotificationID.String(),
+			n.RecipientID.String(),
+			n.SourceDomain,
+			n.NotificationType,
+			n.PolicyKey,
+			n.SourceCategory,
+			n.DeliveryClass,
+			actionData,
+			navigationTarget,
+		),
 	}
 }
 

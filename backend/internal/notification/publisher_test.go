@@ -48,6 +48,167 @@ func TestPushDataFromPublishRequestIncludesRoutingData(t *testing.T) {
 	assert.True(t, isIncomingVoiceCallPush(&PushNotificationPayload{Data: data}))
 }
 
+func TestBuildNotificationPayloadIncludesTypedVoiceCallMetadata(t *testing.T) {
+	notificationID := dbuuid.Must()
+	recipientID := dbuuid.Must()
+	channelID := dbuuid.Must()
+	callID := dbuuid.Must()
+	invitationID := dbuuid.Must()
+	senderID := dbuuid.Must()
+	navigationTarget := &rpcv1.NavigationTarget{
+		Domain:       SourceDomainChat,
+		ResourceType: "channel",
+		ResourceId:   channelID.String(),
+		SecondaryId:  invitationID.String(),
+		Action:       "join_voice_call",
+	}
+	actionData := map[string]string{
+		"action":               "invite",
+		"channelId":            channelID.String(),
+		"channelName":          "Ops Room",
+		"channelType":          "chat",
+		"callId":               callID.String(),
+		"invitationId":         invitationID.String(),
+		"senderEmployeeId":     senderID.String(),
+		"senderName":           "Test Caller",
+		"alreadyInAnotherCall": "true",
+	}
+
+	payload := buildNotificationPayload(
+		notificationID.String(),
+		recipientID.String(),
+		SourceDomainChat,
+		NotificationTypeVoiceCallIncoming,
+		PolicyKeyChatVoiceCallIncoming,
+		SourceCategorySystem,
+		DeliveryClassPersistent,
+		actionData,
+		navigationTarget,
+	)
+
+	require.NotNil(t, payload)
+	assert.Equal(t, int32(1), payload.GetSchemaVersion())
+	assert.Equal(t, notificationID.String(), payload.GetNotificationId())
+	assert.Equal(t, recipientID.String(), payload.GetNotificationRecipientId())
+	assert.Equal(t, PolicyKeyChatVoiceCallIncoming, payload.GetPolicyKey())
+	assert.Equal(t, DeliveryClassPersistent, payload.GetDeliveryClass())
+	assert.Equal(t, navigationTarget.GetResourceId(), payload.GetNavigationTarget().GetResourceId())
+	require.NotNil(t, payload.GetChat())
+	assert.Equal(t, channelID.String(), payload.GetChat().GetChannelId())
+	require.NotNil(t, payload.GetVoiceCall())
+	assert.Equal(t, callID.String(), payload.GetVoiceCall().GetCallId())
+	assert.Equal(t, invitationID.String(), payload.GetVoiceCall().GetInvitationId())
+	assert.Equal(t, senderID.String(), payload.GetVoiceCall().GetSenderEmployeeId())
+	assert.Equal(t, "Test Caller", payload.GetVoiceCall().GetSenderName())
+	assert.True(t, payload.GetVoiceCall().GetAlreadyInAnotherCall())
+}
+
+func TestBuildNotificationPayloadIncludesTypedChatLiveFields(t *testing.T) {
+	payload := buildNotificationPayload(
+		dbuuid.Must().String(),
+		"",
+		SourceDomainChat,
+		NotificationTypeTyping,
+		PolicyKeyChatTypingLive,
+		SourceCategoryActivity,
+		DeliveryClassLiveOnly,
+		map[string]string{
+			"channelId":       dbuuid.Must().String(),
+			"employeeId":      dbuuid.Must().String(),
+			"action":          "start",
+			"parentMessageId": dbuuid.Must().String(),
+			"emojiCode":       ":thumbsup:",
+		},
+		nil,
+	)
+
+	require.NotNil(t, payload.GetChat())
+	assert.Equal(t, "start", payload.GetChat().GetAction())
+	assert.NotEmpty(t, payload.GetChat().GetEmployeeId())
+	assert.Equal(t, ":thumbsup:", payload.GetChat().GetEmojiCode())
+	assert.NotEmpty(t, payload.GetChat().GetParentMessageId())
+}
+
+func TestBuildNotificationPayloadIncludesChatSectionForTaskDiscussionNotification(t *testing.T) {
+	notificationID := dbuuid.Must()
+	recipientID := dbuuid.Must()
+	channelID := dbuuid.Must()
+	messageID := dbuuid.Must()
+	taskID := dbuuid.Must()
+	projectID := dbuuid.Must()
+	payload := buildNotificationPayload(
+		notificationID.String(),
+		recipientID.String(),
+		SourceDomainProjects,
+		NotificationTypeTaskCommented,
+		PolicyKeyTaskComment,
+		SourceCategoryActivity,
+		DeliveryClassPersistent,
+		map[string]string{
+			"projectId":        projectID.String(),
+			"taskId":           taskID.String(),
+			"taskTitle":        "Bridge task",
+			"channelId":        channelID.String(),
+			"messageId":        messageID.String(),
+			"channelType":      "chat",
+			"channelName":      "task-discussion",
+			"senderEmployeeId": dbuuid.Must().String(),
+			"senderName":       "Poster",
+			"action":           "view_message",
+			"deepLink":         "chat/" + channelID.String(),
+		},
+		&rpcv1.NavigationTarget{
+			Domain:       SourceDomainProjects,
+			ResourceType: "task",
+			ResourceId:   taskID.String(),
+		},
+	)
+
+	require.NotNil(t, payload.GetTask())
+	assert.Equal(t, projectID.String(), payload.GetTask().GetProjectId())
+	assert.Equal(t, taskID.String(), payload.GetTask().GetTaskId())
+	assert.Equal(t, "Bridge task", payload.GetTask().GetTaskTitle())
+	require.NotNil(t, payload.GetChat())
+	assert.Equal(t, channelID.String(), payload.GetChat().GetChannelId())
+	assert.Equal(t, messageID.String(), payload.GetChat().GetMessageId())
+	assert.Equal(t, "view_message", payload.GetChat().GetAction())
+}
+
+func TestValidateVoiceCallIncomingPayloadRequiresRoutingMetadata(t *testing.T) {
+	channelID := dbuuid.Must()
+	callID := dbuuid.Must()
+	invitationID := dbuuid.Must()
+	senderID := dbuuid.Must()
+	req := &rpcv1.PublishNotificationRequest{
+		SourceDomain:     SourceDomainChat,
+		NotificationType: NotificationTypeVoiceCallIncoming,
+		Priority:         int32(PriorityAlways),
+		DeliveryClass:    DeliveryClassPersistent,
+		ActionData: map[string]string{
+			"channelId":            channelID.String(),
+			"channelName":          "Ops Room",
+			"channelType":          "chat",
+			"callId":               callID.String(),
+			"invitationId":         invitationID.String(),
+			"senderEmployeeId":     senderID.String(),
+			"senderName":           "Test Caller",
+			"alreadyInAnotherCall": "false",
+		},
+		NavigationTarget: &rpcv1.NavigationTarget{
+			Domain:       SourceDomainChat,
+			ResourceType: "channel",
+			ResourceId:   channelID.String(),
+			SecondaryId:  invitationID.String(),
+			Action:       "join_voice_call",
+		},
+	}
+
+	require.NoError(t, validateVoiceCallIncomingPayload(req))
+
+	req.ActionData["callId"] = ""
+	assert.ErrorContains(t, validateVoiceCallIncomingPayload(req), "action_data.callId is required")
+}
+
 func TestRescuePushPayloadIncludesRecipientRoutingData(t *testing.T) {
 	notificationID := dbuuid.Must()
 	recipientID := dbuuid.Must()

@@ -13,7 +13,32 @@ export const RITUAL_FOCUS_INTENTS: readonly RitualFocusIntent[] = [
 ];
 const RITUAL_ENTRY_CONTEXTS: readonly RitualEntryContext[] = ['skipped', 'detached'];
 
-type NotificationActionData = Record<string, unknown>;
+interface NotificationChatPayload {
+	channelId?: string;
+	channelType?: string;
+	channelName?: string;
+	messageId?: string;
+	parentMessageId?: string;
+	action?: string;
+}
+
+interface NotificationTaskPayload {
+	projectId?: string;
+	taskId?: string;
+	requirementId?: string;
+	focusIntent?: string;
+	entryContext?: string;
+	deepLink?: string;
+}
+
+interface NotificationDocumentPayload {
+	slug?: string;
+	deepLink?: string;
+}
+
+interface NotificationVoiceCallPayload {
+	channelId?: string;
+}
 
 function asString(value: unknown): string | undefined {
 	return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
@@ -33,10 +58,6 @@ function normalizeEntryContext(value: unknown): RitualEntryContext | undefined {
 	}
 
 	return undefined;
-}
-
-function asTruthyFlag(value: unknown): boolean {
-	return value === true || value === 'true' || value === 1 || value === '1';
 }
 
 function mapNotificationTypeToFocusIntent(notificationType: string | undefined): RitualFocusIntent | undefined {
@@ -81,15 +102,18 @@ function buildTaskHref(
 	});
 }
 
-function buildChatHref(actionData: NotificationActionData | null, resourceId?: string): string | null {
-	const channelId = asString(resourceId) ?? asString(actionData?.channelId);
+function buildChatHref(
+	chatPayload: NotificationChatPayload | undefined,
+	resourceId?: string,
+): string | null {
+	const channelId = asString(resourceId) ?? chatPayload?.channelId;
 	if (!channelId) {
 		return null;
 	}
 
-	const action = asString(actionData?.action);
-	const messageId = asString(actionData?.messageId);
-	const parentMessageId = asString(actionData?.parentMessageId);
+	const action = chatPayload?.action;
+	const messageId = chatPayload?.messageId;
+	const parentMessageId = chatPayload?.parentMessageId;
 	const params = new URLSearchParams({ channel: channelId });
 
 	if (action === 'view_thread' && parentMessageId) {
@@ -114,14 +138,13 @@ function parseDeepLink(deepLink: string): { parts: string[]; queryParams: URLSea
 
 function resolveTaskFocus(
 	notificationType: string | undefined,
-	actionData: NotificationActionData | null,
+	taskPayload: NotificationTaskPayload | undefined,
 	navigationAction?: string,
 	queryParams?: URLSearchParams,
 ): { focusIntent?: RitualFocusIntent; requirementId?: string; entryContext?: RitualEntryContext } {
 	const focusIntent =
 		normalizeFocusIntent(queryParams?.get('focusIntent') ?? queryParams?.get('intent')) ??
-		normalizeFocusIntent(actionData?.focusIntent) ??
-		normalizeFocusIntent(actionData?.ritualFocusIntent) ??
+		normalizeFocusIntent(taskPayload?.focusIntent) ??
 		normalizeFocusIntent(navigationAction) ??
 		mapNotificationTypeToFocusIntent(notificationType);
 	const requirementId =
@@ -129,21 +152,14 @@ function resolveTaskFocus(
 		queryParams?.get('evidenceRequirementId') ??
 		queryParams?.get('pendingRequirementId') ??
 		queryParams?.get('focusRequirementId') ??
-		asString(actionData?.requirementId) ??
-		asString(actionData?.evidenceRequirementId) ??
-		asString(actionData?.pendingRequirementId) ??
-		asString(actionData?.focusRequirementId) ??
-		asString(actionData?.latestPendingRequirementId);
+		asString(taskPayload?.requirementId) ??
+		undefined;
 	const entryContext =
 		normalizeEntryContext(
 			queryParams?.get('entryContext') ??
 				queryParams?.get('taskContext') ??
-				actionData?.entryContext ??
-				actionData?.taskContext ??
-				actionData?.ritualContext,
-		) ??
-		(asTruthyFlag(actionData?.detachedFromRitual) ? 'detached' : undefined) ??
-		(asString(actionData?.skipReason) ? 'skipped' : undefined);
+				taskPayload?.entryContext,
+		);
 
 	return {
 		focusIntent,
@@ -154,36 +170,41 @@ function resolveTaskFocus(
 
 export function resolveWorkspaceNotificationHref(notification: Notification): string | null {
 	const target = notification.navigationTarget;
-	const actionData =
-		notification.actionData && typeof notification.actionData === 'object'
-			? (notification.actionData as NotificationActionData)
-			: null;
+	const payload = notification.payload;
+	const chatPayload = payload?.chat as NotificationChatPayload | undefined;
+	const taskPayload = payload?.task as NotificationTaskPayload | undefined;
+	const documentPayload = payload?.document as NotificationDocumentPayload | undefined;
+	const voiceCallPayload = payload?.voiceCall as NotificationVoiceCallPayload | undefined;
 	const notificationType = notification.notificationType;
-	const projectId = asString(actionData?.projectId);
-	const taskId = asString(actionData?.taskId) ?? asString(target?.resourceId);
+	const projectId = taskPayload?.projectId;
+	const taskId = taskPayload?.taskId ?? asString(target?.resourceId);
 
-	const deepLink = asString(actionData?.deepLink);
+	if (notificationType === 'voice_call_incoming' && voiceCallPayload?.channelId) {
+		return `/workspace/chat?channel=${voiceCallPayload.channelId}`;
+	}
+
+	const deepLink = taskPayload?.deepLink ?? documentPayload?.deepLink;
 	if (deepLink) {
 		const { parts, queryParams } = parseDeepLink(deepLink);
 		if (parts[0] === 'tasks' && parts[1] && parts[2]) {
-			const focus = resolveTaskFocus(notificationType, actionData, target?.action, queryParams);
+			const focus = resolveTaskFocus(notificationType, taskPayload, target?.action, queryParams);
 			return buildTaskHref(parts[1], parts[2], focus.focusIntent, focus.requirementId, focus.entryContext);
 		}
 
 		if (parts[0] === 'chat') {
-			return buildChatHref(actionData, parts[1]);
+			return buildChatHref(chatPayload, parts[1]);
 		}
 	}
 
 	if (target?.resourceType === 'task' && projectId && taskId) {
-		const focus = resolveTaskFocus(notificationType, actionData, target.action);
+		const focus = resolveTaskFocus(notificationType, taskPayload, target.action);
 		return buildTaskHref(projectId, taskId, focus.focusIntent, focus.requirementId, focus.entryContext);
 	}
 
 	if (
 		(target?.resourceType === 'channel' || target?.resourceType === 'chat_channel' || notification.sourceDomain === 'chat')
 	) {
-		return buildChatHref(actionData, target?.resourceId);
+		return buildChatHref(chatPayload, target?.resourceId);
 	}
 
 	return null;

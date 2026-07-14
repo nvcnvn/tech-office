@@ -337,6 +337,7 @@ func (s *notificationLogicImpl) NotificationRowToProto(ctx context.Context, n *d
 		}
 	}
 
+	navigationTarget := navigationTargetFromJSON(n.NavigationTarget)
 	summary := &rpcv1.NotificationSummary{
 		NotificationRecipientId: n.RecipientID.String(),
 		NotificationId:          n.NotificationID.String(),
@@ -361,7 +362,18 @@ func (s *notificationLogicImpl) NotificationRowToProto(ctx context.Context, n *d
 		PolicyKey:      n.PolicyKey,
 		SourceCategory: n.SourceCategory,
 		// Typed navigation target
-		NavigationTarget: navigationTargetFromJSON(n.NavigationTarget),
+		NavigationTarget: navigationTarget,
+		Payload: buildNotificationPayload(
+			n.NotificationID.String(),
+			n.RecipientID.String(),
+			n.SourceDomain,
+			n.NotificationType,
+			n.PolicyKey,
+			n.SourceCategory,
+			n.DeliveryClass,
+			actionData,
+			navigationTarget,
+		),
 	}
 
 	return summary

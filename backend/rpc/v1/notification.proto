@@ -255,6 +255,80 @@ message NavigationTarget {
   string action = 5;        // "open", "open_comment", "open_reply" — action to perform on navigation
 }
 
+// NotificationPayload is the typed metadata envelope clients should prefer over
+// action_data. action_data remains for backward compatibility and carries the
+// original publisher key/value pairs.
+message NotificationPayload {
+  int32 schema_version = 1;
+  string notification_id = 2;
+  string notification_recipient_id = 3;
+  string source_domain = 4;
+  string notification_type = 5;
+  string policy_key = 6;
+  string source_category = 7;
+  string delivery_class = 8;
+  NavigationTarget navigation_target = 9;
+  map<string, string> action_data = 10;
+  ChatNotificationPayload chat = 11;
+  VoiceCallNotificationPayload voice_call = 12;
+  TaskNotificationPayload task = 13;
+  DocumentNotificationPayload document = 14;
+  CalendarNotificationPayload calendar = 15;
+}
+
+message ChatNotificationPayload {
+  string channel_id = 1;
+  string channel_type = 2;
+  string channel_name = 3;
+  string message_id = 4;
+  string parent_message_id = 5;
+  string sender_employee_id = 6;
+  string sender_name = 7;
+  string action = 8;
+  string employee_id = 9;
+  string emoji_code = 10;
+}
+
+message VoiceCallNotificationPayload {
+  string channel_id = 1;
+  string channel_type = 2;
+  string channel_name = 3;
+  string call_id = 4;
+  string invitation_id = 5;
+  string sender_employee_id = 6;
+  string sender_name = 7;
+  string initiator_employee_id = 8;
+  string state = 9;
+  int32 participant_count = 10;
+  bool already_in_another_call = 11;
+  string action = 12;
+  string outcome = 13;
+}
+
+message TaskNotificationPayload {
+  string project_id = 1;
+  string task_id = 2;
+  string task_title = 3;
+  string requirement_id = 4;
+  string focus_intent = 5;
+  string entry_context = 6;
+  string deep_link = 7;
+}
+
+message DocumentNotificationPayload {
+  string document_id = 1;
+  string comment_id = 2;
+  string reply_id = 3;
+  string slug = 4;
+  string deep_link = 5;
+}
+
+message CalendarNotificationPayload {
+  string event_id = 1;
+  string event_title = 2;
+  string deep_link = 3;
+}
+
 // AudienceContext enables live-only notifications to resolve recipients
 // from shared active context (viewing pattern) instead of explicit lists.
 message AudienceContext {
@@ -323,6 +397,7 @@ message NotificationSummary {
   string policy_key = 18;           // Evaluated delivery policy key
   string source_category = 19;      // "activity", "mention", "system"
   NavigationTarget navigation_target = 20; // Typed deep-link destination
+  NotificationPayload payload = 21; // Typed metadata envelope; prefer over action_data
 }
 
 message MarkAsReadRequest {

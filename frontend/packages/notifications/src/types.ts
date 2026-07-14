@@ -1,3 +1,5 @@
+import type { notification as NotificationProto } from 'rpc';
+
 /**
  * Frontend Notification Types
  * TypeScript interfaces for notification hub UI state management
@@ -24,7 +26,7 @@ export interface Notification {
 	notificationType: string;            // Dot-separated type (e.g., 'message.new')
 	title: string;                       // Notification title
 	message: string;                     // Notification message body
-	actionData: ActionData | null;       // Action-specific metadata
+	payload: NotificationPayload | null; // Typed metadata envelope from backend contract
 
 	// Status (legacy)
 	readStatus: boolean;                 // true if read, false if unread
@@ -75,18 +77,7 @@ export type DeliveryStatus =
 	| 'delivered' // Successfully delivered via SSE
 	| 'failed';   // Delivery failed
 
-/**
- * Action-specific data (flexible JSON structure)
- * Structure varies by notification type
- * 
- * Examples:
- * - Chat: { threadId: string, messageId: string }
- * - CRM: { dealId: string, contactId: string }
- * - Projects: { projectId: string, ticketId: string }
- */
-export interface ActionData {
-	[key: string]: unknown;
-}
+export type NotificationPayload = NotificationProto.NotificationPayload;
 
 // ============================================================================
 // SSE Connection State

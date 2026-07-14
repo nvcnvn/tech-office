@@ -104,7 +104,7 @@ export function mapNotificationFromProto(proto: any): any {
 		notificationType: proto.notificationType,
 		title: proto.title,
 		message: proto.message,
-		actionData: proto.actionData ? JSON.parse(proto.actionData) : null,
+		payload: proto.payload ?? null,
 		readStatus: proto.readStatus,
 		readAt: proto.readAt ? new Date(proto.readAt) : null,
 		deliveryStatus: proto.deliveryStatus,

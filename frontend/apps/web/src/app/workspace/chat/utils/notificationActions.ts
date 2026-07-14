@@ -20,8 +20,8 @@ import type { AppRouterInstance } from 'next/dist/shared/lib/app-router-context.
 import { markAsRead } from 'apis';
 
 /**
- * Chat action data structure
- * Parsed from notification.actionData
+ * Chat notification payload structure
+ * Parsed from notification.payload.chat
  */
 interface ChatActionData {
 	channelId: string;
@@ -36,7 +36,7 @@ interface ChatActionData {
  * @param router - Next.js router instance
  * @param notificationId - Notification ID to mark as read
  * @param notificationRecipientId - Notification recipient ID for mark as read operation
- * @param actionData - Chat action data from notification
+ * @param chatPayload - Chat payload from notification
  * 
  * Usage:
  * ```tsx
@@ -49,7 +49,7 @@ interface ChatActionData {
  *       router,
  *       notification.notificationId,
  *       notification.notificationRecipientId,
- *       notification.actionData as ChatActionData
+ *       notification.payload?.chat ?? null
  *     );
  *   }
  * };
@@ -59,14 +59,14 @@ export async function handleChatNotificationAction(
 	router: AppRouterInstance,
 	notificationId: string,
 	notificationRecipientId: string,
-	actionData: ChatActionData | null
+	chatPayload: ChatActionData | null
 ): Promise<void> {
-	if (!actionData?.channelId) {
-		console.error('[handleChatNotificationAction] Missing channelId in actionData', actionData);
+	if (!chatPayload?.channelId) {
+		console.error('[handleChatNotificationAction] Missing channelId in chat payload', chatPayload);
 		return;
 	}
 
-	const { channelId, messageId, action, parentMessageId } = actionData;
+	const { channelId, messageId, action, parentMessageId } = chatPayload;
 
 	// Build navigation URL
 	const params = new URLSearchParams();
@@ -102,14 +102,14 @@ export async function handleChatNotificationAction(
 }
 
 /**
- * Check if action data is for chat domain
+ * Check if payload data is for chat domain
  * Type guard for TypeScript
  */
-export function isChatActionData(actionData: unknown): actionData is ChatActionData {
-	if (!actionData || typeof actionData !== 'object') {
+export function isChatPayload(payload: unknown): payload is ChatActionData {
+	if (!payload || typeof payload !== 'object') {
 		return false;
 	}
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const data = actionData as any;
+	const data = payload as any;
 	return typeof data.channelId === 'string';
 }

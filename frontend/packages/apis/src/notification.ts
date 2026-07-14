@@ -544,14 +544,10 @@ function normalizeNotificationSummary(raw: Record<string, unknown>): notificatio
 		partial.sourceCategory = raw.sourceCategory;
 	}
 	if (raw.navigationTarget && typeof raw.navigationTarget === 'object') {
-		const nt = raw.navigationTarget as Record<string, unknown>;
-		partial.navigationTarget = create(notification.NavigationTargetSchema, {
-			domain: typeof nt.domain === 'string' ? nt.domain : '',
-			resourceType: typeof nt.resourceType === 'string' ? nt.resourceType : '',
-			resourceId: typeof nt.resourceId === 'string' ? nt.resourceId : '',
-			secondaryId: typeof nt.secondaryId === 'string' ? nt.secondaryId : '',
-			action: typeof nt.action === 'string' ? nt.action : '',
-		});
+		partial.navigationTarget = normalizeNavigationTarget(raw.navigationTarget as Record<string, unknown>);
+	}
+	if (raw.payload && typeof raw.payload === 'object') {
+		partial.payload = normalizeNotificationPayload(raw.payload as Record<string, unknown>);
 	}
 
 	const createdAt = normalizeTimestamp(raw.createdAt);
@@ -560,6 +556,117 @@ function normalizeNotificationSummary(raw: Record<string, unknown>): notificatio
 	}
 
 	return create(notification.NotificationSummarySchema, partial) as notification.NotificationSummary;
+}
+
+function normalizeNotificationPayload(raw: Record<string, unknown>): notification.NotificationPayload {
+	const partial: Record<string, unknown> = {
+		schemaVersion: numberValue(raw.schemaVersion),
+		notificationId: stringValue(raw.notificationId),
+		notificationRecipientId: stringValue(raw.notificationRecipientId),
+		sourceDomain: stringValue(raw.sourceDomain),
+		notificationType: stringValue(raw.notificationType),
+		policyKey: stringValue(raw.policyKey),
+		sourceCategory: stringValue(raw.sourceCategory),
+		deliveryClass: stringValue(raw.deliveryClass),
+	};
+
+	if (raw.navigationTarget && typeof raw.navigationTarget === 'object') {
+		partial.navigationTarget = normalizeNavigationTarget(raw.navigationTarget as Record<string, unknown>);
+	}
+	if (raw.actionData && typeof raw.actionData === 'object') {
+		partial.actionData = normalizeStringMap(raw.actionData as Record<string, unknown>);
+	}
+	if (raw.chat && typeof raw.chat === 'object') {
+		const chat = raw.chat as Record<string, unknown>;
+		partial.chat = create(notification.ChatNotificationPayloadSchema, {
+			channelId: stringValue(chat.channelId),
+			channelType: stringValue(chat.channelType),
+			channelName: stringValue(chat.channelName),
+			messageId: stringValue(chat.messageId),
+			parentMessageId: stringValue(chat.parentMessageId),
+			senderEmployeeId: stringValue(chat.senderEmployeeId),
+			senderName: stringValue(chat.senderName),
+			action: stringValue(chat.action),
+		});
+	}
+	if (raw.voiceCall && typeof raw.voiceCall === 'object') {
+		const voiceCall = raw.voiceCall as Record<string, unknown>;
+		partial.voiceCall = create(notification.VoiceCallNotificationPayloadSchema, {
+			channelId: stringValue(voiceCall.channelId),
+			channelType: stringValue(voiceCall.channelType),
+			channelName: stringValue(voiceCall.channelName),
+			callId: stringValue(voiceCall.callId),
+			invitationId: stringValue(voiceCall.invitationId),
+			senderEmployeeId: stringValue(voiceCall.senderEmployeeId),
+			senderName: stringValue(voiceCall.senderName),
+			initiatorEmployeeId: stringValue(voiceCall.initiatorEmployeeId),
+			state: stringValue(voiceCall.state),
+			participantCount: numberValue(voiceCall.participantCount),
+			alreadyInAnotherCall: booleanValue(voiceCall.alreadyInAnotherCall),
+			action: stringValue(voiceCall.action),
+			outcome: stringValue(voiceCall.outcome),
+		});
+	}
+	if (raw.task && typeof raw.task === 'object') {
+		const task = raw.task as Record<string, unknown>;
+		partial.task = create(notification.TaskNotificationPayloadSchema, {
+			projectId: stringValue(task.projectId),
+			taskId: stringValue(task.taskId),
+			taskTitle: stringValue(task.taskTitle),
+			requirementId: stringValue(task.requirementId),
+			focusIntent: stringValue(task.focusIntent),
+			entryContext: stringValue(task.entryContext),
+		});
+	}
+	if (raw.document && typeof raw.document === 'object') {
+		const documentPayload = raw.document as Record<string, unknown>;
+		partial.document = create(notification.DocumentNotificationPayloadSchema, {
+			documentId: stringValue(documentPayload.documentId),
+			commentId: stringValue(documentPayload.commentId),
+			replyId: stringValue(documentPayload.replyId),
+		});
+	}
+	if (raw.calendar && typeof raw.calendar === 'object') {
+		const calendar = raw.calendar as Record<string, unknown>;
+		partial.calendar = create(notification.CalendarNotificationPayloadSchema, {
+			eventId: stringValue(calendar.eventId),
+			eventTitle: stringValue(calendar.eventTitle),
+		});
+	}
+
+	return create(notification.NotificationPayloadSchema, partial) as notification.NotificationPayload;
+}
+
+function normalizeNavigationTarget(raw: Record<string, unknown>): notification.NavigationTarget {
+	return create(notification.NavigationTargetSchema, {
+		domain: stringValue(raw.domain),
+		resourceType: stringValue(raw.resourceType),
+		resourceId: stringValue(raw.resourceId),
+		secondaryId: stringValue(raw.secondaryId),
+		action: stringValue(raw.action),
+	});
+}
+
+function normalizeStringMap(raw: Record<string, unknown>): Record<string, string> {
+	const values: Record<string, string> = {};
+	for (const [key, value] of Object.entries(raw)) {
+		if (typeof value === 'string') {
+			values[key] = value;
+		}
+	}
+	return values;
+}
+
+function stringValue(value: unknown): string {
+	return typeof value === 'string' ? value : '';
+}
+
+function numberValue(value: unknown): number {
+	return typeof value === 'number' && Number.isFinite(value) ? value : 0;
+}
+
+function booleanValue(value: unknown): boolean {
+	return value === true || value === 'true';
 }
 
 function normalizeTimestamp(value: unknown): Partial<Timestamp> | undefined {

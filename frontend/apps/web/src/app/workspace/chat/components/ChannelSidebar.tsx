@@ -157,8 +157,7 @@ export default function ChannelSidebar({
         notification.sourceDomain === "chat" &&
         notification.notificationType === "message"
       ) {
-        const actionData = notification.actionData;
-        const channelId = actionData?.channelId as string | undefined;
+        const channelId = notification.payload?.chat?.channelId;
 
         if (channelId && channelId !== activeChannelId) {
           // Mark channel as unread

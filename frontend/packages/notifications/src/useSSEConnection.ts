@@ -307,6 +307,7 @@ export function useSSEConnection({
 						const nanos = ts.nanos || 0;
 						return new Date(seconds * 1000 + nanos / 1000000);
 					};
+					const payload = event.notification.payload ?? null;
 
 					// Map proto to frontend notification type
 					const notification: Notification = {
@@ -316,9 +317,7 @@ export function useSSEConnection({
 						notificationType: event.notification.notificationType,
 						title: event.notification.title,
 						message: event.notification.message,
-						actionData: typeof event.notification.actionData === 'string'
-							? JSON.parse(event.notification.actionData) as Record<string, unknown>
-							: event.notification.actionData || null,
+						payload,
 						readStatus: event.notification.readStatus,
 						readAt: timestampToDate(event.notification.readAt),
 						deliveryStatus: event.notification.deliveryStatus as DeliveryStatus,

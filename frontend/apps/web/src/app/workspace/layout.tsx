@@ -21,7 +21,7 @@ import { CircularProgress, Box } from "@mui/material";
 import TabLink from "@/components/TabLink";
 import {
   handleChatNotificationAction,
-  isChatActionData,
+  isChatPayload,
 } from "./chat/utils/notificationActions";
 import type { Notification } from "@tech-office/notifications";
 import { resolveWorkspaceNotificationHref } from "./notifications/utils/notificationNavigation";
@@ -438,13 +438,13 @@ function WorkspaceLayoutContent({
       // Route by source domain
       if (
         notification.sourceDomain === "chat" &&
-        isChatActionData(notification.actionData)
+        isChatPayload(notification.payload?.chat)
       ) {
         handleChatNotificationAction(
           router,
           notification.notificationId,
           notification.notificationRecipientId,
-          notification.actionData,
+          notification.payload?.chat ?? null,
         );
         return;
       }

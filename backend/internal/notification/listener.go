@@ -476,6 +476,7 @@ func (s *NotificationService) routeEphemeralNotificationToConnections(
 	matchedConnections := 0
 
 	// Create ephemeral notification event directly from payload
+	navigationTarget := navigationTargetFromJSON(payload.NavigationTarget)
 	event := &rpcv1.NotificationEvent{
 		EventId:   dbuuid.Must().String(),
 		EventType: "notification",
@@ -491,6 +492,20 @@ func (s *NotificationService) routeEphemeralNotificationToConnections(
 			ReadStatus:              false,
 			DeliveryStatus:          "delivered", // Ephemeral events are always "delivered" (sent via SSE)
 			CreatedAt:               timestamppb.Now(),
+			PolicyKey:               payload.PolicyKey,
+			SourceCategory:          payload.SourceCategory,
+			NavigationTarget:        navigationTarget,
+			Payload: buildNotificationPayload(
+				payload.NotificationID,
+				"",
+				payload.SourceDomain,
+				payload.NotificationType,
+				payload.PolicyKey,
+				payload.SourceCategory,
+				payload.DeliveryClass,
+				payload.ActionData,
+				navigationTarget,
+			),
 			// Leave ReadAt, DeliveredAt empty for ephemeral events
 		},
 	}
@@ -657,6 +672,7 @@ func (s *NotificationService) notificationRecipientRowToProto(ctx context.Contex
 		}
 	}
 
+	navigationTarget := navigationTargetFromJSON(n.NavigationTarget)
 	return &rpcv1.NotificationSummary{
 		NotificationRecipientId: n.RecipientID.String(),
 		NotificationId:          n.NotificationID.String(),
@@ -677,7 +693,18 @@ func (s *NotificationService) notificationRecipientRowToProto(ctx context.Contex
 		FallbackReason:          n.FallbackReason.String,
 		PolicyKey:               n.PolicyKey,
 		SourceCategory:          n.SourceCategory,
-		NavigationTarget:        navigationTargetFromJSON(n.NavigationTarget),
+		NavigationTarget:        navigationTarget,
+		Payload: buildNotificationPayload(
+			n.NotificationID.String(),
+			n.RecipientID.String(),
+			n.SourceDomain,
+			n.NotificationType,
+			n.PolicyKey,
+			n.SourceCategory,
+			n.DeliveryClass,
+			actionData,
+			navigationTarget,
+		),
 	}
 }
 
@@ -695,6 +722,10 @@ type NotifyPayload struct {
 	Title            string            `json:"title,omitempty"`
 	Message          string            `json:"message,omitempty"`
 	ActionData       map[string]string `json:"action_data,omitempty"`
+	PolicyKey        string            `json:"policy_key,omitempty"`
+	DeliveryClass    string            `json:"delivery_class,omitempty"`
+	SourceCategory   string            `json:"source_category,omitempty"`
+	NavigationTarget []byte            `json:"navigation_target,omitempty"`
 }
 
 // notifyInstancesWithEphemeralData sends NOTIFY with inline event data for ephemeral notifications.
@@ -729,7 +760,15 @@ func (s *NotificationService) notifyInstancesWithEphemeralData(
 			Title:            req.Title,
 			Message:          req.Message,
 			ActionData:       req.ActionData,
+			PolicyKey:        req.PolicyKey,
+			DeliveryClass:    req.DeliveryClass,
+			SourceCategory:   req.SourceCategory,
 		}
+		navigationTargetJSON, err := navigationTargetToJSON(req.NavigationTarget)
+		if err != nil {
+			return fmt.Errorf("failed to marshal ephemeral navigation target: %w", err)
+		}
+		payload.NavigationTarget = navigationTargetJSON
 
 		payloadJSON, err := json.Marshal(payload)
 		if err != nil {

@@ -45,6 +45,10 @@ func TestChatNotificationStream(t *testing.T) {
 			assert.Equal(t, "stream-debug", event.Notification.ActionData["channelName"])
 			assert.Equal(t, alice.ID.String(), event.Notification.ActionData["senderEmployeeId"])
 			assert.NotEmpty(t, event.Notification.ActionData["senderName"])
+			require.NotNil(t, event.Notification.Payload)
+			require.NotNil(t, event.Notification.Payload.Chat)
+			assert.Equal(t, channelID, event.Notification.Payload.Chat.ChannelId)
+			assert.Equal(t, messageID, event.Notification.Payload.Chat.MessageId)
 		})
 
 		t.Run("regular channel messages are live_only and not persisted to inbox", func(t *testing.T) {
@@ -79,5 +83,9 @@ func TestChatNotificationStream(t *testing.T) {
 		assert.Equal(t, "direct_message", event.Notification.ActionData["channelType"])
 		assert.Equal(t, alice.ID.String(), event.Notification.ActionData["senderEmployeeId"])
 		assert.NotEmpty(t, event.Notification.ActionData["senderName"])
+		require.NotNil(t, event.Notification.Payload)
+		require.NotNil(t, event.Notification.Payload.Chat)
+		assert.Equal(t, dmChannelID, event.Notification.Payload.Chat.ChannelId)
+		assert.Equal(t, "direct_message", event.Notification.Payload.Chat.ChannelType)
 	})
 }

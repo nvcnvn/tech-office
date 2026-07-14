@@ -24,8 +24,8 @@ import { listMessages } from "apis";
 import { isVoiceCallNotificationType } from "../../voice/voiceCallEvents";
 
 /**
- * Chat action data structure
- * Parsed from notification.actionData for chat events
+ * Chat notification payload structure
+ * Parsed from notification.payload.chat for chat events
  */
 interface ChatActionData {
   channelId: string;
@@ -129,9 +129,9 @@ export function useChatSSE(options: UseChatSSEOptions) {
         return;
       }
 
-      // Parse action data
-      const actionData = notification.actionData as ChatActionData | null;
-      if (!actionData?.channelId) {
+      // Parse typed chat payload
+      const chatPayload = notification.payload?.chat as ChatActionData | null;
+      if (!chatPayload?.channelId) {
         console.warn(
           "[useChatSSE] Chat notification missing channelId",
           notification,
@@ -144,7 +144,7 @@ export function useChatSSE(options: UseChatSSEOptions) {
 
       // Handle: message (new message in channel)
       if (notificationType === "message") {
-        const channelId = actionData.channelId;
+        const channelId = chatPayload.channelId;
         console.log("[useChatSSE] New message in channel:", channelId);
 
         // Targeted update: fetch only messages newer than what is already in cache.
@@ -217,21 +217,21 @@ export function useChatSSE(options: UseChatSSEOptions) {
       else if (notificationType === "mention") {
         console.log(
           "[useChatSSE] User mentioned in message:",
-          actionData.messageId,
+          chatPayload.messageId,
         );
 
         // OPTIMIZATION: Only invalidate the specific message where mention occurred
         // The message itself doesn't change, but we might need to refetch to get
         // updated mention metadata. Most mentions are in new messages which will
         // be fetched via the 'message' event anyway.
-        if (actionData.messageId) {
+        if (chatPayload.messageId) {
           queryClient.invalidateQueries({
-            queryKey: ["message", actionData.messageId],
+            queryKey: ["message", chatPayload.messageId],
           });
         }
 
         // REMOVED: Full channel invalidation (too expensive for just a mention highlight)
-        // Old: queryClient.invalidateQueries({ queryKey: ['messages', actionData.channelId] });
+        // Old: queryClient.invalidateQueries({ queryKey: ['messages', chatPayload.channelId] });
 
         // Note: Browser notification handled by workspace layout (T039)
       }
@@ -240,10 +240,10 @@ export function useChatSSE(options: UseChatSSEOptions) {
       else if (notificationType === "reply") {
         console.log(
           "[useChatSSE] Reply to message:",
-          actionData.parentMessageId,
+          chatPayload.parentMessageId,
         );
 
-        const { channelId, parentMessageId } = actionData;
+        const { channelId, parentMessageId } = chatPayload;
 
         // Invalidate replies for parent message (updates open ThreadView)
         if (parentMessageId) {
@@ -270,7 +270,7 @@ export function useChatSSE(options: UseChatSSEOptions) {
         // Notify: action==='view_thread' means this is targeted at the parent message
         // author — i.e., someone replied specifically to the current user's message.
         if (
-          actionData.action === "view_thread" &&
+          chatPayload.action === "view_thread" &&
           onReplyEvent &&
           parentMessageId
         ) {
@@ -285,16 +285,16 @@ export function useChatSSE(options: UseChatSSEOptions) {
       // Handle: typing (user typing indicator)
       else if (notificationType === "typing") {
         // Backend sends:
-        // - actionData.employeeId: the person typing
-        // - actionData.action: "start" or "stop"
-        // - actionData.parentMessageId: optional, for thread typing
+        // - chat payload employeeId: the person typing
+        // - chat payload action: "start" or "stop"
+        // - chat payload parentMessageId: optional, for thread typing
         // - notification.title: formatted name (fallback if not extracted)
-        const employeeId = (actionData as { employeeId?: string }).employeeId;
-        const action = actionData.action;
-        const parentMessageId = actionData.parentMessageId;
+        const employeeId = chatPayload.employeeId;
+        const action = chatPayload.action;
+        const parentMessageId = chatPayload.parentMessageId;
 
         console.log("[useChatSSE] Typing event:", {
-          channelId: actionData.channelId,
+          channelId: chatPayload.channelId,
           parentMessageId,
           employeeId,
           action,
@@ -304,13 +304,13 @@ export function useChatSSE(options: UseChatSSEOptions) {
 
         if (onTypingEvent && employeeId) {
           // Extract user name from notification title (format: "John Doe is typing...")
-          // or from actionData if backend adds it in future
+          // or from the typed chat payload if backend adds it in future
           const userName =
             notification.title?.replace(" is typing...", "") || "Someone";
           const isTyping = action === "start";
 
           onTypingEvent({
-            channelId: actionData.channelId,
+            channelId: chatPayload.channelId,
             parentMessageId: parentMessageId,
             userId: employeeId,
             userName: userName,
@@ -325,15 +325,14 @@ export function useChatSSE(options: UseChatSSEOptions) {
       }
       // Handle: reaction (reaction added/removed - OPTIMIZED)
       else if (notificationType === "reaction") {
-        console.log("[useChatSSE] Reaction event:", actionData);
+        console.log("[useChatSSE] Reaction event:", chatPayload);
 
         // Apply optimistic cache patch for immediate UI feedback
-        const emojiCode =
-          actionData.emojiCode || actionData.reactionEmoji || actionData.emoji;
-        const action = actionData.action; // e.g., 'removed'
+        const emojiCode = chatPayload.emojiCode;
+        const action = chatPayload.action; // e.g., 'removed'
         const isRemove = action === "removed";
-        const messageId = actionData.messageId;
-        const channelId = actionData.channelId;
+        const messageId = chatPayload.messageId;
+        const channelId = chatPayload.channelId;
 
         // Helper: update reactions array for a message-like object (proto-shaped)
         function patchReactionsArray(reactions: ReactionLike[] | undefined) {
@@ -491,7 +490,7 @@ export function useChatSSE(options: UseChatSSEOptions) {
 
       // Handle: voice call live updates and targeted invites
       else if (isVoiceCallNotificationType(notificationType)) {
-        const channelId = actionData.channelId;
+        const channelId = chatPayload.channelId;
         // Only invalidate the message list when a call ends — that is the only
         // event that posts a call-record system message to the channel.
         // Invalidating on started/updated/incoming causes every VoiceCallRecord

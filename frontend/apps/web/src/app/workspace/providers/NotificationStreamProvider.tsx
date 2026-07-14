@@ -263,10 +263,7 @@ function mapNotificationToPopup(
     return null;
   }
 
-  const actionData =
-    notification.actionData && typeof notification.actionData === "object"
-      ? (notification.actionData as Record<string, unknown>)
-      : null;
+  const chatPayload = notification.payload?.chat;
 
   return {
     notificationId: notification.notificationId,
@@ -275,17 +272,11 @@ function mapNotificationToPopup(
     message: notification.message,
     type: notification.notificationType,
     channelId:
-      typeof actionData?.channelId === "string"
-        ? actionData.channelId
-        : undefined,
+      typeof chatPayload?.channelId === "string" ? chatPayload.channelId : undefined,
     messageId:
-      typeof actionData?.messageId === "string"
-        ? actionData.messageId
-        : undefined,
+      typeof chatPayload?.messageId === "string" ? chatPayload.messageId : undefined,
     employeeId:
-      typeof actionData?.employeeId === "string"
-        ? actionData.employeeId
-        : undefined,
+      typeof chatPayload?.employeeId === "string" ? chatPayload.employeeId : undefined,
     timestamp: notification.createdAt,
   };
 }

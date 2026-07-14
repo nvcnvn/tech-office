@@ -152,7 +152,62 @@ function resolveNotificationResponseHref(
   return resolveNotificationPayloadHref({
     sourceDomain,
     notificationType,
-    actionData: data,
+    payload: {
+      chat: {
+        channelId: data.channelId ?? data.channel_id,
+        channelType: data.channelType ?? data.channel_type,
+        channelName: data.channelName ?? data.channel_name,
+        messageId: data.messageId ?? data.message_id,
+        parentMessageId: data.parentMessageId ?? data.parent_message_id,
+        senderEmployeeId: data.senderEmployeeId ?? data.sender_employee_id,
+        senderName: data.senderName ?? data.sender_name,
+        action: data.action,
+        employeeId: data.employeeId ?? data.employee_id,
+        emojiCode: data.emojiCode ?? data.emoji_code ?? data.reactionEmoji,
+      },
+      voiceCall: {
+        channelId: data.channelId ?? data.channel_id,
+        channelType: data.channelType ?? data.channel_type,
+        channelName: data.channelName ?? data.channel_name,
+        callId: data.callId ?? data.call_id,
+        invitationId: data.invitationId ?? data.invitation_id,
+        senderEmployeeId: data.senderEmployeeId ?? data.sender_employee_id,
+        senderName: data.senderName ?? data.sender_name,
+        initiatorEmployeeId:
+          data.initiatorEmployeeId ?? data.initiator_employee_id,
+        state: data.state,
+        participantCount: data.participantCount ?? data.participant_count,
+        alreadyInAnotherCall:
+          data.alreadyInAnotherCall ?? data.already_in_another_call,
+        action: data.action,
+        outcome: data.outcome,
+      },
+      task: {
+        projectId: data.projectId ?? data.project_id,
+        taskId: data.taskId ?? data.task_id,
+        taskTitle: data.taskTitle ?? data.task_title,
+        requirementId:
+          data.requirementId ??
+          data.requirement_id ??
+          data.evidenceRequirementId ??
+          data.pendingRequirementId,
+        focusIntent: data.focusIntent ?? data.focus_intent,
+        entryContext: data.entryContext ?? data.entry_context,
+        deepLink: data.deepLink ?? data.deep_link,
+      },
+      document: {
+        documentId: data.documentId ?? data.document_id,
+        commentId: data.commentId ?? data.comment_id,
+        replyId: data.replyId ?? data.reply_id,
+        slug: data.slug ?? data.documentSlug ?? data.document_slug,
+        deepLink: data.deepLink ?? data.deep_link,
+      },
+      calendar: {
+        eventId: data.eventId ?? data.event_id,
+        eventTitle: data.eventTitle ?? data.event_title,
+        deepLink: data.deepLink ?? data.deep_link,
+      },
+    },
     navigationTarget: {
       domain: data.navigationDomain ?? data.domain,
       resourceType: data.navigationResourceType ?? data.resourceType,

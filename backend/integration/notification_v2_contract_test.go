@@ -294,6 +294,18 @@ func TestNotificationV2Contract(t *testing.T) {
 				"task_commented deepLink should point to the chat channel")
 		})
 
+		t.Run("task_commented payload includes typed task and chat routing metadata", func(t *testing.T) {
+			require.NotNil(t, taskCommented,
+				"task_commented should be emitted for task discussion messages via V2 bridge")
+			require.NotNil(t, taskCommented.Payload)
+			require.NotNil(t, taskCommented.Payload.Task)
+			require.NotNil(t, taskCommented.Payload.Chat)
+			assert.Equal(t, project.ID, taskCommented.Payload.Task.ProjectId)
+			assert.Equal(t, task.Id, taskCommented.Payload.Task.TaskId)
+			assert.Equal(t, *task.ChannelId, taskCommented.Payload.Chat.ChannelId)
+			assert.NotEmpty(t, taskCommented.Payload.Chat.MessageId)
+		})
+
 		t.Run("task_commented notification has non-empty message body", func(t *testing.T) {
 			require.NotNil(t, taskCommented,
 				"task_commented should be emitted for task discussion messages via V2 bridge")

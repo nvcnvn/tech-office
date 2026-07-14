@@ -102,7 +102,12 @@ interface AlertNotification {
   createdAt?: unknown;
   sourceDomainId?: string;
   notificationType?: string;
-  actionData?: Record<string, string>;
+  payload?: {
+    voiceCall?: {
+      senderName?: string;
+      channelName?: string;
+    };
+  };
   navigationTarget?: NotificationNavigationTarget;
 }
 
@@ -184,8 +189,8 @@ function notificationDisplayText(notification: AlertNotification): {
     return { title, message };
   }
 
-  const senderName = trimmed(notification.actionData?.senderName);
-  const channelName = trimmed(notification.actionData?.channelName);
+  const senderName = trimmed(notification.payload?.voiceCall?.senderName);
+  const channelName = trimmed(notification.payload?.voiceCall?.channelName);
 
   return {
     title: senderName ? `${senderName} is calling` : title,

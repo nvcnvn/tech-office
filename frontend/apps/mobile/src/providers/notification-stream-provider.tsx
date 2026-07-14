@@ -136,6 +136,138 @@ function debugNotificationStream(
   console.warn(`[notification-stream] ${message}`);
 }
 
+interface StreamNotificationMetadata {
+  channelId?: string;
+  channelType?: string;
+  channelName?: string;
+  messageId?: string;
+  parentMessageId?: string;
+  senderEmployeeId?: string;
+  senderName?: string;
+  action?: string;
+  employeeId?: string;
+  emojiCode?: string;
+  projectId?: string;
+  taskId?: string;
+  taskTitle?: string;
+  requirementId?: string;
+  focusIntent?: string;
+  entryContext?: string;
+  eventId?: string;
+  eventTitle?: string;
+  documentId?: string;
+  documentSlug?: string;
+  callId?: string;
+  invitationId?: string;
+  initiatorEmployeeId?: string;
+  state?: string;
+  participantCount?: number;
+  alreadyInAnotherCall?: boolean;
+}
+
+function stringFromUnknown(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function numberFromUnknown(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+function booleanFromUnknown(value: unknown): boolean | undefined {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (value === "true") return true;
+    if (value === "false") return false;
+  }
+  return undefined;
+}
+
+function metadataFromStreamNotification(
+  notification: Record<string, unknown>,
+): StreamNotificationMetadata {
+  const payload =
+    notification.payload && typeof notification.payload === "object"
+      ? (notification.payload as Record<string, unknown>)
+      : undefined;
+  const chat =
+    payload?.chat && typeof payload.chat === "object"
+      ? (payload.chat as Record<string, unknown>)
+      : undefined;
+  const voiceCall =
+    payload?.voiceCall && typeof payload.voiceCall === "object"
+      ? (payload.voiceCall as Record<string, unknown>)
+      : undefined;
+  const task =
+    payload?.task && typeof payload.task === "object"
+      ? (payload.task as Record<string, unknown>)
+      : undefined;
+  const document =
+    payload?.document && typeof payload.document === "object"
+      ? (payload.document as Record<string, unknown>)
+      : undefined;
+  const calendar =
+    payload?.calendar && typeof payload.calendar === "object"
+      ? (payload.calendar as Record<string, unknown>)
+      : undefined;
+
+  return {
+    channelId: stringFromUnknown(voiceCall?.channelId) ?? stringFromUnknown(chat?.channelId),
+    channelType: stringFromUnknown(voiceCall?.channelType) ?? stringFromUnknown(chat?.channelType),
+    channelName: stringFromUnknown(voiceCall?.channelName) ?? stringFromUnknown(chat?.channelName),
+    messageId: stringFromUnknown(chat?.messageId),
+    parentMessageId: stringFromUnknown(chat?.parentMessageId),
+    senderEmployeeId:
+      stringFromUnknown(voiceCall?.senderEmployeeId) ??
+      stringFromUnknown(chat?.senderEmployeeId),
+    senderName: stringFromUnknown(voiceCall?.senderName) ?? stringFromUnknown(chat?.senderName),
+    action: stringFromUnknown(voiceCall?.action) ?? stringFromUnknown(chat?.action),
+    employeeId: stringFromUnknown(chat?.employeeId),
+    emojiCode: stringFromUnknown(chat?.emojiCode),
+    projectId: stringFromUnknown(task?.projectId),
+    taskId: stringFromUnknown(task?.taskId),
+    taskTitle: stringFromUnknown(task?.taskTitle),
+    requirementId: stringFromUnknown(task?.requirementId),
+    focusIntent: stringFromUnknown(task?.focusIntent),
+    entryContext: stringFromUnknown(task?.entryContext),
+    eventId: stringFromUnknown(calendar?.eventId),
+    eventTitle: stringFromUnknown(calendar?.eventTitle),
+    documentId: stringFromUnknown(document?.documentId),
+    documentSlug: stringFromUnknown(document?.slug),
+    callId: stringFromUnknown(voiceCall?.callId),
+    invitationId: stringFromUnknown(voiceCall?.invitationId),
+    initiatorEmployeeId: stringFromUnknown(voiceCall?.initiatorEmployeeId),
+    state: stringFromUnknown(voiceCall?.state),
+    participantCount: numberFromUnknown(voiceCall?.participantCount),
+    alreadyInAnotherCall: booleanFromUnknown(voiceCall?.alreadyInAnotherCall),
+  };
+}
+
+function stringRecordFromUnknown(value: unknown): Record<string, string> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const record: Record<string, string> = {};
+  for (const [key, entryValue] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof entryValue === "string") {
+      record[key] = entryValue;
+    } else if (typeof entryValue === "number" || typeof entryValue === "boolean") {
+      record[key] = String(entryValue);
+    }
+  }
+
+  return Object.keys(record).length > 0 ? record : undefined;
+}
+
 function playForegroundNotificationSound() {
   Notifications.scheduleNotificationAsync({
     content: {
@@ -206,24 +338,24 @@ function summarizeActorNames(senderNames: string[]): string {
 function buildNotificationGroupKey(
   sourceDomain: string | undefined,
   notificationType: string | undefined,
-  actionData: Record<string, string> | undefined,
+  metadata: StreamNotificationMetadata,
 ): string {
   if (sourceDomain === "chat") {
-    if (actionData?.channelType === "direct_message" && actionData?.channelId) {
-      return `dm:${actionData.channelId}`;
+    if (metadata.channelType === "direct_message" && metadata.channelId) {
+      return `dm:${metadata.channelId}`;
     }
 
-    if (actionData?.parentMessageId) {
-      return `thread:${actionData.parentMessageId}`;
+    if (metadata.parentMessageId) {
+      return `thread:${metadata.parentMessageId}`;
     }
 
-    if (actionData?.channelId) {
-      return `chat:${actionData.channelId}`;
+    if (metadata.channelId) {
+      return `chat:${metadata.channelId}`;
     }
   }
 
-  if (actionData?.projectId && actionData?.taskId) {
-    return `task:${actionData.projectId}:${actionData.taskId}`;
+  if (metadata.projectId && metadata.taskId) {
+    return `task:${metadata.projectId}:${metadata.taskId}`;
   }
 
   return `${sourceDomain ?? "notification"}:${notificationType ?? "unknown"}`;
@@ -232,17 +364,17 @@ function buildNotificationGroupKey(
 function buildNotificationDedupeKey(
   sourceDomain: string | undefined,
   notificationType: string | undefined,
-  actionData: Record<string, string> | undefined,
+  metadata: StreamNotificationMetadata,
   title: string,
   body: string,
 ): string {
   return [
     sourceDomain ?? "notification",
     notificationType ?? "unknown",
-    actionData?.messageId,
-    actionData?.channelId,
-    actionData?.taskId,
-    actionData?.eventId,
+    metadata.messageId,
+    metadata.channelId,
+    metadata.taskId,
+    metadata.eventId,
     title,
     body,
   ]
@@ -252,7 +384,7 @@ function buildNotificationDedupeKey(
 
 function buildNotificationSpamKey(
   sourceDomain: string | undefined,
-  actionData: Record<string, string> | undefined,
+  metadata: StreamNotificationMetadata,
   body: string,
 ): string | null {
   if (sourceDomain !== "chat") {
@@ -260,24 +392,24 @@ function buildNotificationSpamKey(
   }
 
   const normalizedBody = body.trim().toLowerCase().replace(/\s+/g, " ");
-  if (!actionData?.channelId || !actionData?.senderEmployeeId || !normalizedBody) {
+  if (!metadata.channelId || !metadata.senderEmployeeId || !normalizedBody) {
     return null;
   }
 
-  return [actionData.channelId, actionData.senderEmployeeId, normalizedBody].join(":");
+  return [metadata.channelId, metadata.senderEmployeeId, normalizedBody].join(":");
 }
 
 function buildNotificationKind(
   sourceDomain: string | undefined,
   notificationType: string | undefined,
-  actionData: Record<string, string> | undefined,
+  metadata: StreamNotificationMetadata,
 ): PendingLiveNotification["kind"] {
   if (sourceDomain === "chat") {
-    if (actionData?.channelType === "direct_message") {
+    if (metadata.channelType === "direct_message") {
       return "chat-dm";
     }
 
-    if (notificationType === "reply" || actionData?.parentMessageId) {
+    if (notificationType === "reply" || metadata.parentMessageId) {
       return "chat-thread";
     }
 
@@ -301,23 +433,23 @@ function buildNotificationGroupWindowMs(kind: PendingLiveNotification["kind"]): 
 
 function buildNotificationSummaryLabel(
   sourceDomain: string | undefined,
-  actionData: Record<string, string> | undefined,
+  metadata: StreamNotificationMetadata,
   title: string,
 ): string {
   if (sourceDomain === "chat") {
-    if (actionData?.parentMessageId) {
-      return `thread in ${actionData.channelName ?? title}`;
+    if (metadata.parentMessageId) {
+      return `thread in ${metadata.channelName ?? title}`;
     }
 
-    return actionData?.channelName ?? title;
+    return metadata.channelName ?? title;
   }
 
-  if (actionData?.taskTitle) {
-    return actionData.taskTitle;
+  if (metadata.taskTitle) {
+    return metadata.taskTitle;
   }
 
-  if (actionData?.eventTitle) {
-    return actionData.eventTitle;
+  if (metadata.eventTitle) {
+    return metadata.eventTitle;
   }
 
   return title;
@@ -995,9 +1127,11 @@ export function NotificationStreamProvider({
             | Record<string, unknown>
             | undefined;
           if (notification) {
-            const actionData = notification.actionData as
-              | Record<string, string>
-              | undefined;
+            const metadata = metadataFromStreamNotification(notification);
+            const typedPayload =
+              notification.payload && typeof notification.payload === "object"
+                ? (notification.payload as Record<string, unknown>)
+                : undefined;
             const sourceDomain = notification.sourceDomain as string | undefined;
             const notificationType = notification.notificationType as
               | string
@@ -1005,7 +1139,7 @@ export function NotificationStreamProvider({
             const notificationTitle =
               stripHtml(
                 (notification.title as string | undefined) ??
-                  (actionData?.channelName as string | undefined) ??
+                  metadata.channelName ??
                   "New update",
               ) || "New update";
             const notificationBody = stripHtml(
@@ -1017,19 +1151,19 @@ export function NotificationStreamProvider({
             const targetHref = resolveNotificationPayloadHref({
               sourceDomain,
               notificationType,
-              actionData,
+              payload: typedPayload as never,
               navigationTarget: notification.navigationTarget as
                 | Record<string, string>
                 | undefined,
             });
             const voiceCallTargetHref =
-              notificationType === "voice_call_incoming" && actionData?.channelId
-                ? `/(app)/(chat)/${actionData.channelId}`
+              notificationType === "voice_call_incoming" && metadata.channelId
+                ? `/(app)/(chat)/${metadata.channelId}`
                 : targetHref;
             const taskNavigation = resolveNotificationTaskNavigation({
               sourceDomain,
               notificationType,
-              actionData,
+              payload: typedPayload as never,
               navigationTarget: notification.navigationTarget as
                 | Record<string, string>
                 | undefined,
@@ -1037,39 +1171,39 @@ export function NotificationStreamProvider({
             const groupKey = buildNotificationGroupKey(
               sourceDomain,
               notificationType,
-              actionData,
+              metadata,
             );
             const dedupeKey = buildNotificationDedupeKey(
               sourceDomain,
               notificationType,
-              actionData,
+              metadata,
               notificationTitle,
               notificationBody,
             );
             const summaryLabel = buildNotificationSummaryLabel(
               sourceDomain,
-              actionData,
+              metadata,
               notificationTitle,
             );
             const kind = buildNotificationKind(
               sourceDomain,
               notificationType,
-              actionData,
+              metadata,
             );
-            const senderName = actionData?.senderName ?? null;
+            const senderName = metadata.senderName ?? null;
             const spamKey = buildNotificationSpamKey(
               sourceDomain,
-              actionData,
+              metadata,
               notificationBody,
             );
-            const channelId = actionData?.channelId;
+            const channelId = metadata.channelId;
             const isIncomingVoiceCall = notificationType === "voice_call_incoming";
             const isVoiceCallEnded =
-              notificationType === "voice_call_ended" || actionData?.state === "VOICE_CALL_STATE_ENDED";
+              notificationType === "voice_call_ended" || metadata.state === "VOICE_CALL_STATE_ENDED";
             const isActiveChannel = !!channelId && activeChannelRef.current === channelId;
             const isActiveThread =
-              !!actionData?.parentMessageId &&
-              activeThreadRef.current === actionData.parentMessageId;
+              !!metadata.parentMessageId &&
+              activeThreadRef.current === metadata.parentMessageId;
 
       if (taskNavigation) {
         void invalidateTaskQueries(queryClient, {
@@ -1091,32 +1225,30 @@ export function NotificationStreamProvider({
               liveNotificationSpamRef.current.set(spamKey, Date.now());
             }
 
-            if (sourceDomain === "chat" && actionData?.channelId) {
-              if (isVoiceCallEnded && actionData.callId) {
-                clearIncomingVoiceCall(actionData.callId);
-                if (voiceClient.getSnapshot().activeCallId === actionData.callId) {
+            if (sourceDomain === "chat" && metadata.channelId) {
+              if (isVoiceCallEnded && metadata.callId) {
+                clearIncomingVoiceCall(metadata.callId);
+                if (voiceClient.getSnapshot().activeCallId === metadata.callId) {
                   void voiceClient.disconnect();
                 }
               }
 
               if (isIncomingVoiceCall) {
-                if (appStateRef.current === "active" && actionData.callId) {
+                if (appStateRef.current === "active" && metadata.callId) {
                   setIncomingVoiceCall({
-                    id: actionData.invitationId ?? actionData.callId,
+                    id: metadata.invitationId ?? metadata.callId,
                     title: notificationTitle || "Incoming voice call",
                     body:
                       notificationBody ||
-                      (actionData.alreadyInAnotherCall === "true"
+                      (metadata.alreadyInAnotherCall
                         ? "Switch to answer, or stay in your current call."
                         : "Answer from this conversation."),
-                    channelId: actionData.channelId,
-                    callId: actionData.callId,
-                    invitationId: actionData.invitationId,
-                    alreadyInAnotherCall: actionData.alreadyInAnotherCall === "true",
-                    participantCount: actionData.participantCount
-                      ? Number(actionData.participantCount)
-                      : undefined,
-                    state: actionData.state,
+                    channelId: metadata.channelId,
+                    callId: metadata.callId,
+                    invitationId: metadata.invitationId,
+                    alreadyInAnotherCall: metadata.alreadyInAnotherCall,
+                    participantCount: metadata.participantCount,
+                    state: metadata.state,
                     targetHref: voiceCallTargetHref,
                   });
                 } else if (appStateRef.current !== "active") {
@@ -1125,16 +1257,16 @@ export function NotificationStreamProvider({
                     body: notificationBody,
                     targetHref: voiceCallTargetHref,
                     sourceDomain,
-                    channelId: actionData.channelId,
-                    callId: actionData.callId,
-                    invitationId: actionData.invitationId,
-                    alreadyInAnotherCall: actionData.alreadyInAnotherCall === "true",
+                    channelId: metadata.channelId,
+                    callId: metadata.callId,
+                    invitationId: metadata.invitationId,
+                    alreadyInAnotherCall: metadata.alreadyInAnotherCall ?? false,
                   }).catch(() => {});
                 }
               }
 
               queryClient.invalidateQueries({
-                queryKey: ["messages", actionData.channelId],
+                queryKey: ["messages", metadata.channelId],
               });
               queryClient.invalidateQueries({
                 queryKey: ["recentChannels"],
@@ -1147,8 +1279,8 @@ export function NotificationStreamProvider({
 
               debugNotificationStream("chat notification received", {
                 notificationType,
-                channelId: actionData.channelId,
-                parentMessageId: actionData.parentMessageId,
+                channelId: metadata.channelId,
+                parentMessageId: metadata.parentMessageId,
                 isActiveChannel,
                 isActiveThread,
                 shouldSuppressChatPopup,
@@ -1166,14 +1298,14 @@ export function NotificationStreamProvider({
               });
 
               if (!isActiveChannel && !isActiveThread) {
-                markChannelUnread(actionData.channelId);
+                markChannelUnread(metadata.channelId);
               }
 
               if (isIncomingVoiceCall) {
                 debugNotificationStream("surface incoming voice call prompt", {
-                  channelId: actionData.channelId,
-                  callId: actionData.callId,
-                  invitationId: actionData.invitationId,
+                  channelId: metadata.channelId,
+                  callId: metadata.callId,
+                  invitationId: metadata.invitationId,
                   isActiveChannel,
                   appState: appStateRef.current,
                 });
@@ -1182,8 +1314,8 @@ export function NotificationStreamProvider({
 
               if (shouldSuppressChatPopup) {
                 debugNotificationStream("suppress chat popup", {
-                  channelId: actionData.channelId,
-                  parentMessageId: actionData.parentMessageId,
+                  channelId: metadata.channelId,
+                  parentMessageId: metadata.parentMessageId,
                   notificationType,
                   suppressionReason: isActiveThread
                     ? "active-thread"
@@ -1230,8 +1362,8 @@ export function NotificationStreamProvider({
             }
 
             if (notificationType === "task_update" || notificationType === "task_assigned") {
-              const projectId = actionData?.projectId;
-              const taskId = actionData?.taskId;
+              const projectId = metadata.projectId;
+              const taskId = metadata.taskId;
               void invalidateTaskQueries(queryClient, { projectId, taskId });
             }
           }

@@ -69,26 +69,8 @@ export function streamStateToVoiceState(state?: string): VoiceCallStateName {
   }
 }
 
-function actionDataAsRecord(
-  notification: Notification,
-): Record<string, unknown> | null {
-  return notification.actionData && typeof notification.actionData === "object"
-    ? (notification.actionData as Record<string, unknown>)
-    : null;
-}
-
 function stringValue(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
-}
-
-function booleanValue(value: unknown): boolean | undefined {
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "string") {
-    return value === "true";
-  }
-  return undefined;
 }
 
 export function voiceCallEventFromNotification(
@@ -97,22 +79,22 @@ export function voiceCallEventFromNotification(
   if (!isVoiceCallNotificationType(notification.notificationType)) {
     return null;
   }
-  const actionData = actionDataAsRecord(notification);
-  const channelId = stringValue(actionData?.channelId);
-  if (!channelId) {
+
+  const voiceCall = notification.payload?.voiceCall;
+  if (!voiceCall?.channelId) {
     return null;
   }
-  const participantCount = stringValue(actionData?.participantCount);
+
   return {
-    channelId,
-    callId: stringValue(actionData?.callId),
-    action: stringValue(actionData?.action),
-    state: stringValue(actionData?.state),
-    participantCount: participantCount ? Number(participantCount) : undefined,
+    channelId: voiceCall.channelId,
+    callId: stringValue(voiceCall.callId),
+    action: stringValue(voiceCall.action),
+    state: stringValue(voiceCall.state),
+    participantCount: voiceCall.participantCount || undefined,
     notificationType: notification.notificationType,
-    invitationId: stringValue(actionData?.invitationId),
-    initiatorEmployeeId: stringValue(actionData?.initiatorEmployeeId),
-    alreadyInAnotherCall: booleanValue(actionData?.alreadyInAnotherCall),
+    invitationId: stringValue(voiceCall.invitationId),
+    initiatorEmployeeId: stringValue(voiceCall.initiatorEmployeeId),
+    alreadyInAnotherCall: voiceCall.alreadyInAnotherCall,
   };
 }
 

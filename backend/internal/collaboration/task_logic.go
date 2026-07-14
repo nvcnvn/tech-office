@@ -1273,6 +1273,7 @@ func (l *logicImpl) notifyTaskWatchers(
 		projectID := dbuuid.UUID(task.ProjectID)
 		actionData["projectId"] = projectID.String()
 		actionData["deepLink"] = fmt.Sprintf("tasks/%s/%s", projectID.String(), taskID.String())
+		actionData["taskTitle"] = task.Title
 	}
 
 	_, err = l.NotificationPublisher.PublishNotification(ctx, tx, &rpcv1.PublishNotificationRequest{
