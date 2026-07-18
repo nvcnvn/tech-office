@@ -107,6 +107,14 @@ function stringFromNotificationData(value: unknown): string | undefined {
     : undefined;
 }
 
+function numberFromNotificationData(value: string | undefined): number | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function notificationDataToStringMap(
   data: Record<string, unknown> | undefined,
 ): Record<string, string> {
@@ -176,9 +184,11 @@ function resolveNotificationResponseHref(
         initiatorEmployeeId:
           data.initiatorEmployeeId ?? data.initiator_employee_id,
         state: data.state,
-        participantCount: data.participantCount ?? data.participant_count,
+        participantCount: numberFromNotificationData(
+          data.participantCount ?? data.participant_count,
+        ),
         alreadyInAnotherCall:
-          data.alreadyInAnotherCall ?? data.already_in_another_call,
+          (data.alreadyInAnotherCall ?? data.already_in_another_call) === "true",
         action: data.action,
         outcome: data.outcome,
       },

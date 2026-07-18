@@ -1,6 +1,9 @@
 # Tech Office — Test Runner
 #
 # Usage:
+#   make dev-backend           Quick dev loop: docker compose up -d + air (hot reload)
+#   make dev-web               Quick dev loop: Next.js dev server on :13000
+#   make dev-mobile            Quick dev loop: Metro for a physical iPhone
 #   make test-backend          Run Go integration tests (requires backend + postgres)
 #   make test-frontend         Run Playwright E2E tests  (requires backend + frontend)
 #   make test-mobile           Run all Maestro flows on simulator/emulator
@@ -211,6 +214,43 @@ test-mobile-one: check-backend check-maestro check-maestro-env
 	$(MAESTRO_BIN) test $(MAESTRO_ENV_FLAGS) $(MAESTRO_DIR)/$(F).yaml
 
 # ---------------------------------------------------------------------------
+# Quick development loop
+# ---------------------------------------------------------------------------
+#
+# make dev-infra           Start ALL local services (postgres, livekit, clamav,
+#                          gotenberg, whisper) via docker compose
+# make dev-backend         Hot-reload backend with air (installs infra first)
+# make dev-web             Next.js dev server on :13000
+# make dev-mobile          Metro dev server for a physical iPhone (LAN IP)
+# make dev-mobile-device DEVICE=<name-or-udid>   Build & install on the phone
+
+.PHONY: dev-infra
+dev-infra:
+	cd backend && docker compose up -d
+
+.PHONY: dev-backend
+dev-backend: dev-infra
+	@command -v air >/dev/null 2>&1 \
+		|| (echo "✗ air not found. Install: go install github.com/air-verse/air@latest"; exit 1)
+	@test -f backend/.env \
+		|| (echo "backend/.env not found — creating from .env.example"; cp backend/.env.example backend/.env)
+	cd backend && air
+
+.PHONY: dev-web
+dev-web:
+	cd frontend && pnpm -F web dev
+
+.PHONY: dev-mobile
+dev-mobile:
+	cd frontend/apps/mobile && pnpm start:ios
+
+.PHONY: dev-mobile-device
+dev-mobile-device:
+	@test -n "$(DEVICE)" \
+		|| (echo "Usage: make dev-mobile-device DEVICE=<name-or-udid>"; exit 1)
+	cd frontend/apps/mobile && pnpm ios:device --device "$(DEVICE)"
+
+# ---------------------------------------------------------------------------
 # Infrastructure helpers
 # ---------------------------------------------------------------------------
 
@@ -230,7 +270,7 @@ voice-dev-backend:
 	@eval "$$(bash backend/scripts/dev/voice-env.sh)"; \
 		echo "Starting backend with local voice env..."; \
 		echo "  PUBLIC_LIVEKIT_URL=$$PUBLIC_LIVEKIT_URL"; \
-		cd backend && go run ./cmd
+		cd backend && go run ./cmd server
 
 .PHONY: infra-up
 infra-up:

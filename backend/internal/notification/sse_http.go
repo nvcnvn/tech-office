@@ -222,6 +222,8 @@ type chatNotificationJSON struct {
 	SenderEmployeeID string `json:"senderEmployeeId,omitempty"`
 	SenderName       string `json:"senderName,omitempty"`
 	Action           string `json:"action,omitempty"`
+	EmployeeID       string `json:"employeeId,omitempty"`
+	EmojiCode        string `json:"emojiCode,omitempty"`
 }
 
 type voiceCallNotificationJSON struct {
@@ -247,17 +249,21 @@ type taskNotificationJSON struct {
 	RequirementID string `json:"requirementId,omitempty"`
 	FocusIntent   string `json:"focusIntent,omitempty"`
 	EntryContext  string `json:"entryContext,omitempty"`
+	DeepLink      string `json:"deepLink,omitempty"`
 }
 
 type documentNotificationJSON struct {
 	DocumentID string `json:"documentId,omitempty"`
 	CommentID  string `json:"commentId,omitempty"`
 	ReplyID    string `json:"replyId,omitempty"`
+	Slug       string `json:"slug,omitempty"`
+	DeepLink   string `json:"deepLink,omitempty"`
 }
 
 type calendarNotificationJSON struct {
 	EventID    string `json:"eventId,omitempty"`
 	EventTitle string `json:"eventTitle,omitempty"`
+	DeepLink   string `json:"deepLink,omitempty"`
 }
 
 type navigationTargetJSON struct {
@@ -373,6 +379,8 @@ func chatNotificationJSONFromProto(chat *rpcv1.ChatNotificationPayload) *chatNot
 		SenderEmployeeID: chat.SenderEmployeeId,
 		SenderName:       chat.SenderName,
 		Action:           chat.Action,
+		EmployeeID:       chat.EmployeeId,
+		EmojiCode:        chat.EmojiCode,
 	}
 }
 
@@ -408,6 +416,7 @@ func taskNotificationJSONFromProto(task *rpcv1.TaskNotificationPayload) *taskNot
 		RequirementID: task.RequirementId,
 		FocusIntent:   task.FocusIntent,
 		EntryContext:  task.EntryContext,
+		DeepLink:      task.DeepLink,
 	}
 }
 
@@ -419,6 +428,8 @@ func documentNotificationJSONFromProto(document *rpcv1.DocumentNotificationPaylo
 		DocumentID: document.DocumentId,
 		CommentID:  document.CommentId,
 		ReplyID:    document.ReplyId,
+		Slug:       document.Slug,
+		DeepLink:   document.DeepLink,
 	}
 }
 
@@ -429,6 +440,7 @@ func calendarNotificationJSONFromProto(calendar *rpcv1.CalendarNotificationPaylo
 	return &calendarNotificationJSON{
 		EventID:    calendar.EventId,
 		EventTitle: calendar.EventTitle,
+		DeepLink:   calendar.DeepLink,
 	}
 }
 
