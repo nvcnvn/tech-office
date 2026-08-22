@@ -119,7 +119,10 @@ and every restart converges on one row.
 
 Each sweep:
 
-1. `ListOrganizationIDsWithActiveRitualDefinitions` (via `AdminPool` — cross-org).
+1. `ListOrganizationIDsWithActiveRitualDefinitions` (via `AdminPool` — cross-org). It is
+   deliberately unfiltered by `organization_id`: its whole purpose is to *discover* which
+   organizations to sweep. It returns organization IDs plus each organization's active
+   definition count, so `DefinitionsProcessed` costs no second query per org.
 2. For each org, call `Logic.GenerateRitualInstances(ctx, adminPool, orgID, now)`.
 3. On error, log the organization and **continue** — one org must not abort the run
    (FR-008). Per-definition isolation is inherited from `GenerateRitualInstances`, not
@@ -136,6 +139,29 @@ without standing up a flows worker.
 Generation is **idempotent**: `CheckRitualInstanceExists` plus a partial unique index
 `(organization_id, ritual_definition_id, scheduled_date) WHERE task_kind='ritual_instance'`
 means a double run creates nothing extra.
+
+### The lifecycle performs no scheduling work
+
+This is the other half of 034 and the part most likely to surprise someone reading the
+CRUD handlers in `ritual_connect.go` expecting to find scheduling there:
+
+| Action | What it does about timing |
+|---|---|
+| Create | Calls `Logic.GenerateRitualInstances` **inside the creation transaction**, so the definition and its first window commit atomically and the instances exist on return. This replaces the old `flows.WithRunNow()` that rode along with the per-definition schedule. |
+| Update recurrence | Writes the new rule and stops. The next sweep (≤1 min) reads it. |
+| Archive / unarchive | Flips `is_archived` and stops. Nothing is paused or resumed — the discovery query simply stops or starts selecting the definition. |
+| Change schedule | Regenerates in the logic layer as it always did. `instances_removed` / `instances_detached` / `instances_created` were never computed from a schedule, so they are unaffected. |
+
+The practical consequence for tests: calling a generation helper right after creating a
+definition now returns **0**, because creation already covered the window. Several
+pre-existing suites asserted `> 0` there and were corrected in 034.
+
+Deleted with the per-definition machinery: `RitualScheduleID`, `RecurrenceRuleToSchedule`
+and its `parseTimeOfDay` / `isoDayToCron` helpers, `RecurrenceRuleFromDefinition`,
+`RitualSchedulerWorkflow` and its input/output types, the `RitualScheduler` field threaded
+through `CollaborationServiceConnect`, and the unreachable `every_minute` /
+`every_two_minutes` recurrence types that existed only to make the deleted cron fire fast
+in testing.
 
 ### Lazy resource creation (feature 023)
 

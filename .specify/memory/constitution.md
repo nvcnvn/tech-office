@@ -1,43 +1,62 @@
 <!--
-SYNC IMPACT REPORT - Constitution v5.15.0
-Generated: 2026-04-02
+SYNC IMPACT REPORT - Constitution v5.16.0
+Generated: 2026-08-22
 
-VERSION CHANGE: 5.14.0 → 5.15.0 (MINOR)
+VERSION CHANGE: 5.15.0 → 5.16.0 (MINOR)
 
 MODIFIED PRINCIPLES:
-- Principle I: "Data Governance & Multi-Tenancy with Citus Sharding"
-  Migration Workflow subsection rewritten: replaced golang-migrate dependency
-  with a forward-only `psql` runner (`backend/scripts/migrate.sh`).
+- Principle XII: renamed "Architecture Documentation Maintenance" →
+  "Living Documentation & Architecture Documentation Maintenance" and extended
+  to govern `docs/domain/` alongside `backend/docs/`.
   Key changes:
-  - `.up.sql` files applied directly via `psql` (one file at a time)
-  - `public.schema_migrations` managed by the script itself (no external tool)
-  - Dirty versions replayed automatically on rerun
-  - `./scripts/migrate.sh status` for state inspection
-  - Down migrations explicitly unsupported in standard workflow;
-    rollback uses compensating forward migrations or reviewed manual SQL
-  - `.down.sql` files may exist for documentation but are never auto-executed
+  - `docs/domain/` declared the source of truth for CURRENT system behaviour,
+    one living document per business domain plus README index + drift register
+  - `specs/NNN-*` explicitly demoted to historical INTENT only; deriving current
+    behaviour by replaying spec history is now prohibited
+  - Where a spec and the code disagree, the code wins and the disagreement is
+    recorded in the drift register in `docs/domain/README.md`
+  - Superseded behaviour MUST be DELETED from snapshots, not annotated
+    (present tense documents, not changelogs)
+  - "Consult Before Architectural Changes" broadened to "Consult Before Changes"
+    with a new first bullet requiring the domain snapshot to be read before
+    specify/plan/implement
+  - Definition of Done extended with two new checklist items (snapshot updated +
+    "Status date" refreshed; drift register reconciled)
+  - `backend/docs/` explicitly NOT superseded — both document sets are maintained
+  - Rationale expanded to state why specs cannot serve as the behaviour reference
 
 ADDED SECTIONS:
-- None
+- Principle XII: "Domain Snapshots (`docs/domain/`)" subsection with the full
+  document-to-coverage table (11 domain documents)
+- Reference Documents: "Domain Snapshots — source of truth for current behaviour"
 
 REMOVED SECTIONS:
-- None (golang-migrate references removed from Principle I and
-  Database Standards, replaced with psql runner equivalents)
+- None
 
 TEMPLATE UPDATE STATUS:
-✅ .specify/memory/constitution.md - MINOR version bump (5.14.0 → 5.15.0)
-✅ .specify/templates/plan-template.md - No changes needed (generic "migrations
-   framework" phrasing)
-✅ .specify/templates/tasks-template.md - No changes needed (generic phrasing)
-✅ .specify/templates/spec-template.md - No changes needed (no migration refs)
-✅ .agent/rules/specify-rules.md - Updated: golang-migrate → psql runner
-✅ backend/database/scripts/schema.sql - Updated: header comment
-✅ backend/k8s/base/database/migrations/20260310120000_init.up.sql - Updated:
-   header comment
-✅ backend/scripts/migrate.sh - Rewritten: forward-only psql runner
+✅ .specify/memory/constitution.md - MINOR version bump (5.15.0 → 5.16.0)
+✅ AGENTS.md - Added "# Domain Snapshots - READ BEFORE CHANGING BEHAVIOUR" section
+✅ .specify/workflows/speckit/workflow.yml - `update-snapshot` step repaired
+   (`message:` → `prompt:`, which is the field PromptStep validates on; added
+   explicit `integration:`) and expanded with delete-superseded-behaviour and
+   drift-register requirements
+✅ docs/domain/ - 12 documents authored (11 domains + README index/drift register)
+✅ .specify/extensions/docs/ - New "docs" extension providing speckit.docs.snapshot,
+   registered as a MANDATORY (optional: false) hook on after_implement and
+   after_converge in .specify/extensions.yml. Ordered BEFORE the git auto-commit
+   hook so snapshot edits land in the implementation commit, as principle XII
+   requires. Installed as .claude/skills/speckit-docs-snapshot/SKILL.md.
+   This covers direct /speckit.implement invocations, not only full workflow runs.
+⚠️ GEMINI.md - NOT updated; it is a stale truncated copy of AGENTS.md and already
+   lags on the notification guardrail and presence ping-pong debugging note.
+   Recommended follow-up: replace its body with a pointer to AGENTS.md.
+✅ .specify/templates/plan-template.md - No changes needed (references Principle XII
+   generically)
+✅ .specify/templates/tasks-template.md - No changes needed
+✅ .specify/templates/spec-template.md - No changes needed
 
 FOLLOW-UP TODOS:
-- None
+- GEMINI.md: collapse to a pointer at AGENTS.md so it stops drifting
 
 PLACEHOLDERS: None
 
@@ -45,14 +64,15 @@ VALIDATION SUMMARY:
 ✅ No placeholder tokens found
 ✅ All 13 core principles defined
 ✅ All dates in ISO format (YYYY-MM-DD)
-✅ Version history updated with v5.15.0 entry
+✅ Version history updated with v5.16.0 entry
 ✅ Governance procedures defined
-✅ No remaining golang-migrate references in authoritative docs
+✅ All 11 domain documents referenced in Principle XII exist on disk
+✅ after_implement / after_converge hooks resolve to an installed, invocable skill
 -->
 
 # Tech Office Constitution
 
-**Version**: 5.15.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-04-02
+**Version**: 5.16.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-08-22
 
 ## Purpose & Scope
 
@@ -1318,17 +1338,42 @@ class NotificationClient {
 
 ---
 
-### XII. Architecture Documentation Maintenance (MANDATORY)
+### XII. Living Documentation & Architecture Documentation Maintenance (MANDATORY)
 
-**Rule**: Backend architecture documentation under `backend/docs/` MUST be consulted before making architectural changes and MUST be updated after implementation is complete and all tests pass. Documentation updates are part of the Definition of Done.
+**Rule**: Living domain documentation under `docs/domain/` and backend architecture documentation under `backend/docs/` MUST be consulted before making changes and MUST be updated after implementation is complete and all tests pass. Documentation updates are part of the Definition of Done.
 
-**Architecture Documents**:
+**Domain Snapshots (`docs/domain/`) — the source of truth for current behaviour**:
+
+`docs/domain/` holds one living document per business domain describing how the system behaves **today**, plus `README.md` (index and drift register). It is the authoritative answer to "what does this domain do right now".
+
+`specs/NNN-*` records historical **intent** only. Specs are incremental change proposals written before implementation; reconstructing current state from them requires replaying every spec in order, and some describe designs that were later replaced. Agents and humans MUST read the relevant `docs/domain/*.md` rather than walking the spec history.
+
+Where a spec and the code disagree, **the code wins**, and the disagreement MUST be recorded in the drift register in `docs/domain/README.md`.
+
+| Document | Covers |
+|----------|--------|
+| `docs/domain/platform.md` | Architecture tiers, multi-tenancy, auth interceptor, background jobs, config, testing |
+| `docs/domain/auth-identity.md` | Sign-up, sign-in, SSO, PIN accounts, sessions, invitations, roles and permissions |
+| `docs/domain/organization-people.md` | Organizations, employees, employee import, departments, org chart |
+| `docs/domain/chat.md` | Channels, messages, threads, reactions, typing, sidebar config, chat file uploads |
+| `docs/domain/voice.md` | Voice calls, voice messages, recordings, transcripts, LiveKit integration |
+| `docs/domain/notifications-presence.md` | Notification hub, subscriptions, SSE, push, rescue push, presence ping-pong |
+| `docs/domain/rituals-tasks.md` | Projects, tasks, workflow rules, ritual definitions, evidence, generation sweep |
+| `docs/domain/docs-knowledge.md` | Documents, versions, comments, embeds, collaborative editing |
+| `docs/domain/files.md` | Upload flow, quota, validation, access rules, PDF conversion, content index |
+| `docs/domain/calendar.md` | Events, recurrence, attendees, resources, booking links, delegation, check-in |
+| `docs/domain/workspace-navigation.md` | Federated search, canonical resource links, context rail, theme, web and mobile shells |
+
+**Architecture Documents (`backend/docs/`) — engineering-internal deep references**:
 - `backend/docs/SYSTEM-ARCHITECTURE.md` — Domain-driven design, tier model, dependency graphs (code-level and data-level), server initialization order, cross-domain integration patterns
 - `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md` — Notification service ownership, subscription resolution, event taxonomy, delivery pipeline, cross-domain call graph
 
+These are narrower and deeper than the domain snapshots and are NOT superseded by them. Both sets are maintained: a change to the tier model or the delivery pipeline updates `backend/docs/`, a change to what a domain does updates `docs/domain/`, and a change that does both updates both.
+
 **Requirements**:
 
-**1. Consult Before Architectural Changes (NON-NEGOTIABLE)**:
+**1. Consult Before Changes (NON-NEGOTIABLE)**:
+- Before specifying, planning, or implementing a change to any domain, read that domain's snapshot in `docs/domain/` to establish current behaviour. Do NOT derive current behaviour by reading the numbered specs in sequence.
 - Before adding a new domain, service, or cross-domain dependency, read the relevant architecture document to understand the current tier model and dependency rules
 - Before modifying database schema relationships across domains, consult the Database Schema Dependency Graph in `SYSTEM-ARCHITECTURE.md`
 - Before changing notification publishing, routing, or subscription logic, consult `NOTIFICATION-SYSTEM-ARCHITECTURE.md`
@@ -1341,6 +1386,8 @@ class NotificationClient {
 - Updating documentation before tests pass is FORBIDDEN (risks documenting behavior that does not work)
 
 **3. What MUST Be Updated**:
+- **Any behaviour change** — a changed or added RPC surface, database constraint, background job cadence, or cross-domain call — MUST update the affected `docs/domain/*.md`. Superseded behaviour MUST be DELETED, not annotated: these documents describe the present tense and are not a changelog. Refresh the document's "Status date" line.
+- **Drift discovered**: an inconsistency found and fixed MUST have its row removed from the drift register in `docs/domain/README.md`; an inconsistency found and NOT fixed MUST have a row added.
 - **New domain added**: Update tier model table, dependency graphs (code-level and data-level), domain catalog, and server initialization order in `SYSTEM-ARCHITECTURE.md`
 - **New cross-domain dependency**: Update both code-level and data-level dependency graphs; verify dependency direction compliance
 - **New notification type or event**: Update event taxonomy table, delivery pipeline, and cross-domain call graph in `NOTIFICATION-SYSTEM-ARCHITECTURE.md`
@@ -1355,15 +1402,17 @@ class NotificationClient {
 
 **Definition of Done Extension (NON-NEGOTIABLE)**:
 
-A feature involving architectural changes is complete ONLY when ALL of the following are true:
+A feature involving behaviour or architectural changes is complete ONLY when ALL of the following are true:
 - [ ] All feature code implemented
 - [ ] All integration tests pass (entire suite, zero failures)
+- [ ] Affected `docs/domain/*.md` snapshots updated; superseded behaviour deleted; "Status date" refreshed
+- [ ] Drift register in `docs/domain/README.md` reconciled (rows removed for fixes, added for known-unfixed issues)
 - [ ] Architecture documentation reviewed against implementation
 - [ ] Relevant `backend/docs/` files updated to reflect actual changes
 - [ ] Mermaid diagrams verified against current dependency graph
 - [ ] Documentation committed in the same PR as implementation
 
-**Rationale**: Architecture documentation is the primary reference for understanding system structure, dependency rules, and integration patterns. Stale documentation causes incorrect architectural decisions, dependency violations, and wasted investigation time. Updating after tests pass ensures documentation reflects working, verified behavior — not aspirational designs that may not work. Requiring same-PR commits prevents documentation from drifting behind implementation.
+**Rationale**: Documentation is the primary reference for understanding system behaviour, structure, dependency rules, and integration patterns. Specifications alone cannot serve this role: they are cumulative and written before implementation, so answering "how does this work today" from them costs a full replay of the feature history and still misses work that landed outside the spec workflow. Stale documentation causes incorrect architectural decisions, dependency violations, and wasted investigation time. Updating after tests pass ensures documentation reflects working, verified behavior — not aspirational designs that may not work. Requiring same-PR commits prevents documentation from drifting behind implementation.
 
 ---
 
@@ -1521,6 +1570,7 @@ exercised before release.
 - Plan template includes "Constitution Check" gate (`.specify/templates/plan-template.md`)
 
 ### Version History
+- v5.16.0 (2026-08-22): MINOR — Principle XII renamed to "Living Documentation & Architecture Documentation Maintenance" and extended to cover `docs/domain/`: per-domain living snapshots are declared the source of truth for current system behaviour, `specs/NNN-*` is demoted to historical intent, agents MUST read the snapshot rather than replaying spec history, superseded behaviour MUST be deleted rather than annotated, and the drift register in `docs/domain/README.md` MUST be reconciled; Definition of Done extended with snapshot and drift-register items; Reference Documents section updated
 - v5.15.0 (2026-04-02): MINOR — Replaced golang-migrate workflow with a forward-only `psql` migration runner in `backend/scripts/migrate.sh`; updated migration policy to use timestamped `.up.sql` files, `public.schema_migrations` bookkeeping, status checks via `./scripts/migrate.sh status`, and compensating forward migrations instead of automated down execution
 - v5.14.0 (2026-03-22): MINOR — Added Principle XIII (Mobile Application Design & Testing — Expo + Maestro): defines employee-only feature scope for mobile, UX rules (simplicity, screen-size optimization, layout independence from web), testID attribute requirement (React Native equivalent of data-testid), and Maestro blackbox testing mandate (happy-path flows per domain in `frontend/apps/mobile/.maestro/`, full suite via `make test-mobile`); Principle II Definition of Done extended with mobile Maestro requirement
 - v5.13.0 (2026-03-21): MINOR — Principle II expanded to mandate web E2E tests (Playwright) as NON-NEGOTIABLE alongside backend integration tests; E2E scenarios MUST be derived from spec User Stories using the same scenario-as-contract workflow; added E2E test location, pattern ("Arrange via API, Act via UI, Assert via UI"), helper documentation, and scenario stub examples; Definition of Done updated to require both full backend integration suite AND full E2E suite to pass
@@ -1549,6 +1599,10 @@ exercised before release.
 ---
 
 ## Reference Documents
+
+**Domain Snapshots — source of truth for current behaviour** (see Principle XII):
+- `docs/domain/README.md` - Index, maintenance rule, and drift register
+- `docs/domain/*.md` - One living document per business domain: platform, auth-identity, organization-people, chat, voice, notifications-presence, rituals-tasks, docs-knowledge, files, calendar, workspace-navigation
 
 **Architecture Documentation**:
 - `backend/docs/SYSTEM-ARCHITECTURE.md` - Domain-driven design, tier model, dependency graphs, server init order

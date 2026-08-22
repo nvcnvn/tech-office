@@ -487,14 +487,17 @@ The `CalendarReminderWorkflow` is a `flows.Workflow` that polls the `calendar.ev
 
 Reminder rows are created in `CreateEvent` (one per attendee, `fire_at = start_time - 15 minutes`) and cancelled in `CancelEvent` (`status = 'cancelled'`).
 
-### CalendarPresenceWorkflow
+The workflow is registered in `server.go` via `flows.Register(flowsRegistry, workflow)` **and**
+scheduled with `flows.ScheduleTx` under schedule ID `calendar_reminder_poll`. Registration
+alone only makes a workflow resolvable; the `ScheduleTx` bootstrap is what makes it run. That
+bootstrap was originally missing, so reminders never fired until feature 034 added it.
 
-The `CalendarPresenceWorkflow` is a `flows.Workflow` that runs every minute to manage `in_meeting` presence status:
-
-1. **Start window**: Query events starting in the next 1-minute window, set accepted attendees' presence to `in_meeting`
-2. **End window**: Query events ended in the last 1-minute window, revert attendees' presence to `online` (unless they have another active meeting)
-
-Both workflows are registered in `server.go` via `flows.Register(flowsRegistry, workflow)`.
+There is no server-side calendar presence job. A `CalendarPresenceWorkflow` existed but was
+never scheduled and never worked — it queried events with a zero-UUID organization ID, so it
+always read an empty set, and its "set in_meeting" branch only logged. Since the presence
+ping-pong protocol, `notification.active_connection.presence_status` is written **only** by
+client pongs, so any server-side write would be overwritten on the next pong. The workflow was
+deleted in feature 034 rather than scheduled.
 
 ---
 
@@ -521,5 +524,4 @@ Both workflows are registered in `server.go` via `flows.Register(flowsRegistry, 
 | Doc comments | `internal/docs/comment_logic.go` | `AddComment()`, `notifyDocCommentMentions()` |
 | Doc versions | `internal/docs/version_logic.go` | `CreateVersion()`, `bridgeTaskDescriptionModified()` |
 | Calendar events | `internal/calendar/event_logic.go` | `publishEventNotification()`, `publishChangeNotification()`, `publishCancelNotification()` |
-| Calendar reminders | `internal/calendar/reminder_workflow.go` | `CalendarReminderWorkflow.Run()`, `firePendingReminders()` |
-| Calendar presence | `internal/calendar/presence_workflow.go` | `CalendarPresenceWorkflow.Run()`, `updatePresence()` |
+| Calendar reminders | `internal/calendar/reminder_workflow.go` | `CalendarReminderWorkflow.Run()`, `FirePendingReminders()` |

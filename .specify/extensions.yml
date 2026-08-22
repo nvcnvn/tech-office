@@ -115,12 +115,25 @@ hooks:
     description: Auto-commit after task generation
     condition: null
   after_implement:
+  - extension: docs
+    command: speckit.docs.snapshot
+    enabled: true
+    optional: false
+    description: Update docs/domain/ snapshots to reflect implemented behaviour
+    condition: null
   - extension: git
     command: speckit.git.commit
     enabled: true
     optional: true
     prompt: Commit implementation changes?
     description: Auto-commit after implementation
+    condition: null
+  after_converge:
+  - extension: docs
+    command: speckit.docs.snapshot
+    enabled: true
+    optional: false
+    description: Update docs/domain/ snapshots after convergence fills in unbuilt work
     condition: null
   after_checklist:
   - extension: git

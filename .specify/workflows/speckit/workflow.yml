@@ -64,7 +64,20 @@ steps:
 
   - id: update-snapshot
     type: prompt
-    message: |
-      Based on the changes implemented in {{ inputs.spec }}, update the corresponding 
-      living snapshot in docs/domain/ to reflect the new system state, and ensure any 
+    integration: "{{ inputs.integration }}"
+    prompt: |
+      Based on the changes implemented in {{ inputs.spec }}, update the corresponding
+      living snapshot in docs/domain/ to reflect the new system state, and ensure any
       deprecated behavior is removed.
+
+      docs/domain/ is the source of truth for CURRENT system behaviour; specs/ records
+      historical intent only. Requirements:
+      - Update every domain document the change touches (an RPC surface, a database
+        constraint, a background job cadence, or a cross-domain call each count).
+      - DELETE superseded behaviour rather than annotating it. Do not leave a "previously
+        X, now Y" trail.
+      - Update the drift register in docs/domain/README.md: remove rows this change fixes,
+        add rows for any new inconsistency you found and did not fix.
+      - Update the "Status date" line of each document you edit.
+      - Per Constitution principle XII this runs only AFTER implementation is complete and
+        the integration suite passes, so the snapshot records verified behaviour.

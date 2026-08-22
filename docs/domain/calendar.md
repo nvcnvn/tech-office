@@ -94,8 +94,18 @@ re-run after a crash. `FirePendingReminders` is exported so integration tests ca
 poll without a flows worker.
 
 Like the ritual sweep, registration alone does nothing — `flows.ScheduleTx` in
-`cmd/server.go` is what makes it run. The comment there records that this bootstrap was
-originally missing, which is why reminders never fired.
+`cmd/server.go` under schedule ID `calendar_reminder_poll` is what makes it run. That
+bootstrap was missing from the original implementation, so reminders had never fired in
+production; feature 034 added it.
+
+There is **no** calendar presence job. `CalendarPresenceWorkflow` used to exist, registered
+but never scheduled, and could not have worked if it had been: it queried `ListEventsForOrg`
+with a zero-UUID organization ID, so it always read an empty set, and its "set in_meeting"
+branch only called `slog.Debug`. Since the presence ping-pong protocol,
+`notification.active_connection.presence_status` is written only by client pongs, so a
+server-side write would be clobbered on the next pong anyway. Feature 034 deleted it rather
+than scheduling a job that would run every minute and do nothing. `in_meeting` remains a
+valid presence value — clients report it.
 
 ## Notifications produced
 

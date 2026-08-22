@@ -1,0 +1,32 @@
+schema_version: "1.0"
+
+extension:
+  id: docs
+  name: "Domain Snapshot Maintenance"
+  version: "1.0.0"
+  description: "Keeps docs/domain/ — the source of truth for current system behaviour — in sync with implemented changes (Constitution principle XII)"
+  author: tech-office
+  license: MIT
+
+requires:
+  speckit_version: ">=0.2.0"
+
+provides:
+  commands:
+    - name: speckit.docs.snapshot
+      file: commands/speckit.docs.snapshot.md
+      description: "Update docs/domain/ living snapshots to match implemented behaviour"
+
+hooks:
+  after_implement:
+    command: speckit.docs.snapshot
+    optional: false
+    description: "Update docs/domain/ snapshots to reflect implemented behaviour"
+  after_converge:
+    command: speckit.docs.snapshot
+    optional: false
+    description: "Update docs/domain/ snapshots after convergence fills in unbuilt work"
+
+tags:
+  - "documentation"
+  - "governance"
