@@ -3036,6 +3036,48 @@ func (q *Queries) ListFutureRitualInstancesForClassification(ctx context.Context
 	return items, nil
 }
 
+const listOrganizationIDsWithActiveRitualDefinitions = `-- name: ListOrganizationIDsWithActiveRitualDefinitions :many
+SELECT organization_id, count(*)::int AS definition_count
+FROM collaboration.ritual_definition
+WHERE is_archived = FALSE
+GROUP BY organization_id
+ORDER BY organization_id
+`
+
+type ListOrganizationIDsWithActiveRitualDefinitionsRow struct {
+	OrganizationID  dbuuid.UUID `json:"organization_id"`
+	DefinitionCount int32       `json:"definition_count"`
+}
+
+// System-scope background query for the global ritual sweep. Intentionally NOT filtered by
+// organization_id: its purpose is to discover which organizations to sweep. Returns only
+// organization IDs and a per-organization active-definition count, no tenant row data, and
+// runs on AdminPool. See Constitution Principle I ("Use AdminPool ONLY for system operations
+// (requires documented justification)"). The count exists so the sweep can report
+// definitions processed (FR-014) without a second query per organization.
+// ponytail: cross-shard scan each sweep; cost scales with organization count, not ritual
+// count. If it becomes measurable, narrow to organizations with definitions actually due
+// (last_generated_date < target_date + generation_window_days) or cache between sweeps.
+func (q *Queries) ListOrganizationIDsWithActiveRitualDefinitions(ctx context.Context, db DBTX) ([]*ListOrganizationIDsWithActiveRitualDefinitionsRow, error) {
+	rows, err := db.Query(ctx, listOrganizationIDsWithActiveRitualDefinitions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListOrganizationIDsWithActiveRitualDefinitionsRow
+	for rows.Next() {
+		var i ListOrganizationIDsWithActiveRitualDefinitionsRow
+		if err := rows.Scan(&i.OrganizationID, &i.DefinitionCount); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectMembers = `-- name: ListProjectMembers :many
 SELECT id, organization_id, project_id, employee_id, role, notification_preference, joined_at, invited_by_employee_id, updated_at FROM collaboration.project_membership
 WHERE organization_id = $1 AND project_id = $2

@@ -3437,6 +3437,29 @@ func (w *testWorld) generateRitualInstancesAt(actor testUser, now time.Time) int
 	return count
 }
 
+// runRitualGenerationSweep drives one cycle of the global ritual generation sweep
+// in-process, the same way generateRitualInstancesAt drives single-org generation.
+// The sweep is platform-wide, so it also generates for organizations other tests own —
+// generation is idempotent per definition and date, so that is harmless. Scope
+// assertions to the caller's own organizations.
+func (w *testWorld) runRitualGenerationSweep() *collaboration.RitualGenerationOutput {
+	w.t.Helper()
+	return w.runRitualGenerationSweepAt(time.Now())
+}
+
+// runRitualGenerationSweepAt drives one sweep cycle with a custom "now".
+func (w *testWorld) runRitualGenerationSweepAt(now time.Time) *collaboration.RitualGenerationOutput {
+	w.t.Helper()
+	sweep := &collaboration.RitualGenerationWorkflow{
+		Logic:     collaboration.NewLogic(globalQ, nil, nil, nil),
+		Queries:   globalQ,
+		AdminPool: globalDB,
+	}
+	out, err := sweep.Sweep(context.Background(), now)
+	require.NoError(w.t, err)
+	return out
+}
+
 type rpcNotificationPublisher struct {
 	orgID dbuuid.UUID
 }

@@ -2,170 +2,86 @@ package collaboration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/nvcnvn/flows"
 
 	"github.com/nvcnvn/tech-office/backend/database"
-	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
 )
 
-// RitualSchedulerInput is the per-definition input for the ritual scheduler workflow.
-type RitualSchedulerInput struct {
-	OrgID        dbuuid.UUID `json:"org_id"`
-	DefinitionID dbuuid.UUID `json:"definition_id"`
+// RitualGenerationInput is the input for the global ritual generation sweep. It is empty
+// by design: the sweep discovers its own work, and carrying an organization or definition
+// identifier is exactly what made the per-definition design redundant.
+type RitualGenerationInput struct{}
+
+// RitualGenerationOutput reports what one sweep covered (FR-014).
+type RitualGenerationOutput struct {
+	OrganizationsProcessed int `json:"organizations_processed"`
+	DefinitionsProcessed   int `json:"definitions_processed"`
+	TotalGenerated         int `json:"total_generated"`
 }
 
-// RitualSchedulerOutput captures how many instances were generated in the run.
-type RitualSchedulerOutput struct {
-	TotalGenerated int `json:"total_generated"`
-}
-
-// RitualSchedulerWorkflow is a flows.Workflow that generates ritual task instances
-// for a single ritual definition. Each definition gets its own flows schedule.
-type RitualSchedulerWorkflow struct {
+// RitualGenerationWorkflow is the single platform-wide ritual generation job. It runs on a
+// fixed one-minute cadence and generates due ritual instances for every organization that
+// holds at least one unarchived ritual definition.
+//
+// It deliberately wraps Logic.GenerateRitualInstances rather than reimplementing it: the
+// dates a definition produces are a pure function of its stored recurrence rule, timezone,
+// last_generated_date and generation_window_days, never of when a timer fired. Reusing the
+// generation function unmodified is what makes the sweep's output identical to the
+// per-definition scheduler's by construction.
+type RitualGenerationWorkflow struct {
 	Logic     Logic
+	Queries   *database.Queries
 	AdminPool database.AdminDatabaseConnector
 }
 
-func (w *RitualSchedulerWorkflow) Name() string { return "ritual_scheduler" }
+func (w *RitualGenerationWorkflow) Name() string { return "ritual_generation_sweep" }
 
-func (w *RitualSchedulerWorkflow) Run(ctx context.Context, wf *flows.Context, in *RitualSchedulerInput) (*RitualSchedulerOutput, error) {
-	type generateOutput struct {
-		TotalGenerated int `json:"total_generated"`
-	}
-
-	out, err := flows.Execute(ctx, wf, "generate_for_definition/v1",
-		func(ctx context.Context, input *RitualSchedulerInput) (*generateOutput, error) {
-			slog.InfoContext(ctx, "ritual scheduler: running for definition",
-				"orgID", input.OrgID,
-				"definitionID", input.DefinitionID,
-			)
-
-			now := time.Now()
-			n, err := w.Logic.GenerateRitualInstances(ctx, w.AdminPool, input.OrgID, now)
-			if err != nil {
-				return nil, fmt.Errorf("ritual scheduler: generation failed for definition %v: %w", input.DefinitionID, err)
-			}
-
-			slog.InfoContext(ctx, "ritual scheduler: generation complete",
-				"orgID", input.OrgID,
-				"definitionID", input.DefinitionID,
-				"generated", n,
-			)
-			return &generateOutput{TotalGenerated: n}, nil
+func (w *RitualGenerationWorkflow) Run(ctx context.Context, wf *flows.Context, in *RitualGenerationInput) (*RitualGenerationOutput, error) {
+	return flows.Execute(ctx, wf, "sweep_all_organizations/v1",
+		func(ctx context.Context, _ *RitualGenerationInput) (*RitualGenerationOutput, error) {
+			return w.Sweep(ctx, time.Now())
 		},
 		in,
 		flows.RetryPolicy{MaxRetries: 2},
 	)
+}
+
+// Sweep runs one generation cycle across every organization with active ritual definitions.
+// Exported so integration tests can drive a cycle without standing up a flows worker.
+func (w *RitualGenerationWorkflow) Sweep(ctx context.Context, now time.Time) (*RitualGenerationOutput, error) {
+	orgs, err := w.Queries.ListOrganizationIDsWithActiveRitualDefinitions(ctx, w.AdminPool)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("ritual generation sweep: failed to list organizations: %w", err)
 	}
 
-	return &RitualSchedulerOutput{TotalGenerated: out.TotalGenerated}, nil
-}
+	out := &RitualGenerationOutput{}
+	for _, org := range orgs {
+		out.OrganizationsProcessed++
+		out.DefinitionsProcessed += int(org.DefinitionCount)
 
-// RitualScheduleID returns the flows schedule ID for a ritual definition.
-func RitualScheduleID(defID dbuuid.UUID) string {
-	return "ritual_def_" + defID.String()
-}
-
-// RecurrenceRuleToSchedule converts a recurrence rule JSON blob to a flows.Schedule.
-func RecurrenceRuleToSchedule(ruleJSON []byte) (flows.Schedule, error) {
-	rule, err := parseRecurrenceRule(ruleJSON)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse recurrence rule: %w", err)
-	}
-
-	hour, minute := parseTimeOfDay(rule.TimeOfDay)
-
-	switch rule.Type {
-	case RecurrenceTypeDaily:
-		// Every N days at the specified time. For interval=1, cron is simplest.
-		if rule.Interval <= 1 {
-			expr := fmt.Sprintf("%d %d * * *", minute, hour)
-			return flows.ParseCron(expr)
+		n, genErr := w.Logic.GenerateRitualInstances(ctx, w.AdminPool, org.OrganizationID, now)
+		if genErr != nil {
+			// FR-008: one organization must not abort the run, and the run output must
+			// name the organization responsible. Per-definition isolation (FR-009) is
+			// inherited from GenerateRitualInstances and is not reimplemented here.
+			slog.ErrorContext(ctx, "ritual generation sweep: organization failed",
+				"orgID", org.OrganizationID,
+				"error", genErr,
+			)
+			continue
 		}
-		// For multi-day intervals, use flows.Every.
-		return flows.Every(time.Duration(rule.Interval) * 24 * time.Hour), nil
-
-	case RecurrenceTypeWeekly:
-		if len(rule.DaysOfWeek) == 0 {
-			return flows.ParseCron(fmt.Sprintf("%d %d * * *", minute, hour))
-		}
-		// Convert ISO weekdays (1=Mon..7=Sun) to cron weekdays (0=Sun..6=Sat).
-		cronDays := make([]string, len(rule.DaysOfWeek))
-		for i, iso := range rule.DaysOfWeek {
-			cronDays[i] = fmt.Sprintf("%d", isoDayToCron(iso))
-		}
-		expr := fmt.Sprintf("%d %d * * %s", minute, hour, strings.Join(cronDays, ","))
-		return flows.ParseCron(expr)
-
-	case RecurrenceTypeMonthly:
-		dom := rule.DayOfMonth
-		if dom <= 0 {
-			dom = 1
-		}
-		if dom > 28 {
-			dom = 28 // safe cap for cron
-		}
-		expr := fmt.Sprintf("%d %d %d * *", minute, hour, dom)
-		return flows.ParseCron(expr)
-
-	case RecurrenceTypeCustomInterval:
-		days := rule.Interval
-		if days <= 0 {
-			days = 1
-		}
-		return flows.Every(time.Duration(days) * 24 * time.Hour), nil
-
-	case RecurrenceTypeEveryMinute:
-		return flows.Every(1 * time.Minute), nil
-
-	case RecurrenceTypeEveryTwoMinutes:
-		return flows.Every(2 * time.Minute), nil
-
-	default:
-		// Fallback: daily at specified time
-		expr := fmt.Sprintf("%d %d * * *", minute, hour)
-		return flows.ParseCron(expr)
+		out.TotalGenerated += n
 	}
-}
 
-// parseTimeOfDay extracts hour and minute from a "HH:MM" string.
-// Returns (0, 0) if the string is empty or invalid.
-func parseTimeOfDay(tod string) (hour, minute int) {
-	if tod == "" {
-		return 0, 0
-	}
-	parts := strings.SplitN(tod, ":", 2)
-	if len(parts) != 2 {
-		return 0, 0
-	}
-	var h, m int
-	if _, err := fmt.Sscanf(parts[0], "%d", &h); err != nil {
-		return 0, 0
-	}
-	if _, err := fmt.Sscanf(parts[1], "%d", &m); err != nil {
-		return 0, 0
-	}
-	return h, m
-}
+	slog.InfoContext(ctx, "ritual generation sweep complete",
+		"organizations_processed", out.OrganizationsProcessed,
+		"definitions_processed", out.DefinitionsProcessed,
+		"total_generated", out.TotalGenerated,
+	)
 
-// isoDayToCron converts ISO weekday (1=Mon..7=Sun) to cron weekday (0=Sun..6=Sat).
-func isoDayToCron(iso int) int {
-	if iso == 7 {
-		return 0 // Sunday
-	}
-	return iso // Mon=1..Sat=6 map directly
-}
-
-// RecurrenceRuleFromDefinition extracts the recurrence rule JSON from a definition
-// for use with RecurrenceRuleToSchedule.
-func RecurrenceRuleFromDefinition(recurrenceRule json.RawMessage) []byte {
-	return []byte(recurrenceRule)
+	return out, nil
 }

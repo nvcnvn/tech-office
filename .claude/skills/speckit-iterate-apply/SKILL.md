@@ -1,11 +1,16 @@
 ---
 name: speckit-iterate-apply
-description: Apply a pending iteration to spec documents — update all artifacts that speckit.implement relies on, then hand off to implementation.
+description: Apply a pending iteration to spec documents — update all artifacts that
+  speckit.implement relies on, then hand off to implementation.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: iterate:commands/apply.md
+  source: extension:iterate
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Iterate Apply Skill
 
 ## User Input
 

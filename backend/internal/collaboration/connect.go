@@ -47,9 +47,6 @@ type CollaborationServiceConnect struct {
 	// Flows client for async workflow orchestration
 	FlowsClient flows.Client
 
-	// Ritual scheduler workflow for per-definition cron scheduling
-	RitualScheduler *RitualSchedulerWorkflow
-
 	// Post-processing workflow for PDF conversion and content indexing
 	PostProcess flows.Workflow[files.FilePostProcessingWorkflowInput, files.FilePostProcessingWorkflowOutput]
 }
@@ -62,7 +59,6 @@ func NewCollaborationServiceConnect(
 	queries *database.Queries,
 	flowsClient flows.Client,
 	postProcess flows.Workflow[files.FilePostProcessingWorkflowInput, files.FilePostProcessingWorkflowOutput],
-	ritualScheduler *RitualSchedulerWorkflow,
 ) *CollaborationServiceConnect {
 	return &CollaborationServiceConnect{
 		Logic:           logic,
@@ -71,7 +67,6 @@ func NewCollaborationServiceConnect(
 		Queries:         queries,
 		FlowsClient:     flowsClient,
 		PostProcess:     postProcess,
-		RitualScheduler: ritualScheduler,
 	}
 }
 

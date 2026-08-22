@@ -2,13 +2,12 @@ package collaboration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nvcnvn/flows"
 	"github.com/nvcnvn/tech-office/backend/database"
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
 	"github.com/nvcnvn/tech-office/backend/database/txn"
@@ -83,19 +82,11 @@ func (s *CollaborationServiceConnect) CreateRitualDefinition(
 			return txErr
 		}
 
-		// Create a per-definition flows schedule for recurring generation
-		defID := dbuuid.MustParse(def.Id)
-		scheduleID := RitualScheduleID(defID)
-		recurrenceJSON := recurrenceRuleToJSON(req.Msg.RecurrenceRule)
-		schedule, schedErr := RecurrenceRuleToSchedule(recurrenceJSON)
-		if schedErr != nil {
-			slog.WarnContext(ctx, "failed to compute schedule from recurrence rule, skipping schedule creation",
-				"error", schedErr, "defID", def.Id)
-			return nil
-		}
-		input := &RitualSchedulerInput{OrgID: organizationID, DefinitionID: defID}
-		if schedErr = flows.ScheduleTx(ctx, s.FlowsClient, tx, s.RitualScheduler, input, scheduleID, schedule, flows.WithRunNow()); schedErr != nil {
-			return schedErr
+		// Generate the immediately-due instances in the same transaction. This replaces
+		// the flows.WithRunNow() that used to ride along with the per-definition schedule:
+		// the definition and its first instances now commit atomically (FR-011).
+		if _, genErr := s.Logic.GenerateRitualInstances(ctx, tx, organizationID, time.Now()); genErr != nil {
+			return genErr
 		}
 		return nil
 	})
@@ -158,21 +149,8 @@ func (s *CollaborationServiceConnect) UpdateRitualDefinition(
 			return txErr
 		}
 
-		// If recurrence rule was updated, reschedule the flows cron
-		if req.Msg.RecurrenceRule != nil {
-			scheduleID := RitualScheduleID(defID)
-			recurrenceJSON := recurrenceRuleToJSON(req.Msg.RecurrenceRule)
-			schedule, schedErr := RecurrenceRuleToSchedule(recurrenceJSON)
-			if schedErr != nil {
-				slog.WarnContext(ctx, "failed to compute schedule from recurrence rule on update",
-					"error", schedErr, "defID", defID)
-				return nil
-			}
-			input := &RitualSchedulerInput{OrgID: organizationID, DefinitionID: defID}
-			if schedErr = flows.ScheduleTx(ctx, s.FlowsClient, tx, s.RitualScheduler, input, scheduleID, schedule); schedErr != nil {
-				slog.WarnContext(ctx, "failed to update ritual schedule", "error", schedErr, "scheduleID", scheduleID)
-			}
-		}
+		// A changed recurrence rule needs no scheduling work: the next global sweep reads
+		// the stored rule directly.
 		return nil
 	})
 	if err != nil {
@@ -205,17 +183,8 @@ func (s *CollaborationServiceConnect) ArchiveRitualDefinition(
 			return txErr
 		}
 
-		// Pause or resume the per-definition flows schedule
-		scheduleID := RitualScheduleID(defID)
-		if req.Msg.GetArchive() {
-			if pauseErr := flows.PauseScheduleTx(ctx, s.FlowsClient, tx, scheduleID); pauseErr != nil {
-				slog.WarnContext(ctx, "failed to pause ritual schedule", "error", pauseErr, "scheduleID", scheduleID)
-			}
-		} else {
-			if resumeErr := flows.ResumeScheduleTx(ctx, s.FlowsClient, tx, scheduleID); resumeErr != nil {
-				slog.WarnContext(ctx, "failed to resume ritual schedule", "error", resumeErr, "scheduleID", scheduleID)
-			}
-		}
+		// is_archived is the whole mechanism now: the sweep's discovery query selects
+		// unarchived definitions only, so there is no schedule to pause or resume (FR-010).
 		return nil
 	})
 	if err != nil {
@@ -549,21 +518,8 @@ func (s *CollaborationServiceConnect) ChangeRitualDefinitionSchedule(
 			return txErr
 		}
 
-		// Reschedule the flows cron for this definition with the new recurrence rule
-		defID := dbuuid.MustParse(req.Msg.GetRitualDefinitionId())
-		scheduleID := RitualScheduleID(defID)
-		recurrenceJSON := recurrenceRuleToJSON(req.Msg.NewRecurrenceRule)
-		schedule, schedErr := RecurrenceRuleToSchedule(recurrenceJSON)
-		if schedErr != nil {
-			slog.WarnContext(ctx, "ChangeRitualDefinitionSchedule: failed to compute schedule",
-				"error", schedErr, "defID", defID)
-			return nil
-		}
-		input := &RitualSchedulerInput{OrgID: organizationID, DefinitionID: defID}
-		if schedErr = flows.ScheduleTx(ctx, s.FlowsClient, tx, s.RitualScheduler, input, scheduleID, schedule); schedErr != nil {
-			slog.WarnContext(ctx, "ChangeRitualDefinitionSchedule: failed to reschedule",
-				"error", schedErr, "scheduleID", scheduleID)
-		}
+		// Regeneration and the removed/detached/created counts happen in the logic layer
+		// (FR-012); there is no timer left to rewrite.
 		return nil
 	})
 	if err != nil {
@@ -669,14 +625,4 @@ func timestampToDate(ts *timestamppb.Timestamp) pgtype.Date {
 		return pgtype.Date{}
 	}
 	return pgtype.Date{Time: ts.AsTime(), Valid: true}
-}
-
-// recurrenceRuleToJSON marshals a proto RecurrenceRule to JSON bytes
-// suitable for RecurrenceRuleToSchedule.
-func recurrenceRuleToJSON(r *rpcv1.RecurrenceRule) []byte {
-	if r == nil {
-		return []byte("{}")
-	}
-	data, _ := json.Marshal(recurrenceRuleToMap(r))
-	return data
 }

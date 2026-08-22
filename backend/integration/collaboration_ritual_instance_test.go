@@ -21,7 +21,10 @@ func TestRitualInstanceGeneration(t *testing.T) {
 		count := w.generateRitualInstances(owner)
 
 		t.Run("instances are generated for the configured window", func(t *testing.T) {
-			assert.Greater(t, count, 0)
+			// Feature 034: the creation transaction generates the window (FR-011), so this
+			// follow-up run adds nothing. The instances themselves are asserted below.
+			assert.Equal(t, 0, count, "creation already covered this window")
+			assert.NotEmpty(t, w.listTasksWithKind(owner, proj.ID, ptr(rpcv1.TaskKind_TASK_KIND_RITUAL_INSTANCE)))
 		})
 
 		t.Run("instances have task_kind = ritual_instance", func(t *testing.T) {

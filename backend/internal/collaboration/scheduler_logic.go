@@ -370,14 +370,6 @@ func computeDatesInWindow(rule *recurrenceRule, lastGenerated time.Time, windowD
 		for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, rule.Interval) {
 			dates = append(dates, d)
 		}
-
-	case RecurrenceTypeEveryMinute, RecurrenceTypeEveryTwoMinutes:
-		// Test-only: generate a single instance for "now" so the scheduler fires
-		// quickly. The instance is de-duped by scheduled_date (truncated to minute).
-		nowDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, loc)
-		if !nowDate.Before(startDate) && !nowDate.After(endDate) {
-			dates = append(dates, nowDate)
-		}
 	}
 
 	return dates

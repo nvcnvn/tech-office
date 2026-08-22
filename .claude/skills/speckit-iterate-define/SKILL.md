@@ -1,11 +1,17 @@
 ---
 name: speckit-iterate-define
-description: Define an iteration on the current feature — analyze the change request against current spec state and implementation progress, then write a reviewable iteration plan.
+description: Define an iteration on the current feature — analyze the change request
+  against current spec state and implementation progress, then write a reviewable
+  iteration plan.
 compatibility: Requires spec-kit project structure with .specify/ directory
 metadata:
   author: github-spec-kit
-  source: iterate:commands/define.md
+  source: extension:iterate
+user-invocable: true
+disable-model-invocation: false
 ---
+
+# Iterate Define Skill
 
 ## User Input
 

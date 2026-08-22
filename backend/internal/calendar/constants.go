@@ -63,8 +63,6 @@ const (
 	AuditActionTypeInstanceSkipped       = "instance_skipped"
 )
 
-const PresenceStatusInMeeting = "in_meeting"
-
 const (
 	BookingLinkStatusActive  = "active"
 	BookingLinkStatusExpired = "expired"

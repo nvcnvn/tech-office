@@ -35,7 +35,7 @@ func (w *CalendarReminderWorkflow) Name() string { return "CalendarReminderWorkf
 func (w *CalendarReminderWorkflow) Run(ctx context.Context, wf *flows.Context, _ *CalendarReminderInput) (*CalendarReminderOutput, error) {
 	out, err := flows.Execute(ctx, wf, "fire_pending_reminders/v1",
 		func(ctx context.Context, _ *CalendarReminderInput) (*CalendarReminderOutput, error) {
-			return w.firePendingReminders(ctx)
+			return w.FirePendingReminders(ctx)
 		},
 		&CalendarReminderInput{},
 		flows.RetryPolicy{MaxRetries: 2},
@@ -46,7 +46,9 @@ func (w *CalendarReminderWorkflow) Run(ctx context.Context, wf *flows.Context, _
 	return out, nil
 }
 
-func (w *CalendarReminderWorkflow) firePendingReminders(ctx context.Context) (*CalendarReminderOutput, error) {
+// FirePendingReminders publishes every due pending reminder and marks it sent. Exported so
+// integration tests can drive one poll without standing up a flows worker.
+func (w *CalendarReminderWorkflow) FirePendingReminders(ctx context.Context) (*CalendarReminderOutput, error) {
 	now := time.Now()
 	const batchSize int32 = 100
 

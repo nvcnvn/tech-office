@@ -725,6 +725,22 @@ WHERE organization_id = @organization_id
   AND (last_generated_date IS NULL OR last_generated_date < sqlc.arg('target_date')::date + generation_window_days)
 ORDER BY id;
 
+-- name: ListOrganizationIDsWithActiveRitualDefinitions :many
+-- System-scope background query for the global ritual sweep. Intentionally NOT filtered by
+-- organization_id: its purpose is to discover which organizations to sweep. Returns only
+-- organization IDs and a per-organization active-definition count, no tenant row data, and
+-- runs on AdminPool. See Constitution Principle I ("Use AdminPool ONLY for system operations
+-- (requires documented justification)"). The count exists so the sweep can report
+-- definitions processed (FR-014) without a second query per organization.
+-- ponytail: cross-shard scan each sweep; cost scales with organization count, not ritual
+-- count. If it becomes measurable, narrow to organizations with definitions actually due
+-- (last_generated_date < target_date + generation_window_days) or cache between sweeps.
+SELECT organization_id, count(*)::int AS definition_count
+FROM collaboration.ritual_definition
+WHERE is_archived = FALSE
+GROUP BY organization_id
+ORDER BY organization_id;
+
 -- name: UpdateRitualDefinitionLastGenerated :exec
 UPDATE collaboration.ritual_definition
 SET last_generated_date = @last_generated_date, updated_at = @updated_at

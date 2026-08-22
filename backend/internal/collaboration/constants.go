@@ -312,10 +312,6 @@ const (
 	RecurrenceTypeWeekly         = "weekly"
 	RecurrenceTypeMonthly        = "monthly"
 	RecurrenceTypeCustomInterval = "custom_interval"
-
-	// Hidden test-only recurrence types (backend only, not exposed in proto/frontend).
-	RecurrenceTypeEveryMinute     = "every_minute"
-	RecurrenceTypeEveryTwoMinutes = "every_two_minutes"
 )
 
 // Ritual notification type constants.

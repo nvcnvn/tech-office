@@ -17,6 +17,7 @@ import (
 
 	"github.com/nvcnvn/flows"
 	"github.com/nvcnvn/tech-office/backend/database"
+	"github.com/nvcnvn/tech-office/backend/database/txn"
 	"github.com/nvcnvn/tech-office/backend/internal/calendar"
 	"github.com/nvcnvn/tech-office/backend/internal/chat"
 	"github.com/nvcnvn/tech-office/backend/internal/collaboration"
@@ -413,14 +414,25 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	slog.InfoContext(ctx, "initializing collaboration service")
 	collaborationLogic := collaboration.NewLogic(queries, chatLogic, docsLogic, notificationService)
 
-	// Feature 022: Register ritual scheduler workflow with flows (per-definition scheduling).
-	// Individual schedules are created/paused/resumed via ScheduleTx in CRUD handlers.
-	ritualScheduler := &collaboration.RitualSchedulerWorkflow{
+	// Feature 034: one platform-wide ritual generation sweep replaces per-definition
+	// schedules. Registration alone does NOT schedule anything — the ScheduleTx bootstrap
+	// below is what makes the job run. ScheduleTx upserts by schedule ID, so every instance
+	// and every restart converges on exactly one row.
+	ritualGenerationWorkflow := &collaboration.RitualGenerationWorkflow{
 		Logic:     collaborationLogic,
+		Queries:   queries,
 		AdminPool: adminPool,
 	}
-	flows.Register(flowsRegistry, ritualScheduler)
-	slog.InfoContext(ctx, "ritual scheduler workflow registered (per-definition scheduling)")
+	flows.Register(flowsRegistry, ritualGenerationWorkflow)
+	if err := txn.WithTxn(ctx, adminPool, func(ctx context.Context, tx database.DBTX) error {
+		return flows.ScheduleTx(ctx, flowsClient, tx, ritualGenerationWorkflow,
+			&collaboration.RitualGenerationInput{},
+			ritualGenerationWorkflow.Name(), flows.Every(1*time.Minute))
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to bootstrap ritual generation sweep schedule", "error", err)
+		return err
+	}
+	slog.InfoContext(ctx, "ritual generation sweep scheduled", "cadence", "1m")
 
 	collaborationConnect := collaboration.NewCollaborationServiceConnect(
 		collaborationLogic,
@@ -429,7 +441,6 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 		queries,
 		flowsClient,
 		filePostProcessingWorkflows.FilePostProcessing,
-		ritualScheduler,
 	)
 	mux.Handle(rpcv1connect.NewCollaborationServiceHandler(collaborationConnect, interceptors))
 	slog.InfoContext(ctx, "collaboration service registered")
@@ -471,15 +482,17 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 		AdminPool:             adminPool,
 	}
 	flows.Register(flowsRegistry, calendarReminderWorkflow)
-	slog.InfoContext(ctx, "calendar reminder workflow registered")
-
-	// Register CalendarPresenceWorkflow (signals in_meeting status at event boundaries).
-	calendarPresenceWorkflow := &calendar.CalendarPresenceWorkflow{
-		Queries:   queries,
-		AdminPool: adminPool,
+	// Registration makes a workflow resolvable; only ScheduleTx makes it run. This
+	// bootstrap was missing, which is why calendar reminders never fired.
+	if err := txn.WithTxn(ctx, adminPool, func(ctx context.Context, tx database.DBTX) error {
+		return flows.ScheduleTx(ctx, flowsClient, tx, calendarReminderWorkflow,
+			&calendar.CalendarReminderInput{},
+			calendar.CalendarReminderScheduleID(), calendar.ReminderSchedule())
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to bootstrap calendar reminder poll schedule", "error", err)
+		return err
 	}
-	flows.Register(flowsRegistry, calendarPresenceWorkflow)
-	slog.InfoContext(ctx, "calendar presence workflow registered")
+	slog.InfoContext(ctx, "calendar reminder workflow registered and scheduled", "cadence", "1m")
 
 	listener, err := net.Listen("tcp", "0.0.0.0:"+port)
 	if err != nil {

@@ -61,3 +61,10 @@ steps:
     integration: "{{ inputs.integration }}"
     input:
       args: "{{ inputs.spec }}"
+
+  - id: update-snapshot
+    type: prompt
+    message: |
+      Based on the changes implemented in {{ inputs.spec }}, update the corresponding 
+      living snapshot in docs/domain/ to reflect the new system state, and ensure any 
+      deprecated behavior is removed.

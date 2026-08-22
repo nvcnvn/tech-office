@@ -17,6 +17,32 @@ This repository manages the production backend application and the required in-c
 4. Apply `backend/k8s/overlays/prod`.
 5. Run `backend/scripts/migrate.sh up` against the external production database.
 
+## Background jobs
+
+The backend bootstraps every recurring `flows` schedule at startup. `flows.ScheduleTx` upserts
+by schedule ID, so all instances and every restart converge on exactly one row per job.
+
+| Schedule ID | Workflow | Cadence | What it does |
+| --- | --- | --- | --- |
+| `ritual_generation_sweep` | `RitualGenerationWorkflow` | every 1 minute | Generates due ritual task instances for every organization that has at least one unarchived ritual definition |
+| `calendar_reminder_poll` | `CalendarReminderWorkflow` | every 1 minute | Publishes notifications for `calendar.event_reminder` rows whose `fire_at` has passed, and marks them `sent` |
+
+**`flows.Register` alone does not schedule a workflow.** Registration only makes a workflow
+name resolvable by the worker; nothing runs until a matching `flows.ScheduleTx` writes its
+`flows.schedules` row. Both calendar jobs were registered without that bootstrap and
+consequently never ran in production — event reminders never fired. Any new recurring job
+must add a `ScheduleTx` bootstrap in `backend/cmd/server.go` next to its `Register` call, and
+a row in the table above.
+
+To verify a deployment:
+
+```sql
+SELECT schedule_id, workflow_name, cron_expr, enabled FROM flows.schedules ORDER BY schedule_id;
+```
+
+Expect exactly one row per job listed above, `enabled = true`, unchanged across restarts and
+across instances.
+
 ## Notes
 
 - `backend/k8s/overlays/prod` is the single production overlay in this repo.

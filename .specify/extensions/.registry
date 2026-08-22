@@ -30,7 +30,13 @@
           "speckit.git.commit"
         ]
       },
-      "registered_skills": [],
+      "registered_skills": [
+        "speckit-git-feature",
+        "speckit-git-validate",
+        "speckit-git-remote",
+        "speckit-git-initialize",
+        "speckit-git-commit"
+      ],
       "installed_at": "2026-04-21T09:45:43.514309+00:00"
     },
     "iterate": {
@@ -53,7 +59,10 @@
           "speckit.iterate.apply"
         ]
       },
-      "registered_skills": [],
+      "registered_skills": [
+        "speckit-iterate-define",
+        "speckit-iterate-apply"
+      ],
       "installed_at": "2026-04-21T09:47:49.497965+00:00"
     }
   }

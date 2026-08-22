@@ -387,6 +387,7 @@ graph LR
 - **Tables**: `project`, `project_state`, `task_level`, `task`, `task_assignee`, `custom_field_definition`, `custom_field_value`, `workflow_rule`, `workflow_rule_execution`, `project_membership`, `saved_view`, `task_watcher`
 - **Role**: Projects with configurable workflows, tasks with hierarchy (max 5 levels), custom fields, automation rules, analytics, saved views, membership & roles
 - **Code dependencies**: `chat` (CreateChannel), `docs` (CreateDocument), `notification` (PublishNotification), `files` (FileLogic)
+- **Workflows**: `RitualGenerationWorkflow` (`ritual_generation_sweep`) — one platform-wide job on a fixed 1-minute cadence. It discovers every organization holding at least one unarchived ritual definition and calls `GenerateRitualInstances` once per organization. There is **no** per-ritual-definition schedule: a definition's dates are derived entirely from its stored `recurrence_rule`, `timezone`, `last_generated_date`, and `generation_window_days`, so creating, updating, archiving, unarchiving, or rescheduling a ritual performs zero scheduling operations. Archiving is what stops generation; the discovery query simply stops selecting the definition. A newly created definition is generated inside the creation transaction so its instances exist immediately rather than after the next sweep. A failure on one organization is logged with that organization's ID and the sweep continues; an unparseable recurrence rule skips its own definition only.
 - **Why orchestrator**: Creating a task auto-provisions a chat channel (discussion thread) and a document (description), then publishes notifications for assignments/updates
 
 ### T4 — Aggregation
@@ -396,7 +397,7 @@ graph LR
 - **Tables**: `event`, `attendee`, `recurrence_exception`, `resource`, `resource_acl`, `resource_booking`, `working_hours`, `delegation`, `check_in`, `audit_entry`, `booking_link`, `event_reminder`
 - **Role**: Personal and team calendars, RFC 5545 recurring events with exceptions, meeting room/equipment booking with conflict prevention, scheduling assistant (free/busy + slot suggestion), booking links, delegation (act on behalf), compliance check-in with evidence and audit trail, cross-domain overlays (tasks, rituals, doc deadlines)
 - **Code dependencies**: `notification` (PublishNotification for invite/cancel/change/reminder), `collaboration` (via `CollaborationOverlayReader` for task due dates and ritual instances), `docs` (via `DocsOverlayReader` for document deadlines)
-- **Workflows**: `CalendarReminderWorkflow` (polls pending reminders every minute, publishes notifications), `CalendarPresenceWorkflow` (sets in_meeting presence at event boundaries)
+- **Workflows**: `CalendarReminderWorkflow` (`calendar_reminder_poll`) — polls pending reminders every minute and publishes notifications. Presence at event boundaries is **not** a server-side job: since the presence ping-pong protocol, `presence_status` is written only by client pongs.
 - **Why T4 Aggregation**: Calendar reads from T3 (Collaboration) and T2 (Docs) domains through thin read-only overlay interfaces. It is the first domain to compose data from the orchestrator tier, establishing T4 as the aggregation layer. Dependencies are strictly one-directional — neither Collaboration nor Docs import Calendar.
 
 ---
