@@ -29,6 +29,7 @@ import (
 //
 // These tests guard against regression of that bug and verify the endpoint core contracts.
 func TestGetEmployeeCards(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

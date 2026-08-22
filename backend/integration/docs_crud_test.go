@@ -9,6 +9,7 @@ import (
 
 // TestDocumentCRUD covers create, update, list, delete lifecycle for documents.
 func TestDocumentCRUD(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

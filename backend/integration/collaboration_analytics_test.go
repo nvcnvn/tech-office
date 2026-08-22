@@ -11,6 +11,7 @@ import (
 
 // TestTaskAnalytics covers analytics grouping, CSV export, and edge cases.
 func TestTaskAnalytics(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

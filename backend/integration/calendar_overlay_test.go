@@ -18,6 +18,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestCrossDomainOverlays(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

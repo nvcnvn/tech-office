@@ -9,6 +9,7 @@ import (
 
 // TestFileMetadataBatch covers batch retrieval, deletion metadata, and edge cases.
 func TestFileMetadataBatch(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

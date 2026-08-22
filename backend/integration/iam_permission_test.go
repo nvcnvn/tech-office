@@ -12,6 +12,7 @@ import (
 // TestIAMPermissions covers the permission-based authorization system:
 // default role seeding, role CRUD lifecycle, and permission assignment.
 func TestIAMPermissions(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

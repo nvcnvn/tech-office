@@ -11,6 +11,7 @@ import (
 // TestMultiTenancy verifies cross-org isolation for presence, push tokens,
 // preferences, and visibility settings.
 func TestMultiTenancy(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 
 	t.Run("when two users from different orgs update presence", func(t *testing.T) {

@@ -17,6 +17,7 @@ import (
 )
 
 func TestNotificationV2Contract(t *testing.T) {
+	t.Parallel()
 
 	t.Run("notification type taxonomy validation", func(t *testing.T) {
 		t.Run("all defined notification types are validated by IsValidNotificationType", func(t *testing.T) {

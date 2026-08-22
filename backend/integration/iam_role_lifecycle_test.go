@@ -14,6 +14,7 @@ import (
 // TestIAMPermissionDenied covers Scenario 2, 5, and 7:
 // permission enforcement, OR semantics, and unauthenticated endpoints.
 func TestIAMPermissionDenied(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	emp := w.withEmployee()
@@ -76,6 +77,7 @@ func TestIAMPermissionDenied(t *testing.T) {
 // TestIAMPermissionUnion covers Scenario 3 and 4:
 // union of permissions across roles and immediate effect on removal.
 func TestIAMPermissionUnion(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	emp := w.withEmployee()
@@ -146,6 +148,7 @@ func TestIAMPermissionUnion(t *testing.T) {
 // TestIAMRoleLifecycle covers Scenario 8, 9, and 10:
 // cascade deletion, system role protection, and lockout prevention.
 func TestIAMRoleLifecycle(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	employees := w.withEmployees(3)

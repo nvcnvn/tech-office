@@ -11,6 +11,7 @@ import (
 // removal window are deleted, and connections still inside it are preserved so a
 // recovering client finds its row intact.
 func TestStaleConnectionCleanup(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

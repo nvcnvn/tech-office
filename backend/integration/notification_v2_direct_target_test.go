@@ -15,6 +15,7 @@ import (
 )
 
 func TestNotificationV2DirectTarget(t *testing.T) {
+	t.Parallel()
 
 	t.Run("chat channel mention overrides muted preference", func(t *testing.T) {
 		// PASSES: baseline scenario — muted user still receives @mention.

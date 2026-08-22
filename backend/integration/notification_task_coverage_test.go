@@ -14,6 +14,7 @@ import (
 // the correct policy_key, source_category, and navigation_target fields, and
 // that actor-exclusion and recipient eligibility rules are respected.
 func TestNotificationTaskCoverage(t *testing.T) {
+	t.Parallel()
 
 	t.Run("when a task is assigned to an employee", func(t *testing.T) {
 		w := newTestWorld(t)

@@ -36,6 +36,7 @@ func (w *testWorld) calCreateResource(actor testUser, name, resourceType string,
 // ---------------------------------------------------------------------------
 
 func TestResourceBooking(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

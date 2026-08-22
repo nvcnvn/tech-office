@@ -11,6 +11,7 @@ import (
 // TestConstantSync verifies that DB CHECK constraints, Go constants, and proto enums
 // remain synchronized across all collaboration entity types.
 func TestConstantSync(t *testing.T) {
+	t.Parallel()
 	t.Run("when checking ProjectVisibility", func(t *testing.T) {
 		dbValues := []string{"public", "private"}
 		goValues := []string{

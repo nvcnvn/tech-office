@@ -9,6 +9,7 @@ import (
 
 // TestDocumentVersion covers version history and diff between versions.
 func TestDocumentVersion(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

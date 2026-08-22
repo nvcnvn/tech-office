@@ -9,6 +9,7 @@ import (
 
 // TestPreference covers get defaults, update/toggle, reset, and cross-org isolation.
 func TestPreference(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	emp := w.withEmployee()
 

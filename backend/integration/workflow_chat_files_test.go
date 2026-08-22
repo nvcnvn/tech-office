@@ -14,6 +14,7 @@ import (
 // - Create private channel -> invite members -> verify access cascade to files
 // - Reactions and thread replies across multiple users
 func TestChatChannelWorkflow(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(3)
 	alice, bob, charlie := users[0], users[1], users[2]

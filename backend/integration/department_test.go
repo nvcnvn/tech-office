@@ -9,6 +9,7 @@ import (
 
 // TestDepartment covers create, hierarchy, member assignment, and move operations.
 func TestDepartment(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	emp := w.withEmployee()

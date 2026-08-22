@@ -72,6 +72,28 @@ func init() {
 	globalQ = database.New()
 }
 
+// registeredOrgs records every organisation this run creates so TestMain can delete
+// them afterwards. Tests call rememberOrg from parallel goroutines, hence the mutex.
+var (
+	registeredOrgsMu sync.Mutex
+	registeredOrgs   []dbuuid.UUID
+)
+
+func rememberOrg(orgID dbuuid.UUID) {
+	registeredOrgsMu.Lock()
+	defer registeredOrgsMu.Unlock()
+	registeredOrgs = append(registeredOrgs, orgID)
+}
+
+// takeRegisteredOrgs returns the recorded organisations and clears the registry.
+func takeRegisteredOrgs() []dbuuid.UUID {
+	registeredOrgsMu.Lock()
+	defer registeredOrgsMu.Unlock()
+	orgs := registeredOrgs
+	registeredOrgs = nil
+	return orgs
+}
+
 func findJWTKey() string {
 	dir, err := os.Getwd()
 	if err != nil {
@@ -253,6 +275,7 @@ func (w *testWorld) mustRegisterNewOrg() (orgID dbuuid.UUID, ownerID dbuuid.UUID
 	orgID, err = dbuuid.Parse(resp.Msg.Organization.Id)
 	require.NoError(w.t, err, "parse org ID")
 	w.OrgID = orgID
+	rememberOrg(orgID)
 
 	// Fetch the owner's user ID from the DB (registration response only returns the org).
 	err = globalDB.QueryRow(ctx,

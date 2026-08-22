@@ -10,6 +10,7 @@ import (
 
 // TestRitualInstanceGeneration covers ritual instance auto-generation from definitions.
 func TestRitualInstanceGeneration(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Instance Generation Project", uniqueProjectKey("IGPROJ"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -64,6 +65,7 @@ func TestRitualInstanceGeneration(t *testing.T) {
 
 // TestRitualInstanceLifecycle covers the skip operation on ritual instances.
 func TestRitualInstanceLifecycle(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Lifecycle Project", uniqueProjectKey("LCPROJ"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -86,6 +88,7 @@ func TestRitualInstanceLifecycle(t *testing.T) {
 
 // TestRitualInstanceTodayView covers the filtered view for ritual instances in a project.
 func TestRitualInstanceTodayView(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

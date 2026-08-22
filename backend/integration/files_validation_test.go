@@ -10,6 +10,7 @@ import (
 
 // TestFileValidation covers MIME type verification, mismatch detection, and edge cases.
 func TestFileValidation(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	chID := w.createChannel(owner, "Validation", false)

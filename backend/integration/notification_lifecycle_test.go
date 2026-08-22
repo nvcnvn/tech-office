@@ -10,6 +10,7 @@ import (
 
 // TestNotificationLifecycle covers publish, list, mark-as-read, mark-all, and delete.
 func TestNotificationLifecycle(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	emp := w.withEmployee()

@@ -31,6 +31,7 @@ func hasSubmissionWithStatus(submissions []*rpcv1.EvidenceSubmission, status rpc
 }
 
 func TestCollaborationRitualUXRedesign(t *testing.T) {
+	t.Parallel()
 	t.Run("when a member opens a standard project without an explicit view", func(t *testing.T) {
 		// FR-001, FR-002, Phase 3 / T011
 		w := newTestWorld(t)

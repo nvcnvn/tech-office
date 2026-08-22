@@ -16,6 +16,7 @@ import (
 // TestCalendarNotifications validates US8: reminder scheduling, change notifications,
 // cancel notifications, and the CalendarReminderWorkflow polling cycle.
 func TestCalendarNotifications(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	attendee := w.withEmployee()

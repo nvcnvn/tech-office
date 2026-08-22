@@ -13,6 +13,7 @@ import (
 // TestContextRail captures the behavior-contract scenarios for the workspace
 // context rail before the backend summary contracts are implemented.
 func TestContextRail(t *testing.T) {
+	t.Parallel()
 	t.Run("when requesting the assigned work summary for the authenticated employee", func(t *testing.T) {
 		t.Run("it returns due-today and overdue work across projects", func(t *testing.T) {
 			w := newTestWorld(t)
@@ -221,27 +222,27 @@ func TestContextRail(t *testing.T) {
 			w := newTestWorld(t)
 			owner := w.withOwner()
 			employee := w.withEmployee()
-			
+
 			channelId := w.createChannel(owner, "Test Rail Channel", false)
 			w.joinChannel(employee, channelId)
-			
+
 			summary := w.getChannelContextSummary(employee, channelId)
-			
+
 			assert.Equal(t, int32(2), summary.MemberCount)
 			require.Len(t, summary.Members, 2)
-			
+
 			// Verify members
 			byId := map[string]*rpcv1.ChannelMemberSummary{}
 			for _, m := range summary.Members {
 				byId[m.EmployeeId] = m
 			}
-			
+
 			require.Contains(t, byId, owner.ID.String())
 			require.Contains(t, byId, employee.ID.String())
-			
+
 			assert.Equal(t, "Admin", byId[owner.ID.String()].RoleLabel)
 			assert.Equal(t, "Member", byId[employee.ID.String()].RoleLabel)
-			
+
 			// Empty pinned messages for now since DB doesn't support them yet
 			assert.Empty(t, summary.PinnedMessages)
 			assert.Nil(t, summary.DmCounterpart)
@@ -251,14 +252,14 @@ func TestContextRail(t *testing.T) {
 			w := newTestWorld(t)
 			owner := w.withOwner()
 			employee := w.withEmployee()
-			
+
 			resp := w.createOrGetDirectMessage(owner, employee.ID.String())
-			
+
 			summary := w.getChannelContextSummary(owner, resp.Channel.Id)
-			
+
 			assert.Equal(t, int32(2), summary.MemberCount)
 			require.Len(t, summary.Members, 2)
-			
+
 			// Check DM counterpart
 			require.NotNil(t, summary.DmCounterpart)
 			assert.Equal(t, employee.ID.String(), summary.DmCounterpart.EmployeeId)
@@ -269,10 +270,10 @@ func TestContextRail(t *testing.T) {
 			w := newTestWorld(t)
 			owner := w.withOwner()
 			channelId := w.createChannel(owner, "Org 1 Channel", false)
-			
+
 			otherWorld := newTestWorld(t)
 			otherEmployee := otherWorld.withEmployee()
-			
+
 			err := w.getChannelContextSummaryError(otherEmployee, channelId)
 			require.Error(t, err)
 			assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))

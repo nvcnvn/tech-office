@@ -20,6 +20,7 @@ import (
 // are created on the media plane — without requiring a real browser or WebRTC
 // stack. Run this after changing docker/livekit.yaml or the voice config.
 func TestVoiceLiveKitConnectivity(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	alice := w.withOwner()
 	bob := w.withEmployee()

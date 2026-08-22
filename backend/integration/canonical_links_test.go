@@ -132,6 +132,7 @@ func deleteTask(t *testing.T, w *testWorld, actor testUser, taskID string) {
 }
 
 func TestCanonicalLinks(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	tenantKey := w.orgSubdomain()

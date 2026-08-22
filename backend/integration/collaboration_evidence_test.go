@@ -10,6 +10,7 @@ import (
 
 // TestEvidenceRequirementCRUD covers evidence requirement creation, update, delete, and listing.
 func TestEvidenceRequirementCRUD(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Evidence Requirements Project", uniqueProjectKey("EVREQ"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -103,6 +104,7 @@ func TestEvidenceRequirementCRUD(t *testing.T) {
 
 // TestEvidenceSubmission covers evidence submission, auto-approval, review, and state transitions.
 func TestEvidenceSubmission(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Evidence Submission Project", uniqueProjectKey("EVSUB"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -171,6 +173,7 @@ func TestEvidenceSubmission(t *testing.T) {
 
 // TestGPSEvidenceAutoApprove covers GPS-based automatic evidence approval.
 func TestGPSEvidenceAutoApprove(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "GPS Evidence Project", uniqueProjectKey("GPSPROJ"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -235,5 +238,6 @@ func TestGPSEvidenceAutoApprove(t *testing.T) {
 
 // TestEvidenceFileUpload covers presigned URL requests and upload confirmation.
 func TestEvidenceFileUpload(t *testing.T) {
+	t.Parallel()
 	t.Skip("File upload tests require live MinIO integration — covered by T014/T015 file storage tests")
 }

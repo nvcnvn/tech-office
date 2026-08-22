@@ -389,6 +389,8 @@ INSERT INTO files.file_pdf_conversion (
     organization_id, original_file_id, pdf_storage_key,
     pdf_size_bytes, conversion_status
 ) VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, original_file_id) DO UPDATE
+    SET pdf_storage_key = EXCLUDED.pdf_storage_key
 RETURNING id, organization_id, original_file_id, pdf_storage_key, pdf_size_bytes, conversion_status, conversion_error, conversion_duration_ms, updated_at
 `
 
@@ -400,6 +402,14 @@ type InsertPDFConversionParams struct {
 	ConversionStatus string      `json:"conversion_status"`
 }
 
+// Two callers race to create this row: the TriggerPDFConversion RPC and the post-upload
+// processing workflow, each doing its own check-then-insert on a separate connection. On
+// a true race the loser used to get a unique_file_conversion violation (SQLSTATE 23505),
+// surfacing to the user as an internal error when they asked to convert a file that was
+// still being post-processed. DO UPDATE — not DO NOTHING, which would return no row for
+// :one — makes the insert idempotent so the loser gets the winner's row back instead.
+// conversion_status is deliberately left untouched: overwriting it would knock an
+// already-completed conversion back to pending.
 func (q *Queries) InsertPDFConversion(ctx context.Context, db DBTX, arg *InsertPDFConversionParams) (*FilesFilePdfConversion, error) {
 	row := db.QueryRow(ctx, insertPDFConversion,
 		arg.OrganizationID,

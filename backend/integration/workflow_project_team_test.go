@@ -13,6 +13,7 @@ import (
 // Owner creates project -> adds members with roles -> members collaborate on tasks ->
 // role changes affect permissions -> member removal cascades to access loss.
 func TestProjectTeamWorkflow(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(4)
 	owner, lead, dev1, dev2 := users[0], users[1], users[2], users[3]

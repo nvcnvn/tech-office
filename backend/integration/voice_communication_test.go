@@ -17,6 +17,7 @@ import (
 )
 
 func TestVoiceCommunicationLifecycle(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	members := w.withEmployees(3)
@@ -465,6 +466,7 @@ func findVoiceIncomingNotificationForCall(notifications []*rpcv1.NotificationSum
 }
 
 func TestVoiceMessageUploadLifecycle(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	members := w.withEmployees(2)

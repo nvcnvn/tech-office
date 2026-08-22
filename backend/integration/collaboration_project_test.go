@@ -11,6 +11,7 @@ import (
 
 // TestProject covers project creation, visibility filtering, archive, and key immutability.
 func TestProject(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 
@@ -128,6 +129,7 @@ func TestProject(t *testing.T) {
 
 // TestProjectCollaborationMode covers project collaboration mode selection and its effect on state bootstrapping.
 func TestProjectCollaborationMode(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

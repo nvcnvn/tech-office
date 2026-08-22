@@ -11,6 +11,7 @@ import (
 )
 
 func TestNotificationPreferences(t *testing.T) {
+	t.Parallel()
 
 	t.Run("FT-01 task watcher default preference receives all notifications", func(t *testing.T) {
 		w := newTestWorld(t)

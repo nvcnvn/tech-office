@@ -14,6 +14,7 @@ import (
 // window-based generation, incremental daily generation, weekly/monthly recurrence,
 // and the interaction between the flows scheduler and the generation logic.
 func TestRitualScheduleGeneration(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

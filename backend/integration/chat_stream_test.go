@@ -13,6 +13,7 @@ import (
 // notification SSE stream, with regular channel messages staying live-only and
 // direct messages remaining streamable even though they are persisted.
 func TestChatNotificationStream(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(2)
 	alice, bob := users[0], users[1]

@@ -13,6 +13,7 @@ import (
 )
 
 func TestNotificationDocuments(t *testing.T) {
+	t.Parallel()
 
 	t.Run("FT-05 version save notifies followers", func(t *testing.T) {
 		w := newTestWorld(t)

@@ -16,6 +16,7 @@ import (
 // - Content updates create versions -> version diff is viewable
 // - Access revocation prevents further interaction
 func TestDocumentCollaborationWorkflow(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(3)
 	author, editor, viewer := users[0], users[1], users[2]
@@ -123,6 +124,7 @@ func TestDocumentCollaborationWorkflow(t *testing.T) {
 // TestDocumentWithTaskIntegration tests that tasks automatically get a description
 // document and that both the task and its document work together.
 func TestDocumentWithTaskIntegration(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(2)
 	manager, dev := users[0], users[1]

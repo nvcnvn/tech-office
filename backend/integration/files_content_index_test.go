@@ -9,6 +9,7 @@ import (
 
 // TestContentIndexing covers text file indexing and search-by-content after indexing.
 func TestContentIndexing(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	chID := w.createChannel(owner, "Indexing", false)

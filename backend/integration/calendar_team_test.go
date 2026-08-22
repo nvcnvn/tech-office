@@ -18,6 +18,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestTeamCalendarVisibility(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	member := w.withEmployee()
@@ -87,6 +88,7 @@ func TestTeamCalendarVisibility(t *testing.T) {
 }
 
 func TestDelegation(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	delegate := w.withEmployee()

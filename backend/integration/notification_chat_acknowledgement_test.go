@@ -11,6 +11,7 @@ import (
 )
 
 func TestNotificationChatAcknowledgement(t *testing.T) {
+	t.Parallel()
 	t.Run("when a user opens a channel with a pending chat notification", func(t *testing.T) {
 		w := newTestWorld(t)
 		owner := w.withOwner()

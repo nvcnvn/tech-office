@@ -10,6 +10,7 @@ import (
 
 // TestFileSearch covers filename search, content search, and pagination.
 func TestFileSearch(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	chID := w.createChannel(owner, "Search Test", false)

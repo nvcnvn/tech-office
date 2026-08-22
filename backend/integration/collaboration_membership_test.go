@@ -11,6 +11,7 @@ import (
 
 // TestProjectMembership covers member count tracking, RBAC, role mutations, and orphan prevention.
 func TestProjectMembership(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

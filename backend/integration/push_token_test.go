@@ -9,6 +9,7 @@ import (
 
 // TestPushToken covers registration, duplicate handling, listing, and revocation.
 func TestPushToken(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

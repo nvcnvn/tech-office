@@ -12,6 +12,7 @@ import (
 // TestNotificationRouting verifies that presence status and push token
 // infrastructure support smart notification routing decisions.
 func TestNotificationRouting(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	employee := w.withEmployee()
 

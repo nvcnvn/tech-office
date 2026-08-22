@@ -11,6 +11,7 @@ import (
 
 // TestCustomField covers the 7 custom field types, value CRUD, validation rules, and archiving.
 func TestCustomField(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProject(owner, "CF Test", uniqueProjectKey("CF"))

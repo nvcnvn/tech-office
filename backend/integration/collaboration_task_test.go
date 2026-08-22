@@ -13,6 +13,7 @@ import (
 // TestTask covers task creation integrations, hierarchy validation, state transitions,
 // filtering, assignees, and watch/unwatch.
 func TestTask(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 
@@ -158,6 +159,7 @@ func TestTask(t *testing.T) {
 
 // TestTaskKindFiltering covers filtering tasks by task_kind (standard vs ritual_instance).
 func TestTaskKindFiltering(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

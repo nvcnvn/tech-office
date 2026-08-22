@@ -14,6 +14,7 @@ import (
 // carry the correct policy_key, source_category, and navigation_target fields
 // and respect follower eligibility.
 func TestNotificationDocumentCoverage(t *testing.T) {
+	t.Parallel()
 
 	t.Run("when a document is updated by a non-follower", func(t *testing.T) {
 		w := newTestWorld(t)

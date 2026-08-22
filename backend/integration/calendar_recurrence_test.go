@@ -50,6 +50,7 @@ func (w *testWorld) calCreateRecurringEvent(actor testUser, title string, start,
 // ---------------------------------------------------------------------------
 
 func TestRecurringEvents(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 
@@ -124,7 +125,7 @@ func TestRecurringEvents(t *testing.T) {
 			EventId:           event.Id,
 			InstanceStartTime: timestamppb.New(secondInstance),
 			ChangeScope:       rpcv1.EventEditScope_EVENT_EDIT_SCOPE_THIS_INSTANCE,
-			SkipInstance:       true,
+			SkipInstance:      true,
 		})
 
 		t.Run("that date appears as skipped and future instances remain", func(t *testing.T) {
@@ -226,5 +227,3 @@ func weekdayAbbrev(wd time.Weekday) string {
 		return "MO"
 	}
 }
-
-

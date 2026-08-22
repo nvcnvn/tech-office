@@ -88,19 +88,33 @@ check-tracked-files:
 # ---------------------------------------------------------------------------
 
 .PHONY: test-backend
-# BACKEND_TEST_TIMEOUT bounds the WHOLE package, not one test. The suite takes a few
-# minutes end to end, so 120s could never finish it.
+# BACKEND_TEST_TIMEOUT bounds the WHOLE package, not one test.
 BACKEND_TEST_TIMEOUT ?= 900s
+
+# Top-level integration tests call t.Parallel(); each builds its own organisation, so
+# they share only the server and the database. The work is I/O-bound on the backend, not
+# CPU-bound here, so this is deliberately unrelated to core count. 8 measured fastest —
+# 16 was slower, because the floor is the slowest single test (a presence test that waits
+# out two real 20s ping intervals), not the queue.
+BACKEND_TEST_PARALLEL ?= 8
 
 test-backend: check-postgres check-backend
 	@echo "\n=== Running backend integration tests ==="
-	cd backend && go test -v -count=1 -timeout $(BACKEND_TEST_TIMEOUT) ./integration/...
+	cd backend && go test -v -count=1 -parallel $(BACKEND_TEST_PARALLEL) -timeout $(BACKEND_TEST_TIMEOUT) ./integration/...
 
 # Run a single backend test by name: make test-backend-one T=TestTaskLifecycle
 .PHONY: test-backend-one
 test-backend-one: check-postgres check-backend
 	@echo "\n=== Running backend test: $(T) ==="
-	cd backend && go test -v -count=1 -timeout $(BACKEND_TEST_TIMEOUT) -run "$(T)" ./integration/...
+	cd backend && go test -v -count=1 -parallel $(BACKEND_TEST_PARALLEL) -timeout $(BACKEND_TEST_TIMEOUT) -run "$(T)" ./integration/...
+
+# Purge organisations left behind by past integration runs. TestMain cleans up each run
+# from now on, so this is for clearing a pre-existing backlog.
+.PHONY: test-db-purge
+test-db-purge: check-postgres
+	@echo "\n=== Purging leftover test organisations ==="
+	@psql "postgres://postgres:tech_office_password@localhost:$(PG_PORT)/tech_office_db?sslmode=disable" \
+		-f backend/scripts/sql/purge-test-orgs.sql
 
 # ---------------------------------------------------------------------------
 # Frontend E2E tests (Playwright)
@@ -234,7 +248,7 @@ voice-dev-backend:
 	@eval "$$(bash backend/scripts/dev/voice-env.sh)"; \
 		echo "Starting backend with local voice env..."; \
 		echo "  PUBLIC_LIVEKIT_URL=$$PUBLIC_LIVEKIT_URL"; \
-		cd backend && go run ./cmd
+		cd backend && go run ./cmd server
 
 .PHONY: infra-up
 infra-up:

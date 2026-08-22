@@ -9,6 +9,7 @@ import (
 
 // TestDocumentDiff covers paragraph-level diff tracking including hard breaks.
 func TestDocumentDiff(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

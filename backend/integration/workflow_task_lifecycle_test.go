@@ -15,6 +15,7 @@ import (
 // assigns tasks -> team members interact with task channels and files ->
 // tasks move through states -> manager views analytics.
 func TestTaskLifecycleWorkflow(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(3)
 	manager, dev1, dev2 := users[0], users[1], users[2]
@@ -163,6 +164,7 @@ func TestTaskLifecycleWorkflow(t *testing.T) {
 // TestTaskCrossProjectIsolation verifies that task operations respect project
 // boundaries.
 func TestTaskCrossProjectIsolation(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(2)
 	member, outsider := users[0], users[1]

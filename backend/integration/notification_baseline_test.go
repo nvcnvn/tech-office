@@ -16,6 +16,7 @@ import (
 // BEFORE any code changes. These tests document the existing contract and
 // will catch regressions during refactoring.
 func TestNotificationBaseline(t *testing.T) {
+	t.Parallel()
 	// BL-01: Chat Notification Preference Filtering
 	t.Run("BL-01 chat notification preference filtering", func(t *testing.T) {
 		w := newTestWorld(t)

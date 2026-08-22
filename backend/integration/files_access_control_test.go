@@ -11,6 +11,7 @@ import (
 // TestFileAccessControl covers upload permissions, channel-scoped access, batch filtering,
 // and multi-tenant isolation for files.
 func TestFileAccessControl(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	employee := w.withEmployee()
@@ -80,6 +81,7 @@ func TestFileAccessControl(t *testing.T) {
 
 // TestFileUploadPublicChannel covers upload to public channels.
 func TestFileUploadPublicChannel(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	employee := w.withEmployee()

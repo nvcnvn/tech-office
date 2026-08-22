@@ -11,6 +11,7 @@ import (
 )
 
 func TestNotificationTasks(t *testing.T) {
+	t.Parallel()
 
 	t.Run("FT-02 task assignment emits task_assigned type", func(t *testing.T) {
 		w := newTestWorld(t)

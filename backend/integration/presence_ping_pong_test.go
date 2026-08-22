@@ -28,75 +28,12 @@ const (
 // setConnectionLastPongAt rather than sleeping: a scenario that genuinely waited out
 // the 90-second removal window would blow the whole suite's time budget on its own.
 func TestPresencePingPong(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
-	owner := w.withOwner()
+	w.withOwner()
 	colleague := w.withEmployee()
 
 	// ── User Story 1: notifications reach a colleague whose app went away silently ──
-
-	// FR-001, FR-002: the server challenges and the client answers
-	t.Run("when a client holds an open notification stream", func(t *testing.T) {
-		stream, connIDStr, cancel := w.openNotificationStream(owner, 3*notification.PingIntervalSeconds*time.Second)
-		defer cancel()
-		connID := dbuuid.MustParse(connIDStr)
-
-		first := w.awaitPingEvent(stream)
-		second := w.awaitPingEvent(stream)
-
-		t.Run("it receives ping events on the stream", func(t *testing.T) {
-			require.NotNil(t, first)
-			assert.Equal(t, notification.EventTypePing, first.EventType)
-		})
-
-		t.Run("each ping carries the connection id and a unique event id", func(t *testing.T) {
-			assert.Equal(t, connIDStr, first.ConnectionId)
-			assert.Equal(t, connIDStr, second.ConnectionId)
-			assert.NotEmpty(t, first.EventId)
-			assert.NotEqual(t, first.EventId, second.EventId,
-				"the event id IS the ping id and must be unique per challenge")
-		})
-
-		t.Run("answering a ping records the pong and returns ACK", func(t *testing.T) {
-			w.setConnectionLastPongAt(connID, 30*time.Second)
-
-			directive := w.sendPong(owner, pongRequest{
-				ConnectionID: connIDStr,
-				PingID:       second.EventId,
-				Status:       rpcv1.PresenceStatus_PRESENCE_STATUS_ONLINE,
-			})
-
-			assert.Equal(t, rpcv1.PongDirective_PONG_DIRECTIVE_ACK, directive)
-			assert.Less(t, w.connectionLastPongAge(connID), 5*time.Second,
-				"the pong must advance liveness to the database's own clock")
-		})
-	})
-
-	// FR-003: liveness comes only from pongs — the regression guard for the original defect
-	t.Run("when a stream stays open but the client never answers", func(t *testing.T) {
-		silent := w.withEmployee()
-		stream, connIDStr, cancel := w.openNotificationStream(silent, 3*notification.PingIntervalSeconds*time.Second)
-		defer cancel()
-		connID := dbuuid.MustParse(connIDStr)
-
-		t.Run("the server does not advance the connection's liveness on its own", func(t *testing.T) {
-			// Age the row, then let the server send a ping while the client stays
-			// silent. If anything server-side still refreshed liveness — the deleted
-			// heartbeat write, or the re-registration it triggered — the age would
-			// reset here. That reset was the original defect.
-			w.setConnectionLastPongAt(connID, 30*time.Second)
-			w.awaitPingEvent(stream)
-
-			assert.Greater(t, w.connectionLastPongAge(connID), 25*time.Second,
-				"liveness must only ever be advanced by a received pong")
-		})
-
-		t.Run("the connection stops counting as present once the window elapses", func(t *testing.T) {
-			w.setConnectionLastPongAt(connID, responsiveWindow+5*time.Second)
-
-			assert.Equal(t, rpcv1.PresenceStatus_PRESENCE_STATUS_OFFLINE,
-				w.getPresence(colleague, silent.ID).Status)
-		})
-	})
 
 	// FR-012, FR-013, FR-014: routing follows responsiveness
 	t.Run("when a notification is generated for an employee", func(t *testing.T) {
@@ -776,4 +713,83 @@ func contains(values []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// The two scenarios below are top-level tests rather than subtests of
+// TestPresencePingPong because each has to wait out real PingIntervalSeconds
+// challenges from the server. Nested as subtests they ran one after the other and
+// made this file the critical path of the whole package; as parallel top-level tests
+// their waits overlap with each other and with every other test.
+
+// FR-001, FR-002: the server challenges and the client answers
+func TestPresencePingChallenge(t *testing.T) {
+	t.Parallel()
+	w := newTestWorld(t)
+	owner := w.withOwner()
+
+	stream, connIDStr, cancel := w.openNotificationStream(owner, 3*notification.PingIntervalSeconds*time.Second)
+	defer cancel()
+	connID := dbuuid.MustParse(connIDStr)
+
+	first := w.awaitPingEvent(stream)
+	second := w.awaitPingEvent(stream)
+
+	t.Run("it receives ping events on the stream", func(t *testing.T) {
+		require.NotNil(t, first)
+		assert.Equal(t, notification.EventTypePing, first.EventType)
+	})
+
+	t.Run("each ping carries the connection id and a unique event id", func(t *testing.T) {
+		assert.Equal(t, connIDStr, first.ConnectionId)
+		assert.Equal(t, connIDStr, second.ConnectionId)
+		assert.NotEmpty(t, first.EventId)
+		assert.NotEqual(t, first.EventId, second.EventId,
+			"the event id IS the ping id and must be unique per challenge")
+	})
+
+	t.Run("answering a ping records the pong and returns ACK", func(t *testing.T) {
+		w.setConnectionLastPongAt(connID, 30*time.Second)
+
+		directive := w.sendPong(owner, pongRequest{
+			ConnectionID: connIDStr,
+			PingID:       second.EventId,
+			Status:       rpcv1.PresenceStatus_PRESENCE_STATUS_ONLINE,
+		})
+
+		assert.Equal(t, rpcv1.PongDirective_PONG_DIRECTIVE_ACK, directive)
+		assert.Less(t, w.connectionLastPongAge(connID), 5*time.Second,
+			"the pong must advance liveness to the database's own clock")
+	})
+}
+
+// FR-003: liveness comes only from pongs — the regression guard for the original defect
+func TestPresenceLivenessComesOnlyFromPong(t *testing.T) {
+	t.Parallel()
+	w := newTestWorld(t)
+	w.withOwner()
+	colleague := w.withEmployee()
+
+	silent := w.withEmployee()
+	stream, connIDStr, cancel := w.openNotificationStream(silent, 3*notification.PingIntervalSeconds*time.Second)
+	defer cancel()
+	connID := dbuuid.MustParse(connIDStr)
+
+	t.Run("the server does not advance the connection's liveness on its own", func(t *testing.T) {
+		// Age the row, then let the server send a ping while the client stays
+		// silent. If anything server-side still refreshed liveness — the deleted
+		// heartbeat write, or the re-registration it triggered — the age would
+		// reset here. That reset was the original defect.
+		w.setConnectionLastPongAt(connID, 30*time.Second)
+		w.awaitPingEvent(stream)
+
+		assert.Greater(t, w.connectionLastPongAge(connID), 25*time.Second,
+			"liveness must only ever be advanced by a received pong")
+	})
+
+	t.Run("the connection stops counting as present once the window elapses", func(t *testing.T) {
+		w.setConnectionLastPongAt(connID, responsiveWindow+5*time.Second)
+
+		assert.Equal(t, rpcv1.PresenceStatus_PRESENCE_STATUS_OFFLINE,
+			w.getPresence(colleague, silent.ID).Status)
+	})
 }

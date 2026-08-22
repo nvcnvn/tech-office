@@ -27,6 +27,7 @@ import (
 )
 
 func TestNotificationV2TaskSubscription(t *testing.T) {
+	t.Parallel()
 
 	t.Run("when a user follows a task", func(t *testing.T) {
 		w := newTestWorld(t)

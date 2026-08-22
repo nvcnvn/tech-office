@@ -79,6 +79,7 @@ func (w *testWorld) orgSubdomain() string {
 }
 
 func TestOrgManagedAccounts(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	subdomain := w.orgSubdomain()

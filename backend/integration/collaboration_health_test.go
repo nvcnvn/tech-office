@@ -12,6 +12,7 @@ import (
 
 // TestOperationalHealth covers operational health summary and per-employee metrics.
 func TestOperationalHealth(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Health Test Project", uniqueProjectKey("HLTH"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -57,6 +58,7 @@ func TestOperationalHealth(t *testing.T) {
 
 // TestHealthDashboardCSVExport covers CSV export of ritual compliance data.
 func TestHealthDashboardCSVExport(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "CSV Export Project", uniqueProjectKey("CSVEX"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)

@@ -14,6 +14,7 @@ import (
 )
 
 func TestNotificationV2DocumentSubscription(t *testing.T) {
+	t.Parallel()
 
 	t.Run("when a user follows a document", func(t *testing.T) {
 		w := newTestWorld(t)

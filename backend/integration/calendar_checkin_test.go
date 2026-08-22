@@ -15,6 +15,7 @@ import (
 
 // TestOperationalCheckIn validates US7: compliance check-in, evidence, and audit trail.
 func TestOperationalCheckIn(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	technician := w.withEmployee()

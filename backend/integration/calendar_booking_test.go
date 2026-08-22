@@ -18,6 +18,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestSchedulingAssistant(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	member := w.withEmployee()
@@ -63,7 +64,7 @@ func TestSchedulingAssistant(t *testing.T) {
 			DurationMinutes: 30,
 			SearchFrom:      timestamppb.New(now),
 			SearchUntil:     timestamppb.New(now.Add(7 * 24 * time.Hour)),
-			MaxSuggestions:   5,
+			MaxSuggestions:  5,
 		})
 		suggestReq.Header().Set("Authorization", "Bearer "+owner.Token)
 		suggestResp, err := w.cal.SuggestSlots(context.Background(), suggestReq)
@@ -94,6 +95,7 @@ func TestSchedulingAssistant(t *testing.T) {
 }
 
 func TestBookingLinks(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	member := w.withEmployee()

@@ -14,6 +14,7 @@ import (
 //   - acknowledgement correctly transitions pending to acknowledged
 //   - unread-only filter excludes acknowledged notifications
 func TestNotificationDeliveryConsistency(t *testing.T) {
+	t.Parallel()
 
 	t.Run("when a persistent notification is published", func(t *testing.T) {
 		w := newTestWorld(t)

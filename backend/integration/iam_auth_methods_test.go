@@ -18,6 +18,7 @@ import (
 )
 
 func TestIAMAuthMethods(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	logic := backendiam.NewIAMLogic(database.New(), globalSigner)

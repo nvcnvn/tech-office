@@ -11,6 +11,7 @@ import (
 
 // TestPDFConversion covers triggering office-to-PDF conversion and polling for status.
 func TestPDFConversion(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	chID := w.createChannel(owner, "PDF Conv", false)

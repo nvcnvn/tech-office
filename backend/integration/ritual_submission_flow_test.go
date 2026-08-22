@@ -11,6 +11,7 @@ import (
 )
 
 func TestRitualSubmissionFlow(t *testing.T) {
+	t.Parallel()
 	// FR-001, FR-002, FR-003, FR-004
 	t.Run("when an assigned employee opens an active ritual instance", func(t *testing.T) {
 		w := newTestWorld(t)

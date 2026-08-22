@@ -12,6 +12,7 @@ import (
 )
 
 func TestNotificationStreamRules(t *testing.T) {
+	t.Parallel()
 	t.Run("chat message reaches channel members with all preference", func(t *testing.T) {
 		w := newTestWorld(t)
 		owner := w.withOwner()

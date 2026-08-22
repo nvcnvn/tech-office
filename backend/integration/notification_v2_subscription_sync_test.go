@@ -11,6 +11,7 @@ import (
 )
 
 func TestNotificationV2SubscriptionSync(t *testing.T) {
+	t.Parallel()
 	t.Run("when a task is manually watched and later unwatched", func(t *testing.T) {
 		w := newTestWorld(t)
 		owner := w.withOwner()

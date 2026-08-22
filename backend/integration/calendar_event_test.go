@@ -87,6 +87,7 @@ func (w *testWorld) calRespondToInviteError(actor testUser, eventID string, rsvp
 
 // TestCalendarPersonalEvent covers event CRUD for the organizer's own calendar.
 func TestCalendarPersonalEvent(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 
@@ -182,6 +183,7 @@ func TestCalendarPersonalEvent(t *testing.T) {
 
 // TestCalendarRSVP covers invite/RSVP flow for attendees.
 func TestCalendarRSVP(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	attendee := w.withEmployee()

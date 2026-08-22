@@ -11,6 +11,7 @@ import (
 
 // TestRitualDefinitionCRUD covers ritual definition creation, retrieval, update, archive, and listing.
 func TestRitualDefinitionCRUD(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 
@@ -140,6 +141,7 @@ func TestRitualDefinitionCRUD(t *testing.T) {
 
 // TestRitualDefinitionPermissions covers RBAC on ritual definition operations.
 func TestRitualDefinitionPermissions(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Permissions Ritual Project", uniqueProjectKey("PRIT"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)

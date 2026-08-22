@@ -11,6 +11,7 @@ import (
 
 // TestRitualNotifications covers notification events for ritual task lifecycle.
 func TestRitualNotifications(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	worker := w.withEmployee()
@@ -115,6 +116,7 @@ func TestRitualNotifications(t *testing.T) {
 // of type "ritual_instances_scheduled", never N individual task_assigned or
 // ritual_instance_assigned notifications.
 func TestRitualBulkGenerationNotifications(t *testing.T) {
+	t.Parallel()
 	t.Run("when a daily ritual with a named assignee generates multiple instances", func(t *testing.T) {
 		w := newTestWorld(t)
 		owner := w.withOwner()

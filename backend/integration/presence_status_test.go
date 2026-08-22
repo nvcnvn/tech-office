@@ -11,6 +11,7 @@ import (
 
 // TestPresenceStatus covers status transitions, active channel tracking, and batch queries.
 func TestPresenceStatus(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 

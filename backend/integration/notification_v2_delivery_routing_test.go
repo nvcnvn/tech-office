@@ -18,6 +18,7 @@ import (
 )
 
 func TestNotificationV2DeliveryRouting(t *testing.T) {
+	t.Parallel()
 
 	t.Run("regular chat message is live-only and not persisted", func(t *testing.T) {
 		// PASSES: chat_message notifications should not appear in the notification inbox.

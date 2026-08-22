@@ -15,6 +15,7 @@ import (
 )
 
 func TestVoiceConstantSync(t *testing.T) {
+	t.Parallel()
 	schemaSQL := readProjectFile(t, "backend/database/scripts/schema.sql")
 	voiceAPI := readProjectFile(t, "frontend/packages/apis/src/voice.ts")
 	chatAPI := readProjectFile(t, "frontend/packages/apis/src/chat.ts")

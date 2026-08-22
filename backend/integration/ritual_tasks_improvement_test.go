@@ -19,6 +19,7 @@ import (
 // generation time, wasting resources for instances that may never be opened.
 // After this feature: channel and doc are created on first user interaction (get task detail).
 func TestRitualTasksImprovementLazyResources(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Lazy Resource Project", uniqueProjectKey("LZRC"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -94,6 +95,7 @@ func TestRitualTasksImprovementLazyResources(t *testing.T) {
 // TestRitualTasksImprovementConcurrentAccess verifies that concurrent GetTask calls
 // for the same uninitialized ritual instance do not produce duplicate channels or documents.
 func TestRitualTasksImprovementConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	emp := w.withEmployee()
@@ -130,6 +132,7 @@ func TestRitualTasksImprovementConcurrentAccess(t *testing.T) {
 // TestRitualTasksImprovementScheduleChangeImpact verifies the preview endpoint that
 // returns impact counts before a schedule change is applied.
 func TestRitualTasksImprovementScheduleChangeImpact(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Impact Preview Project", uniqueProjectKey("IMPC"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -180,6 +183,7 @@ func TestRitualTasksImprovementScheduleChangeImpact(t *testing.T) {
 // TestRitualTasksImprovementScheduleChangeUntouched verifies that a schedule change
 // correctly soft-deletes future untouched instances.
 func TestRitualTasksImprovementScheduleChangeUntouched(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Untouched Cleanup Project", uniqueProjectKey("UNTC"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -234,6 +238,7 @@ func TestRitualTasksImprovementScheduleChangeUntouched(t *testing.T) {
 // TestRitualTasksImprovementScheduleChangeTouched verifies that touched future instances
 // are converted to standalone tasks rather than deleted when the schedule changes.
 func TestRitualTasksImprovementScheduleChangeTouched(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Touched Detach Project", uniqueProjectKey("TDET"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -294,6 +299,7 @@ func TestRitualTasksImprovementScheduleChangeTouched(t *testing.T) {
 // TestRitualTasksImprovementScheduleChangeHistorical verifies that historical instances
 // (scheduled_date ≤ today) are never modified during a schedule change.
 func TestRitualTasksImprovementScheduleChangeHistorical(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Historical Protection Project", uniqueProjectKey("HIST"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -331,6 +337,7 @@ func TestRitualTasksImprovementScheduleChangeHistorical(t *testing.T) {
 // TestRitualTasksImprovementScheduleChangeAtomicity verifies that the schedule change
 // operation is atomic — if anything fails, no partial changes are persisted.
 func TestRitualTasksImprovementScheduleChangeAtomicity(t *testing.T) {
+	t.Parallel()
 	// FR-012: The entire schedule change operation executes atomically.
 	// This is a structural test — we rely on the transaction boundary in the Connect layer.
 	// The integration test verifies the observable effect: after a successful change,
@@ -364,6 +371,7 @@ func TestRitualTasksImprovementScheduleChangeAtomicity(t *testing.T) {
 // TestRitualTasksImprovementConfirmationRequired verifies that applying a schedule
 // change without the confirmed=true flag is rejected.
 func TestRitualTasksImprovementConfirmationRequired(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Confirmation Required Project", uniqueProjectKey("CONF"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -392,6 +400,7 @@ func TestRitualTasksImprovementConfirmationRequired(t *testing.T) {
 // TestRitualTasksImprovementAccessControl verifies that only the definition creator
 // or a project admin may change the recurrence schedule.
 func TestRitualTasksImprovementAccessControl(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Access Control Project", uniqueProjectKey("ACTL"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -429,6 +438,7 @@ func TestRitualTasksImprovementAccessControl(t *testing.T) {
 // TestRitualTasksImprovementRapidScheduleChanges verifies that repeated schedule changes
 // apply the "Clean Slate Forward" logic consistently (idempotent design).
 func TestRitualTasksImprovementRapidScheduleChanges(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "Rapid Change Project", uniqueProjectKey("RPDC"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
@@ -550,6 +560,7 @@ func biWeeklyRecurrenceRule() *rpcv1.RecurrenceRule {
 // recurrence schedule to an identical rule is a no-op: no instances are removed,
 // detached, or newly created, and the schedule_version remains unchanged.
 func TestRitualTasksImprovementIdenticalScheduleNoOp(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	owner := w.withOwner()
 	proj := w.createProjectWithMode(owner, "No-op Schedule Project", uniqueProjectKey("NOOP"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)

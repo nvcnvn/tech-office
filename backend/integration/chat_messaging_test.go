@@ -10,6 +10,7 @@ import (
 
 // TestChatMessaging covers sending messages, replies, mentions, reactions, and DMs.
 func TestChatMessaging(t *testing.T) {
+	t.Parallel()
 	w := newTestWorld(t)
 	users := w.withEmployees(3)
 	sender, receiver, bystander := users[0], users[1], users[2]

@@ -17,6 +17,7 @@ import (
 // category, and delivery class behaviour. These tests act as a contract check
 // so changes to the backend payload break loudly before frontend breakage.
 func TestNotificationFrontendParity(t *testing.T) {
+	t.Parallel()
 
 	t.Run("when a persistent notification is listed", func(t *testing.T) {
 		w := newTestWorld(t)
