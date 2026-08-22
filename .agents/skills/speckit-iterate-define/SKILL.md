@@ -1,16 +1,12 @@
 ---
-description: Define an iteration on the current feature — analyze the change request against current spec state and implementation progress, then write a reviewable iteration plan.
-handoffs:
-- label: Apply Iteration
-  agent: speckit-iterate-apply
-  prompt: Apply the pending iteration to spec documents
-  send: true
 name: speckit-iterate-define
+description: Define an iteration on the current feature — analyze the change request against current spec state and implementation progress, then write a reviewable iteration plan.
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: iterate:commands/define.md
 ---
 
-
-<!-- Extension: iterate -->
-<!-- Config: .specify/extensions/iterate/ -->
 ## User Input
 
 ```text
@@ -19,7 +15,7 @@ $ARGUMENTS
 
 You **MUST** consider the user input before proceeding (if not empty).
 
-The text the user typed after `/speckit-iterate-define` **is** the change request. It describes what should be added, modified, or removed from the current feature — either the whole feature or a specific phase/subtask.
+The text the user typed after `/speckit.iterate.define` **is** the change request. It describes what should be added, modified, or removed from the current feature — either the whole feature or a specific phase/subtask.
 
 ## Outline
 
@@ -33,7 +29,7 @@ Run `.specify/scripts/bash/check-prerequisites.sh --json --paths-only` from repo
 - `FEATURE_SPEC`
 - (Optionally capture `IMPL_PLAN`, `TASKS` for downstream use.)
 
-If JSON parsing fails, abort and instruct the user to run `/speckit-specify` or verify the feature branch environment.
+If JSON parsing fails, abort and instruct the user to run `/speckit.specify` or verify the feature branch environment.
 
 For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
@@ -43,7 +39,7 @@ Check if `FEATURE_DIR/pending-iteration.md` already exists. If it does:
 
 - Warn the user: "A pending iteration already exists. Running define again will overwrite it."
 - Show the existing file's `change_request` and `created` date from its frontmatter.
-- Ask the user to confirm before proceeding, or suggest running `/speckit-iterate-apply` first.
+- Ask the user to confirm before proceeding, or suggest running `/speckit.iterate.apply` first.
 
 ### 3. Load Current Artifacts
 
@@ -170,7 +166,7 @@ Wait for user confirmation before writing the file.
 
 **If completed tasks are invalidated**: Warn the user explicitly — "Tasks TXXX–TYYY are already marked complete but would be affected by this change. They may need re-implementation after apply." Ask how to proceed.
 
-**If the change is a Pivot**: Warn that this is a significant direction change and recommend running `/speckit-specify` with an updated description instead, unless the user explicitly wants an in-place iteration.
+**If the change is a Pivot**: Warn that this is a significant direction change and recommend running `/speckit.specify` with an updated description instead, unless the user explicitly wants an in-place iteration.
 
 ### 7. Write Pending Iteration File
 
@@ -247,13 +243,13 @@ After writing the file, confirm to the user:
 
 You can:
 - **Review/edit** the file directly before applying
-- **Re-run** `/speckit-iterate-define` to regenerate with a different request
-- **Apply** with `/speckit-iterate-apply` to update all spec documents
+- **Re-run** `/speckit.iterate.define` to regenerate with a different request
+- **Apply** with `/speckit.iterate.apply` to update all spec documents
 ```
 
 ## Behavior Rules
 
-- **Never modify spec artifacts** — this command only writes `pending-iteration.md`. All spec changes happen in `/speckit-iterate-apply`.
+- **Never modify spec artifacts** — this command only writes `pending-iteration.md`. All spec changes happen in `/speckit.iterate.apply`.
 - **Safe to re-run** — running define again overwrites the pending iteration file (with user confirmation if one exists).
 - **Respect user intent** — if the change request is ambiguous, ask one clarifying question before proceeding (do not guess on high-impact decisions).
 - **Account for reality** — always check implementation progress before planning changes. An iteration plan that ignores completed work is useless.

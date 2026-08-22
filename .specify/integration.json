@@ -2,14 +2,14 @@
   "version": "1.0.1",
   "integration_state_schema": 1,
   "installed_integrations": [
-    "cline"
+    "agy"
   ],
   "integration_settings": {
-    "cline": {
+    "agy": {
       "script": "sh",
       "invoke_separator": "-"
     }
   },
-  "integration": "cline",
-  "default_integration": "cline"
+  "integration": "agy",
+  "default_integration": "agy"
 }

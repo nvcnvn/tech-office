@@ -22,7 +22,7 @@
           "speckit.git.initialize",
           "speckit.git.commit"
         ],
-        "cline": [
+        "agy": [
           "speckit.git.feature",
           "speckit.git.validate",
           "speckit.git.remote",
@@ -48,7 +48,7 @@
           "speckit.iterate.define",
           "speckit.iterate.apply"
         ],
-        "cline": [
+        "agy": [
           "speckit.iterate.define",
           "speckit.iterate.apply"
         ]

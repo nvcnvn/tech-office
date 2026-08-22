@@ -1,20 +1,12 @@
 ---
-description: Apply a pending iteration to spec documents — update all artifacts that speckit-implement relies on, then hand off to implementation.
-handoffs:
-- label: Continue Implementation
-  agent: speckit-implement
-  prompt: Continue implementing tasks with the updated spec documents
-  send: true
-- label: Analyze For Consistency
-  agent: speckit-analyze
-  prompt: Run a project analysis for consistency after the iteration
-  send: true
 name: speckit-iterate-apply
+description: Apply a pending iteration to spec documents — update all artifacts that speckit.implement relies on, then hand off to implementation.
+compatibility: Requires spec-kit project structure with .specify/ directory
+metadata:
+  author: github-spec-kit
+  source: iterate:commands/apply.md
 ---
 
-
-<!-- Extension: iterate -->
-<!-- Config: .specify/extensions/iterate/ -->
 ## User Input
 
 ```text
@@ -27,7 +19,7 @@ If the user provides arguments, treat them as adjustments or notes for the apply
 
 ## Outline
 
-Goal: Execute the iteration plan defined in `pending-iteration.md` by updating all spec artifacts that `speckit-implement` relies on. After apply completes, the user can go directly to `/speckit-implement` — skipping `/speckit-plan` and `/speckit-tasks` since this command already handles those updates.
+Goal: Execute the iteration plan defined in `pending-iteration.md` by updating all spec artifacts that `speckit.implement` relies on. After apply completes, the user can go directly to `/speckit.implement` — skipping `/speckit.plan` and `/speckit.tasks` since this command already handles those updates.
 
 ### 1. Initialize Feature Context
 
@@ -37,7 +29,7 @@ Run `.specify/scripts/bash/check-prerequisites.sh --json --paths-only` from repo
 - `FEATURE_SPEC`
 - (Optionally capture `IMPL_PLAN`, `TASKS` for downstream use.)
 
-If JSON parsing fails, abort and instruct the user to run `/speckit-specify` or verify the feature branch environment.
+If JSON parsing fails, abort and instruct the user to run `/speckit.specify` or verify the feature branch environment.
 
 For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
@@ -45,7 +37,7 @@ For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot
 
 Check for `FEATURE_DIR/pending-iteration.md`. If it does **not** exist, abort with:
 
-> No pending iteration found. Run `/speckit-iterate-define <change request>` first to define what you want to change.
+> No pending iteration found. Run `/speckit.iterate.define <change request>` first to define what you want to change.
 
 If it exists, read and parse the file:
 
@@ -87,7 +79,7 @@ Present a brief confirmation to the user:
 **Apply now?** (yes / no)
 ```
 
-Wait for user confirmation. If the user says no, suggest they edit `pending-iteration.md` or re-run `/speckit-iterate-define`.
+Wait for user confirmation. If the user says no, suggest they edit `pending-iteration.md` or re-run `/speckit.iterate.define`.
 
 ### 5. Apply Changes to Artifacts
 
@@ -211,9 +203,9 @@ Output a structured summary:
 
 Your spec documents are updated and ready for implementation:
 
-- `/speckit-implement` — continue implementation with the updated specs (recommended)
-- `/speckit-analyze` — verify cross-artifact consistency before implementing
-- `/speckit-iterate-define` — define another iteration if more changes are needed
+- `/speckit.implement` — continue implementation with the updated specs (recommended)
+- `/speckit.analyze` — verify cross-artifact consistency before implementing
+- `/speckit.iterate.define` — define another iteration if more changes are needed
 ```
 
 ## Behavior Rules
