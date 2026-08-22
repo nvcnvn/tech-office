@@ -28,6 +28,7 @@ require (
 	github.com/teambition/rrule-go v1.8.2
 	github.com/urfave/cli/v3 v3.4.1
 	google.golang.org/protobuf v1.36.11
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -155,7 +156,6 @@ require (
 	google.golang.org/api v0.255.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 require (
@@ -171,7 +171,7 @@ require (
 	go.opentelemetry.io/otel/metric v1.40.0 // indirect
 	go.opentelemetry.io/otel/trace v1.40.0 // indirect
 	golang.org/x/crypto v0.50.0
-	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/net v0.52.0
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sys v0.43.0 // indirect
 	golang.org/x/text v0.36.0 // indirect
