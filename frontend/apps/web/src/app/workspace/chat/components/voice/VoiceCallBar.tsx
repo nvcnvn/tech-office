@@ -93,7 +93,7 @@ export function VoiceCallBar({ voiceCall }: VoiceCallBarProps) {
               {participantText}
             </Typography>
           </Box>
-          {voiceCall.isConnected && (
+          {(voiceCall.isConnected || voiceCall.connectionQuality !== 'unknown') && (
             <Chip
               data-testid="voice-quality-indicator"
               icon={<NetworkCheckIcon />}

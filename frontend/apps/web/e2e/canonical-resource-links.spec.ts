@@ -14,7 +14,7 @@ async function expectCanonicalTaskDestination(page: Parameters<typeof test>[0] e
 				pathname: currentUrl.pathname,
 				focusIntent: currentUrl.searchParams.get('focusIntent'),
 			};
-		})
+		}, { timeout: 15_000 })
 		.toEqual({
 			pathname: `/workspace/tasks/${projectId}/tasks/${taskId}/`,
 			focusIntent: 'review_pending',

@@ -125,7 +125,9 @@ function ProjectDetailContent() {
 		if (!project) return;
 		setTasksLoading(true);
 		try {
-			const response = await listTasks({ projectId, rootOnly: false });
+			// ponytail: rituals generate a horizon of instances, so the backend's default page of
+			// 50 silently hides runs. 100 is the server cap; add real pagination if projects outgrow it.
+			const response = await listTasks({ projectId, rootOnly: false, limit: 100 });
 			setTasks(response.tasks);
 		} catch (err) {
 			console.error('Failed to load tasks:', err);

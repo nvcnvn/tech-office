@@ -171,16 +171,20 @@ function getRitualReviewSignal(task: Task): string {
 }
 
 function buildRitualInstanceHref(projectId: string, task: Task): string {
+	// Mirrors TodayView.getRitualFocusIntent: generic list entries open the live instance,
+	// and only nudge towards proof when something is actually outstanding. Review focus is
+	// carried by notification deep links, not by the list surface.
 	const focusIntent = (() => {
-		if ((task.evidenceProgress?.pendingReviewCount ?? 0) > 0) {
-			return 'review_pending';
-		}
-
-		if ((task.evidenceProgress?.rejectedCount ?? 0) > 0 || !(task.evidenceProgress?.allRequiredApproved ?? false)) {
+		const progress = task.evidenceProgress;
+		if ((progress?.rejectedCount ?? 0) > 0) {
 			return 'submit_requirement';
 		}
 
-		return 'view_instance';
+		const missingRequiredProof =
+			(progress?.requiredCount ?? 0) > (progress?.approvedCount ?? 0) &&
+			(progress?.pendingReviewCount ?? 0) === 0;
+
+		return missingRequiredProof ? 'submit_requirement' : 'view_instance';
 	})();
 
 	return `/workspace/tasks/${projectId}/tasks/${task.id}?focusIntent=${focusIntent}`;

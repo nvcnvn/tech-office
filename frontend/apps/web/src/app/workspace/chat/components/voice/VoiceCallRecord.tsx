@@ -246,7 +246,14 @@ export function VoiceCallRecord({ label = 'Voice call', callId, metadata, outcom
   );
   const participantLabel = `${participantCount || 1} participant${participantCount === 1 ? '' : 's'}`;
   const visibleDuration = shouldShowElapsedDuration(call?.outcome, effectiveOutcomeHint) ? duration : null;
-  const recordingStatus = shouldShowRecordingStatus(recording) ? artifactStatusLabel(recording) : statusLabel(metadata?.recordingStatus);
+  // FR-012: always say whether a recording exists. A ready artifact renders the
+  // player instead of a status chip; anything else (including no artifact at all)
+  // gets an explicit status.
+  const recordingStatus = shouldShowRecordingStatus(recording)
+    ? artifactStatusLabel(recording)
+    : recording
+      ? null
+      : statusLabel(metadata?.recordingStatus) ?? 'Recording unavailable';
   const resolvedTitle = call ? outcomeLabel(call.outcome, effectiveOutcomeHint) : effectiveOutcomeHint ? outcomeLabel(undefined, effectiveOutcomeHint) : label;
 
   return (

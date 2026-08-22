@@ -867,6 +867,7 @@ export default function TaskDetailPage() {
 	const currentTaskState = states.find((s) => s.id === task.stateId);
 	const isAssignedToRitualInstance = task.assignees.some((assignee) => assignee.employeeId === user?.sub);
 	const isDualRoleRitualUser = task.taskKind === 'ritual_instance' && isAssignedToRitualInstance && canReviewRitualEvidence;
+	const pendingReviewCount = task.evidenceProgress?.pendingReviewCount ?? 0;
 
 	return (
 		<Box sx={{ p: 3 }}>
@@ -1041,6 +1042,7 @@ export default function TaskDetailPage() {
 										document={document}
 										isEditing={isEditingDescription}
 										onSaved={handleDescriptionSaved}
+										showTitle={false}
 									/>
 								</Box>
 							) : task?.taskKind === 'ritual_instance' ? (
@@ -1176,10 +1178,25 @@ export default function TaskDetailPage() {
 									const canSubmitEvidence = isAssignedToRitualInstance && !(currentTaskState?.isClosed ?? false);
 									return (
 										<>
-											{canReviewRitualEvidence && ritualFocusIntent === 'review_pending' && (
-												<Alert ref={reviewSectionRef} severity="warning" sx={{ mb: 2 }}>
-													Open the highlighted proof below to approve or reject it inline without leaving this task.
-												</Alert>
+											{/* Review section (FR-019): reviewers — including dual-role users who
+											    also submit proof here — get their review actions in their own labelled
+											    section, separate from the proof checklist below. */}
+											{canReviewRitualEvidence && (
+												<Box ref={reviewSectionRef} data-testid="ritual-review-section" sx={{ mb: 2 }}>
+													<Typography
+														variant="subtitle1"
+														sx={{ ...colors.text.primary.style, fontWeight: 600, mb: 1 }}
+													>
+														Review
+													</Typography>
+													<Alert severity={ritualFocusIntent === 'review_pending' ? 'warning' : 'info'}>
+														{ritualFocusIntent === 'review_pending'
+															? 'Open the highlighted proof below to approve or reject it inline without leaving this task.'
+															: pendingReviewCount > 0
+																? `${pendingReviewCount} proof ${pendingReviewCount === 1 ? 'submission is' : 'submissions are'} waiting for your decision below.`
+																: 'No proof is waiting for your review on this ritual instance.'}
+													</Alert>
+												</Box>
 											)}
 											<Box
 												ref={evidenceSectionRef}

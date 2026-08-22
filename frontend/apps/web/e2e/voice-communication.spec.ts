@@ -83,9 +83,13 @@ test.describe('Voice Communication', () => {
       await expect(page.getByTestId('voice-call-record').first()).toContainText(/Recording (not requested|unavailable|failed)/i);
       await expect(page.getByTestId('voice-transcript-panel').first()).toContainText(/Transcript (not requested|unavailable|failed)/i);
 
-      const records = await api.listCallRecords(alice, channelId);
-      expect(records.records[0]?.call?.id).toBe(active.call?.id);
-      expect(records.records[0]?.call?.outcome).toMatch(/CANCELLED|COMPLETED/);
+      // The UI confirms the hang-up from the timeline message, which can render before
+      // LeaveVoiceCall has finished server-side, so poll the history instead of reading once.
+      await expect
+        .poll(async () => (await api.listCallRecords(alice, channelId)).records?.[0]?.call ?? null, {
+          timeout: 15_000,
+        })
+        .toMatchObject({ id: active.call?.id, outcome: expect.stringMatching(/CANCELLED|COMPLETED/) });
 
       const record = await api.getCallRecord(alice, active.call!.id);
       expect(record.record?.call?.channelId).toBe(channelId);

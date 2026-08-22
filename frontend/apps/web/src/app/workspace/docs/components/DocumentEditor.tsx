@@ -56,6 +56,9 @@ interface DocumentEditorProps {
 	onSaved: () => void;
 	citedLineRanges?: CitedLineRange[];
 	onOpenCitations?: () => void;
+	/** Hide the document heading when the surrounding surface already names the document
+	 *  (task description panels, where the task title is right above). */
+	showTitle?: boolean;
 }
 
 type EditorMode = 'wysiwyg' | 'markdown';
@@ -628,6 +631,7 @@ export default function DocumentEditor({
 	onSaved,
 	citedLineRanges = [],
 	onOpenCitations,
+	showTitle = true,
 }: DocumentEditorProps) {
 	const colors = useThemeColors();
 	const theme = useTheme();
@@ -1066,9 +1070,11 @@ export default function DocumentEditor({
 
 		return (
 			<Box>
-				<Typography variant="h4" gutterBottom fontWeight={600}>
-					{document.title}
-				</Typography>
+				{showTitle && (
+					<Typography variant="h4" gutterBottom fontWeight={600}>
+						{document.title}
+					</Typography>
+				)}
 
 				{/* View Mode with Line Numbers */}
 				<Box sx={{ display: 'flex', gap: 1, mt: 2 }}>

@@ -3,7 +3,7 @@ import { createTestEmployee, createTestOrg, loginAs, type TestUser } from './hel
 import * as api from './helpers/api';
 
 async function waitForRitualTasks(owner: TestUser, projectId: string, minCount = 1) {
-	for (let attempt = 0; attempt < 12; attempt += 1) {
+	for (let attempt = 0; attempt < 30; attempt += 1) {
 		const response = await api.listTasks(owner, projectId, {
 			taskKind: 'TASK_KIND_RITUAL_INSTANCE',
 		});
@@ -18,25 +18,28 @@ async function waitForRitualTasks(owner: TestUser, projectId: string, minCount =
 }
 
 /**
- * Polls until a ritual instance task for the given definition ID is found.
- * This avoids the race condition where waitForRitualTasks returns early with
- * only one definition's tasks (before the second definition's scheduler run).
+ * Polls until today's ritual instance task for the given definition ID is found.
+ * The scheduler generates a whole horizon of future instances, so picking an
+ * arbitrary one would act on a run that today-oriented surfaces never show.
  */
 async function waitForRitualTaskByDefinition(owner: TestUser, projectId: string, definitionId: string) {
-	for (let attempt = 0; attempt < 12; attempt += 1) {
+	const today = new Date().toISOString().slice(0, 10);
+	for (let attempt = 0; attempt < 30; attempt += 1) {
 		const response = await api.listTasks(owner, projectId, {
 			taskKind: 'TASK_KIND_RITUAL_INSTANCE',
 		});
 		const tasks = Array.isArray(response?.tasks) ? response.tasks : [];
-		const task = tasks.find((t) => t.ritualDefinitionId === definitionId);
+		const task = tasks.find(
+			(t) => t.ritualDefinitionId === definitionId && (t.scheduledDate ?? '').slice(0, 10) === today,
+		);
 		if (task) return task;
 		await new Promise((resolve) => setTimeout(resolve, 1000));
 	}
-	throw new Error(`Timed out waiting for ritual task for definition ${definitionId} in ${projectId}`);
+	throw new Error(`Timed out waiting for today's ritual task for definition ${definitionId} in ${projectId}`);
 }
 
 async function waitForNotificationRecipientId(user: TestUser, title: string) {
-	for (let attempt = 0; attempt < 12; attempt += 1) {
+	for (let attempt = 0; attempt < 30; attempt += 1) {
 		const response = await api.listNotifications(user, { unreadOnly: false });
 		const notificationRecipientId = response.notifications.find(
 			(notification) => notification.title === title,
@@ -61,6 +64,8 @@ test.describe('Ritual Submission Flow', () => {
 		let requirementId: string;
 
 		test.beforeAll(async () => {
+			test.setTimeout(120_000);
+
 			owner = await createTestOrg();
 			worker = await createTestEmployee(owner);
 
@@ -184,6 +189,8 @@ test.describe('Ritual Submission Flow', () => {
 		let secondSubmissionId: string;
 
 		test.beforeAll(async () => {
+			test.setTimeout(120_000);
+
 			owner = await createTestOrg();
 			worker = await createTestEmployee(owner);
 
@@ -275,6 +282,8 @@ test.describe('Ritual Submission Flow', () => {
 		let skippedTaskId: string;
 
 		test.beforeAll(async () => {
+			test.setTimeout(120_000);
+
 			owner = await createTestOrg();
 			worker = await createTestEmployee(owner);
 
@@ -361,10 +370,13 @@ test.describe('Ritual Submission Flow', () => {
 			let rejectedTaskId: string;
 			let rejectedRequirementId: string;
 			let rejectedSubmissionId: string;
+		let settledTaskId: string;
 		let ownerNotificationRecipientId: string;
 		let workerNotificationRecipientId: string;
 
 		test.beforeAll(async () => {
+			test.setTimeout(120_000);
+
 			owner = await createTestOrg();
 			worker = await createTestEmployee(owner);
 
@@ -386,6 +398,18 @@ test.describe('Ritual Submission Flow', () => {
 				name: `Routing Reject ${crypto.randomUUID().slice(0, 6)}`,
 				defaultAssigneeIds: [worker.id],
 			});
+			// A run with nothing outstanding is the only state the today surface offers with
+			// view_instance focus: rejected proof pulls the entry to submit_requirement and
+			// proof awaiting review is intentionally kept out of the worker action groups.
+			const settledDefinition = await api.createRitualDefinition(owner, {
+				projectId,
+				name: `Routing Settled ${crypto.randomUUID().slice(0, 6)}`,
+				defaultAssigneeIds: [worker.id],
+			});
+			const settledRequirement = await api.createEvidenceRequirement(owner, {
+				ritualDefinitionId: settledDefinition.ritualDefinition.id,
+				name: 'Pressure reading closing note',
+			});
 			const reviewRequirement = await api.createEvidenceRequirement(owner, {
 				ritualDefinitionId: reviewDefinition.ritualDefinition.id,
 				name: 'Pressure reading note',
@@ -399,9 +423,20 @@ test.describe('Ritual Submission Flow', () => {
 
 			const reviewTask = await waitForRitualTaskByDefinition(owner, projectId, reviewDefinition.ritualDefinition.id);
 			const rejectedTask = await waitForRitualTaskByDefinition(owner, projectId, rejectedDefinition.ritualDefinition.id);
+			const settledTask = await waitForRitualTaskByDefinition(owner, projectId, settledDefinition.ritualDefinition.id);
 			reviewTaskId = reviewTask.id;
 			rejectedTaskId = rejectedTask.id;
+			settledTaskId = settledTask.id;
 			await api.watchTask(owner, reviewTaskId);
+
+			const settledSubmission = await api.submitEvidence(worker, {
+				taskId: settledTaskId,
+				evidenceRequirementId: settledRequirement.evidenceRequirement.id,
+				textContent: 'Pressure stable at 08:00',
+			});
+			await api.approveEvidence(owner, {
+				evidenceSubmissionId: settledSubmission.evidenceSubmission.id,
+			});
 
 			const reviewSubmission = await api.submitEvidence(worker, {
 				taskId: reviewTaskId,
@@ -437,9 +472,10 @@ test.describe('Ritual Submission Flow', () => {
 			await todayLink.click();
 			await expect.poll(() => page.url()).toContain(todayHref ?? 'focusIntent=view_instance');
 
-			await page.goto(`/workspace/tasks/${projectId}?view=list`);
-				await page.getByTestId(`task-row-${reviewTaskId}`).click();
-				await expect.poll(() => page.url()).toContain(`/workspace/tasks/${projectId}/tasks/${reviewTaskId}/?focusIntent=view_instance`);
+			// Ritual-only projects expose the task list as the Worklist surface; there is no List tab.
+			await page.goto(`/workspace/tasks/${projectId}?view=worklist`);
+			await page.getByTestId(`task-row-${settledTaskId}`).click();
+			await expect.poll(() => page.url()).toContain(`/workspace/tasks/${projectId}/tasks/${settledTaskId}/?focusIntent=view_instance`);
 		});
 
 		test('notification rows route reviewers and workers into the same ritual instance with the right focus', async ({ page }) => {

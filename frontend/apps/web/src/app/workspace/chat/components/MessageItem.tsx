@@ -277,9 +277,12 @@ export default function MessageItem({
 	);
 	const [canonicalPreview, setCanonicalPreview] = useState<CanonicalLinkPreview | null>(null);
 	const [canonicalPreviewLoaded, setCanonicalPreviewLoaded] = useState(false);
+	// Only show a preview card when the backend actually resolved metadata (FR-018).
+	// When the lookup fails the raw link must stay in the message text (FR-017), so we
+	// deliberately do not synthesise a card from the URL here.
 	const canonicalPreviewDisplay = useMemo(
-		() => getCanonicalLinkPreviewDisplay(canonicalPreview, canonicalPreviewLoaded ? canonicalLink : null),
-		[canonicalLink, canonicalPreview, canonicalPreviewLoaded]
+		() => (canonicalPreviewLoaded ? getCanonicalLinkPreviewDisplay(canonicalPreview) : null),
+		[canonicalPreview, canonicalPreviewLoaded]
 	);
 	const isHtmlMessage = useMemo(() => /<[a-z][\s\S]*>/i.test(messageText), [messageText]);
 	const displayMessageText = useMemo(

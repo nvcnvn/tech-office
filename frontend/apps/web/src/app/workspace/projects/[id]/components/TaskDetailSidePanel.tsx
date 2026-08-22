@@ -575,6 +575,7 @@ export function TaskDetailSidePanel({
 								document={document}
 								isEditing={isEditingDescription}
 								onSaved={handleDescriptionSaved}
+								showTitle={false}
 							/>
 						</Box>
 					) : (

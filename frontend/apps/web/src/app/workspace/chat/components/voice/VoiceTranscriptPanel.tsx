@@ -16,7 +16,7 @@ interface VoiceTranscriptPanelProps {
 
 function transcriptStatusLabel(artifact?: VoiceCallArtifact): string {
   if (!artifact) {
-    return '';
+    return 'Transcript unavailable';
   }
   switch (artifact.status) {
     case voice.VoiceArtifactStatus.PENDING:
@@ -40,12 +40,8 @@ export function VoiceTranscriptPanel({ artifact }: VoiceTranscriptPanelProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!artifact) {
-    return null;
-  }
-
-  const ready = artifact.status === voice.VoiceArtifactStatus.READY && Boolean(artifact.fileId);
-  const pending = artifact.status === voice.VoiceArtifactStatus.PENDING || artifact.status === voice.VoiceArtifactStatus.PROCESSING;
+  const ready = artifact?.status === voice.VoiceArtifactStatus.READY && Boolean(artifact.fileId);
+  const pending = artifact?.status === voice.VoiceArtifactStatus.PENDING || artifact?.status === voice.VoiceArtifactStatus.PROCESSING;
 
   const fetchTranscript = async () => {
     if (!artifact?.fileId) {

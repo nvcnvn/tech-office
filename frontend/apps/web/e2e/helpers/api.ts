@@ -313,6 +313,7 @@ export async function listTasks(
       stateId: string;
       taskKind?: string;
       ritualDefinitionId?: string;
+      scheduledDate?: string;
       evidenceProgress?: {
         pendingReviewCount?: number;
       };
@@ -323,6 +324,8 @@ export async function listTasks(
     stateId: opts?.stateId,
     assigneeId: opts?.assigneeId,
     taskKind: opts?.taskKind,
+    // Rituals generate a horizon of instances; the default page of 50 can drop today's run.
+    limit: 100,
   });
 }
 
@@ -567,6 +570,24 @@ export async function submitEvidence(
     evidenceType: opts.evidenceType ?? 'EVIDENCE_TYPE_TEXT_NOTE',
     textContent: opts.textContent ?? '',
     gpsCoordinates: opts.gpsCoordinates,
+  });
+}
+
+export async function approveEvidence(
+  user: TestUser,
+  opts: {
+    evidenceSubmissionId: string;
+    comment?: string;
+  },
+) {
+  return apiCall<{
+    evidenceSubmission: {
+      id: string;
+      approvalStatus: string;
+    };
+  }>(user, '/rpc.v1.CollaborationService/ApproveEvidence', {
+    evidenceSubmissionId: opts.evidenceSubmissionId,
+    comment: opts.comment ?? '',
   });
 }
 
