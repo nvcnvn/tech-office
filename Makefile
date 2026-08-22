@@ -88,15 +88,19 @@ check-tracked-files:
 # ---------------------------------------------------------------------------
 
 .PHONY: test-backend
+# BACKEND_TEST_TIMEOUT bounds the WHOLE package, not one test. The suite takes a few
+# minutes end to end, so 120s could never finish it.
+BACKEND_TEST_TIMEOUT ?= 900s
+
 test-backend: check-postgres check-backend
 	@echo "\n=== Running backend integration tests ==="
-	cd backend && go test -v -count=1 -timeout 120s ./integration/...
+	cd backend && go test -v -count=1 -timeout $(BACKEND_TEST_TIMEOUT) ./integration/...
 
 # Run a single backend test by name: make test-backend-one T=TestTaskLifecycle
 .PHONY: test-backend-one
 test-backend-one: check-postgres check-backend
 	@echo "\n=== Running backend test: $(T) ==="
-	cd backend && go test -v -count=1 -timeout 120s -run "$(T)" ./integration/...
+	cd backend && go test -v -count=1 -timeout $(BACKEND_TEST_TIMEOUT) -run "$(T)" ./integration/...
 
 # ---------------------------------------------------------------------------
 # Frontend E2E tests (Playwright)

@@ -69,7 +69,23 @@ name: "Auth — Sign In"
 - tapOn:
     id: "signin-button"
 
+# iOS offers to save the password after a form submit. The sheet covers the screen and
+# makes every later assertion fail, in whichever flow happens to run next — dismiss it
+# here so no flow has to know about it.
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"
+
 # Wait for API call to complete and navigate
 - extendedWaitUntil:
     visible: "Chat"
     timeout: 20000
+
+# The sheet can also appear after navigation completes.
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"

@@ -52,7 +52,8 @@ func (s *NotificationService) registerConnection(
 		DepartmentIds:  departmentIDs,
 		UserAgent:      stringToNullText(userAgent),
 		IpAddress:      ipAddr,
-		LastHeartbeat:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		// A new connection gets a full responsive window before its first ping is due.
+		LastPongAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	})
 	if err != nil {
 		return fmt.Errorf("failed to insert active connection: %w", err)
@@ -79,32 +80,16 @@ func (s *NotificationService) unregisterConnection(
 	return nil
 }
 
-// updateHeartbeat updates the last heartbeat timestamp for a connection.
-// Returns the number of rows affected. Zero means the DB row is missing
-// (e.g. after UNLOGGED table data loss from PostgreSQL recovery).
-func (s *NotificationService) updateHeartbeat(
-	ctx context.Context,
-	employeeID dbuuid.UUID,
-	connectionID dbuuid.UUID,
-	organizationID dbuuid.UUID,
-) (int64, error) {
-	n, err := s.Queries.UpdateConnectionHeartbeat(ctx, s.AdminPool, &database.UpdateConnectionHeartbeatParams{
-		OrganizationID: organizationID,
-		EmployeeID:     employeeID,
-		ConnectionID:   connectionID,
-		LastHeartbeat:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to update heartbeat: %w", err)
-	}
-	return n, nil
-}
-
-// startCleanupWorker starts a background goroutine that periodically cleans up stale connections.
-// Runs every 5 minutes and marks connections with last_heartbeat > 60 seconds as stale,
-// then deletes connections stale for > 5 minutes.
+// startCleanupWorker starts the presence janitor: a single DELETE sweep per
+// organization, every minute, removing connections that have not pongged within the
+// removal window.
+//
+// This replaces the old mark-then-sweep pair. `connection_status` is gone, so there is
+// nothing left to mark: responsive versus unresponsive is derived from last_pong_at at
+// read time, and it becomes true the instant the window elapses rather than whenever a
+// marker job last ran.
 func (s *NotificationService) startCleanupWorker(ctx context.Context) {
-	ticker := time.NewTicker(5 * time.Minute)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -118,27 +103,13 @@ func (s *NotificationService) startCleanupWorker(ctx context.Context) {
 				continue
 			}
 
-			staleThreshold := timestamptzFromTime(time.Now().Add(-1 * time.Minute))
-			deleteThreshold := timestamptzFromTime(time.Now().Add(-5 * time.Minute))
-
 			for _, orgID := range orgIDs {
-				if err := s.Queries.MarkStaleConnections(ctx, s.AdminPool, &database.MarkStaleConnectionsParams{
-					OrganizationID: orgID,
-					LastHeartbeat:  staleThreshold,
-				}); err != nil {
-					slog.ErrorContext(ctx, "failed to mark stale connections",
-						"organization_id", orgID.String(),
-						"error", err,
-					)
-					continue
-				}
-
-				removed, err := s.Queries.CleanupStaleConnections(ctx, s.AdminPool, &database.CleanupStaleConnectionsParams{
-					OrganizationID: orgID,
-					LastHeartbeat:  deleteThreshold,
+				removed, err := s.Queries.DeleteExpiredConnections(ctx, s.AdminPool, &database.DeleteExpiredConnectionsParams{
+					OrganizationID:       orgID,
+					RemovalWindowSeconds: RemovalWindowSeconds,
 				})
 				if err != nil {
-					slog.ErrorContext(ctx, "failed to cleanup stale connections",
+					slog.ErrorContext(ctx, "failed to delete expired connections",
 						"organization_id", orgID.String(),
 						"error", err,
 					)
@@ -146,9 +117,12 @@ func (s *NotificationService) startCleanupWorker(ctx context.Context) {
 				}
 
 				if removed > 0 {
-					slog.InfoContext(ctx, "removed stale connections",
+					// FR-025: janitor removals per organization.
+					slog.InfoContext(ctx, "removed expired connections",
+						"function", "startCleanupWorker",
 						"organization_id", orgID.String(),
 						"removed_count", removed,
+						"removal_window_seconds", RemovalWindowSeconds,
 					)
 				}
 			}
@@ -251,7 +225,7 @@ func (s *NotificationService) reRegisterActiveConnections(ctx context.Context) {
 			ConnectionID:   conn.ConnectionID,
 			OrganizationID: conn.OrganizationID,
 			DepartmentIds:  deptIDs,
-			LastHeartbeat:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
+			LastPongAt:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		})
 		if err != nil {
 			slog.WarnContext(ctx, "failed to re-register connection",

@@ -9,16 +9,18 @@ import (
 	"github.com/nvcnvn/tech-office/backend/database/txn"
 )
 
-// StartCleanupRoutine starts a background goroutine that periodically cleans up stale connections and push tokens.
+// StartCleanupRoutine starts a background goroutine that periodically removes stale
+// LISTEN registrations.
 //
 // System-scope justification:
-// This routine scans all organizations' stale connections and push tokens for cleanup.
-// Uses context.Background() for system maintenance operations that should continue
+// This routine scans all instances' listener registrations for cleanup. Uses
+// context.Background() for system maintenance operations that should continue
 // independent of user requests.
 //
-// Cleanup operations:
-//   - Stale active_connection records (last_heartbeat > 60s ago)
-//   - Stale push tokens (last_used_at > 90 days ago, optional in this implementation)
+// Connections are NOT swept here: notification.active_connection is owned by the
+// presence janitor in registry.go, which removes rows only once they are silent past
+// RemovalWindowSeconds. Deleting them on a shorter timetable would tear down
+// connections that are merely unresponsive and still due to recover.
 //
 // Parameters:
 //   - ctx: Context for lifecycle management (cancellation signal)
@@ -34,7 +36,7 @@ func (s *NotificationService) StartCleanupRoutine(ctx context.Context, interval 
 	defer ticker.Stop()
 
 	// Run cleanup immediately on start
-	s.cleanupStaleConnections(ctx)
+	s.cleanupStaleListeners(ctx)
 
 	for {
 		select {
@@ -45,49 +47,22 @@ func (s *NotificationService) StartCleanupRoutine(ctx context.Context, interval 
 			return
 
 		case <-ticker.C:
-			s.cleanupStaleConnections(ctx)
+			s.cleanupStaleListeners(ctx)
 		}
 	}
 }
 
-// cleanupStaleConnections removes stale connections (last_heartbeat > 60 seconds ago)
-// across all organizations.
-// Uses AdminPool for cross-organization cleanup with direct SQL.
-func (s *NotificationService) cleanupStaleConnections(ctx context.Context) {
-	slog.DebugContext(ctx, "running stale connection cleanup",
-		"function", "cleanupStaleConnections")
+// cleanupStaleListeners removes LISTEN registrations whose owning instance stopped
+// heartbeating. Uses AdminPool for cross-instance cleanup with direct SQL.
+func (s *NotificationService) cleanupStaleListeners(ctx context.Context) {
+	slog.DebugContext(ctx, "running stale listener cleanup",
+		"function", "cleanupStaleListeners")
 
-	// Define stale threshold: connections with last_heartbeat older than 60 seconds
 	staleThreshold := 60 * time.Second
 	staleBefore := time.Now().Add(-staleThreshold)
 
-	// Use AdminPool for system-scope operation: scan all organizations
-	// Justification: System maintenance requires cross-tenant access
 	err := txn.WithTxn(ctx, s.AdminPool, func(ctx context.Context, tx database.DBTX) error {
-		// Direct SQL query for cross-organization cleanup
-		// This is intentionally not using organization_id filter for system-wide cleanup
-		query := `
-			DELETE FROM notification.active_connection
-			WHERE last_heartbeat < $1
-		`
-
-		result, err := tx.Exec(ctx, query, timestamptzFromTime(staleBefore))
-		if err != nil {
-			slog.ErrorContext(ctx, "failed to execute stale connection cleanup",
-				"function", "cleanupStaleConnections",
-				"error", err)
-			return err
-		}
-
-		deletedCount := result.RowsAffected()
-		if deletedCount > 0 {
-			slog.InfoContext(ctx, "stale connections cleaned up",
-				"function", "cleanupStaleConnections",
-				"deletedCount", deletedCount,
-				"staleThreshold", staleThreshold.String())
-		}
-
-		listenerQuery := `
+		const listenerQuery = `
 			DELETE FROM notification.active_listener
 			WHERE last_heartbeat < $1
 		`
@@ -95,16 +70,15 @@ func (s *NotificationService) cleanupStaleConnections(ctx context.Context) {
 		listenerResult, err := tx.Exec(ctx, listenerQuery, timestamptzFromTime(staleBefore))
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to execute stale listener cleanup",
-				"function", "cleanupStaleConnections",
+				"function", "cleanupStaleListeners",
 				"error", err)
 			return err
 		}
 
-		listenerDeletedCount := listenerResult.RowsAffected()
-		if listenerDeletedCount > 0 {
+		if deleted := listenerResult.RowsAffected(); deleted > 0 {
 			slog.InfoContext(ctx, "stale listeners cleaned up",
-				"function", "cleanupStaleConnections",
-				"deletedCount", listenerDeletedCount,
+				"function", "cleanupStaleListeners",
+				"deletedCount", deleted,
 				"staleThreshold", staleThreshold.String())
 		}
 
@@ -113,13 +87,13 @@ func (s *NotificationService) cleanupStaleConnections(ctx context.Context) {
 
 	if err != nil {
 		if isExpectedShutdownError(ctx, err) {
-			slog.InfoContext(ctx, "stale connection cleanup stopped during shutdown",
-				"function", "cleanupStaleConnections",
+			slog.InfoContext(ctx, "stale listener cleanup stopped during shutdown",
+				"function", "cleanupStaleListeners",
 				"reason", err)
 			return
 		}
 		slog.ErrorContext(ctx, "cleanup transaction failed",
-			"function", "cleanupStaleConnections",
+			"function", "cleanupStaleListeners",
 			"error", err)
 	}
 }
@@ -178,13 +152,14 @@ func (s *NotificationService) CleanupStalePushTokens(ctx context.Context) {
 	}
 }
 
-// StartCleanupWorker starts both connection and push token cleanup routines
-// Runs stale connection cleanup every 30 seconds, push token cleanup every 24 hours
+// StartCleanupWorker starts both listener and push token cleanup routines.
+// Runs stale listener cleanup every 30 seconds, push token cleanup every 24 hours.
+// Connection removal belongs to the presence janitor in registry.go.
 func (s *NotificationService) StartCleanupWorker(ctx context.Context) {
 	slog.InfoContext(ctx, "starting cleanup worker",
 		"function", "StartCleanupWorker")
 
-	// Start stale connection cleanup (every 30 seconds)
+	// Start stale listener cleanup (every 30 seconds)
 	go s.StartCleanupRoutine(ctx, 30*time.Second)
 
 	// Start push token cleanup (every 24 hours)
@@ -211,6 +186,6 @@ func (s *NotificationService) StartCleanupWorker(ctx context.Context) {
 
 	slog.InfoContext(ctx, "cleanup workers started",
 		"function", "StartCleanupWorker",
-		"connectionCleanupInterval", "30s",
+		"listenerCleanupInterval", "30s",
 		"pushTokenCleanupInterval", "24h")
 }

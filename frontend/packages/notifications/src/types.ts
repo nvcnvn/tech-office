@@ -137,8 +137,22 @@ export const SSE_CONFIG = {
 
 	// LocalStorage key for last event ID
 	LAST_EVENT_ID_KEY: 'notification_last_event_id',
-	// LocalStorage key for presence connection ID coordination
-	CONNECTION_ID_KEY: 'notification_connection_id',
+} as const;
+
+/**
+ * SSE event types carried on NotificationEvent.event_type.
+ *
+ * MUST align with backend/internal/notification/constants.go, which is the source of
+ * truth (Constitution VIII).
+ *
+ * 'ping' is a liveness challenge: the client MUST answer it with a PresencePong
+ * echoing the event's eventId. It replaces the former 'heartbeat' event, which also
+ * refreshed the server's own liveness row — the defect ping-pong exists to remove.
+ */
+export const SSE_EVENT_TYPE = {
+	PING: 'ping',
+	CONNECTION_ESTABLISHED: 'connection_established',
+	NOTIFICATION: 'notification',
 } as const;
 
 // ============================================================================

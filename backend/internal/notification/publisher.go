@@ -221,6 +221,10 @@ type pushFallbackPlan struct {
 	immediatePushRecipients []dbuuid.UUID
 	rescueQueueRecipients   []dbuuid.UUID
 	skippedRecipients       map[dbuuid.UUID]string
+	// pushReasons records why each immediate-push recipient got one. Non-empty only
+	// where absence of a responsive connection drove the decision (FR-014), so the
+	// delivery record distinguishes "unreachable live" from a priority or policy send.
+	pushReasons map[dbuuid.UUID]string
 }
 
 func planPushFallbacks(
@@ -235,6 +239,7 @@ func planPushFallbacks(
 ) pushFallbackPlan {
 	plan := pushFallbackPlan{
 		skippedRecipients: make(map[dbuuid.UUID]string),
+		pushReasons:       make(map[dbuuid.UUID]string),
 	}
 
 	if routing == nil || len(employeeIDs) == 0 {
@@ -246,6 +251,9 @@ func planPushFallbacks(
 		decision := routing.DecideFallback(ctx, tx, employeeID, orgID, priority, sourceDomain, channelID)
 		if decision.ShouldSend {
 			plan.immediatePushRecipients = append(plan.immediatePushRecipients, employeeID)
+			if decision.Reason != "" {
+				plan.pushReasons[employeeID] = decision.Reason
+			}
 			continue
 		}
 
@@ -653,7 +661,11 @@ func (s *NotificationService) PublishNotification(ctx context.Context, tx databa
 		}
 	}
 
-	fallbackPlan := pushFallbackPlan{immediatePushRecipients: offlineEmployees, skippedRecipients: map[dbuuid.UUID]string{}}
+	fallbackPlan := pushFallbackPlan{
+		immediatePushRecipients: offlineEmployees,
+		skippedRecipients:       map[dbuuid.UUID]string{},
+		pushReasons:             map[dbuuid.UUID]string{},
+	}
 	if s.RoutingLogic != nil {
 		fallbackPlan = planPushFallbacks(
 			ctx,
@@ -713,7 +725,24 @@ func (s *NotificationService) PublishNotification(ctx context.Context, tx databa
 				Data:     pushData,
 				Priority: "high",
 			}
-			if err := s.sendPushAndRecord(ctx, tx, empID, orgID, recipientID, payload, ""); err != nil {
+			// Record the routing decision itself before attempting delivery. The
+			// recipient row's fallback_reason ends up describing the delivery OUTCOME
+			// (sent, no push target, error), so without this the reason live delivery
+			// was impossible would be lost — and FR-014 requires that decision to stay
+			// auditable.
+			routingReason := fallbackPlan.pushReasons[empID]
+			if routingReason != "" {
+				attemptedAt := pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
+				if err := s.recordDeliveryAttempt(ctx, tx, orgID, recipientID, "push", "queued", routingReason, attemptedAt, nil); err != nil {
+					slog.ErrorContext(ctx, "failed to record push routing decision",
+						"employee_id", empID.String(),
+						"notificationID", notificationID.String(),
+						"reason", routingReason,
+						"error", err)
+				}
+			}
+
+			if err := s.sendPushAndRecord(ctx, tx, empID, orgID, recipientID, payload, routingReason); err != nil {
 				slog.ErrorContext(ctx, "failed to track immediate push fallback",
 					"employee_id", empID.String(),
 					"notificationID", notificationID.String(),
@@ -1048,8 +1077,9 @@ func (s *NotificationService) publishToInstancesByChannel(
 	// Query active connections for employees viewing this channel
 	// Note: channelID is dbuuid.UUID (array), need to cast to googl.UUID for NullUUID
 	connections, err := s.Queries.GetActiveConnectionsByChannelID(ctx, tx, &database.GetActiveConnectionsByChannelIDParams{
-		ActiveChannelID: dbuuid.NullUUID{UUID: googl.UUID(channelID), Valid: true},
-		OrganizationID:  organizationID,
+		ActiveChannelID:         dbuuid.NullUUID{UUID: googl.UUID(channelID), Valid: true},
+		OrganizationID:          organizationID,
+		ResponsiveWindowSeconds: ResponsiveWindowSeconds,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to query active connections by channel",
@@ -1113,8 +1143,9 @@ func (s *NotificationService) queryInstancesForEmployees(
 
 	// Query active connections
 	connections, err := s.Queries.GetActiveConnectionsByEmployeeIDs(ctx, tx, &database.GetActiveConnectionsByEmployeeIDsParams{
-		Column1:        employeeIDs,
-		OrganizationID: organizationID,
+		EmployeeIds:             employeeIDs,
+		OrganizationID:          organizationID,
+		ResponsiveWindowSeconds: ResponsiveWindowSeconds,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to query active connections: %w", err)

@@ -297,6 +297,41 @@ const (
 	PresenceStatusInMeeting    = "in_meeting"
 )
 
+// Presence ping-pong timing. These three numbers define the whole liveness state
+// machine and MUST align with:
+// - Proto comments: rpc/v1/notification.proto (PresencePong, NotificationEvent)
+// - Frontend mirror: frontend/packages/apis/src/presence.ts
+// - Frontend mirror: frontend/packages/notifications/src/types.ts (event type)
+//
+// This Go file is the source of truth (Constitution VIII). The windows are passed to
+// SQL as integer seconds via make_interval(secs => $n) so the value has exactly one
+// definition here while the comparison still runs on the database clock.
+const (
+	// PingIntervalSeconds is how often the server challenges each open stream.
+	PingIntervalSeconds = 20
+	// ResponsiveWindowSeconds is the maximum silence a connection may have and still
+	// count as present and as a live-delivery target. Two missed pings plus slack:
+	// a single dropped pong must never demote a healthy connection.
+	ResponsiveWindowSeconds = 45
+	// RemovalWindowSeconds is how long a silent connection's row survives before the
+	// janitor deletes it. Deliberately well past the responsive window so a recovering
+	// client finds its row intact and resumes without reconnecting.
+	RemovalWindowSeconds = 90
+)
+
+// SSE event types carried on NotificationEvent.event_type.
+const (
+	// EventTypePing is a liveness challenge. The client MUST answer it with a
+	// PresencePong echoing the event's event_id. It replaces the former "heartbeat"
+	// event, which also refreshed the server's own liveness row — the defect the
+	// ping-pong protocol exists to remove.
+	EventTypePing = "ping"
+	// EventTypeConnectionEstablished carries the connection_id to a new stream.
+	EventTypeConnectionEstablished = "connection_established"
+	// EventTypeNotification carries a NotificationSummary.
+	EventTypeNotification = "notification"
+)
+
 // presenceStatusPriority orders statuses from most to least available for aggregation logic.
 var presenceStatusPriority = map[string]int{
 	PresenceStatusOnline:       4,
@@ -332,6 +367,8 @@ func PresenceStatusFromProto(status rpcv1.PresenceStatus) string {
 		return PresenceStatusIdle
 	case rpcv1.PresenceStatus_PRESENCE_STATUS_OFFLINE:
 		return PresenceStatusOffline
+	case rpcv1.PresenceStatus_PRESENCE_STATUS_IN_MEETING:
+		return PresenceStatusInMeeting
 	default:
 		return PresenceStatusOffline
 	}
@@ -348,6 +385,8 @@ func PresenceStatusToProto(status string) rpcv1.PresenceStatus {
 		return rpcv1.PresenceStatus_PRESENCE_STATUS_IDLE
 	case PresenceStatusOffline:
 		return rpcv1.PresenceStatus_PRESENCE_STATUS_OFFLINE
+	case PresenceStatusInMeeting:
+		return rpcv1.PresenceStatus_PRESENCE_STATUS_IN_MEETING
 	default:
 		return rpcv1.PresenceStatus_PRESENCE_STATUS_UNSPECIFIED
 	}
@@ -615,7 +654,9 @@ const (
 	FallbackReasonSuppressedByPreference = "suppressed_by_preference" // User preference mutes this type
 	FallbackReasonSSEReceiptConfirmed    = "sse_receipt_confirmed"    // Foreground client receipt confirmed SSE delivery
 	FallbackReasonAcknowledgedBeforePush = "acknowledged_before_fallback"
-	FallbackReasonGhostConnectionTimeout = "ghost_connection_timeout"
+	// FallbackReasonConnectionUnresponsive records that the recipient's connections had
+	// stopped answering presence pings, so live delivery could not reach them.
+	FallbackReasonConnectionUnresponsive = "connection_unresponsive"
 	FallbackReasonDeliveryError          = "delivery_error" // FCM/APNS/email returned an error
 )
 
@@ -627,7 +668,7 @@ var fallbackReasons = map[string]struct{}{
 	FallbackReasonSuppressedByPreference: {},
 	FallbackReasonSSEReceiptConfirmed:    {},
 	FallbackReasonAcknowledgedBeforePush: {},
-	FallbackReasonGhostConnectionTimeout: {},
+	FallbackReasonConnectionUnresponsive: {},
 	FallbackReasonDeliveryError:          {},
 }
 

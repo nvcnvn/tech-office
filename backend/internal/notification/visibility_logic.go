@@ -92,6 +92,14 @@ func (l *visibilityLogicImpl) GetPresenceVisibility(ctx context.Context, tx data
 	return visibility, nil
 }
 
+// FilterVisiblePresence applies an employee's visibility preference to what a viewer
+// sees.
+//
+// Ordering constraint (FR-015): this runs on the READ path only, after presence has
+// been aggregated, and its result never reaches routing. Choosing to appear offline
+// changes what colleagues see; it must not change whether a notification can be
+// delivered live, because the person is in fact still there answering pings. Calling
+// this from RoutingLogic would silently push every hidden employee onto the push path.
 func (l *visibilityLogicImpl) FilterVisiblePresence(ctx context.Context, tx database.DBTX, presences []*EmployeePresence, viewerEmployeeID dbuuid.UUID, organizationID dbuuid.UUID) ([]*EmployeePresence, error) {
 	if len(presences) == 0 {
 		return presences, nil

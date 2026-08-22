@@ -502,11 +502,10 @@ SELECT DISTINCT ON (ac.employee_id)
         ELSE ac.presence_status
     END AS presence_status
 FROM notification.active_connection ac
-WHERE ac.organization_id = $1
-  AND ac.employee_id = ANY($2::uuid[])
-  AND ac.connection_status = 'active'
-  AND ac.last_heartbeat > NOW() - INTERVAL '60 seconds'
-ORDER BY ac.employee_id, ac.last_heartbeat DESC;
+WHERE ac.organization_id = @organization_id
+  AND ac.employee_id = ANY(@employee_ids::uuid[])
+  AND ac.last_pong_at >= NOW() - make_interval(secs => @responsive_window_seconds::int)
+ORDER BY ac.employee_id, ac.last_pong_at DESC;
 
 -- =============================================================================
 -- Org-Managed Accounts: Identity Lookup for PIN Login

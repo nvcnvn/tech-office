@@ -499,6 +499,12 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	}
 	defer notificationService.Stop()
 
+	// Presence pong batcher: coalesces the pongs arriving at this instance into one
+	// multi-row UPDATE per organization per flush tick. Drained on shutdown so no
+	// in-flight pong RPC is left waiting.
+	notificationConnect.StartPongBatcher(serverCtx)
+	defer notificationConnect.StopPongBatcher()
+
 	flowWorker := flows.Worker{
 		Pool:         flowPool,
 		Registry:     flowsRegistry,

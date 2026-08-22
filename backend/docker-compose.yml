@@ -8,7 +8,10 @@ services:
     command:
       - postgres
       - -c
-      - shared_preload_libraries=citus,pg_textsearch
+      # pg_stat_statements is how the presence write rate is validated (see
+      # specs/033-presence-ping-pong/quickstart.md): it is the only way to see that
+      # RecordPresencePongs call counts do not track connection count 1:1.
+      - shared_preload_libraries=citus,pg_textsearch,pg_stat_statements
     environment:
       POSTGRES_DB: tech_office_db
       POSTGRES_PASSWORD: tech_office_password

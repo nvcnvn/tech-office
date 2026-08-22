@@ -455,18 +455,10 @@ INSERT INTO notification.active_connection (
     ip_address
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
-) ON CONFLICT (organization_id, employee_id, connection_id) 
-DO UPDATE SET 
-    last_heartbeat = $8,
-    connection_status = 'active';
-
--- name: UpdateConnectionHeartbeat :execrows
-UPDATE notification.active_connection
-SET last_heartbeat = $4
-WHERE organization_id = $1
-  AND employee_id = $2
-  AND connection_id = $3
-  AND connection_status = 'active';
+) ON CONFLICT (organization_id, employee_id, connection_id)
+DO UPDATE SET
+    instance_id = EXCLUDED.instance_id,
+    last_pong_at = $8;
 
 -- name: RemoveActiveConnection :exec
 DELETE FROM notification.active_connection
@@ -474,75 +466,81 @@ WHERE organization_id = $1
   AND employee_id = $2
   AND connection_id = $3;
 
--- name: UpdatePresenceStatus :exec
-INSERT INTO notification.active_connection (
-    organization_id,
-    employee_id,
-    connection_id,
-    instance_id,
-    presence_status,
-    active_channel_id,
-    last_interaction_at,
-    last_heartbeat,
-    connection_status
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, 'active'
-)
-ON CONFLICT (organization_id, employee_id, connection_id)
-DO UPDATE SET 
-  instance_id = EXCLUDED.instance_id,
-    presence_status = EXCLUDED.presence_status,
-    active_channel_id = EXCLUDED.active_channel_id,
-    last_interaction_at = EXCLUDED.last_interaction_at,
-    last_heartbeat = EXCLUDED.last_heartbeat,
-    connection_status = 'active';
+-- name: RecordPresencePongs :many
+-- Advance liveness for a batch of connections in one organization.
+-- UPDATE only — never an upsert — so a connection removed by the janitor is not
+-- resurrected by a late pong. The RETURNING set tells the caller which pongs matched;
+-- unmatched connection_ids receive PONG_DIRECTIVE_RECONNECT.
+-- last_pong_at uses the DATABASE clock: client clocks are never trusted for liveness.
+-- Matching on employee_id as well as connection_id is what enforces ownership: a pong
+-- can only ever touch a row belonging to the authenticated employee, and a mismatched
+-- pair simply fails to match — no separate authorization query.
+-- active_channel_ids travels as text[] so an empty string can carry "no channel":
+-- a uuid[] cannot hold a NULL element through the generated parameter type.
+UPDATE notification.active_connection ac
+SET presence_status    = p.presence_status,
+    active_channel_id  = p.active_channel_id,
+    last_interaction_at = p.last_interaction_at,
+    last_pong_at       = now()
+FROM (
+        SELECT (@connection_ids::uuid[])[i]           AS connection_id,
+               (@employee_ids::uuid[])[i]             AS employee_id,
+               (@presence_statuses::text[])[i]        AS presence_status,
+               nullif((@active_channel_ids::text[])[i], '')::uuid AS active_channel_id,
+               (@last_interactions::timestamptz[])[i] AS last_interaction_at
+        FROM generate_subscripts(@connection_ids::uuid[], 1) AS i
+     ) AS p
+WHERE ac.organization_id = @organization_id
+  AND ac.employee_id     = p.employee_id
+  AND ac.connection_id   = p.connection_id
+RETURNING ac.connection_id;
 
--- name: GetActiveConnectionByID :one
-SELECT organization_id,
-     employee_id,
-     connection_id,
-     instance_id,
-     presence_status,
-     active_channel_id,
-     last_interaction_at,
-     last_heartbeat
-FROM notification.active_connection
-WHERE organization_id = $1
-  AND employee_id = $2
-  AND connection_id = $3
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds';
+-- name: RemoveDepartedConnections :execrows
+-- Immediate removal for clients that announced a deliberate teardown.
+-- Issued in the same flush as RecordPresencePongs, after it, for the departing subset.
+DELETE FROM notification.active_connection
+WHERE organization_id = @organization_id
+  AND employee_id     = ANY(@employee_ids::uuid[])
+  AND connection_id   = ANY(@connection_ids::uuid[]);
+
+-- name: DeleteExpiredConnections :execrows
+-- Sweep connections that have not pongged within the removal window.
+-- Replaces the old mark-then-sweep pair; there is no longer anything to mark.
+DELETE FROM notification.active_connection
+WHERE organization_id = @organization_id
+  AND last_pong_at < now() - make_interval(secs => @removal_window_seconds::int);
 
 -- name: GetEmployeeActiveConnections :many
+-- Feeds both presence aggregation and ShouldSendPush. A connection is a live-delivery
+-- target iff it pongged within the responsive window — exactly one derived predicate,
+-- compared on the database clock against a window Go owns (Constitution VIII).
 SELECT connection_id,
        instance_id,
        active_channel_id,
        presence_status,
-       last_heartbeat,
+       last_pong_at,
        last_interaction_at
 FROM notification.active_connection
-WHERE organization_id = $1
-  AND employee_id = $2
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds';
+WHERE organization_id = @organization_id
+  AND employee_id = @employee_id
+  AND last_pong_at >= now() - make_interval(secs => @responsive_window_seconds::int);
 
 -- name: GetActiveConnectionsByEmployeeIDs :many
+-- Live-routing fan-out by instance.
 SELECT instance_id, array_agg(employee_id)::uuid[] AS employee_ids
 FROM notification.active_connection
-WHERE employee_id = ANY($1::uuid[])
-  AND organization_id = $2
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds'
+WHERE employee_id = ANY(@employee_ids::uuid[])
+  AND organization_id = @organization_id
+  AND last_pong_at >= now() - make_interval(secs => @responsive_window_seconds::int)
 GROUP BY instance_id;
 
 -- name: GetActiveConnectionsByChannelID :many
--- Get active connections for employees viewing a specific channel
+-- Channel-scoped live routing.
 SELECT instance_id, array_agg(employee_id)::uuid[] AS employee_ids
 FROM notification.active_connection
-WHERE active_channel_id = $1
-  AND organization_id = $2
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds'
+WHERE active_channel_id = @active_channel_id
+  AND organization_id = @organization_id
+  AND last_pong_at >= now() - make_interval(secs => @responsive_window_seconds::int)
 GROUP BY instance_id;
 
 -- name: GetEmployeeDepartments :many
@@ -561,18 +559,6 @@ FROM notification.notification_recipient
 WHERE fallback_status = 'queued'
   AND fallback_due_at IS NOT NULL
   AND fallback_due_at <= @now_at;
-
--- name: MarkStaleConnections :exec
-UPDATE notification.active_connection
-SET connection_status = 'stale'
-WHERE organization_id = $1
-  AND last_heartbeat < $2
-  AND connection_status = 'active';
-
--- name: CleanupStaleConnections :execrows
-DELETE FROM notification.active_connection
-WHERE organization_id = $1
-  AND last_heartbeat < $2;
 
 -- ============================================================================
 -- Delivery Attempt Operations (per-channel delivery audit trail)
@@ -703,7 +689,7 @@ SELECT ac.employee_id,
        ac.presence_status,
        ac.active_channel_id,
        ac.last_interaction_at,
-       ac.last_heartbeat,
+       ac.last_pong_at,
        pv.visibility_mode,
        pv.custom_status_text,
   pv.custom_status_emoji,
@@ -712,10 +698,9 @@ FROM notification.active_connection ac
 LEFT JOIN notification.presence_visibility pv
   ON pv.organization_id = ac.organization_id
  AND pv.employee_id = ac.employee_id
-WHERE ac.organization_id = $1
-  AND ac.employee_id = ANY($2::uuid[])
-  AND ac.connection_status = 'active'
-  AND ac.last_heartbeat >= now() - interval '60 seconds';
+WHERE ac.organization_id = @organization_id
+  AND ac.employee_id = ANY(@employee_ids::uuid[])
+  AND ac.last_pong_at >= now() - make_interval(secs => @responsive_window_seconds::int);
 
 -- name: SharesDepartment :one
 SELECT EXISTS (

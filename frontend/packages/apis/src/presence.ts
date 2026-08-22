@@ -9,7 +9,7 @@ import { notification } from "rpc";
 import { protoTimestampToDate, dateToProtoTimestamp } from "./proto-utils";
 
 // Type aliases for RPC response types
-type UpdatePresenceStatusResponse = notification.UpdatePresenceStatusResponse;
+type PresencePongResponse = notification.PresencePongResponse;
 type GetEmployeePresenceResponse = notification.GetEmployeePresenceResponse;
 type GetBatchEmployeePresenceResponse = notification.GetBatchEmployeePresenceResponse;
 
@@ -28,7 +28,27 @@ type GetBatchEmployeePresenceResponse = notification.GetBatchEmployeePresenceRes
  * 4. Update this TypeScript type
  * 5. Submit all changes in single PR with alignment verification
  */
-export type PresenceStatus = 'online' | 'online_hidden' | 'idle' | 'offline' | 'unspecified';
+export type PresenceStatus = 'online' | 'online_hidden' | 'idle' | 'offline' | 'in_meeting' | 'unspecified';
+
+/**
+ * Presence ping-pong timing.
+ *
+ * MUST align with backend/internal/notification/constants.go, which is the source of
+ * truth (Constitution VIII). Changing a value here without changing it there breaks
+ * the protocol silently.
+ */
+/** How often the server challenges each open stream with a `ping` event. */
+export const PING_INTERVAL_SECONDS = 20;
+/** Maximum silence a connection may have and still count as present. */
+export const RESPONSIVE_WINDOW_SECONDS = 45;
+
+/**
+ * Directive returned by a pong.
+ * - `ack`: recorded, carry on.
+ * - `reconnect`: this connection no longer exists server-side. Close the stream and
+ *   re-establish; do not retry the pong against the dead connection id.
+ */
+export type PongDirective = 'ack' | 'reconnect' | 'unspecified';
 
 /**
  * Map protobuf enum to custom type
@@ -43,6 +63,8 @@ function mapProtoPresenceStatus(protoStatus: notification.PresenceStatus): Prese
 			return 'idle';
 		case notification.PresenceStatus.OFFLINE:
 			return 'offline';
+		case notification.PresenceStatus.IN_MEETING:
+			return 'in_meeting';
 		case notification.PresenceStatus.UNSPECIFIED:
 		default:
 			return 'unspecified';
@@ -62,6 +84,8 @@ function mapToProtoPresenceStatus(status: PresenceStatus): notification.Presence
 			return notification.PresenceStatus.IDLE;
 		case 'offline':
 			return notification.PresenceStatus.OFFLINE;
+		case 'in_meeting':
+			return notification.PresenceStatus.IN_MEETING;
 		case 'unspecified':
 		default:
 			return notification.PresenceStatus.UNSPECIFIED;
@@ -69,24 +93,24 @@ function mapToProtoPresenceStatus(status: PresenceStatus): notification.Presence
 }
 
 /**
- * Parameters for updating presence status
+ * Parameters for answering a presence ping.
  */
-export interface UpdatePresenceParams {
-	/** Current presence status */
+export interface PresencePongParams {
+	/** Connection being answered for, from the connection_established event. Required. */
+	connectionId: string;
+	/**
+	 * Echo of the answered ping's eventId. Omit for an unsolicited pong (state change
+	 * or departure) — liveness comes from the server-observed arrival time, never this.
+	 */
+	pingId?: string;
+	/** The employee's current state on THIS connection. */
 	status: PresenceStatus;
-	/** Active channel ID (null if not viewing a channel) */
+	/** Channel currently being viewed on this connection; null when none. */
 	activeChannelId: string | null;
-	/** Last user interaction timestamp */
+	/** Last user interaction. Advisory: clamped server-side to [now - 1h, now]. */
 	lastInteractionAt: Date;
-	/** Active SSE connection identifier */
-	connectionId?: string | null;
-}
-
-export interface UpdatePresenceResult {
-	status: PresenceStatus;
-	updatedAt: Date;
-	connectionId: string | null;
-	activeChannelId?: string;
+	/** Clean departure: remove the connection now rather than waiting out the window. */
+	departing?: boolean;
 }
 
 /**
@@ -112,29 +136,37 @@ export interface EmployeePresence {
 }
 
 /**
- * Update the current user's presence status
- * 
- * @param params - Presence update parameters
- * @returns Updated presence status and timestamp
+ * Answer a presence ping, or report a state change unsolicited.
+ *
+ * This is the ONLY way presence is reported: the server never advances a connection's
+ * liveness on its own. A connection silent for RESPONSIVE_WINDOW_SECONDS stops counting
+ * as present and its notifications take the push path instead.
+ *
+ * @param params - Pong parameters
+ * @returns The server's directive — 'ack' to carry on, 'reconnect' to re-establish
  */
-export async function updatePresenceStatus(
-	params: UpdatePresenceParams
-): Promise<UpdatePresenceResult> {
+export async function presencePong(
+	params: PresencePongParams
+): Promise<PongDirective> {
 	return await rpcCall(async () => {
-		const resp = await notificationClient.updatePresenceStatus({
+		const resp = await notificationClient.presencePong({
+			connectionId: params.connectionId,
+			pingId: params.pingId || undefined,
 			status: mapToProtoPresenceStatus(params.status),
 			activeChannelId: params.activeChannelId || undefined,
 			lastInteractionAt: dateToProtoTimestamp(params.lastInteractionAt),
-			connectionId: params.connectionId || undefined,
+			departing: params.departing ?? false,
 		});
 
-		const typed = resp as UpdatePresenceStatusResponse;
-		return {
-			status: mapProtoPresenceStatus(typed.status),
-			updatedAt: protoTimestampToDate(typed.updatedAt) || new Date(),
-			connectionId: typed.connectionId || null,
-			activeChannelId: typed.activeChannelId || undefined,
-		};
+		const typed = resp as PresencePongResponse;
+		switch (typed.directive) {
+			case notification.PongDirective.ACK:
+				return 'ack';
+			case notification.PongDirective.RECONNECT:
+				return 'reconnect';
+			default:
+				return 'unspecified';
+		}
 	});
 }
 

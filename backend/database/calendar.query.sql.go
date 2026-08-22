@@ -185,8 +185,8 @@ const detectResourceConflict = `-- name: DetectResourceConflict :many
 SELECT id, organization_id, resource_id, event_id, start_time, end_time, booked_by_id, updated_at FROM calendar.resource_booking
 WHERE organization_id = $1
   AND resource_id = $2
-    AND start_time < $4
-    AND end_time > $3
+  AND start_time < $3
+  AND end_time > $4
   AND event_id != $5
 FOR UPDATE
 `
@@ -194,17 +194,18 @@ FOR UPDATE
 type DetectResourceConflictParams struct {
 	OrganizationID dbuuid.UUID        `json:"organization_id"`
 	ResourceID     dbuuid.UUID        `json:"resource_id"`
-	StartTime      pgtype.Timestamptz `json:"start_time"`
-	EndTime        pgtype.Timestamptz `json:"end_time"`
+	RangeEnd       pgtype.Timestamptz `json:"range_end"`
+	RangeStart     pgtype.Timestamptz `json:"range_start"`
 	EventID        dbuuid.UUID        `json:"event_id"`
 }
 
+// Bounds are named for the range; see ListEventsForEmployee.
 func (q *Queries) DetectResourceConflict(ctx context.Context, db DBTX, arg *DetectResourceConflictParams) ([]*CalendarResourceBooking, error) {
 	rows, err := db.Query(ctx, detectResourceConflict,
 		arg.OrganizationID,
 		arg.ResourceID,
-		arg.StartTime,
-		arg.EndTime,
+		arg.RangeEnd,
+		arg.RangeStart,
 		arg.EventID,
 	)
 	if err != nil {
@@ -1059,28 +1060,32 @@ SELECT e.id, e.organization_id, e.title, e.description, e.event_type, e.visibili
 LEFT JOIN calendar.attendee a
     ON a.organization_id = e.organization_id
  AND a.event_id = e.id
- AND a.employee_id = $2
-WHERE e.organization_id = $1
-    AND (e.organizer_id = $2 OR a.employee_id IS NOT NULL)
-				AND e.start_time < $4
-				AND e.end_time > $3
+ AND a.employee_id = $1
+WHERE e.organization_id = $2
+    AND (e.organizer_id = $1 OR a.employee_id IS NOT NULL)
+  AND e.start_time < $3
+  AND e.end_time > $4
   AND e.cancelled_at IS NULL
 ORDER BY e.start_time ASC
 `
 
 type ListEventsForEmployeeParams struct {
-	OrganizationID dbuuid.UUID        `json:"organization_id"`
 	EmployeeID     dbuuid.UUID        `json:"employee_id"`
-	StartTime      pgtype.Timestamptz `json:"start_time"`
-	EndTime        pgtype.Timestamptz `json:"end_time"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	RangeEnd       pgtype.Timestamptz `json:"range_end"`
+	RangeStart     pgtype.Timestamptz `json:"range_start"`
 }
 
+// Overlap test: an event is in range when it starts before the range ends and ends
+// after the range begins. The bounds are named for the RANGE, not for the column they
+// are compared against — naming them start_time/end_time inverts their meaning and is
+// exactly the mix-up that returns an empty list.
 func (q *Queries) ListEventsForEmployee(ctx context.Context, db DBTX, arg *ListEventsForEmployeeParams) ([]*CalendarEvent, error) {
 	rows, err := db.Query(ctx, listEventsForEmployee,
-		arg.OrganizationID,
 		arg.EmployeeID,
-		arg.StartTime,
-		arg.EndTime,
+		arg.OrganizationID,
+		arg.RangeEnd,
+		arg.RangeStart,
 	)
 	if err != nil {
 		return nil, err
@@ -1128,8 +1133,8 @@ func (q *Queries) ListEventsForEmployee(ctx context.Context, db DBTX, arg *ListE
 const listEventsForOrg = `-- name: ListEventsForOrg :many
 SELECT id, organization_id, title, description, event_type, visibility, start_time, end_time, all_day, location_text, virtual_link, organizer_id, recurrence_rule, recurrence_end, series_id, is_exception_instance, original_start_time, description_document_id, discussion_channel_id, requires_check_in, requires_evidence, cancelled_at, cancelled_by_id, updated_at FROM calendar.event
 WHERE organization_id = $1
-	AND start_time < $3
-	AND end_time > $2
+  AND start_time < $2
+  AND end_time > $3
   AND cancelled_at IS NULL
   AND visibility IN ('team', 'org_wide')
 ORDER BY start_time ASC
@@ -1137,12 +1142,13 @@ ORDER BY start_time ASC
 
 type ListEventsForOrgParams struct {
 	OrganizationID dbuuid.UUID        `json:"organization_id"`
-	StartTime      pgtype.Timestamptz `json:"start_time"`
-	EndTime        pgtype.Timestamptz `json:"end_time"`
+	RangeEnd       pgtype.Timestamptz `json:"range_end"`
+	RangeStart     pgtype.Timestamptz `json:"range_start"`
 }
 
+// Bounds are named for the range; see ListEventsForEmployee.
 func (q *Queries) ListEventsForOrg(ctx context.Context, db DBTX, arg *ListEventsForOrgParams) ([]*CalendarEvent, error) {
-	rows, err := db.Query(ctx, listEventsForOrg, arg.OrganizationID, arg.StartTime, arg.EndTime)
+	rows, err := db.Query(ctx, listEventsForOrg, arg.OrganizationID, arg.RangeEnd, arg.RangeStart)
 	if err != nil {
 		return nil, err
 	}

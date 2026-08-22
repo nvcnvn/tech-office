@@ -59,7 +59,7 @@ func (s *NotificationService) streamNotificationsCore(
 	// Initial connection event includes connection ID for presence tracking.
 	connectionEvent := &rpcv1.NotificationEvent{
 		EventId:      dbuuid.Must().String(),
-		EventType:    "connection_established",
+		EventType:    EventTypeConnectionEstablished,
 		Timestamp:    timestamppb.Now(),
 		ConnectionId: connectionID.String(),
 	}
@@ -74,8 +74,8 @@ func (s *NotificationService) streamNotificationsCore(
 		}
 	}
 
-	heartbeatTicker := time.NewTicker(30 * time.Second)
-	defer heartbeatTicker.Stop()
+	pingTicker := time.NewTicker(PingIntervalSeconds * time.Second)
+	defer pingTicker.Stop()
 
 	s.connMutex.RLock()
 	sseConn, exists := s.activeConnections[connectionID]
@@ -122,32 +122,27 @@ func (s *NotificationService) streamNotificationsCore(
 				"eventID", event.EventId,
 				"eventType", event.EventType)
 
-		case <-heartbeatTicker.C:
-			heartbeat := &rpcv1.NotificationEvent{
+		case <-pingTicker.C:
+			// The ping is a liveness challenge, and its event_id IS the ping id: the
+			// client answers with PresencePong echoing it.
+			//
+			// Nothing here writes to the connection's row. That deletion is the whole
+			// point of this protocol: as long as anything server-side advanced the
+			// liveness timestamp, a client that had gone away was unobservable, and a
+			// sleeping laptop stayed "online" while its notifications were suppressed.
+			// Liveness is now established only by an answer that made the full round
+			// trip — server → stream → client → RPC → server. A connection whose row
+			// vanished (UNLOGGED-table recovery) is told to reconnect by its next pong's
+			// directive rather than being silently re-registered here.
+			ping := &rpcv1.NotificationEvent{
 				EventId:      dbuuid.Must().String(),
-				EventType:    "heartbeat",
+				EventType:    EventTypePing,
 				Timestamp:    timestamppb.Now(),
 				ConnectionId: connectionID.String(),
 			}
 
-			if err := send(heartbeat); err != nil {
-				return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to send heartbeat: %w", err))
-			}
-
-			rowsAffected, err := s.updateHeartbeat(ctx, employeeID, connectionID, organizationID)
-			if err != nil {
-				slog.WarnContext(ctx, "failed to update heartbeat", "error", err, "employeeID", employeeID.String())
-			} else if rowsAffected == 0 {
-				// DB row missing — likely UNLOGGED table data loss after PostgreSQL recovery.
-				// Re-register so the connection stays visible for presence and routing.
-				slog.WarnContext(ctx, "heartbeat matched 0 rows, re-registering connection",
-					"employeeID", employeeID.String(),
-					"connectionID", connectionID.String(),
-				)
-				if regErr := s.registerConnection(ctx, employeeID, connectionID, organizationID, "", ""); regErr != nil {
-					slog.WarnContext(ctx, "failed to re-register connection after missing heartbeat",
-						"error", regErr, "employeeID", employeeID.String())
-				}
+			if err := send(ping); err != nil {
+				return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to send ping: %w", err))
 			}
 		}
 	}
@@ -297,7 +292,7 @@ func (s *NotificationService) sendMissedNotifications(
 		// Send as notification event
 		event := &rpcv1.NotificationEvent{
 			EventId:      n.NotificationID.String(), // Use notification ID as event ID
-			EventType:    "notification",
+			EventType:    EventTypeNotification,
 			Timestamp:    timestamppb.New(n.UpdatedAt.Time),
 			Notification: notifSummary,
 		}

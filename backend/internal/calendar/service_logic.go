@@ -101,8 +101,8 @@ func (l *logicImpl) GetFreeBusy(ctx context.Context, tx database.DBTX, orgID dbu
 		events, err := l.queries.ListEventsForEmployee(ctx, tx, &database.ListEventsForEmployeeParams{
 			OrganizationID: orgID,
 			EmployeeID:     empID,
-			EndTime:        toPg,
-			StartTime:      fromPg,
+			RangeStart:     fromPg,
+			RangeEnd:       toPg,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("list events for free/busy (employee %s): %w", empID, err)

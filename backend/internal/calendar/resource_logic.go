@@ -18,8 +18,8 @@ func (l *logicImpl) CreateResourceBooking(ctx context.Context, tx database.DBTX,
 	conflicts, err := l.queries.DetectResourceConflict(ctx, tx, &database.DetectResourceConflictParams{
 		OrganizationID: orgID,
 		ResourceID:     resourceID,
-		StartTime:      toPgTimestamptz(start),
-		EndTime:        toPgTimestamptz(end),
+		RangeStart:     toPgTimestamptz(start),
+		RangeEnd:       toPgTimestamptz(end),
 		EventID:        eventID,
 	})
 	if err != nil {

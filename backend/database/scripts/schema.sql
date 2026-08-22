@@ -1492,7 +1492,7 @@ CREATE TABLE IF NOT EXISTS notification.notification_recipient(
             'suppressed_by_preference',
             'sse_receipt_confirmed',
             'acknowledged_before_fallback',
-            'ghost_connection_timeout',
+            'connection_unresponsive',
             'delivery_error'
         )
     )
@@ -1533,7 +1533,7 @@ COMMENT ON COLUMN notification.notification_recipient.acknowledgement_action IS 
 
 COMMENT ON COLUMN notification.notification_recipient.fallback_status IS 'Latest offline delivery outcome summary: not_applicable, queued, sent, skipped, failed.';
 
-COMMENT ON COLUMN notification.notification_recipient.fallback_reason IS 'Why fallback was queued, skipped, sent, or failed. Values: live_only_policy, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, ghost_connection_timeout, delivery_error.';
+COMMENT ON COLUMN notification.notification_recipient.fallback_reason IS 'Why fallback was queued, skipped, sent, or failed. Values: live_only_policy, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, delivery_error.';
 
 COMMENT ON COLUMN notification.notification_recipient.fallback_due_at IS 'Deadline for delayed rescue push when SSE delivery is ambiguous. NULL when no rescue job is queued.';
 
@@ -1674,8 +1674,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS notification.active_connection(
     department_ids uuid[], -- Populated on connect from organization.department_member
     -- Connection tracking
     connected_at timestamptz DEFAULT now(),
-    last_heartbeat timestamptz DEFAULT now(),
-    connection_status text DEFAULT 'active' CHECK (connection_status IN ('active', 'stale')),
+    last_pong_at timestamptz NOT NULL DEFAULT now(),
     presence_status text NOT NULL DEFAULT 'online',
     active_channel_id uuid NULL,
     last_interaction_at timestamptz NOT NULL DEFAULT now(),
@@ -1698,25 +1697,29 @@ CREATE UNLOGGED TABLE IF NOT EXISTS notification.active_connection(
 SELECT create_distributed_table('notification.active_connection', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for active_connection
-CREATE INDEX IF NOT EXISTS idx_active_connection_employee ON notification.active_connection(organization_id, employee_id, connection_status);
+-- Liveness is derived from last_pong_at, so every index leads with it rather than a
+-- stored status column. Fewer indexes on a write-hot UNLOGGED table is a direct
+-- write-throughput gain.
 
-CREATE INDEX IF NOT EXISTS idx_active_connection_instance ON notification.active_connection(organization_id, instance_id, connection_status);
+-- Serves presence lookups and routing eligibility, the two hottest reads.
+CREATE INDEX IF NOT EXISTS idx_active_connection_employee_live
+    ON notification.active_connection(organization_id, employee_id, last_pong_at DESC);
 
-CREATE INDEX IF NOT EXISTS idx_active_connection_org ON notification.active_connection(organization_id, connection_status);
+-- Serves channel-scoped live routing.
+CREATE INDEX IF NOT EXISTS idx_active_connection_channel_live
+    ON notification.active_connection(organization_id, active_channel_id, last_pong_at DESC)
+    WHERE active_channel_id IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_active_connection_org_presence
-    ON notification.active_connection(organization_id, presence_status, last_heartbeat DESC);
+-- Serves the janitor sweep.
+CREATE INDEX IF NOT EXISTS idx_active_connection_expiry
+    ON notification.active_connection(organization_id, last_pong_at);
+
+-- Serves instance-startup cleanup.
+CREATE INDEX IF NOT EXISTS idx_active_connection_instance
+    ON notification.active_connection(organization_id, instance_id);
 
 -- GIN index for array overlap queries (department-based targeting)
 CREATE INDEX IF NOT EXISTS idx_active_connection_departments ON notification.active_connection USING GIN(department_ids);
-
-CREATE INDEX IF NOT EXISTS idx_active_connection_heartbeat ON notification.active_connection(organization_id, last_heartbeat)
-WHERE
-    connection_status = 'active';
-
-CREATE INDEX IF NOT EXISTS idx_active_connection_active_channel
-    ON notification.active_connection(organization_id, active_channel_id)
-    WHERE active_channel_id IS NOT NULL;
 
 COMMENT ON TABLE notification.active_connection IS 'UNLOGGED table tracking active SSE connections across backend instances. Data lost on crash is acceptable (users reconnect). 2-3x faster writes than regular table.';
 
@@ -1724,9 +1727,9 @@ COMMENT ON COLUMN notification.active_connection.instance_id IS 'Backend instanc
 
 COMMENT ON COLUMN notification.active_connection.department_ids IS 'Denormalized department membership for single-query department → users → instances resolution. Updated only on reconnect.';
 
-COMMENT ON COLUMN notification.active_connection.last_heartbeat IS 'Updated every 30 seconds by SSE connection. Entries with last_heartbeat > 60s old are considered stale and cleaned up.';
+COMMENT ON COLUMN notification.active_connection.last_pong_at IS 'Instant the database observed a client answer a presence ping (PresencePong RPC). Advanced ONLY by a received pong — nothing server-side ever refreshes it. Liveness is derived: a connection is a live-delivery target iff last_pong_at >= now() - 45s, and is deleted by the janitor once silent for 90s.';
 
-COMMENT ON COLUMN notification.active_connection.presence_status IS 'Real-time presence indicator. Allowed values: online, online_hidden, idle, offline. Aligned with rpc.v1.PresenceStatus enum.';
+COMMENT ON COLUMN notification.active_connection.presence_status IS 'Real-time presence indicator reported by each pong. Allowed values: online, online_hidden, idle, offline, in_meeting. Aligned with rpc.v1.PresenceStatus enum.';
 
 COMMENT ON COLUMN notification.active_connection.active_channel_id IS 'Channel currently viewed by the connection. Nullable: may be NULL when the connection is not viewing any channel. Used for targeted ephemeral signal routing.';
 
@@ -1914,7 +1917,7 @@ CREATE TABLE IF NOT EXISTS notification.delivery_attempt (
             'suppressed_by_preference',
             'sse_receipt_confirmed',
             'acknowledged_before_fallback',
-            'ghost_connection_timeout',
+            'connection_unresponsive',
             'provider_error',
             'delivery_error'
         )

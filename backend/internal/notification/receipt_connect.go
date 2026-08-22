@@ -66,11 +66,20 @@ func (s *NotificationServiceConnect) ConfirmNotificationReceipt(
 
 	confirmedCount := int32(0)
 	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
-		if _, err := s.NotificationService.Queries.GetActiveConnectionByID(ctx, tx, &database.GetActiveConnectionByIDParams{
-			OrganizationID: organizationID,
-			EmployeeID:     employeeID,
-			ConnectionID:   connectionID,
-		}); err != nil {
+		// Ownership and liveness in one shard-local read: the query already returns only
+		// the employee's own connections that pongged within the responsive window.
+		conns, err := s.PresenceLogic.GetEmployeeActiveConnections(ctx, tx, employeeID, organizationID)
+		if err != nil {
+			return err
+		}
+		owned := false
+		for _, conn := range conns {
+			if conn.ConnectionID == connectionID {
+				owned = true
+				break
+			}
+		}
+		if !owned {
 			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("connection_id does not belong to employee or is stale"))
 		}
 

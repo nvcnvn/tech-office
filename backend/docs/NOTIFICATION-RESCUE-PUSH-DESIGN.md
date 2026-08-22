@@ -257,7 +257,7 @@ Do extend `delivery_attempt.reason` to include:
 
 - `sse_receipt_confirmed`
 - `acknowledged_before_fallback`
-- `ghost_connection_timeout`
+- `connection_unresponsive` (was `ghost_connection_timeout`, which named the workaround for a defect the presence ping-pong protocol removed)
 
 Use `delivery_attempt` for audit trail entries such as:
 
@@ -434,7 +434,7 @@ Add counters and logs for:
 
 Important ratio to watch:
 
-- `ghost_connection_timeout_rate = rescue_push_sent_after_online_queue / total_online_queued`
+- `connection_unresponsive_rate = rescue_push_sent_after_online_queue / total_online_queued`
 
 If this is non-trivial, the design is catching exactly the class of failures it was introduced for.
 

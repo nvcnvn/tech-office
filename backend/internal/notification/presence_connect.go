@@ -2,7 +2,6 @@ package notification
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 
@@ -15,139 +14,94 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// UpdatePresenceStatus implements the RPC handler for updating employee presence status.
-// This method is called frequently (every 30s heartbeat) and on state changes.
-func (s *NotificationServiceConnect) UpdatePresenceStatus(
+// PresencePong answers a presence ping delivered on the notification stream, and is
+// also sent unsolicited when the employee's state or active context changes.
+//
+// This is the ONLY way presence is reported. The server never advances a connection's
+// liveness on its own — see sse.go, where the former heartbeat write was deleted.
+//
+// The handler validates, enqueues the pong on the per-instance batcher, and blocks on
+// its own result. Awaiting the flush is what lets the response say authoritatively
+// that a connection no longer exists.
+func (s *NotificationServiceConnect) PresencePong(
 	ctx context.Context,
-	req *connect.Request[rpcv1.UpdatePresenceStatusRequest],
-) (*connect.Response[rpcv1.UpdatePresenceStatusResponse], error) {
-	slog.DebugContext(ctx, "UpdatePresenceStatus RPC called",
-		"function", "UpdatePresenceStatus",
-		"status", req.Msg.Status.String(),
-	)
-
-	// Extract auth context
+	req *connect.Request[rpcv1.PresencePongRequest],
+) (*connect.Response[rpcv1.PresencePongResponse], error) {
 	employeeID, organizationID, err := s.extractAuthContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// connection_id is REQUIRED - MUST be provided by frontend (obtained from SSE stream)
-	// UpdatePresenceStatus ONLY updates existing connections, never creates new ones
 	if req.Msg.ConnectionId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("connection_id is required - establish SSE connection first"))
+			fmt.Errorf("connection_id is required - establish a notification stream first"))
+	}
+	connectionID, err := dbuuid.Parse(req.Msg.ConnectionId)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid connection_id: %w", err))
 	}
 
-	connectionID, parseErr := dbuuid.Parse(req.Msg.ConnectionId)
-	if parseErr != nil {
+	// The client must state what it is: an unspecified status carries no information
+	// and would silently overwrite a real one.
+	if req.Msg.Status == rpcv1.PresenceStatus_PRESENCE_STATUS_UNSPECIFIED {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid connection_id: %w", parseErr))
+			fmt.Errorf("status is required and must not be PRESENCE_STATUS_UNSPECIFIED"))
 	}
+	status := PresenceStatusFromProto(req.Msg.Status)
 
-	slog.DebugContext(ctx, "UpdatePresenceStatus validating connection ownership",
-		"function", "UpdatePresenceStatus",
-		"connection_id", connectionID.String(),
-	)
-
-	// Convert proto status to database string
-	statusStr := presenceStatusProtoToString(req.Msg.Status)
-
-	// Parse active channel ID (optional)
 	var activeChannelID dbuuid.NullUUID
 	if req.Msg.ActiveChannelId != "" {
 		channelUUID, err := dbuuid.Parse(req.Msg.ActiveChannelId)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid active_channel_id: %w", err))
 		}
-		// dbuuid.UUID is an alias for google/dbuuid.UUID, direct cast is safe
-		activeChannelID = dbuuid.NullUUID{
-			UUID:  [16]byte(channelUUID),
-			Valid: true,
-		}
+		activeChannelID = dbuuid.NullUUID{UUID: [16]byte(channelUUID), Valid: true}
 	}
 
-	// Convert last interaction timestamp
 	var lastInteractionAt pgtype.Timestamptz
 	if req.Msg.LastInteractionAt != nil {
-		lastInteractionAt = pgtype.Timestamptz{
-			Time:  req.Msg.LastInteractionAt.AsTime(),
-			Valid: true,
-		}
+		lastInteractionAt = pgtype.Timestamptz{Time: req.Msg.LastInteractionAt.AsTime(), Valid: true}
 	}
 
-	// Build update params
-	// Always require connection ownership verification since connection_id is mandatory
-	params := &UpdatePresenceParams{
-		OrganizationID:             organizationID,
-		EmployeeID:                 employeeID,
-		ConnectionID:               connectionID,
-		Status:                     statusStr,
-		ActiveChannelID:            activeChannelID,
-		LastInteractionAt:          lastInteractionAt,
-		RequestedInstanceID:        s.NotificationService.InstanceID,
-		RequireConnectionOwnership: true, // Always true - connection_id is mandatory
-	}
-
-	// Update presence status (transaction for consistency)
-	var presence *EmployeePresence
-	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
-		var txErr error
-		presence, txErr = s.PresenceLogic.UpdatePresenceStatus(ctx, tx, params)
-		return txErr
+	directive, err := s.PongBatcher.Submit(ctx, PongRecord{
+		OrganizationID:    organizationID,
+		EmployeeID:        employeeID,
+		ConnectionID:      connectionID,
+		Status:            status,
+		ActiveChannelID:   activeChannelID,
+		LastInteractionAt: lastInteractionAt,
+		Departing:         req.Msg.Departing,
 	})
 	if err != nil {
-		if errors.Is(err, ErrConnectionNotFound) {
-			// The DB row is missing, but the SSE stream may still be alive —
-			// this happens after PostgreSQL crash/recovery because active_connection
-			// is an UNLOGGED table (data is truncated on recovery).
-			// Verify the connection exists in memory and retry without the
-			// ownership SELECT; the UpdatePresenceStatus SQL is an UPSERT that
-			// will re-create the row.
-			if s.NotificationService.HasActiveConnection(connectionID, employeeID) {
-				slog.WarnContext(ctx, "connection row missing but SSE stream alive, re-upserting",
-					"function", "UpdatePresenceStatus",
-					"connectionID", connectionID.String(),
-					"employeeID", employeeID.String(),
-				)
-				params.RequireConnectionOwnership = false
-				err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
-					var txErr error
-					presence, txErr = s.PresenceLogic.UpdatePresenceStatus(ctx, tx, params)
-					return txErr
-				})
-			}
-			if err != nil {
-				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("connection_id does not belong to employee"))
-			}
-		} else {
-			slog.ErrorContext(ctx, "failed to update presence status",
-				"function", "UpdatePresenceStatus",
-				"error", err,
-			)
-			return nil, connect.NewError(connect.CodeInternal, err)
-		}
+		slog.WarnContext(ctx, "failed to record presence pong",
+			"function", "PresencePong",
+			"employee_id", employeeID.String(),
+			"connection_id", connectionID.String(),
+			"error", err,
+		)
+		// The client simply answers the next ping.
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to record presence pong: %w", err))
 	}
 
-	// Build response
-	resp := &rpcv1.UpdatePresenceStatusResponse{
-		Status:       presenceStatusStringToProto(presence.Status),
-		ConnectionId: connectionID.String(),
-	}
-	if presence.LastHeartbeat.Valid {
-		resp.UpdatedAt = timestamppb.New(presence.LastHeartbeat.Time)
-	}
-	if presence.ActiveChannelID.Valid {
-		resp.ActiveChannelId = presence.ActiveChannelID.UUID.String()
-	}
-
-	slog.InfoContext(ctx, "presence status updated successfully",
+	slog.DebugContext(ctx, "presence pong recorded",
+		"function", "PresencePong",
 		"employee_id", employeeID.String(),
-		"status", presence.Status,
 		"connection_id", connectionID.String(),
+		"status", status,
+		"ping_id", req.Msg.PingId,
+		"departing", req.Msg.Departing,
+		"directive", directive,
 	)
 
-	return connect.NewResponse(resp), nil
+	// A connection belonging to another employee or organization simply fails to match,
+	// so it is indistinguishable from a removed one by design: the response leaks
+	// nothing about other tenants (FR-022, FR-023).
+	protoDirective := rpcv1.PongDirective_PONG_DIRECTIVE_ACK
+	if directive == PongDirectiveReconnect {
+		protoDirective = rpcv1.PongDirective_PONG_DIRECTIVE_RECONNECT
+	}
+
+	return connect.NewResponse(&rpcv1.PresencePongResponse{Directive: protoDirective}), nil
 }
 
 // GetEmployeePresence implements the RPC handler for fetching single employee presence.
@@ -209,7 +163,7 @@ func (s *NotificationServiceConnect) GetEmployeePresence(
 	// Build response
 	protoPresence := &rpcv1.EmployeePresence{
 		EmployeeId: presence.EmployeeID.String(),
-		Status:     presenceStatusStringToProto(presence.Status),
+		Status:     PresenceStatusToProto(presence.Status),
 	}
 
 	if presence.ActiveChannelID.Valid {
@@ -220,8 +174,9 @@ func (s *NotificationServiceConnect) GetEmployeePresence(
 		protoPresence.LastInteractionAt = timestamppb.New(presence.LastInteractionAt.Time)
 	}
 
-	if presence.LastHeartbeat.Valid {
-		protoPresence.LastHeartbeat = timestamppb.New(presence.LastHeartbeat.Time)
+	// The proto field keeps its name and number; last_pong_at is what fills it now.
+	if presence.LastPongAt.Valid {
+		protoPresence.LastHeartbeat = timestamppb.New(presence.LastPongAt.Time)
 	}
 
 	if presence.Visibility != nil {
@@ -284,7 +239,7 @@ func (s *NotificationServiceConnect) GetBatchEmployeePresence(
 	for _, p := range presences {
 		protoPresence := &rpcv1.EmployeePresence{
 			EmployeeId: p.EmployeeID.String(),
-			Status:     presenceStatusStringToProto(p.Status),
+			Status:     PresenceStatusToProto(p.Status),
 		}
 
 		if p.ActiveChannelID.Valid {
@@ -295,8 +250,9 @@ func (s *NotificationServiceConnect) GetBatchEmployeePresence(
 			protoPresence.LastInteractionAt = timestamppb.New(p.LastInteractionAt.Time)
 		}
 
-		if p.LastHeartbeat.Valid {
-			protoPresence.LastHeartbeat = timestamppb.New(p.LastHeartbeat.Time)
+		// The proto field keeps its name and number; last_pong_at is what fills it now.
+		if p.LastPongAt.Valid {
+			protoPresence.LastHeartbeat = timestamppb.New(p.LastPongAt.Time)
 		}
 
 		if p.Visibility != nil {
@@ -319,36 +275,6 @@ func (s *NotificationServiceConnect) GetBatchEmployeePresence(
 }
 
 // Helper functions for proto conversion
-
-func presenceStatusProtoToString(status rpcv1.PresenceStatus) string {
-	switch status {
-	case rpcv1.PresenceStatus_PRESENCE_STATUS_ONLINE:
-		return PresenceStatusOnline
-	case rpcv1.PresenceStatus_PRESENCE_STATUS_ONLINE_HIDDEN:
-		return PresenceStatusOnlineHidden
-	case rpcv1.PresenceStatus_PRESENCE_STATUS_IDLE:
-		return PresenceStatusIdle
-	case rpcv1.PresenceStatus_PRESENCE_STATUS_OFFLINE:
-		return PresenceStatusOffline
-	default:
-		return PresenceStatusOffline
-	}
-}
-
-func presenceStatusStringToProto(status string) rpcv1.PresenceStatus {
-	switch status {
-	case PresenceStatusOnline:
-		return rpcv1.PresenceStatus_PRESENCE_STATUS_ONLINE
-	case PresenceStatusOnlineHidden:
-		return rpcv1.PresenceStatus_PRESENCE_STATUS_ONLINE_HIDDEN
-	case PresenceStatusIdle:
-		return rpcv1.PresenceStatus_PRESENCE_STATUS_IDLE
-	case PresenceStatusOffline:
-		return rpcv1.PresenceStatus_PRESENCE_STATUS_OFFLINE
-	default:
-		return rpcv1.PresenceStatus_PRESENCE_STATUS_OFFLINE
-	}
-}
 
 func visibilityModeStringToProto(mode string) rpcv1.VisibilityMode {
 	switch mode {

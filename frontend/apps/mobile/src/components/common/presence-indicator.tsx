@@ -28,6 +28,10 @@ export function PresenceIndicator({
 }: PresenceIndicatorProps) {
   return (
     <View
+      // The status is in the testID because a colored dot has no other readable
+      // surface: it is how the Maestro presence flow can tell online from offline.
+      testID={`presence-indicator-${status}`}
+      accessibilityLabel={`Presence: ${status}`}
       style={[
         {
           width: size,

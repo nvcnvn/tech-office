@@ -20,31 +20,33 @@ type EmployeePresence struct {
 	Status            string
 	ActiveChannelID   dbuuid.NullUUID
 	LastInteractionAt pgtype.Timestamptz
-	LastHeartbeat     pgtype.Timestamptz
+	LastPongAt        pgtype.Timestamptz
 	Visibility        *database.NotificationPresenceVisibility
 }
 
-// UpdatePresenceParams groups UpdatePresenceStatus inputs for clarity.
-type UpdatePresenceParams struct {
-	OrganizationID             dbuuid.UUID
-	EmployeeID                 dbuuid.UUID
-	ConnectionID               dbuuid.UUID
-	Status                     string
-	ActiveChannelID            dbuuid.NullUUID
-	LastInteractionAt          pgtype.Timestamptz
-	RequestedInstanceID        string
-	RequireConnectionOwnership bool
-}
-
-var ErrConnectionNotFound = errors.New("active connection not found for employee")
+// maxInteractionBackdate bounds how far in the past a client-supplied interaction time
+// may sit. Client clocks are advisory and routinely minutes off on mobile, so the value
+// is clamped rather than trusted (research R6).
+const maxInteractionBackdate = time.Hour
 
 // PresenceLogic encapsulates presence-related business rules.
 type PresenceLogic interface {
-	UpdatePresenceStatus(ctx context.Context, tx database.DBTX, params *UpdatePresenceParams) (*EmployeePresence, error)
+	// RecordPongs advances liveness for a batch of connections in ONE organization and
+	// returns the connection IDs that matched. Unmatched IDs belong to connections that
+	// no longer exist (or never belonged to the pongging employee) and get the reconnect
+	// directive — the statement is an UPDATE, never an upsert, so a removed connection
+	// is never resurrected by a late pong.
+	RecordPongs(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID, records []PongRecord) ([]dbuuid.UUID, error)
+	// RemoveDepartedConnections deletes connections whose clients announced a deliberate
+	// teardown, instead of waiting out the responsive window.
+	RemoveDepartedConnections(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID, records []PongRecord) (int64, error)
 	GetEmployeePresence(ctx context.Context, tx database.DBTX, employeeID, organizationID dbuuid.UUID) (*EmployeePresence, error)
 	GetBatchEmployeePresence(ctx context.Context, tx database.DBTX, employeeIDs []dbuuid.UUID, organizationID dbuuid.UUID, viewerID dbuuid.UUID) ([]*EmployeePresence, error)
 	GetEmployeeActiveConnections(ctx context.Context, tx database.DBTX, employeeID, organizationID dbuuid.UUID) ([]*database.GetEmployeeActiveConnectionsRow, error)
-	CleanupStaleConnections(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID, staleBefore time.Time) (int64, error)
+	// DeleteExpiredConnections sweeps connections silent past the removal window. It
+	// replaces the old mark-then-sweep pair: liveness is derived, so there is nothing
+	// left to mark.
+	DeleteExpiredConnections(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID) (int64, error)
 }
 
 type presenceLogicImpl struct {
@@ -62,81 +64,86 @@ func NewPresenceLogic(queries *database.Queries, visibility VisibilityLogic) Pre
 	}
 }
 
-func (l *presenceLogicImpl) UpdatePresenceStatus(ctx context.Context, tx database.DBTX, params *UpdatePresenceParams) (*EmployeePresence, error) {
-	if params == nil {
-		return nil, fmt.Errorf("update presence params required")
-	}
-	if !IsValidPresenceStatus(params.Status) {
-		return nil, fmt.Errorf("invalid presence status: %s", params.Status)
+func (l *presenceLogicImpl) RecordPongs(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID, records []PongRecord) ([]dbuuid.UUID, error) {
+	if len(records) == 0 {
+		return nil, nil
 	}
 
-	heartbeat := timestamptzFromTime(l.nowSupplier())
-	lastInteraction := params.LastInteractionAt
-	if !lastInteraction.Valid {
-		lastInteraction = heartbeat
-	}
+	now := l.nowSupplier()
+	earliest := now.Add(-maxInteractionBackdate)
 
-	instanceID := params.RequestedInstanceID
-	if params.RequireConnectionOwnership {
-		if params.ConnectionID == (dbuuid.UUID{}) {
-			return nil, fmt.Errorf("connection ID required for ownership validation")
+	connectionIDs := make([]dbuuid.UUID, len(records))
+	employeeIDs := make([]dbuuid.UUID, len(records))
+	statuses := make([]string, len(records))
+	activeChannelIDs := make([]string, len(records))
+	lastInteractions := make([]pgtype.Timestamptz, len(records))
+
+	for i, rec := range records {
+		if !IsValidPresenceStatus(rec.Status) {
+			return nil, fmt.Errorf("invalid presence status: %s", rec.Status)
 		}
 
-		row, err := l.queries.GetActiveConnectionByID(ctx, tx, &database.GetActiveConnectionByIDParams{
-			OrganizationID: params.OrganizationID,
-			EmployeeID:     params.EmployeeID,
-			ConnectionID:   params.ConnectionID,
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return nil, ErrConnectionNotFound
-			}
-			return nil, fmt.Errorf("failed to verify active connection: %w", err)
+		connectionIDs[i] = rec.ConnectionID
+		employeeIDs[i] = rec.EmployeeID
+		statuses[i] = rec.Status
+		// Empty string carries "no channel": a uuid[] parameter cannot hold a NULL element.
+		if rec.ActiveChannelID.Valid {
+			activeChannelIDs[i] = dbuuid.UUID(rec.ActiveChannelID.UUID).String()
 		}
-
-		// Preserve the instance that owns the SSE stream.
-		instanceID = row.InstanceID
+		lastInteractions[i] = clampInteractionTime(rec.LastInteractionAt, earliest, now)
 	}
 
-	if instanceID == "" {
-		instanceID = "transient"
-	}
-
-	slog.DebugContext(ctx, "updating presence status",
-		"function", "PresenceLogic.UpdatePresenceStatus",
-		"employee_id", params.EmployeeID.String(),
-		"organization_id", params.OrganizationID.String(),
-		"status", params.Status,
-		"connection_id", params.ConnectionID.String(),
-		"instance_id", instanceID,
-	)
-
-	err := l.queries.UpdatePresenceStatus(ctx, tx, &database.UpdatePresenceStatusParams{
-		OrganizationID:    params.OrganizationID,
-		EmployeeID:        params.EmployeeID,
-		ConnectionID:      params.ConnectionID,
-		InstanceID:        instanceID,
-		PresenceStatus:    params.Status,
-		ActiveChannelID:   params.ActiveChannelID,
-		LastInteractionAt: lastInteraction,
-		LastHeartbeat:     heartbeat,
+	matched, err := l.queries.RecordPresencePongs(ctx, tx, &database.RecordPresencePongsParams{
+		OrganizationID:   organizationID,
+		ConnectionIds:    connectionIDs,
+		EmployeeIds:      employeeIDs,
+		PresenceStatuses: statuses,
+		ActiveChannelIds: activeChannelIDs,
+		LastInteractions: lastInteractions,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to update presence status",
-			"function", "PresenceLogic.UpdatePresenceStatus",
-			"error", err,
-		)
-		return nil, fmt.Errorf("failed to update presence status: %w", err)
+		return nil, fmt.Errorf("failed to record presence pongs: %w", err)
+	}
+	return matched, nil
+}
+
+func (l *presenceLogicImpl) RemoveDepartedConnections(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID, records []PongRecord) (int64, error) {
+	if len(records) == 0 {
+		return 0, nil
 	}
 
-	presence, err := l.GetEmployeePresence(ctx, tx, params.EmployeeID, params.OrganizationID)
+	employeeIDs := make([]dbuuid.UUID, len(records))
+	connectionIDs := make([]dbuuid.UUID, len(records))
+	for i, rec := range records {
+		employeeIDs[i] = rec.EmployeeID
+		connectionIDs[i] = rec.ConnectionID
+	}
+
+	removed, err := l.queries.RemoveDepartedConnections(ctx, tx, &database.RemoveDepartedConnectionsParams{
+		OrganizationID: organizationID,
+		EmployeeIds:    employeeIDs,
+		ConnectionIds:  connectionIDs,
+	})
 	if err != nil {
-		return nil, err
+		return 0, fmt.Errorf("failed to remove departed connections: %w", err)
 	}
-	if presence == nil {
-		return nil, fmt.Errorf("presence record not found for employee %s", params.EmployeeID)
+	return removed, nil
+}
+
+// clampInteractionTime keeps a client-supplied interaction time plausible. It is a
+// display and idle-detection hint only — liveness is the database's own clock — so an
+// implausible value is clamped rather than rejected.
+func clampInteractionTime(candidate pgtype.Timestamptz, earliest, latest time.Time) pgtype.Timestamptz {
+	if !candidate.Valid {
+		return timestamptzFromTime(latest)
 	}
-	return presence, nil
+	if candidate.Time.After(latest) {
+		return timestamptzFromTime(latest)
+	}
+	if candidate.Time.Before(earliest) {
+		return timestamptzFromTime(earliest)
+	}
+	return timestamptzFromTime(candidate.Time)
 }
 
 func (l *presenceLogicImpl) GetEmployeePresence(ctx context.Context, tx database.DBTX, employeeID, organizationID dbuuid.UUID) (*EmployeePresence, error) {
@@ -191,8 +198,9 @@ func (l *presenceLogicImpl) GetBatchEmployeePresence(ctx context.Context, tx dat
 
 func (l *presenceLogicImpl) GetEmployeeActiveConnections(ctx context.Context, tx database.DBTX, employeeID, organizationID dbuuid.UUID) ([]*database.GetEmployeeActiveConnectionsRow, error) {
 	rows, err := l.queries.GetEmployeeActiveConnections(ctx, tx, &database.GetEmployeeActiveConnectionsParams{
-		OrganizationID: organizationID,
-		EmployeeID:     employeeID,
+		OrganizationID:          organizationID,
+		EmployeeID:              employeeID,
+		ResponsiveWindowSeconds: ResponsiveWindowSeconds,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch active connections: %w", err)
@@ -200,20 +208,21 @@ func (l *presenceLogicImpl) GetEmployeeActiveConnections(ctx context.Context, tx
 	return rows, nil
 }
 
-func (l *presenceLogicImpl) CleanupStaleConnections(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID, staleBefore time.Time) (int64, error) {
-	threshold := timestamptzFromTime(staleBefore)
-	count, err := l.queries.CleanupStaleConnections(ctx, tx, &database.CleanupStaleConnectionsParams{
-		OrganizationID: organizationID,
-		LastHeartbeat:  threshold,
+func (l *presenceLogicImpl) DeleteExpiredConnections(ctx context.Context, tx database.DBTX, organizationID dbuuid.UUID) (int64, error) {
+	count, err := l.queries.DeleteExpiredConnections(ctx, tx, &database.DeleteExpiredConnectionsParams{
+		OrganizationID:       organizationID,
+		RemovalWindowSeconds: RemovalWindowSeconds,
 	})
 	if err != nil {
-		return 0, fmt.Errorf("failed to cleanup stale connections: %w", err)
+		return 0, fmt.Errorf("failed to delete expired connections: %w", err)
 	}
 	if count > 0 {
-		slog.InfoContext(ctx, "removed stale connections",
-			"function", "PresenceLogic.CleanupStaleConnections",
+		// FR-025: janitor removals per organization.
+		slog.InfoContext(ctx, "removed expired connections",
+			"function", "PresenceLogic.DeleteExpiredConnections",
 			"organization_id", organizationID.String(),
 			"removed_count", count,
+			"removal_window_seconds", RemovalWindowSeconds,
 		)
 	}
 	return count, nil
@@ -221,8 +230,9 @@ func (l *presenceLogicImpl) CleanupStaleConnections(ctx context.Context, tx data
 
 func (l *presenceLogicImpl) fetchPresences(ctx context.Context, tx database.DBTX, employeeIDs []dbuuid.UUID, organizationID dbuuid.UUID) (map[dbuuid.UUID]*EmployeePresence, error) {
 	rows, err := l.queries.GetEmployeeVisiblePresence(ctx, tx, &database.GetEmployeeVisiblePresenceParams{
-		OrganizationID: organizationID,
-		Column2:        employeeIDs,
+		OrganizationID:          organizationID,
+		EmployeeIds:             employeeIDs,
+		ResponsiveWindowSeconds: ResponsiveWindowSeconds,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch presence rows: %w", err)
@@ -239,16 +249,18 @@ func (l *presenceLogicImpl) fetchPresences(ctx context.Context, tx database.DBTX
 				Status:            row.PresenceStatus,
 				ActiveChannelID:   row.ActiveChannelID,
 				LastInteractionAt: row.LastInteractionAt,
-				LastHeartbeat:     row.LastHeartbeat,
+				LastPongAt:        row.LastPongAt,
 				Visibility:        currentVisibility,
 			}
 			continue
 		}
 
-		// Merge by picking strongest status and most recent activity timestamps.
+		// Every row here is already responsive — the query predicate saw to that — so
+		// aggregation is: highest-ranked status wins, ties broken by the most recently
+		// pongged row, and context comes from that row (data-model.md).
 		if PresenceStatusRank(row.PresenceStatus) > PresenceStatusRank(presence.Status) ||
 			(PresenceStatusRank(row.PresenceStatus) == PresenceStatusRank(presence.Status) &&
-				newerTimestamptz(row.LastHeartbeat, presence.LastHeartbeat)) {
+				newerTimestamptz(row.LastPongAt, presence.LastPongAt)) {
 			presence.Status = row.PresenceStatus
 			presence.ActiveChannelID = row.ActiveChannelID
 		}
@@ -256,8 +268,8 @@ func (l *presenceLogicImpl) fetchPresences(ctx context.Context, tx database.DBTX
 		if newerTimestamptz(row.LastInteractionAt, presence.LastInteractionAt) {
 			presence.LastInteractionAt = row.LastInteractionAt
 		}
-		if newerTimestamptz(row.LastHeartbeat, presence.LastHeartbeat) {
-			presence.LastHeartbeat = row.LastHeartbeat
+		if newerTimestamptz(row.LastPongAt, presence.LastPongAt) {
+			presence.LastPongAt = row.LastPongAt
 		}
 		if presence.Visibility == nil && currentVisibility != nil {
 			presence.Visibility = currentVisibility
@@ -291,7 +303,7 @@ func (l *presenceLogicImpl) newOfflinePresence(employeeID, organizationID dbuuid
 		Status:            PresenceStatusOffline,
 		ActiveChannelID:   dbuuid.NullUUID{},
 		LastInteractionAt: pgtype.Timestamptz{},
-		LastHeartbeat:     pgtype.Timestamptz{},
+		LastPongAt:        pgtype.Timestamptz{},
 		Visibility:        visibility,
 	}
 }

@@ -26,6 +26,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/database/dbuuid"
 	"github.com/nvcnvn/tech-office/backend/internal/config"
 	"github.com/nvcnvn/tech-office/backend/internal/iam"
+	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"github.com/nvcnvn/tech-office/backend/rpc/v1/rpcv1connect"
 )
@@ -158,8 +159,8 @@ var ToolsCommand = &cli.Command{
 				},
 				&cli.StringFlag{
 					Name:  "status",
-					Usage: "Connection status filter: active, stale, or all",
-					Value: "active",
+					Usage: "Liveness filter: responsive (pongged within the responsive window), unresponsive, or all",
+					Value: "responsive",
 				},
 				&cli.BoolFlag{
 					Name:  "json",
@@ -189,11 +190,10 @@ type sseConnectionDebugRow struct {
 	Email              string      `json:"email"`
 	InstanceID         string      `json:"instance_id"`
 	ConnectionID       dbuuid.UUID `json:"connection_id"`
-	ConnectionStatus   string      `json:"connection_status"`
 	PresenceStatus     string      `json:"presence_status"`
 	ActiveChannelID    string      `json:"active_channel_id"`
 	ConnectedAt        string      `json:"connected_at"`
-	LastHeartbeat      string      `json:"last_heartbeat"`
+	LastPongAt         string      `json:"last_pong_at"`
 	LastInteractionAt  string      `json:"last_interaction_at"`
 	DeviceIdentifier   string      `json:"device_identifier"`
 	UserAgent          string      `json:"user_agent"`
@@ -479,12 +479,14 @@ func debugSSEConnections(ctx context.Context, cmd *cli.Command) error {
 	}
 	defer adminPool.Close()
 
+	// Liveness is derived from last_pong_at, not stored, so the filter is a comparison
+	// rather than a column value.
 	status := strings.TrimSpace(strings.ToLower(cmd.String("status")))
 	if status == "" {
-		status = "active"
+		status = "responsive"
 	}
-	if status != "active" && status != "stale" && status != "all" {
-		return fmt.Errorf("invalid status %q: expected active, stale, or all", status)
+	if status != "responsive" && status != "unresponsive" && status != "all" {
+		return fmt.Errorf("invalid status %q: expected responsive, unresponsive, or all", status)
 	}
 
 	orgID, err := parseOptionalUUIDFlag(cmd.String("org-id"), "org-id")
@@ -515,11 +517,10 @@ func debugSSEConnections(ctx context.Context, cmd *cli.Command) error {
 			&row.Email,
 			&row.InstanceID,
 			&row.ConnectionID,
-			&row.ConnectionStatus,
 			&row.PresenceStatus,
 			&row.ActiveChannelID,
 			&row.ConnectedAt,
-			&row.LastHeartbeat,
+			&row.LastPongAt,
 			&row.LastInteractionAt,
 			&row.DeviceIdentifier,
 			&row.UserAgent,
@@ -587,11 +588,10 @@ SELECT
   e.email,
   ac.instance_id,
   ac.connection_id,
-  ac.connection_status,
   ac.presence_status,
   COALESCE(ac.active_channel_id::text, '') AS active_channel_id,
 	COALESCE(to_char(ac.connected_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), '') AS connected_at,
-	COALESCE(to_char(ac.last_heartbeat AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), '') AS last_heartbeat,
+	COALESCE(to_char(ac.last_pong_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), '') AS last_pong_at,
 	COALESCE(to_char(ac.last_interaction_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"'), '') AS last_interaction_at,
   ac.device_identifier,
   COALESCE(ac.user_agent, '') AS user_agent,
@@ -619,9 +619,15 @@ WHERE 1 = 1`)
 		return fmt.Sprintf("$%d", len(args))
 	}
 
-	if status != "all" {
-		query.WriteString("\n  AND ac.connection_status = ")
-		query.WriteString(addArg(status))
+	switch status {
+	case "responsive":
+		query.WriteString("\n  AND ac.last_pong_at >= now() - make_interval(secs => ")
+		query.WriteString(addArg(int32(notification.ResponsiveWindowSeconds)))
+		query.WriteString("::int)")
+	case "unresponsive":
+		query.WriteString("\n  AND ac.last_pong_at < now() - make_interval(secs => ")
+		query.WriteString(addArg(int32(notification.ResponsiveWindowSeconds)))
+		query.WriteString("::int)")
 	}
 	if orgID != nil {
 		query.WriteString("\n  AND ac.organization_id = ")
@@ -739,17 +745,16 @@ func printSSEConnectionsDebug(connections []sseConnectionDebugRow, listenerStatu
 		}
 		for _, connection := range instanceConnections {
 			fmt.Printf("  - %s <%s>\n", formatEmployeeDisplayName(connection), connection.Email)
-			fmt.Printf("    org=%s employee=%s connection=%s presence=%s status=%s\n",
+			fmt.Printf("    org=%s employee=%s connection=%s presence=%s\n",
 				connection.OrganizationID,
 				connection.EmployeeID,
 				connection.ConnectionID,
 				connection.PresenceStatus,
-				connection.ConnectionStatus,
 			)
-			fmt.Printf("    connected=%s heartbeat=%s (%s ago) interaction=%s (%s ago)\n",
+			fmt.Printf("    connected=%s last_pong=%s (%s ago) interaction=%s (%s ago)\n",
 				formatTimestamp(connection.ConnectedAt),
-				formatTimestamp(connection.LastHeartbeat),
-				formatAge(connection.LastHeartbeat),
+				formatTimestamp(connection.LastPongAt),
+				formatAge(connection.LastPongAt),
 				formatTimestamp(connection.LastInteractionAt),
 				formatAge(connection.LastInteractionAt),
 			)

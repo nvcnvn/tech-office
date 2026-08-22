@@ -15,6 +15,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/database/dbuuid"
 	"github.com/nvcnvn/tech-office/backend/database/txn"
 	"github.com/nvcnvn/tech-office/backend/internal/interceptor"
+	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	v1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"github.com/nvcnvn/tech-office/backend/rpc/v1/rpcv1connect"
 )
@@ -1008,8 +1009,9 @@ func (s *IAMServiceConnect) GetEmployeeCards(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to fetch employee cards: %w", err))
 	}
 	presenceRows, err := queries.GetLatestEmployeePresenceByIDs(ctx, s.adminPool, &database.GetLatestEmployeePresenceByIDsParams{
-		OrganizationID: orgID,
-		Column2:        employeeIDs,
+		OrganizationID:          orgID,
+		EmployeeIds:             employeeIDs,
+		ResponsiveWindowSeconds: notification.ResponsiveWindowSeconds,
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "GetEmployeeCards presence query failed", "error", err)

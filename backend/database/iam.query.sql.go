@@ -1109,14 +1109,14 @@ SELECT DISTINCT ON (ac.employee_id)
 FROM notification.active_connection ac
 WHERE ac.organization_id = $1
   AND ac.employee_id = ANY($2::uuid[])
-  AND ac.connection_status = 'active'
-  AND ac.last_heartbeat > NOW() - INTERVAL '60 seconds'
-ORDER BY ac.employee_id, ac.last_heartbeat DESC
+  AND ac.last_pong_at >= NOW() - make_interval(secs => $3::int)
+ORDER BY ac.employee_id, ac.last_pong_at DESC
 `
 
 type GetLatestEmployeePresenceByIDsParams struct {
-	OrganizationID dbuuid.UUID   `json:"organization_id"`
-	Column2        []dbuuid.UUID `json:"column_2"`
+	OrganizationID          dbuuid.UUID   `json:"organization_id"`
+	EmployeeIds             []dbuuid.UUID `json:"employee_ids"`
+	ResponsiveWindowSeconds int32         `json:"responsive_window_seconds"`
 }
 
 type GetLatestEmployeePresenceByIDsRow struct {
@@ -1127,7 +1127,7 @@ type GetLatestEmployeePresenceByIDsRow struct {
 // Fetch latest live presence for a batch of employees.
 // Reads only notification.active_connection to stay Citus-friendly.
 func (q *Queries) GetLatestEmployeePresenceByIDs(ctx context.Context, db DBTX, arg *GetLatestEmployeePresenceByIDsParams) ([]*GetLatestEmployeePresenceByIDsRow, error) {
-	rows, err := db.Query(ctx, getLatestEmployeePresenceByIDs, arg.OrganizationID, arg.Column2)
+	rows, err := db.Query(ctx, getLatestEmployeePresenceByIDs, arg.OrganizationID, arg.EmployeeIds, arg.ResponsiveWindowSeconds)
 	if err != nil {
 		return nil, err
 	}

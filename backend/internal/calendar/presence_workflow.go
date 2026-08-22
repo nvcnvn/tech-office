@@ -57,8 +57,8 @@ func (w *CalendarPresenceWorkflow) updatePresence(ctx context.Context) (*Calenda
 	// (a) Events starting in the next 1-minute window — set attendees to in_meeting.
 	startingEvents, err := w.Queries.ListEventsForOrg(ctx, w.AdminPool, &database.ListEventsForOrgParams{
 		OrganizationID: [16]byte{}, // global poll — the query is org-scoped but we run per-org via admin pool
-		StartTime:      pgtype.Timestamptz{Time: windowStart, Valid: true},
-		EndTime:        pgtype.Timestamptz{Time: windowEnd, Valid: true},
+		RangeStart:     pgtype.Timestamptz{Time: windowStart, Valid: true},
+		RangeEnd:       pgtype.Timestamptz{Time: windowEnd, Valid: true},
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "presence workflow: failed to query starting events", "error", err)
@@ -94,8 +94,8 @@ func (w *CalendarPresenceWorkflow) updatePresence(ctx context.Context) (*Calenda
 	recentEnd := now.Add(-1 * time.Minute)
 	endedEvents, err := w.Queries.ListEventsForOrg(ctx, w.AdminPool, &database.ListEventsForOrgParams{
 		OrganizationID: [16]byte{},
-		StartTime:      pgtype.Timestamptz{Time: recentEnd, Valid: true},
-		EndTime:        pgtype.Timestamptz{Time: now, Valid: true},
+		RangeStart:     pgtype.Timestamptz{Time: recentEnd, Valid: true},
+		RangeEnd:       pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "presence workflow: failed to query ended events", "error", err)

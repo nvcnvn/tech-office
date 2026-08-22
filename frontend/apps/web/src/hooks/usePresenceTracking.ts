@@ -1,280 +1,151 @@
 /**
  * Presence Tracking Hook
- * Tracks user activity, page visibility, and idle state for presence status
- * Constitution v5.4.0 compliant
+ *
+ * Detects what the user is doing — tab visibility, window focus, interaction, idle —
+ * and writes it into the shared presence store. It does NOT talk to the server: the
+ * pong handler next to the SSE connection reads the store and answers the server's
+ * pings, and fires one debounced unsolicited pong when something material changes.
+ *
+ * That split is why this hook no longer needs a 30-second heartbeat, a one-second
+ * polling loop watching sessionStorage for a connection id, a triple-field dedup, or a
+ * recovery path for a stale stored connection id. All of it existed only to coordinate
+ * two modules that are now one.
  */
 
 import { useEffect, useRef, useCallback } from 'react';
-import { updatePresenceStatus } from 'apis';
-import { SSE_CONFIG } from '@tech-office/notifications';
-
-/**
- * Presence status matching backend constants
- * MUST align with:
- * - Backend Go constants: internal/notification/constants.go
- * - Database CHECK constraint: notification.active_connection.status
- */
-export type PresenceStatus = 'online' | 'online_hidden' | 'idle' | 'offline';
+import { presencePong, type PresenceStatus } from 'apis';
+import { getPresenceState, setPresenceState } from '@tech-office/notifications';
 
 interface UsePresenceTrackingOptions {
 	/** Active channel ID for context-aware notifications */
 	activeChannelId?: string;
 	/** Idle timeout in milliseconds (default: 5 minutes) */
 	idleTimeout?: number;
-	/** Heartbeat interval in milliseconds (default: 30 seconds) */
-	heartbeatInterval?: number;
 	/** Enable/disable tracking */
 	enabled?: boolean;
 }
 
 /**
- * Hook to track user presence and send updates to backend
- * 
+ * Hook to track user presence.
+ *
  * Features:
  * - Page Visibility API tracking (tab focus/blur)
  * - User interaction detection (mouse, keyboard, scroll)
  * - Idle timeout detection (default 5 minutes)
- * - Periodic heartbeat (default 30 seconds)
  * - Active channel context tracking
- * 
- * @param options - Configuration options
+ * - A best-effort departing pong on teardown
  */
 export function usePresenceTracking(options: UsePresenceTrackingOptions = {}) {
 	const {
 		activeChannelId,
 		idleTimeout = 5 * 60 * 1000, // 5 minutes
-		heartbeatInterval = 30 * 1000, // 30 seconds
 		enabled = true,
 	} = options;
 
-	const currentStatus = useRef<PresenceStatus>('online');
-	const lastInteractionTime = useRef<Date>(new Date());
 	const idleTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-	const heartbeatTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
-	const activeChannelRef = useRef<string | null>(activeChannelId ?? null);
-	const lastSentRef = useRef<{ status: PresenceStatus; channelId: string | null; connectionId: string | null } | null>(null);
 
 	/**
-	 * Send presence update to backend
-	 * ONLY sends updates when a valid SSE connection_id exists
+	 * Announce a deliberate teardown. Best-effort by design: if it does not land, the
+	 * responsive window covers it, which is strictly better than the minutes-long
+	 * lingering the old design produced.
 	 */
-	const sendPresenceUpdate = useCallback(async (
-		status: PresenceStatus,
-		channelId?: string | null,
-		force = false,
-	) => {
+	const sendDepartingPong = useCallback(() => {
+		const { connectionId } = getPresenceState();
+		if (!connectionId) return;
+
+		void presencePong({
+			connectionId,
+			status: 'offline',
+			activeChannelId: null,
+			lastInteractionAt: new Date(),
+			departing: true,
+		}).catch(() => {
+			// Ignored on purpose — see above.
+		});
+	}, []);
+
+	const report = useCallback((status: PresenceStatus) => {
 		if (!enabled) return;
-
-		// Read connection_id from sessionStorage (set by SSE connection)
-		const connectionId = typeof window === 'undefined'
-			? null
-			: sessionStorage.getItem(SSE_CONFIG.CONNECTION_ID_KEY);
-
-		// CRITICAL: Do NOT send presence updates without a valid connection_id
-		// Wait for SSE stream to establish connection first
-		if (!connectionId) {
-			console.debug('[usePresenceTracking] Skipping presence update - no SSE connection_id yet');
-			return;
-		}
-
-		const normalizedChannel = channelId ?? null;
-		const lastPayload = lastSentRef.current;
-
-		// Skip redundant updates (same payload)
-		if (!force && lastPayload &&
-			lastPayload.status === status &&
-			lastPayload.channelId === normalizedChannel &&
-			lastPayload.connectionId === connectionId) {
-			return;
-		}
-
-		try {
-			await updatePresenceStatus({
-				status,
-				activeChannelId: normalizedChannel,
-				lastInteractionAt: lastInteractionTime.current,
-				connectionId,
-			});
-			currentStatus.current = status;
-			lastSentRef.current = { status, channelId: normalizedChannel, connectionId };
-		} catch (error) {
-			const message = error instanceof Error ? error.message : String(error);
-			const isOwnershipError = message.toLowerCase().includes('connection_id does not belong to employee');
-
-			if (isOwnershipError && typeof window !== 'undefined') {
-				// Connection ID is stale (likely from previous session) - clear it
-				console.warn('[usePresenceTracking] Connection ownership error - clearing stale connection_id');
-				sessionStorage.removeItem(SSE_CONFIG.CONNECTION_ID_KEY);
-				lastSentRef.current = null;
-				// Don't retry - wait for SSE to establish new connection
-				return;
-			}
-
-			console.error('[usePresenceTracking] Failed to update presence:', error);
-		}
+		setPresenceState({ status, lastInteractionAt: new Date() });
 	}, [enabled]);
 
-	/**
-	 * Handle user interaction - reset idle timer
-	 */
 	const scheduleIdleTimer = useCallback(() => {
 		if (idleTimerRef.current) {
 			clearTimeout(idleTimerRef.current);
 		}
 
 		idleTimerRef.current = setTimeout(() => {
-			if (!enabled) {
-				return;
-			}
-			sendPresenceUpdate('idle', activeChannelRef.current, true);
+			report('idle');
 		}, idleTimeout);
-	}, [enabled, idleTimeout, sendPresenceUpdate]);
+	}, [idleTimeout, report]);
 
 	const handleUserInteraction = useCallback(() => {
-		lastInteractionTime.current = new Date();
+		if (!enabled) return;
 
-		// If currently idle, transition to online
-		if (currentStatus.current === 'idle') {
-			sendPresenceUpdate('online', activeChannelRef.current, true);
+		// Recording the interaction time alone is not a material change, so it does not
+		// cost a pong — otherwise an active user would pong on every mouse move.
+		setPresenceState({ lastInteractionAt: new Date() });
+
+		if (getPresenceState().status === 'idle') {
+			report('online');
 		}
 
 		scheduleIdleTimer();
-	}, [scheduleIdleTimer, sendPresenceUpdate]);
+	}, [enabled, report, scheduleIdleTimer]);
 
-	/**
-	 * Handle page visibility change
-	 */
 	const handleVisibilityChange = useCallback(() => {
 		if (document.hidden) {
-			// Tab hidden - treat as online_hidden but keep heartbeat active
-			sendPresenceUpdate('online_hidden', activeChannelRef.current, true);
+			// Hidden, not gone: the stream stays open and keeps answering pings.
+			report('online_hidden');
 			if (idleTimerRef.current) {
 				clearTimeout(idleTimerRef.current);
 			}
 		} else {
-			// Tab visible - set to online
-			sendPresenceUpdate('online', activeChannelRef.current, true);
-			handleUserInteraction(); // Restart idle timer
+			report('online');
+			handleUserInteraction();
 		}
-	}, [handleUserInteraction, sendPresenceUpdate]);
+	}, [handleUserInteraction, report]);
 
-	/**
-	 * Handle window focus/blur
-	 */
 	const handleFocus = useCallback(() => {
-		sendPresenceUpdate('online', activeChannelRef.current, true);
+		report('online');
 		handleUserInteraction();
-	}, [handleUserInteraction, sendPresenceUpdate]);
+	}, [handleUserInteraction, report]);
 
 	const handleBlur = useCallback(() => {
-		sendPresenceUpdate('online_hidden', activeChannelRef.current, true);
+		report('online_hidden');
 		if (idleTimerRef.current) {
 			clearTimeout(idleTimerRef.current);
 		}
-	}, [sendPresenceUpdate]);
+	}, [report]);
 
-	/**
-	 * Periodic heartbeat to maintain presence
-	 */
+	// Report the channel the user is looking at, so notifications about it can be
+	// suppressed as already seen.
 	useEffect(() => {
 		if (!enabled) return;
-
-		heartbeatTimerRef.current = setInterval(() => {
-			sendPresenceUpdate(currentStatus.current, activeChannelRef.current, false);
-		}, heartbeatInterval);
-
-		return () => {
-			if (heartbeatTimerRef.current) {
-				clearInterval(heartbeatTimerRef.current);
-			}
-		};
-	}, [enabled, heartbeatInterval, sendPresenceUpdate]);
-
-	// Keep ref in sync with latest active channel and notify backend of changes
-	useEffect(() => {
-		if (!enabled) return;
-
-		const normalized = activeChannelId ?? null;
-		if (activeChannelRef.current !== normalized) {
-			activeChannelRef.current = normalized;
-			sendPresenceUpdate(currentStatus.current, activeChannelRef.current, true);
-		}
-	}, [activeChannelId, enabled, sendPresenceUpdate]);
-
-	/**
-	 * Monitor SSE connection status and handle connection changes
-	 * Sends initial presence when connection is established or reconnected
-	 */
-	useEffect(() => {
-		if (!enabled) return;
-
-		// Poll for connection_id changes (SSE connection established/reconnected)
-		const checkConnection = () => {
-			const connectionId = typeof window === 'undefined'
-				? null
-				: sessionStorage.getItem(SSE_CONFIG.CONNECTION_ID_KEY);
-
-			const lastConnectionId = lastSentRef.current?.connectionId;
-
-			// Case 1: New connection established (no previous connection)
-			if (connectionId && !lastSentRef.current) {
-				console.log('[usePresenceTracking] SSE connection established, sending initial presence');
-				lastInteractionTime.current = new Date();
-				sendPresenceUpdate('online', activeChannelRef.current, true);
-				handleUserInteraction();
-			}
-			// Case 2: Connection ID changed (SSE reconnected with new connection)
-			else if (connectionId && lastConnectionId && connectionId !== lastConnectionId) {
-				console.log('[usePresenceTracking] SSE connection_id changed (reconnected), updating presence', {
-					oldConnectionId: lastConnectionId,
-					newConnectionId: connectionId,
-				});
-				// Reset last sent ref to force update with new connection_id
-				lastSentRef.current = null;
-				lastInteractionTime.current = new Date();
-				sendPresenceUpdate(currentStatus.current, activeChannelRef.current, true);
-			}
-			// Case 3: Connection lost (connection_id removed from storage)
-			else if (!connectionId && lastSentRef.current) {
-				console.log('[usePresenceTracking] SSE connection lost, waiting for reconnection');
-				// Clear last sent ref so next connection triggers update
-				lastSentRef.current = null;
-			}
-		};
-
-		// Check immediately
-		checkConnection();
-
-		// Check periodically to detect connection changes
-		const checkInterval = setInterval(checkConnection, 1000); // Check every second
-
-		return () => {
-			clearInterval(checkInterval);
-		};
-	}, [enabled, sendPresenceUpdate, handleUserInteraction]);
+		setPresenceState({ activeChannelId: activeChannelId ?? null });
+	}, [activeChannelId, enabled]);
 
 	/** Setup global listeners and handle cleanup */
 	useEffect(() => {
 		if (!enabled) return;
 
-		// Page Visibility API
-		document.addEventListener('visibilitychange', handleVisibilityChange);
+		report('online');
+		scheduleIdleTimer();
 
-		// Window focus/blur
+		document.addEventListener('visibilitychange', handleVisibilityChange);
 		window.addEventListener('focus', handleFocus);
 		window.addEventListener('blur', handleBlur);
-
-		// User interaction events
 		window.addEventListener('mousemove', handleUserInteraction);
 		window.addEventListener('keydown', handleUserInteraction);
 		window.addEventListener('scroll', handleUserInteraction, true); // Capture for nested scroll containers
 
+		// A closed or discarded tab never runs React cleanup, so the departure is also
+		// announced on pagehide.
+		window.addEventListener('pagehide', sendDepartingPong);
+
 		return () => {
 			if (idleTimerRef.current) {
 				clearTimeout(idleTimerRef.current);
-			}
-			if (heartbeatTimerRef.current) {
-				clearInterval(heartbeatTimerRef.current);
 			}
 
 			document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -284,8 +155,9 @@ export function usePresenceTracking(options: UsePresenceTrackingOptions = {}) {
 			window.removeEventListener('keydown', handleUserInteraction);
 			window.removeEventListener('scroll', handleUserInteraction, true);
 
-			// Send offline status on cleanup
-			sendPresenceUpdate('offline', activeChannelRef.current, true);
+			window.removeEventListener('pagehide', sendDepartingPong);
+
+			sendDepartingPong();
 		};
 	}, [
 		enabled,
@@ -293,10 +165,12 @@ export function usePresenceTracking(options: UsePresenceTrackingOptions = {}) {
 		handleVisibilityChange,
 		handleFocus,
 		handleBlur,
-		sendPresenceUpdate,
+		report,
+		scheduleIdleTimer,
+		sendDepartingPong,
 	]);
 
 	return {
-		currentStatus: currentStatus.current,
+		currentStatus: getPresenceState().status,
 	};
 }

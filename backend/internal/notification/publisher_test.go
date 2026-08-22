@@ -83,8 +83,8 @@ func (s routingLogicStub) RouteEphemeralSignal(context.Context, dbuuid.UUID, *db
 	return nil
 }
 
-func (s routingLogicStub) ShouldSendPush(context.Context, database.DBTX, dbuuid.UUID, dbuuid.UUID, int32, *dbuuid.UUID) (bool, error) {
-	return false, nil
+func (s routingLogicStub) ShouldSendPush(context.Context, database.DBTX, dbuuid.UUID, dbuuid.UUID, int32, *dbuuid.UUID) (bool, string, error) {
+	return false, "", nil
 }
 
 func (s routingLogicStub) ShouldSuppressPush(context.Context, database.DBTX, dbuuid.UUID, dbuuid.UUID, int32, string) (bool, error) {

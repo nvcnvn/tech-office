@@ -265,25 +265,6 @@ func (q *Queries) ClaimDueFallbackRecipients(ctx context.Context, db DBTX, arg *
 	return items, nil
 }
 
-const cleanupStaleConnections = `-- name: CleanupStaleConnections :execrows
-DELETE FROM notification.active_connection
-WHERE organization_id = $1
-  AND last_heartbeat < $2
-`
-
-type CleanupStaleConnectionsParams struct {
-	OrganizationID dbuuid.UUID        `json:"organization_id"`
-	LastHeartbeat  pgtype.Timestamptz `json:"last_heartbeat"`
-}
-
-func (q *Queries) CleanupStaleConnections(ctx context.Context, db DBTX, arg *CleanupStaleConnectionsParams) (int64, error) {
-	result, err := db.Exec(ctx, cleanupStaleConnections, arg.OrganizationID, arg.LastHeartbeat)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const cleanupStalePushTokens = `-- name: CleanupStalePushTokens :execrows
 DELETE FROM notification.push_token
 WHERE organization_id = $1
@@ -395,6 +376,27 @@ type CreateNotificationRecipientsBatchParams struct {
 	TargetDepartmentIds []dbuuid.UUID `json:"target_department_ids"`
 }
 
+const deleteExpiredConnections = `-- name: DeleteExpiredConnections :execrows
+DELETE FROM notification.active_connection
+WHERE organization_id = $1
+  AND last_pong_at < now() - make_interval(secs => $2::int)
+`
+
+type DeleteExpiredConnectionsParams struct {
+	OrganizationID       dbuuid.UUID `json:"organization_id"`
+	RemovalWindowSeconds int32       `json:"removal_window_seconds"`
+}
+
+// Sweep connections that have not pongged within the removal window.
+// Replaces the old mark-then-sweep pair; there is no longer anything to mark.
+func (q *Queries) DeleteExpiredConnections(ctx context.Context, db DBTX, arg *DeleteExpiredConnectionsParams) (int64, error) {
+	result, err := db.Exec(ctx, deleteExpiredConnections, arg.OrganizationID, arg.RemovalWindowSeconds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteNotificationRecipient = `-- name: DeleteNotificationRecipient :exec
 
 DELETE FROM notification.notification_recipient
@@ -479,69 +481,19 @@ func (q *Queries) DeleteResourceSubscriptionReason(ctx context.Context, db DBTX,
 	return err
 }
 
-const getActiveConnectionByID = `-- name: GetActiveConnectionByID :one
-SELECT organization_id,
-     employee_id,
-     connection_id,
-     instance_id,
-     presence_status,
-     active_channel_id,
-     last_interaction_at,
-     last_heartbeat
-FROM notification.active_connection
-WHERE organization_id = $1
-  AND employee_id = $2
-  AND connection_id = $3
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds'
-`
-
-type GetActiveConnectionByIDParams struct {
-	OrganizationID dbuuid.UUID `json:"organization_id"`
-	EmployeeID     dbuuid.UUID `json:"employee_id"`
-	ConnectionID   dbuuid.UUID `json:"connection_id"`
-}
-
-type GetActiveConnectionByIDRow struct {
-	OrganizationID    dbuuid.UUID        `json:"organization_id"`
-	EmployeeID        dbuuid.UUID        `json:"employee_id"`
-	ConnectionID      dbuuid.UUID        `json:"connection_id"`
-	InstanceID        string             `json:"instance_id"`
-	PresenceStatus    string             `json:"presence_status"`
-	ActiveChannelID   dbuuid.NullUUID    `json:"active_channel_id"`
-	LastInteractionAt pgtype.Timestamptz `json:"last_interaction_at"`
-	LastHeartbeat     pgtype.Timestamptz `json:"last_heartbeat"`
-}
-
-func (q *Queries) GetActiveConnectionByID(ctx context.Context, db DBTX, arg *GetActiveConnectionByIDParams) (*GetActiveConnectionByIDRow, error) {
-	row := db.QueryRow(ctx, getActiveConnectionByID, arg.OrganizationID, arg.EmployeeID, arg.ConnectionID)
-	var i GetActiveConnectionByIDRow
-	err := row.Scan(
-		&i.OrganizationID,
-		&i.EmployeeID,
-		&i.ConnectionID,
-		&i.InstanceID,
-		&i.PresenceStatus,
-		&i.ActiveChannelID,
-		&i.LastInteractionAt,
-		&i.LastHeartbeat,
-	)
-	return &i, err
-}
-
 const getActiveConnectionsByChannelID = `-- name: GetActiveConnectionsByChannelID :many
 SELECT instance_id, array_agg(employee_id)::uuid[] AS employee_ids
 FROM notification.active_connection
 WHERE active_channel_id = $1
   AND organization_id = $2
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds'
+  AND last_pong_at >= now() - make_interval(secs => $3::int)
 GROUP BY instance_id
 `
 
 type GetActiveConnectionsByChannelIDParams struct {
-	ActiveChannelID dbuuid.NullUUID `json:"active_channel_id"`
-	OrganizationID  dbuuid.UUID     `json:"organization_id"`
+	ActiveChannelID         dbuuid.NullUUID `json:"active_channel_id"`
+	OrganizationID          dbuuid.UUID     `json:"organization_id"`
+	ResponsiveWindowSeconds int32           `json:"responsive_window_seconds"`
 }
 
 type GetActiveConnectionsByChannelIDRow struct {
@@ -549,9 +501,9 @@ type GetActiveConnectionsByChannelIDRow struct {
 	EmployeeIds []dbuuid.UUID `json:"employee_ids"`
 }
 
-// Get active connections for employees viewing a specific channel
+// Channel-scoped live routing.
 func (q *Queries) GetActiveConnectionsByChannelID(ctx context.Context, db DBTX, arg *GetActiveConnectionsByChannelIDParams) ([]*GetActiveConnectionsByChannelIDRow, error) {
-	rows, err := db.Query(ctx, getActiveConnectionsByChannelID, arg.ActiveChannelID, arg.OrganizationID)
+	rows, err := db.Query(ctx, getActiveConnectionsByChannelID, arg.ActiveChannelID, arg.OrganizationID, arg.ResponsiveWindowSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -575,14 +527,14 @@ SELECT instance_id, array_agg(employee_id)::uuid[] AS employee_ids
 FROM notification.active_connection
 WHERE employee_id = ANY($1::uuid[])
   AND organization_id = $2
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds'
+  AND last_pong_at >= now() - make_interval(secs => $3::int)
 GROUP BY instance_id
 `
 
 type GetActiveConnectionsByEmployeeIDsParams struct {
-	Column1        []dbuuid.UUID `json:"column_1"`
-	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	EmployeeIds             []dbuuid.UUID `json:"employee_ids"`
+	OrganizationID          dbuuid.UUID   `json:"organization_id"`
+	ResponsiveWindowSeconds int32         `json:"responsive_window_seconds"`
 }
 
 type GetActiveConnectionsByEmployeeIDsRow struct {
@@ -590,8 +542,9 @@ type GetActiveConnectionsByEmployeeIDsRow struct {
 	EmployeeIds []dbuuid.UUID `json:"employee_ids"`
 }
 
+// Live-routing fan-out by instance.
 func (q *Queries) GetActiveConnectionsByEmployeeIDs(ctx context.Context, db DBTX, arg *GetActiveConnectionsByEmployeeIDsParams) ([]*GetActiveConnectionsByEmployeeIDsRow, error) {
-	rows, err := db.Query(ctx, getActiveConnectionsByEmployeeIDs, arg.Column1, arg.OrganizationID)
+	rows, err := db.Query(ctx, getActiveConnectionsByEmployeeIDs, arg.EmployeeIds, arg.OrganizationID, arg.ResponsiveWindowSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -615,18 +568,18 @@ SELECT connection_id,
        instance_id,
        active_channel_id,
        presence_status,
-       last_heartbeat,
+       last_pong_at,
        last_interaction_at
 FROM notification.active_connection
 WHERE organization_id = $1
   AND employee_id = $2
-  AND connection_status = 'active'
-  AND last_heartbeat >= now() - interval '60 seconds'
+  AND last_pong_at >= now() - make_interval(secs => $3::int)
 `
 
 type GetEmployeeActiveConnectionsParams struct {
-	OrganizationID dbuuid.UUID `json:"organization_id"`
-	EmployeeID     dbuuid.UUID `json:"employee_id"`
+	OrganizationID          dbuuid.UUID `json:"organization_id"`
+	EmployeeID              dbuuid.UUID `json:"employee_id"`
+	ResponsiveWindowSeconds int32       `json:"responsive_window_seconds"`
 }
 
 type GetEmployeeActiveConnectionsRow struct {
@@ -634,12 +587,15 @@ type GetEmployeeActiveConnectionsRow struct {
 	InstanceID        string             `json:"instance_id"`
 	ActiveChannelID   dbuuid.NullUUID    `json:"active_channel_id"`
 	PresenceStatus    string             `json:"presence_status"`
-	LastHeartbeat     pgtype.Timestamptz `json:"last_heartbeat"`
+	LastPongAt        pgtype.Timestamptz `json:"last_pong_at"`
 	LastInteractionAt pgtype.Timestamptz `json:"last_interaction_at"`
 }
 
+// Feeds both presence aggregation and ShouldSendPush. A connection is a live-delivery
+// target iff it pongged within the responsive window — exactly one derived predicate,
+// compared on the database clock against a window Go owns (Constitution VIII).
 func (q *Queries) GetEmployeeActiveConnections(ctx context.Context, db DBTX, arg *GetEmployeeActiveConnectionsParams) ([]*GetEmployeeActiveConnectionsRow, error) {
-	rows, err := db.Query(ctx, getEmployeeActiveConnections, arg.OrganizationID, arg.EmployeeID)
+	rows, err := db.Query(ctx, getEmployeeActiveConnections, arg.OrganizationID, arg.EmployeeID, arg.ResponsiveWindowSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -652,7 +608,7 @@ func (q *Queries) GetEmployeeActiveConnections(ctx context.Context, db DBTX, arg
 			&i.InstanceID,
 			&i.ActiveChannelID,
 			&i.PresenceStatus,
-			&i.LastHeartbeat,
+			&i.LastPongAt,
 			&i.LastInteractionAt,
 		); err != nil {
 			return nil, err
@@ -776,7 +732,7 @@ SELECT ac.employee_id,
        ac.presence_status,
        ac.active_channel_id,
        ac.last_interaction_at,
-       ac.last_heartbeat,
+       ac.last_pong_at,
        pv.visibility_mode,
        pv.custom_status_text,
   pv.custom_status_emoji,
@@ -787,13 +743,13 @@ LEFT JOIN notification.presence_visibility pv
  AND pv.employee_id = ac.employee_id
 WHERE ac.organization_id = $1
   AND ac.employee_id = ANY($2::uuid[])
-  AND ac.connection_status = 'active'
-  AND ac.last_heartbeat >= now() - interval '60 seconds'
+  AND ac.last_pong_at >= now() - make_interval(secs => $3::int)
 `
 
 type GetEmployeeVisiblePresenceParams struct {
-	OrganizationID dbuuid.UUID   `json:"organization_id"`
-	Column2        []dbuuid.UUID `json:"column_2"`
+	OrganizationID          dbuuid.UUID   `json:"organization_id"`
+	EmployeeIds             []dbuuid.UUID `json:"employee_ids"`
+	ResponsiveWindowSeconds int32         `json:"responsive_window_seconds"`
 }
 
 type GetEmployeeVisiblePresenceRow struct {
@@ -802,7 +758,7 @@ type GetEmployeeVisiblePresenceRow struct {
 	PresenceStatus    string             `json:"presence_status"`
 	ActiveChannelID   dbuuid.NullUUID    `json:"active_channel_id"`
 	LastInteractionAt pgtype.Timestamptz `json:"last_interaction_at"`
-	LastHeartbeat     pgtype.Timestamptz `json:"last_heartbeat"`
+	LastPongAt        pgtype.Timestamptz `json:"last_pong_at"`
 	VisibilityMode    pgtype.Text        `json:"visibility_mode"`
 	CustomStatusText  pgtype.Text        `json:"custom_status_text"`
 	CustomStatusEmoji pgtype.Text        `json:"custom_status_emoji"`
@@ -810,7 +766,7 @@ type GetEmployeeVisiblePresenceRow struct {
 }
 
 func (q *Queries) GetEmployeeVisiblePresence(ctx context.Context, db DBTX, arg *GetEmployeeVisiblePresenceParams) ([]*GetEmployeeVisiblePresenceRow, error) {
-	rows, err := db.Query(ctx, getEmployeeVisiblePresence, arg.OrganizationID, arg.Column2)
+	rows, err := db.Query(ctx, getEmployeeVisiblePresence, arg.OrganizationID, arg.EmployeeIds, arg.ResponsiveWindowSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -824,7 +780,7 @@ func (q *Queries) GetEmployeeVisiblePresence(ctx context.Context, db DBTX, arg *
 			&i.PresenceStatus,
 			&i.ActiveChannelID,
 			&i.LastInteractionAt,
-			&i.LastHeartbeat,
+			&i.LastPongAt,
 			&i.VisibilityMode,
 			&i.CustomStatusText,
 			&i.CustomStatusEmoji,
@@ -1331,10 +1287,10 @@ INSERT INTO notification.active_connection (
     ip_address
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7
-) ON CONFLICT (organization_id, employee_id, connection_id) 
-DO UPDATE SET 
-    last_heartbeat = $8,
-    connection_status = 'active'
+) ON CONFLICT (organization_id, employee_id, connection_id)
+DO UPDATE SET
+    instance_id = EXCLUDED.instance_id,
+    last_pong_at = $8
 `
 
 type InsertActiveConnectionParams struct {
@@ -1345,7 +1301,7 @@ type InsertActiveConnectionParams struct {
 	DepartmentIds  []dbuuid.UUID      `json:"department_ids"`
 	UserAgent      pgtype.Text        `json:"user_agent"`
 	IpAddress      *netip.Addr        `json:"ip_address"`
-	LastHeartbeat  pgtype.Timestamptz `json:"last_heartbeat"`
+	LastPongAt     pgtype.Timestamptz `json:"last_pong_at"`
 }
 
 // ============================================================================
@@ -1360,7 +1316,7 @@ func (q *Queries) InsertActiveConnection(ctx context.Context, db DBTX, arg *Inse
 		arg.DepartmentIds,
 		arg.UserAgent,
 		arg.IpAddress,
-		arg.LastHeartbeat,
+		arg.LastPongAt,
 	)
 	return err
 }
@@ -2053,22 +2009,70 @@ func (q *Queries) MarkQueuedFallbackSkippedByReceipt(ctx context.Context, db DBT
 	return items, nil
 }
 
-const markStaleConnections = `-- name: MarkStaleConnections :exec
-UPDATE notification.active_connection
-SET connection_status = 'stale'
-WHERE organization_id = $1
-  AND last_heartbeat < $2
-  AND connection_status = 'active'
+const recordPresencePongs = `-- name: RecordPresencePongs :many
+UPDATE notification.active_connection ac
+SET presence_status    = p.presence_status,
+    active_channel_id  = p.active_channel_id,
+    last_interaction_at = p.last_interaction_at,
+    last_pong_at       = now()
+FROM (
+        SELECT ($2::uuid[])[i]           AS connection_id,
+               ($3::uuid[])[i]             AS employee_id,
+               ($4::text[])[i]        AS presence_status,
+               nullif(($5::text[])[i], '')::uuid AS active_channel_id,
+               ($6::timestamptz[])[i] AS last_interaction_at
+        FROM generate_subscripts($2::uuid[], 1) AS i
+     ) AS p
+WHERE ac.organization_id = $1
+  AND ac.employee_id     = p.employee_id
+  AND ac.connection_id   = p.connection_id
+RETURNING ac.connection_id
 `
 
-type MarkStaleConnectionsParams struct {
-	OrganizationID dbuuid.UUID        `json:"organization_id"`
-	LastHeartbeat  pgtype.Timestamptz `json:"last_heartbeat"`
+type RecordPresencePongsParams struct {
+	OrganizationID   dbuuid.UUID          `json:"organization_id"`
+	ConnectionIds    []dbuuid.UUID        `json:"connection_ids"`
+	EmployeeIds      []dbuuid.UUID        `json:"employee_ids"`
+	PresenceStatuses []string             `json:"presence_statuses"`
+	ActiveChannelIds []string             `json:"active_channel_ids"`
+	LastInteractions []pgtype.Timestamptz `json:"last_interactions"`
 }
 
-func (q *Queries) MarkStaleConnections(ctx context.Context, db DBTX, arg *MarkStaleConnectionsParams) error {
-	_, err := db.Exec(ctx, markStaleConnections, arg.OrganizationID, arg.LastHeartbeat)
-	return err
+// Advance liveness for a batch of connections in one organization.
+// UPDATE only — never an upsert — so a connection removed by the janitor is not
+// resurrected by a late pong. The RETURNING set tells the caller which pongs matched;
+// unmatched connection_ids receive PONG_DIRECTIVE_RECONNECT.
+// last_pong_at uses the DATABASE clock: client clocks are never trusted for liveness.
+// Matching on employee_id as well as connection_id is what enforces ownership: a pong
+// can only ever touch a row belonging to the authenticated employee, and a mismatched
+// pair simply fails to match — no separate authorization query.
+// active_channel_ids travels as text[] so an empty string can carry "no channel":
+// a uuid[] cannot hold a NULL element through the generated parameter type.
+func (q *Queries) RecordPresencePongs(ctx context.Context, db DBTX, arg *RecordPresencePongsParams) ([]dbuuid.UUID, error) {
+	rows, err := db.Query(ctx, recordPresencePongs,
+		arg.OrganizationID,
+		arg.ConnectionIds,
+		arg.EmployeeIds,
+		arg.PresenceStatuses,
+		arg.ActiveChannelIds,
+		arg.LastInteractions,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []dbuuid.UUID
+	for rows.Next() {
+		var connection_id dbuuid.UUID
+		if err := rows.Scan(&connection_id); err != nil {
+			return nil, err
+		}
+		items = append(items, connection_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const removeActiveConnection = `-- name: RemoveActiveConnection :exec
@@ -2087,6 +2091,29 @@ type RemoveActiveConnectionParams struct {
 func (q *Queries) RemoveActiveConnection(ctx context.Context, db DBTX, arg *RemoveActiveConnectionParams) error {
 	_, err := db.Exec(ctx, removeActiveConnection, arg.OrganizationID, arg.EmployeeID, arg.ConnectionID)
 	return err
+}
+
+const removeDepartedConnections = `-- name: RemoveDepartedConnections :execrows
+DELETE FROM notification.active_connection
+WHERE organization_id = $1
+  AND employee_id     = ANY($2::uuid[])
+  AND connection_id   = ANY($3::uuid[])
+`
+
+type RemoveDepartedConnectionsParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	EmployeeIds    []dbuuid.UUID `json:"employee_ids"`
+	ConnectionIds  []dbuuid.UUID `json:"connection_ids"`
+}
+
+// Immediate removal for clients that announced a deliberate teardown.
+// Issued in the same flush as RecordPresencePongs, after it, for the departing subset.
+func (q *Queries) RemoveDepartedConnections(ctx context.Context, db DBTX, arg *RemoveDepartedConnectionsParams) (int64, error) {
+	result, err := db.Exec(ctx, removeDepartedConnections, arg.OrganizationID, arg.EmployeeIds, arg.ConnectionIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const setFallbackFailedForRecipient = `-- name: SetFallbackFailedForRecipient :exec
@@ -2304,35 +2331,6 @@ func (q *Queries) SharesDepartment(ctx context.Context, db DBTX, arg *SharesDepa
 	return shares_department, err
 }
 
-const updateConnectionHeartbeat = `-- name: UpdateConnectionHeartbeat :execrows
-UPDATE notification.active_connection
-SET last_heartbeat = $4
-WHERE organization_id = $1
-  AND employee_id = $2
-  AND connection_id = $3
-  AND connection_status = 'active'
-`
-
-type UpdateConnectionHeartbeatParams struct {
-	OrganizationID dbuuid.UUID        `json:"organization_id"`
-	EmployeeID     dbuuid.UUID        `json:"employee_id"`
-	ConnectionID   dbuuid.UUID        `json:"connection_id"`
-	LastHeartbeat  pgtype.Timestamptz `json:"last_heartbeat"`
-}
-
-func (q *Queries) UpdateConnectionHeartbeat(ctx context.Context, db DBTX, arg *UpdateConnectionHeartbeatParams) (int64, error) {
-	result, err := db.Exec(ctx, updateConnectionHeartbeat,
-		arg.OrganizationID,
-		arg.EmployeeID,
-		arg.ConnectionID,
-		arg.LastHeartbeat,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const updateDeliveryStatus = `-- name: UpdateDeliveryStatus :exec
 
 UPDATE notification.notification_recipient
@@ -2361,55 +2359,6 @@ func (q *Queries) UpdateDeliveryStatus(ctx context.Context, db DBTX, arg *Update
 		arg.LastDeliveryError,
 		arg.OrganizationID,
 		arg.ID,
-	)
-	return err
-}
-
-const updatePresenceStatus = `-- name: UpdatePresenceStatus :exec
-INSERT INTO notification.active_connection (
-    organization_id,
-    employee_id,
-    connection_id,
-    instance_id,
-    presence_status,
-    active_channel_id,
-    last_interaction_at,
-    last_heartbeat,
-    connection_status
-) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, 'active'
-)
-ON CONFLICT (organization_id, employee_id, connection_id)
-DO UPDATE SET 
-  instance_id = EXCLUDED.instance_id,
-    presence_status = EXCLUDED.presence_status,
-    active_channel_id = EXCLUDED.active_channel_id,
-    last_interaction_at = EXCLUDED.last_interaction_at,
-    last_heartbeat = EXCLUDED.last_heartbeat,
-    connection_status = 'active'
-`
-
-type UpdatePresenceStatusParams struct {
-	OrganizationID    dbuuid.UUID        `json:"organization_id"`
-	EmployeeID        dbuuid.UUID        `json:"employee_id"`
-	ConnectionID      dbuuid.UUID        `json:"connection_id"`
-	InstanceID        string             `json:"instance_id"`
-	PresenceStatus    string             `json:"presence_status"`
-	ActiveChannelID   dbuuid.NullUUID    `json:"active_channel_id"`
-	LastInteractionAt pgtype.Timestamptz `json:"last_interaction_at"`
-	LastHeartbeat     pgtype.Timestamptz `json:"last_heartbeat"`
-}
-
-func (q *Queries) UpdatePresenceStatus(ctx context.Context, db DBTX, arg *UpdatePresenceStatusParams) error {
-	_, err := db.Exec(ctx, updatePresenceStatus,
-		arg.OrganizationID,
-		arg.EmployeeID,
-		arg.ConnectionID,
-		arg.InstanceID,
-		arg.PresenceStatus,
-		arg.ActiveChannelID,
-		arg.LastInteractionAt,
-		arg.LastHeartbeat,
 	)
 	return err
 }

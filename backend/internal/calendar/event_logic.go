@@ -313,8 +313,8 @@ func (l *logicImpl) ListEvents(ctx context.Context, tx database.DBTX, orgID, act
 	personalEvents, err := l.queries.ListEventsForEmployee(ctx, tx, &database.ListEventsForEmployeeParams{
 		OrganizationID: orgID,
 		EmployeeID:     queryEmployeeID,
-		EndTime:        toPg,
-		StartTime:      fromPg,
+		RangeStart:     fromPg,
+		RangeEnd:       toPg,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list events for employee: %w", err)
@@ -323,8 +323,8 @@ func (l *logicImpl) ListEvents(ctx context.Context, tx database.DBTX, orgID, act
 	// Org-wide events (team / org_wide visibility).
 	orgEvents, err := l.queries.ListEventsForOrg(ctx, tx, &database.ListEventsForOrgParams{
 		OrganizationID: orgID,
-		EndTime:        toPg,
-		StartTime:      fromPg,
+		RangeStart:     fromPg,
+		RangeEnd:       toPg,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("list org events: %w", err)

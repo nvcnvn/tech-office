@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/internal/collaboration"
 	"github.com/nvcnvn/tech-office/backend/internal/config"
 	"github.com/nvcnvn/tech-office/backend/internal/iam"
+	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"github.com/nvcnvn/tech-office/backend/rpc/v1/rpcv1connect"
 )
@@ -1058,40 +1060,62 @@ func (w *testWorld) publishLiveOnlyNotification(recipientID dbuuid.UUID, title s
 // Act: Presence
 // ---------------------------------------------------------------------------
 
-func (w *testWorld) updatePresence(actor testUser, status rpcv1.PresenceStatus) {
+// pongRequest builds a PresencePongRequest with sane defaults so scenarios only state
+// what they are actually varying.
+type pongRequest struct {
+	ConnectionID      string
+	PingID            string
+	Status            rpcv1.PresenceStatus
+	ActiveChannelID   string
+	LastInteractionAt *timestamppb.Timestamp
+	Departing         bool
+}
+
+// sendPong answers a presence ping and returns the server's directive.
+func (w *testWorld) sendPong(actor testUser, p pongRequest) rpcv1.PongDirective {
 	w.t.Helper()
-	connID := w.cachedSSEConnection(actor)
-	req := connect.NewRequest(&rpcv1.UpdatePresenceStatusRequest{
-		Status:       status,
-		ConnectionId: connID,
+	directive, err := w.sendPongErr(actor, p)
+	require.NoError(w.t, err)
+	return directive
+}
+
+// sendPongErr is sendPong for scenarios that assert on the error contract.
+func (w *testWorld) sendPongErr(actor testUser, p pongRequest) (rpcv1.PongDirective, error) {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.PresencePongRequest{
+		ConnectionId:      p.ConnectionID,
+		PingId:            p.PingID,
+		Status:            p.Status,
+		ActiveChannelId:   p.ActiveChannelID,
+		LastInteractionAt: p.LastInteractionAt,
+		Departing:         p.Departing,
 	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
-	_, err := w.notif.UpdatePresenceStatus(context.Background(), req)
-	require.NoError(w.t, err)
+	resp, err := w.notif.PresencePong(context.Background(), req)
+	if err != nil {
+		return rpcv1.PongDirective_PONG_DIRECTIVE_UNSPECIFIED, err
+	}
+	return resp.Msg.Directive, nil
+}
+
+// updatePresence reports a status on the actor's cached stream connection.
+func (w *testWorld) updatePresence(actor testUser, status rpcv1.PresenceStatus) {
+	w.t.Helper()
+	w.sendPong(actor, pongRequest{ConnectionID: w.cachedSSEConnection(actor), Status: status})
 }
 
 func (w *testWorld) updatePresenceWithConnection(actor testUser, status rpcv1.PresenceStatus, connectionID string) {
 	w.t.Helper()
-	req := connect.NewRequest(&rpcv1.UpdatePresenceStatusRequest{
-		Status:       status,
-		ConnectionId: connectionID,
-	})
-	req.Header().Set("Authorization", "Bearer "+actor.Token)
-	_, err := w.notif.UpdatePresenceStatus(context.Background(), req)
-	require.NoError(w.t, err)
+	w.sendPong(actor, pongRequest{ConnectionID: connectionID, Status: status})
 }
 
 func (w *testWorld) updatePresenceWithChannel(actor testUser, status rpcv1.PresenceStatus, channelID string) {
 	w.t.Helper()
-	connID := w.cachedSSEConnection(actor)
-	req := connect.NewRequest(&rpcv1.UpdatePresenceStatusRequest{
+	w.sendPong(actor, pongRequest{
+		ConnectionID:    w.cachedSSEConnection(actor),
 		Status:          status,
-		ActiveChannelId: channelID,
-		ConnectionId:    connID,
+		ActiveChannelID: channelID,
 	})
-	req.Header().Set("Authorization", "Bearer "+actor.Token)
-	_, err := w.notif.UpdatePresenceStatus(context.Background(), req)
-	require.NoError(w.t, err)
 }
 
 func (w *testWorld) getPresence(actor testUser, targetID dbuuid.UUID) *rpcv1.EmployeePresence {
@@ -2270,6 +2294,240 @@ func findDocument(docs []*rpcv1.DocumentSummary, id string) *rpcv1.DocumentSumma
 // DB helpers (for tests needing direct data access)
 // ---------------------------------------------------------------------------
 
+// recipientRowID resolves the notification_recipient row for one employee, which is
+// what the delivery and fallback columns hang off.
+func (w *testWorld) recipientRowID(notificationID string, employeeID dbuuid.UUID) string {
+	w.t.Helper()
+	notifUUID, err := dbuuid.Parse(notificationID)
+	require.NoError(w.t, err)
+	var id dbuuid.UUID
+	err = globalDB.QueryRow(context.Background(),
+		`SELECT id FROM notification.notification_recipient
+		  WHERE organization_id = $1 AND notification_id = $2 AND employee_id = $3`,
+		w.OrgID, notifUUID, employeeID,
+	).Scan(&id)
+	require.NoError(w.t, err)
+	return id.String()
+}
+
+// connectionLastPongAge reports how long ago the database observed this connection's
+// last pong.
+func (w *testWorld) connectionLastPongAge(connID dbuuid.UUID) time.Duration {
+	w.t.Helper()
+	var seconds float64
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT EXTRACT(EPOCH FROM (now() - last_pong_at))
+		   FROM notification.active_connection WHERE connection_id = $1`, connID,
+	).Scan(&seconds)
+	require.NoError(w.t, err)
+	return time.Duration(seconds * float64(time.Second))
+}
+
+// connectionRow reads the mutable presence columns of one connection.
+func (w *testWorld) connectionRow(connID dbuuid.UUID) (presenceStatus, activeChannelID string, lastInteractionAt time.Time) {
+	w.t.Helper()
+	var channel dbuuid.NullUUID
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT presence_status, active_channel_id, last_interaction_at
+		   FROM notification.active_connection WHERE connection_id = $1`, connID,
+	).Scan(&presenceStatus, &channel, &lastInteractionAt)
+	require.NoError(w.t, err)
+	if channel.Valid {
+		activeChannelID = dbuuid.UUID(channel.UUID).String()
+	}
+	return
+}
+
+// pongCall pairs an actor with a pong so a batch can span employees and organizations.
+type pongCall struct {
+	Actor   testUser
+	Request pongRequest
+}
+
+// sendPongsConcurrently fires one pong per connection at the same moment, so they land
+// in the same batcher flush window, and returns the directives in input order.
+func (w *testWorld) sendPongsConcurrently(actor testUser, connectionIDs []string) []rpcv1.PongDirective {
+	w.t.Helper()
+	calls := make([]pongCall, len(connectionIDs))
+	for i, connID := range connectionIDs {
+		calls[i] = pongCall{
+			Actor:   actor,
+			Request: pongRequest{ConnectionID: connID, Status: rpcv1.PresenceStatus_PRESENCE_STATUS_ONLINE},
+		}
+	}
+	return w.sendPongsConcurrentlyForUsers(calls)
+}
+
+func (w *testWorld) sendPongsConcurrentlyForUsers(calls []pongCall) []rpcv1.PongDirective {
+	w.t.Helper()
+	directives := make([]rpcv1.PongDirective, len(calls))
+	errs := make([]error, len(calls))
+
+	var start sync.WaitGroup
+	var done sync.WaitGroup
+	start.Add(1)
+	for i, call := range calls {
+		done.Add(1)
+		go func(i int, call pongCall) {
+			defer done.Done()
+			start.Wait()
+			req := connect.NewRequest(&rpcv1.PresencePongRequest{
+				ConnectionId:      call.Request.ConnectionID,
+				PingId:            call.Request.PingID,
+				Status:            call.Request.Status,
+				ActiveChannelId:   call.Request.ActiveChannelID,
+				LastInteractionAt: call.Request.LastInteractionAt,
+				Departing:         call.Request.Departing,
+			})
+			req.Header().Set("Authorization", "Bearer "+call.Actor.Token)
+			resp, err := w.notif.PresencePong(context.Background(), req)
+			if err != nil {
+				errs[i] = err
+				return
+			}
+			directives[i] = resp.Msg.Directive
+		}(i, call)
+	}
+	start.Done()
+	done.Wait()
+
+	for i, err := range errs {
+		require.NoError(w.t, err, "pong %d failed", i)
+	}
+	return directives
+}
+
+// callRemovedUpdatePresenceStatus invokes the deleted UpdatePresenceStatus method by
+// its wire path. The generated client no longer has it, which is the point: this proves
+// the method is gone from the served contract rather than merely unused.
+func (w *testWorld) callRemovedUpdatePresenceStatus(actor testUser, connectionID string) (connect.Code, error) {
+	w.t.Helper()
+	body := fmt.Sprintf(`{"status":"PRESENCE_STATUS_OFFLINE","connectionId":%q}`, connectionID)
+	httpReq, err := http.NewRequest(http.MethodPost,
+		serverBaseURL+"/rpc.v1.NotificationService/UpdatePresenceStatus",
+		strings.NewReader(body))
+	require.NoError(w.t, err)
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Connect-Protocol-Version", "1")
+	httpReq.Header.Set("Authorization", "Bearer "+actor.Token)
+
+	resp, err := http.DefaultClient.Do(httpReq)
+	require.NoError(w.t, err)
+	defer resp.Body.Close()
+	payload, err := io.ReadAll(resp.Body)
+	require.NoError(w.t, err)
+
+	if resp.StatusCode == http.StatusOK {
+		return 0, nil
+	}
+	return connectCodeFromHTTPStatus(resp.StatusCode), fmt.Errorf("removed endpoint returned %d: %s", resp.StatusCode, payload)
+}
+
+// connectCodeFromHTTPStatus maps the Connect protocol's HTTP status mapping back to a
+// code, so scenarios can assert on the semantic outcome rather than a number.
+func connectCodeFromHTTPStatus(status int) connect.Code {
+	switch status {
+	case http.StatusNotFound, http.StatusNotImplemented:
+		return connect.CodeUnimplemented
+	case http.StatusBadRequest:
+		return connect.CodeInvalidArgument
+	case http.StatusUnauthorized:
+		return connect.CodeUnauthenticated
+	case http.StatusForbidden:
+		return connect.CodePermissionDenied
+	default:
+		return connect.CodeUnknown
+	}
+}
+
+// publishNotificationForChannel publishes a notification tied to a channel, so routing
+// can decide whether the recipient is already looking at it.
+func (w *testWorld) publishNotificationForChannel(recipientID dbuuid.UUID, title, channelID string) string {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.PublishNotificationRequest{
+		OrganizationId: w.OrgID.String(),
+		Recipients: &rpcv1.NotificationRecipients{
+			EmployeeIds: []string{recipientID.String()},
+		},
+		SourceDomain:        "chat",
+		NotificationType:    "message",
+		Title:               title,
+		Message:             "Integration test channel notification",
+		ActionCategory:      "integration",
+		Priority:            1,
+		PublishingServiceId: "integration-tests",
+		PolicyKey:           "chat_message",
+		DeliveryClass:       "persistent",
+		SourceCategory:      "activity",
+		ActiveChannelId:     channelID,
+		NavigationTarget: &rpcv1.NavigationTarget{
+			Domain:       "chat",
+			ResourceType: "channel",
+			ResourceId:   channelID,
+		},
+	})
+	req.Header().Set("Authorization", "Bearer "+w.systemToken())
+	resp, err := w.notif.PublishNotification(context.Background(), req)
+	require.NoError(w.t, err)
+	require.NotEmpty(w.t, resp.Msg.NotificationId)
+	return resp.Msg.NotificationId
+}
+
+// deliveryAttemptReasons lists the reasons recorded against one recipient's delivery
+// attempts, newest first. The routing decision lives here; notification_recipient's
+// fallback_reason ends up describing the delivery outcome instead.
+func (w *testWorld) deliveryAttemptReasons(notifRecipientID string) []string {
+	w.t.Helper()
+	recipientUUID, err := dbuuid.Parse(notifRecipientID)
+	require.NoError(w.t, err)
+	rows, err := globalDB.Query(context.Background(),
+		`SELECT COALESCE(reason, '')
+		   FROM notification.delivery_attempt
+		  WHERE organization_id = $1 AND notification_recipient_id = $2
+		  ORDER BY attempted_at DESC`,
+		w.OrgID, recipientUUID)
+	require.NoError(w.t, err)
+	defer rows.Close()
+
+	reasons := make([]string, 0, 4)
+	for rows.Next() {
+		var reason string
+		require.NoError(w.t, rows.Scan(&reason))
+		reasons = append(reasons, reason)
+	}
+	require.NoError(w.t, rows.Err())
+	return reasons
+}
+
+// responsiveConnectionIDs lists the connections that currently count as live-delivery
+// targets for an employee — the same derived predicate presence reads and routing use.
+func (w *testWorld) responsiveConnectionIDs(employeeID dbuuid.UUID) []dbuuid.UUID {
+	w.t.Helper()
+	rows, err := globalQ.GetEmployeeActiveConnections(context.Background(), globalDB, &database.GetEmployeeActiveConnectionsParams{
+		OrganizationID:          w.OrgID,
+		EmployeeID:              employeeID,
+		ResponsiveWindowSeconds: notification.ResponsiveWindowSeconds,
+	})
+	require.NoError(w.t, err)
+	ids := make([]dbuuid.UUID, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.ConnectionID)
+	}
+	return ids
+}
+
+// awaitPingEvent waits for the next ping challenge on a live stream.
+func (w *testWorld) awaitPingEvent(stream *connect.ServerStreamForClient[rpcv1.NotificationEvent]) *rpcv1.NotificationEvent {
+	w.t.Helper()
+	for stream.Receive() {
+		if event := stream.Msg(); event.EventType == notification.EventTypePing {
+			return event
+		}
+	}
+	require.FailNow(w.t, "expected a ping event before the stream closed", "stream error: %v", stream.Err())
+	return nil
+}
+
 func (w *testWorld) queryDeliveryStatus(notifRecipientID string) (status string, deliveredAt pgtype.Timestamptz) {
 	w.t.Helper()
 	err := globalDB.QueryRow(context.Background(),
@@ -2297,11 +2555,25 @@ func (w *testWorld) insertStaleConnection(employeeID dbuuid.UUID, age time.Durat
 	_, err := globalDB.Exec(context.Background(), `
 		INSERT INTO notification.active_connection (
 			connection_id, organization_id, employee_id, instance_id,
-			presence_status, last_heartbeat, last_interaction_at
+			presence_status, last_pong_at, last_interaction_at
 		) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		connID, w.OrgID, employeeID, instanceID, "online", ts, ts)
 	require.NoError(w.t, err)
 	return connID
+}
+
+// setConnectionLastPongAt rewrites a connection's last_pong_at directly through the
+// admin pool so scenarios can simulate elapsed silence instead of sleeping. The suite
+// runs under -timeout 120s and cannot wait out the 90-second removal window.
+func (w *testWorld) setConnectionLastPongAt(connID dbuuid.UUID, age time.Duration) {
+	w.t.Helper()
+	tag, err := globalDB.Exec(context.Background(),
+		`UPDATE notification.active_connection
+		    SET last_pong_at = now() - $2::interval
+		  WHERE connection_id = $1`,
+		connID, fmt.Sprintf("%d milliseconds", age.Milliseconds()))
+	require.NoError(w.t, err)
+	require.EqualValues(w.t, 1, tag.RowsAffected(), "expected exactly one connection row to age")
 }
 
 func (w *testWorld) connectionExists(connID dbuuid.UUID) bool {
@@ -2314,14 +2586,15 @@ func (w *testWorld) connectionExists(connID dbuuid.UUID) bool {
 	return count > 0
 }
 
-func (w *testWorld) cleanupStaleConnections(threshold time.Duration) {
+// deleteExpiredConnections runs the presence janitor's sweep for this org.
+func (w *testWorld) deleteExpiredConnections() int64 {
 	w.t.Helper()
-	ts := time.Now().Add(-threshold)
-	_, err := globalQ.CleanupStaleConnections(context.Background(), globalDB, &database.CleanupStaleConnectionsParams{
-		OrganizationID: w.OrgID,
-		LastHeartbeat:  pgtype.Timestamptz{Time: ts, Valid: true},
+	removed, err := globalQ.DeleteExpiredConnections(context.Background(), globalDB, &database.DeleteExpiredConnectionsParams{
+		OrganizationID:       w.OrgID,
+		RemovalWindowSeconds: notification.RemovalWindowSeconds,
 	})
 	require.NoError(w.t, err)
+	return removed
 }
 
 func (w *testWorld) lookupDepartment() (dbuuid.UUID, bool) {

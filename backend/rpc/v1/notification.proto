@@ -17,6 +17,7 @@ enum PresenceStatus {
   PRESENCE_STATUS_ONLINE_HIDDEN = 2;
   PRESENCE_STATUS_IDLE = 3;
   PRESENCE_STATUS_OFFLINE = 4;
+  PRESENCE_STATUS_IN_MEETING = 5;
 }
 
 enum PermissionState {
@@ -102,8 +103,20 @@ service NotificationService {
     };
   }
 
-  // UpdatePresenceStatus records the employee's presence state and active channel context.
-  rpc UpdatePresenceStatus(UpdatePresenceStatusRequest) returns (UpdatePresenceStatusResponse) {
+  // PresencePong answers a presence ping delivered on the notification stream, and is
+  // also sent unsolicited when the employee's state or active context changes.
+  //
+  // This is the ONLY way presence is reported. The server never advances a connection's
+  // liveness on its own.
+  //
+  // Cadence: the server pings every PING_INTERVAL_SECONDS (20). A connection with no pong
+  // for RESPONSIVE_WINDOW_SECONDS (45) is not present and not a live-delivery target.
+  // Constants are defined in backend/internal/notification/constants.go and mirrored in
+  // frontend/packages/apis/src/presence.ts (Constitution VIII).
+  //
+  // The permission key predates the protocol rename; it still means
+  // "this employee may report their own presence".
+  rpc PresencePong(PresencePongRequest) returns (PresencePongResponse) {
     option (rpc.v1.access_control) = {
       required_permissions: ["notif.updatePresence"]
     };
@@ -354,11 +367,18 @@ message StreamNotificationsRequest {
 }
 
 message NotificationEvent {
-  string event_id = 1; // Unique event ID for SSE (UUIDv7)
-  string event_type = 2; // "notification", "heartbeat", "connection_established"
+  // Unique event ID (UUIDv7). For a "ping" event this IS the ping id: the client
+  // echoes it back in PresencePongRequest.ping_id.
+  string event_id = 1;
+  // "notification", "ping", "connection_established".
+  // "ping" is a liveness challenge: the client MUST answer it with PresencePong
+  // carrying this event's event_id and its own connection_id. It replaces the former
+  // "heartbeat" event, which also refreshed the server's own liveness row — the
+  // defect this protocol exists to remove.
+  string event_type = 2;
   NotificationSummary notification = 3; // Only present for "notification" event_type
   google.protobuf.Timestamp timestamp = 4;
-  string connection_id = 5; // Present on connection_established heartbeats for presence tracking
+  string connection_id = 5; // Present on connection_established and ping events for presence tracking
 }
 
 message ConfirmNotificationReceiptRequest {
@@ -387,18 +407,46 @@ message GetUnreadCountResponse {
 // Presence & Push Token API
 // ============================================================================
 
-message UpdatePresenceStatusRequest {
-  PresenceStatus status = 1;
-  string active_channel_id = 2; // Optional - null/empty when not viewing a channel
-  google.protobuf.Timestamp last_interaction_at = 3;
-  string connection_id = 4;
+message PresencePongRequest {
+  // Connection being answered for. Obtained from the connection_established event.
+  // Required.
+  string connection_id = 1;
+
+  // Echo of the answered ping's NotificationEvent.event_id.
+  // Empty for an unsolicited pong (state change or departure).
+  // Used only for round-trip observability and duplicate suppression — liveness is
+  // established by the server-observed arrival time, never by this value.
+  string ping_id = 2;
+
+  // The employee's current state on THIS connection.
+  PresenceStatus status = 3;
+
+  // Channel currently being viewed on this connection; empty when none.
+  string active_channel_id = 4;
+
+  // Client's last user-interaction time. Advisory: clamped server-side to
+  // [now - 1h, now]. Never used for liveness.
+  google.protobuf.Timestamp last_interaction_at = 5;
+
+  // Clean departure: the client is going away deliberately (tab closed, signed out).
+  // The connection is removed immediately rather than waiting out the window.
+  bool departing = 6;
 }
 
-message UpdatePresenceStatusResponse {
-  PresenceStatus status = 1;
-  string active_channel_id = 2;
-  google.protobuf.Timestamp updated_at = 3;
-  string connection_id = 4;
+message PresencePongResponse {
+  PongDirective directive = 1;
+}
+
+enum PongDirective {
+  PONG_DIRECTIVE_UNSPECIFIED = 0;
+
+  // Pong recorded; carry on.
+  PONG_DIRECTIVE_ACK = 1;
+
+  // This connection no longer exists server-side (removed after prolonged silence, or
+  // lost to UNLOGGED-table recovery). The client MUST close its stream and re-establish.
+  // A removed connection is never resurrected by a late pong.
+  PONG_DIRECTIVE_RECONNECT = 2;
 }
 
 message GetEmployeePresenceRequest {

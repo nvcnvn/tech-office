@@ -1,0 +1,75 @@
+appId: com.devguards.TechOffice
+name: "Presence Ping-Pong"
+tags:
+  - presence
+  - notifications
+# Behavioral contract:
+#   specs/033-presence-ping-pong/contracts/integration-scenarios.md (Mobile scenarios)
+#
+# Happy path only, deliberately: foreground → background → foreground presence recovery.
+# The timing-sensitive cases live in the backend suite, which can move the server clock;
+# Maestro cannot, and a flow that waited out a 90-second removal window would be both
+# slow and flaky.
+---
+- runFlow: "auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+# Reach the profile card, which is where this app renders the user's own presence dot.
+- extendedWaitUntil:
+    visible:
+      id: "tab-more"
+    timeout: 15000
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "more-user-card"
+    timeout: 15000
+
+# Foreground: the client has answered its first challenge, so the dot reads online.
+# The wait covers one ping interval plus slack.
+- extendedWaitUntil:
+    visible:
+      id: "presence-indicator-online"
+    timeout: 30000
+- takeScreenshot: "tmp/maestro-screenshots/presence-01-foreground-online"
+
+# Background the app. The provider sends an unsolicited pong reporting idle and pauses
+# the stream, so the person stops looking available on a device nobody is holding.
+- pressKey: Home
+- extendedWaitUntil:
+    notVisible:
+      id: "more-user-card"
+    timeout: 10000
+
+# Return to the foreground. Presence must recover on its own: the stream re-establishes
+# and answers the next challenge, with no re-login and no manual refresh.
+- launchApp:
+    clearState: false
+    clearKeychain: false
+# A cold start returns to the default tab, so navigate back to the profile card.
+- extendedWaitUntil:
+    visible:
+      id: "tab-more"
+    timeout: 30000
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "more-user-card"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "presence-indicator-online"
+    timeout: 30000
+- takeScreenshot: "tmp/maestro-screenshots/presence-02-recovered-online"
+
+# "Without a re-login" is the other half of the assertion: the sign-in screen must never
+# have come back.
+- assertNotVisible: 'How do you sign in\?'

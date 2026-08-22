@@ -38,6 +38,11 @@ type NotificationServiceConnect struct {
 	// Infrastructure components (SSE, registry, publisher, listener)
 	// These are kept in Connect layer as they handle infrastructure concerns
 	NotificationService *NotificationService // Original service for SSE/registry/publisher
+
+	// PongBatcher coalesces presence pongs arriving at this instance into one
+	// multi-row UPDATE per organization per flush tick. The connect layer owns it
+	// because it owns the pool; PresenceLogic stays pool-agnostic.
+	PongBatcher *pongBatcher
 }
 
 // NewNotificationServiceConnect creates a new notification service connect layer
@@ -58,7 +63,18 @@ func NewNotificationServiceConnect(
 		AdminPool:           adminPool,
 		TenantPool:          tenantPool,
 		NotificationService: notificationService,
+		PongBatcher:         newPongBatcher(adminPool, presenceLogic),
 	}
+}
+
+// StartPongBatcher launches the pong flush loop. Call once at startup.
+func (s *NotificationServiceConnect) StartPongBatcher(ctx context.Context) {
+	s.PongBatcher.Start(ctx)
+}
+
+// StopPongBatcher drains in-flight pongs so no request is left waiting on shutdown.
+func (s *NotificationServiceConnect) StopPongBatcher() {
+	s.PongBatcher.Stop()
 }
 
 func (s *NotificationServiceConnect) ListNotifications(

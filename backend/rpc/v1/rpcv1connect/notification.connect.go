@@ -57,9 +57,9 @@ const (
 	// NotificationServiceGetUnreadCountProcedure is the fully-qualified name of the
 	// NotificationService's GetUnreadCount RPC.
 	NotificationServiceGetUnreadCountProcedure = "/rpc.v1.NotificationService/GetUnreadCount"
-	// NotificationServiceUpdatePresenceStatusProcedure is the fully-qualified name of the
-	// NotificationService's UpdatePresenceStatus RPC.
-	NotificationServiceUpdatePresenceStatusProcedure = "/rpc.v1.NotificationService/UpdatePresenceStatus"
+	// NotificationServicePresencePongProcedure is the fully-qualified name of the NotificationService's
+	// PresencePong RPC.
+	NotificationServicePresencePongProcedure = "/rpc.v1.NotificationService/PresencePong"
 	// NotificationServiceGetEmployeePresenceProcedure is the fully-qualified name of the
 	// NotificationService's GetEmployeePresence RPC.
 	NotificationServiceGetEmployeePresenceProcedure = "/rpc.v1.NotificationService/GetEmployeePresence"
@@ -123,8 +123,20 @@ type NotificationServiceClient interface {
 	// GetUnreadCount returns the count of unread notifications for the authenticated employee.
 	// Uses TenantPool with organization context from auth token.
 	GetUnreadCount(context.Context, *connect.Request[v1.GetUnreadCountRequest]) (*connect.Response[v1.GetUnreadCountResponse], error)
-	// UpdatePresenceStatus records the employee's presence state and active channel context.
-	UpdatePresenceStatus(context.Context, *connect.Request[v1.UpdatePresenceStatusRequest]) (*connect.Response[v1.UpdatePresenceStatusResponse], error)
+	// PresencePong answers a presence ping delivered on the notification stream, and is
+	// also sent unsolicited when the employee's state or active context changes.
+	//
+	// This is the ONLY way presence is reported. The server never advances a connection's
+	// liveness on its own.
+	//
+	// Cadence: the server pings every PING_INTERVAL_SECONDS (20). A connection with no pong
+	// for RESPONSIVE_WINDOW_SECONDS (45) is not present and not a live-delivery target.
+	// Constants are defined in backend/internal/notification/constants.go and mirrored in
+	// frontend/packages/apis/src/presence.ts (Constitution VIII).
+	//
+	// The permission key predates the protocol rename; it still means
+	// "this employee may report their own presence".
+	PresencePong(context.Context, *connect.Request[v1.PresencePongRequest]) (*connect.Response[v1.PresencePongResponse], error)
 	// GetEmployeePresence returns the latest presence signal for a specific employee.
 	GetEmployeePresence(context.Context, *connect.Request[v1.GetEmployeePresenceRequest]) (*connect.Response[v1.GetEmployeePresenceResponse], error)
 	// GetBatchEmployeePresence returns presence information for multiple employees.
@@ -213,10 +225,10 @@ func NewNotificationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(notificationServiceMethods.ByName("GetUnreadCount")),
 			connect.WithClientOptions(opts...),
 		),
-		updatePresenceStatus: connect.NewClient[v1.UpdatePresenceStatusRequest, v1.UpdatePresenceStatusResponse](
+		presencePong: connect.NewClient[v1.PresencePongRequest, v1.PresencePongResponse](
 			httpClient,
-			baseURL+NotificationServiceUpdatePresenceStatusProcedure,
-			connect.WithSchema(notificationServiceMethods.ByName("UpdatePresenceStatus")),
+			baseURL+NotificationServicePresencePongProcedure,
+			connect.WithSchema(notificationServiceMethods.ByName("PresencePong")),
 			connect.WithClientOptions(opts...),
 		),
 		getEmployeePresence: connect.NewClient[v1.GetEmployeePresenceRequest, v1.GetEmployeePresenceResponse](
@@ -298,7 +310,7 @@ type notificationServiceClient struct {
 	streamNotifications               *connect.Client[v1.StreamNotificationsRequest, v1.NotificationEvent]
 	confirmNotificationReceipt        *connect.Client[v1.ConfirmNotificationReceiptRequest, v1.ConfirmNotificationReceiptResponse]
 	getUnreadCount                    *connect.Client[v1.GetUnreadCountRequest, v1.GetUnreadCountResponse]
-	updatePresenceStatus              *connect.Client[v1.UpdatePresenceStatusRequest, v1.UpdatePresenceStatusResponse]
+	presencePong                      *connect.Client[v1.PresencePongRequest, v1.PresencePongResponse]
 	getEmployeePresence               *connect.Client[v1.GetEmployeePresenceRequest, v1.GetEmployeePresenceResponse]
 	getBatchEmployeePresence          *connect.Client[v1.GetBatchEmployeePresenceRequest, v1.GetBatchEmployeePresenceResponse]
 	registerPushToken                 *connect.Client[v1.RegisterPushTokenRequest, v1.RegisterPushTokenResponse]
@@ -352,9 +364,9 @@ func (c *notificationServiceClient) GetUnreadCount(ctx context.Context, req *con
 	return c.getUnreadCount.CallUnary(ctx, req)
 }
 
-// UpdatePresenceStatus calls rpc.v1.NotificationService.UpdatePresenceStatus.
-func (c *notificationServiceClient) UpdatePresenceStatus(ctx context.Context, req *connect.Request[v1.UpdatePresenceStatusRequest]) (*connect.Response[v1.UpdatePresenceStatusResponse], error) {
-	return c.updatePresenceStatus.CallUnary(ctx, req)
+// PresencePong calls rpc.v1.NotificationService.PresencePong.
+func (c *notificationServiceClient) PresencePong(ctx context.Context, req *connect.Request[v1.PresencePongRequest]) (*connect.Response[v1.PresencePongResponse], error) {
+	return c.presencePong.CallUnary(ctx, req)
 }
 
 // GetEmployeePresence calls rpc.v1.NotificationService.GetEmployeePresence.
@@ -441,8 +453,20 @@ type NotificationServiceHandler interface {
 	// GetUnreadCount returns the count of unread notifications for the authenticated employee.
 	// Uses TenantPool with organization context from auth token.
 	GetUnreadCount(context.Context, *connect.Request[v1.GetUnreadCountRequest]) (*connect.Response[v1.GetUnreadCountResponse], error)
-	// UpdatePresenceStatus records the employee's presence state and active channel context.
-	UpdatePresenceStatus(context.Context, *connect.Request[v1.UpdatePresenceStatusRequest]) (*connect.Response[v1.UpdatePresenceStatusResponse], error)
+	// PresencePong answers a presence ping delivered on the notification stream, and is
+	// also sent unsolicited when the employee's state or active context changes.
+	//
+	// This is the ONLY way presence is reported. The server never advances a connection's
+	// liveness on its own.
+	//
+	// Cadence: the server pings every PING_INTERVAL_SECONDS (20). A connection with no pong
+	// for RESPONSIVE_WINDOW_SECONDS (45) is not present and not a live-delivery target.
+	// Constants are defined in backend/internal/notification/constants.go and mirrored in
+	// frontend/packages/apis/src/presence.ts (Constitution VIII).
+	//
+	// The permission key predates the protocol rename; it still means
+	// "this employee may report their own presence".
+	PresencePong(context.Context, *connect.Request[v1.PresencePongRequest]) (*connect.Response[v1.PresencePongResponse], error)
 	// GetEmployeePresence returns the latest presence signal for a specific employee.
 	GetEmployeePresence(context.Context, *connect.Request[v1.GetEmployeePresenceRequest]) (*connect.Response[v1.GetEmployeePresenceResponse], error)
 	// GetBatchEmployeePresence returns presence information for multiple employees.
@@ -527,10 +551,10 @@ func NewNotificationServiceHandler(svc NotificationServiceHandler, opts ...conne
 		connect.WithSchema(notificationServiceMethods.ByName("GetUnreadCount")),
 		connect.WithHandlerOptions(opts...),
 	)
-	notificationServiceUpdatePresenceStatusHandler := connect.NewUnaryHandler(
-		NotificationServiceUpdatePresenceStatusProcedure,
-		svc.UpdatePresenceStatus,
-		connect.WithSchema(notificationServiceMethods.ByName("UpdatePresenceStatus")),
+	notificationServicePresencePongHandler := connect.NewUnaryHandler(
+		NotificationServicePresencePongProcedure,
+		svc.PresencePong,
+		connect.WithSchema(notificationServiceMethods.ByName("PresencePong")),
 		connect.WithHandlerOptions(opts...),
 	)
 	notificationServiceGetEmployeePresenceHandler := connect.NewUnaryHandler(
@@ -617,8 +641,8 @@ func NewNotificationServiceHandler(svc NotificationServiceHandler, opts ...conne
 			notificationServiceConfirmNotificationReceiptHandler.ServeHTTP(w, r)
 		case NotificationServiceGetUnreadCountProcedure:
 			notificationServiceGetUnreadCountHandler.ServeHTTP(w, r)
-		case NotificationServiceUpdatePresenceStatusProcedure:
-			notificationServiceUpdatePresenceStatusHandler.ServeHTTP(w, r)
+		case NotificationServicePresencePongProcedure:
+			notificationServicePresencePongHandler.ServeHTTP(w, r)
 		case NotificationServiceGetEmployeePresenceProcedure:
 			notificationServiceGetEmployeePresenceHandler.ServeHTTP(w, r)
 		case NotificationServiceGetBatchEmployeePresenceProcedure:
@@ -682,8 +706,8 @@ func (UnimplementedNotificationServiceHandler) GetUnreadCount(context.Context, *
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.NotificationService.GetUnreadCount is not implemented"))
 }
 
-func (UnimplementedNotificationServiceHandler) UpdatePresenceStatus(context.Context, *connect.Request[v1.UpdatePresenceStatusRequest]) (*connect.Response[v1.UpdatePresenceStatusResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.NotificationService.UpdatePresenceStatus is not implemented"))
+func (UnimplementedNotificationServiceHandler) PresencePong(context.Context, *connect.Request[v1.PresencePongRequest]) (*connect.Response[v1.PresencePongResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.NotificationService.PresencePong is not implemented"))
 }
 
 func (UnimplementedNotificationServiceHandler) GetEmployeePresence(context.Context, *connect.Request[v1.GetEmployeePresenceRequest]) (*connect.Response[v1.GetEmployeePresenceResponse], error) {

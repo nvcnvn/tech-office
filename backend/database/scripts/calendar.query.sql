@@ -29,23 +29,28 @@ SELECT * FROM calendar.event
 WHERE organization_id = $1 AND id = $2;
 
 -- name: ListEventsForEmployee :many
+-- Overlap test: an event is in range when it starts before the range ends and ends
+-- after the range begins. The bounds are named for the RANGE, not for the column they
+-- are compared against — naming them start_time/end_time inverts their meaning and is
+-- exactly the mix-up that returns an empty list.
 SELECT e.* FROM calendar.event e
 LEFT JOIN calendar.attendee a
     ON a.organization_id = e.organization_id
  AND a.event_id = e.id
- AND a.employee_id = $2
-WHERE e.organization_id = $1
-    AND (e.organizer_id = $2 OR a.employee_id IS NOT NULL)
-                AND e.start_time < $4
-                AND e.end_time > $3
+ AND a.employee_id = @employee_id
+WHERE e.organization_id = @organization_id
+    AND (e.organizer_id = @employee_id OR a.employee_id IS NOT NULL)
+  AND e.start_time < @range_end
+  AND e.end_time > @range_start
   AND e.cancelled_at IS NULL
 ORDER BY e.start_time ASC;
 
 -- name: ListEventsForOrg :many
+-- Bounds are named for the range; see ListEventsForEmployee.
 SELECT * FROM calendar.event
-WHERE organization_id = $1
-    AND start_time < $3
-    AND end_time > $2
+WHERE organization_id = @organization_id
+  AND start_time < @range_end
+  AND end_time > @range_start
   AND cancelled_at IS NULL
   AND visibility IN ('team', 'org_wide')
 ORDER BY start_time ASC;
@@ -200,12 +205,13 @@ INSERT INTO calendar.resource_booking (
 RETURNING *;
 
 -- name: DetectResourceConflict :many
+-- Bounds are named for the range; see ListEventsForEmployee.
 SELECT * FROM calendar.resource_booking
-WHERE organization_id = $1
-  AND resource_id = $2
-    AND start_time < $4
-    AND end_time > $3
-  AND event_id != $5
+WHERE organization_id = @organization_id
+  AND resource_id = @resource_id
+  AND start_time < @range_end
+  AND end_time > @range_start
+  AND event_id != @event_id
 FOR UPDATE;
 
 -- name: DeleteResourceBookingsForEvent :exec

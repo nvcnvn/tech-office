@@ -38,9 +38,76 @@ flowchart TB
 | `resource_surface` | Maps a parent resource to attached surfaces that inherit subscription. E.g. task → task_discussion (chat channel), task → task_description (document). |
 | `notification` | Persisted notification record with source_domain, notification_type, policy_key, delivery_class, source_category, navigation_target. |
 | `notification_recipient` | Per-employee delivery tracking: read_status, delivery_status, fallback_status, fallback_reason, acknowledgement_status (authoritative unread signal), acknowledgement_action, recipient_type, target_department_ids. |
-| `active_connection` | UNLOGGED table. Registry of live SSE connections per instance, with presence_status and active_channel_id. |
+| `active_connection` | UNLOGGED table. Registry of live SSE connections per instance, with presence_status, active_channel_id, and `last_pong_at`. Liveness is derived from `last_pong_at`; there is no stored status column. See [Presence: the ping-pong protocol](#presence-the-ping-pong-protocol). |
 | `active_listener` | Reference table. Registry of backend LISTEN topic ownership per instance, including heartbeat for listener health debugging. |
 | `active_context` | UNLOGGED table. Tracks active realtime context (channel, document, task) per SSE connection. Generalizes active_channel_id for multi-domain context awareness. |
+
+## Presence: the ping-pong protocol
+
+Presence is established by challenge and response, not by self-report.
+
+- **Ping.** The SSE loop emits a `ping` event on each open stream every
+  `PingIntervalSeconds` (20). The event's `event_id` (UUIDv7) *is* the ping id.
+- **Pong.** The client answers with the unary `PresencePong` RPC, echoing the ping id
+  and carrying its status, active channel, and last interaction time. A pong is also
+  sent unsolicited when the client's state or context changes materially, and with
+  `departing: true` on deliberate teardown.
+- **Liveness.** `active_connection.last_pong_at` is advanced *only* by a received pong,
+  and only from the database's own clock. Nothing server-side refreshes it.
+
+That last rule is the point of the design. The previous scheme had the SSE loop refresh
+the connection's own liveness timestamp on a ticker, so a laptop that had gone to sleep
+still looked online for minutes — and `ShouldSendPush` therefore suppressed the push that
+would have reached the person. A pong proves the whole round trip (server → stream →
+client → RPC → server), which is exactly what a half-open stream cannot fake.
+
+### Derived liveness state machine
+
+There is no stored state. Given `age = now() - last_pong_at`:
+
+| State | Condition | Meaning |
+|---|---|---|
+| Responsive | `age <= 45s` (`ResponsiveWindowSeconds`) | Present, and a valid live-delivery target |
+| Unresponsive | `45s < age <= 90s` | Not present, not a delivery target, row still intact so a late pong restores it without a reconnect |
+| Removed | `age > 90s` (`RemovalWindowSeconds`) | Row deleted by the janitor; a later pong returns `PONG_DIRECTIVE_RECONNECT` and never resurrects it |
+
+**Invariant:** a connection is a valid live-delivery target **iff**
+`last_pong_at >= now() - 45s`. Presence reads and routing use that one predicate, so they
+cannot disagree.
+
+Removal is a single `DeleteExpiredConnections` sweep per organization every 60 seconds
+(`registry.go`). The old mark-then-sweep pair is gone along with the `connection_status`
+column it maintained.
+
+### The pong batcher
+
+Each instance runs a `pongBatcher` (`pong_batcher.go`). A `PresencePong` handler
+validates its request, enqueues it, and blocks on its own result channel. Every 200 ms —
+or at 500 queued pongs, whichever comes first — the batcher groups the queue **by
+`organization_id`** and issues one multi-row `UPDATE ... RETURNING connection_id` per
+group. Each waiter is then resolved from that `RETURNING` set: present → `ACK`, absent →
+`RECONNECT`.
+
+Three properties follow from that shape:
+
+- **Shard locality.** Grouping by organization keeps every statement single-shard, as
+  Citus requires. A cross-organization batch is never issued.
+- **Authoritative directives.** Because each handler awaits its own flush rather than
+  firing and forgetting, it can say authoritatively that a connection no longer exists.
+- **No resurrection.** The statement is an `UPDATE`, never an upsert, so a pong arriving
+  after the janitor removed a row cannot recreate it.
+
+Nothing in the batcher outlives the request that put it there, so it is not process-local
+state and the database remains the single source of truth.
+
+At the 10k-connection design target this turns roughly 500 presence writes/second into
+roughly 15 statements/second carrying ~33 rows each.
+
+### Observability
+
+One flush tick logs batch size, flush duration, matched count, and reconnect-directive
+count; the janitor logs removals per organization. Those four numbers are what a presence
+incident is diagnosed from. A flush that exceeds its own window logs a warning.
 
 ### Retired tables
 
@@ -443,7 +510,8 @@ Both workflows are registered in `server.go` via `flows.Register(flowsRegistry, 
 | PG listener | `internal/notification/listener.go` | `initListener()`, LISTEN channel setup |
 | Routing | `internal/notification/routing_logic.go` | `ShouldSuppressPush()`, presence-aware decisions |
 | RPC layer | `internal/notification/connect.go` | `ListNotifications`, `MarkAsRead`, `StreamNotifications` |
-| Presence | `internal/notification/presence_logic.go` | `UpdatePresenceStatus()`, `GetEmployeePresence()`, `GetBatchEmployeePresence()` |
+| Presence | `internal/notification/presence_logic.go` | `RecordPongs()`, `RemoveDepartedConnections()`, `DeleteExpiredConnections()`, `GetEmployeePresence()`, `GetBatchEmployeePresence()` |
+| Pong batcher | `internal/notification/pong_batcher.go` | `Submit()`, per-organization flush |
 | Push | `internal/notification/push_logic.go` | FCM push fallback |
 | Chat bridge | `internal/chat/logic.go` | `broadcastNewMessage()`, `bridgeTaskChannelMessage()` |
 | Task surfaces | `internal/collaboration/task_logic.go` | `registerTaskResourceSurfaces()`, `createTaskWatcher()`, `notifyTaskWatchers()` |

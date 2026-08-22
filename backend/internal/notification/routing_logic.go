@@ -17,8 +17,11 @@ type RoutingLogic interface {
 	// without database writes
 	RouteEphemeralSignal(ctx context.Context, orgID dbuuid.UUID, channelID *dbuuid.UUID, notification *rpcv1.NotificationEvent) error
 
-	// ShouldSendPush determines if push notification should be sent based on employee presence
-	ShouldSendPush(ctx context.Context, tx database.DBTX, employeeID, orgID dbuuid.UUID, priority int32, channelID *dbuuid.UUID) (bool, error)
+	// ShouldSendPush determines if push notification should be sent based on employee
+	// presence. The returned reason is non-empty only when the absence of a responsive
+	// connection is what drove a "send" decision, so the delivery record can distinguish
+	// "we could not reach them live" from a policy or priority decision (FR-014).
+	ShouldSendPush(ctx context.Context, tx database.DBTX, employeeID, orgID dbuuid.UUID, priority int32, channelID *dbuuid.UUID) (bool, string, error)
 
 	// ShouldSuppressPush checks DND and domain-mute to decide if push should be suppressed.
 	// Priority 0 (always) bypasses all suppression.
@@ -34,7 +37,9 @@ type RoutingLogic interface {
 type FallbackDecision struct {
 	// ShouldSend is true when a push notification should be dispatched.
 	ShouldSend bool
-	// Reason is non-empty when ShouldSend is false, recording why push was skipped.
+	// Reason records why the decision came out the way it did — why push was skipped
+	// when ShouldSend is false, and, when absence drove a send, that the recipient's
+	// connections had stopped answering presence pings.
 	// Matches the FallbackReason* constants in constants.go.
 	Reason string
 }
@@ -119,10 +124,19 @@ func (r *routingLogicImpl) RouteEphemeralSignal(
 
 // ShouldSendPush determines if push notification should be sent based on presence.
 //
+// "Present" means responsive: GetEmployeeActiveConnections returns only connections
+// that answered a presence ping within ResponsiveWindowSeconds, so a device that
+// stopped answering is not a live-delivery target and its owner gets the push. This
+// is the whole business reason for the ping-pong protocol — before it, a sleeping
+// laptop still counted as online and suppressed the push that would have reached the
+// person.
+//
 // Logic:
 //   - Priority=0 (critical): Always send push
-//   - Priority=1-3: Send push if employee is offline OR if online but hidden
-//   - If employee is viewing target channel: Don't send push (SSE is enough)
+//   - Priority=1-3: Send push if the employee has no responsive connection, OR if
+//     responsive but hidden
+//   - If employee is viewing target channel on a responsive connection: Don't send
+//     push (live delivery is enough)
 //
 // Parameters:
 //   - ctx: Request context
@@ -141,7 +155,7 @@ func (r *routingLogicImpl) ShouldSendPush(
 	employeeID, orgID dbuuid.UUID,
 	priority int32,
 	channelID *dbuuid.UUID,
-) (bool, error) {
+) (bool, string, error) {
 	slog.DebugContext(ctx, "checking if push should be sent",
 		"function", "ShouldSendPush",
 		"employeeID", employeeID.String(),
@@ -152,12 +166,12 @@ func (r *routingLogicImpl) ShouldSendPush(
 	if priority == 0 {
 		slog.DebugContext(ctx, "critical notification, sending push",
 			"employeeID", employeeID.String())
-		return true, nil
+		return true, "", nil
 	}
 
 	// Priority=4 (ephemeral): Never send push
 	if priority == 4 {
-		return false, nil
+		return false, "", nil
 	}
 
 	// Get employee's active connections to determine online status
@@ -168,16 +182,17 @@ func (r *routingLogicImpl) ShouldSendPush(
 			"error", err,
 			"employeeID", employeeID.String())
 		// Fallback: send push if we can't determine presence
-		return true, fmt.Errorf("failed to get active connections: %w", err)
+		return true, "", fmt.Errorf("failed to get active connections: %w", err)
 	}
 
-	isOnline := len(activeConnections) > 0
-
-	// Offline: send push
-	if !isOnline {
-		slog.DebugContext(ctx, "employee offline, sending push",
-			"employeeID", employeeID.String())
-		return true, nil
+	// No responsive connection: either the employee has no connection at all, or every
+	// connection they have stopped answering pings. Both mean live delivery cannot
+	// reach them.
+	if len(activeConnections) == 0 {
+		slog.DebugContext(ctx, "employee has no responsive connection, sending push",
+			"employeeID", employeeID.String(),
+			"responsiveWindowSeconds", ResponsiveWindowSeconds)
+		return true, FallbackReasonConnectionUnresponsive, nil
 	}
 
 	// Online: check if viewing target channel
@@ -190,7 +205,7 @@ func (r *routingLogicImpl) ShouldSendPush(
 				slog.DebugContext(ctx, "employee viewing target channel, suppress push",
 					"employeeID", employeeID.String(),
 					"channelID", channelID.String())
-				return false, nil
+				return false, "", nil
 			}
 		}
 	}
@@ -201,14 +216,14 @@ func (r *routingLogicImpl) ShouldSendPush(
 			// Employee set status to hidden - send push
 			slog.DebugContext(ctx, "employee status is online_hidden, sending push",
 				"employeeID", employeeID.String())
-			return true, nil
+			return true, "", nil
 		}
 	}
 
 	// Online and viewing or status is visible: don't send push (SSE is enough)
 	slog.DebugContext(ctx, "employee online and visible, skip push",
 		"employeeID", employeeID.String())
-	return false, nil
+	return false, "", nil
 }
 
 // ShouldSuppressPush checks DND schedule and domain-mute to decide if push
@@ -292,8 +307,8 @@ func (r *routingLogicImpl) DecideFallback(
 	sourceDomain string,
 	channelID *dbuuid.UUID,
 ) FallbackDecision {
-	// Check presence: is the employee even reachable via push?
-	sendPush, err := r.ShouldSendPush(ctx, tx, employeeID, orgID, priority, channelID)
+	// Check presence: is the employee even reachable by live delivery?
+	sendPush, presenceReason, err := r.ShouldSendPush(ctx, tx, employeeID, orgID, priority, channelID)
 	if err != nil {
 		slog.WarnContext(ctx, "DecideFallback: presence check failed, defaulting to send",
 			"employeeID", employeeID.String(), "error", err)
@@ -301,7 +316,10 @@ func (r *routingLogicImpl) DecideFallback(
 		return FallbackDecision{ShouldSend: true}
 	}
 	if !sendPush {
-		// Employee is online and reachable via SSE
+		// Employee has a responsive connection and is reachable live. Exactly one
+		// decision is produced per recipient (FR-016): this branch and the ones below
+		// are mutually exclusive, so a recipient is never both delivered live and
+		// queued for unsuppressed fallback.
 		return FallbackDecision{ShouldSend: false, Reason: FallbackReasonRecipientOnline}
 	}
 
@@ -316,5 +334,8 @@ func (r *routingLogicImpl) DecideFallback(
 		return FallbackDecision{ShouldSend: false, Reason: FallbackReasonSuppressedByPreference}
 	}
 
-	return FallbackDecision{ShouldSend: true}
+	// presenceReason is connection_unresponsive when the recipient had connections that
+	// had simply stopped answering, and empty when priority or a hidden status drove
+	// the send. Either way this is the one decision recorded for this recipient.
+	return FallbackDecision{ShouldSend: true, Reason: presenceReason}
 }

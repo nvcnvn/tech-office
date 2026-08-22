@@ -19,7 +19,12 @@ import { AppState, type AppStateStatus } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Notifications from "expo-notifications";
 import EventSource from "react-native-sse";
-import { confirmNotificationReceipt } from "apis";
+import {
+  confirmNotificationReceipt,
+  presencePong,
+  PING_INTERVAL_SECONDS,
+  type PresenceStatus,
+} from "apis";
 import { API_BASE_URL } from "@/lib/constants";
 import { AuthContext } from "@/hooks/use-auth";
 import {
@@ -386,6 +391,16 @@ export function useNotificationStream() {
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 30_000;
 
+/**
+ * A stream that has delivered no ping for two intervals is dead — most likely
+ * half-open, where the mobile radio dropped it while this process kept believing it
+ * was connected. Noticing that is the client-side half of what ping-pong buys.
+ */
+const DEAD_STREAM_TIMEOUT_MS = 2 * PING_INTERVAL_SECONDS * 1_000;
+
+/** At most one unsolicited pong per this window, per the protocol's client obligations. */
+const UNSOLICITED_PONG_DEBOUNCE_MS = 500;
+
 export function NotificationStreamProvider({
   children,
 }: {
@@ -406,6 +421,9 @@ export function NotificationStreamProvider({
   const connectionAttemptRef = useRef(0);
   const reconnectCycleRef = useRef(0);
   const connectionIdRef = useRef<string | null>(null);
+  const deadStreamTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const unsolicitedPongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const presenceStatusRef = useRef<PresenceStatus>("online");
   const isConnectedRef = useRef(false);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
   const connectRef = useRef<() => void>(() => {});
@@ -896,6 +914,8 @@ export function NotificationStreamProvider({
     [flushReceiptBatch],
   );
 
+  const closeStreamRef = useRef<(options: { intentional: boolean }) => void>(() => {});
+
   const closeStream = useCallback(
     ({ intentional }: { intentional: boolean }) => {
       intentionalCloseRef.current = intentional;
@@ -907,6 +927,7 @@ export function NotificationStreamProvider({
         } catch {}
         esRef.current = null;
       }
+      clearDeadStreamTimer();
       isConnectedRef.current = false;
       setIsConnected(false);
     },
@@ -957,6 +978,85 @@ export function NotificationStreamProvider({
       connectRef.current();
     }, notificationStreamBehavior.sessionMaxAgeMs);
   }, [auth?.isAuthenticated, clearSessionRotationTimer, closeStream, enterReconnectWindow]);
+
+  const clearDeadStreamTimer = useCallback(() => {
+    if (deadStreamTimerRef.current) {
+      clearTimeout(deadStreamTimerRef.current);
+      deadStreamTimerRef.current = null;
+    }
+  }, []);
+
+  /**
+   * Answer a ping, or report a state change unsolicited.
+   *
+   * A RECONNECT directive means this connection no longer exists server-side; the only
+   * correct response is to drop the stream and re-establish, never to retry the pong
+   * against a dead connection id.
+   */
+  const sendPong = useCallback(
+    async (options: { pingId?: string; departing?: boolean; status?: PresenceStatus } = {}) => {
+      const connectionId = connectionIdRef.current;
+      if (!connectionId) {
+        return;
+      }
+
+      const status = options.status ?? presenceStatusRef.current;
+      try {
+        const directive = await presencePong({
+          connectionId,
+          pingId: options.pingId,
+          status,
+          activeChannelId: activeChannelRef.current,
+          lastInteractionAt: new Date(),
+          departing: options.departing ?? false,
+        });
+
+        if (directive === "reconnect") {
+          debugNotificationStream("server no longer knows this connection, re-establishing");
+          connectionIdRef.current = null;
+          closeStreamRef.current({ intentional: true });
+          connectRef.current();
+        }
+      } catch {
+        // A dropped pong is covered by the responsive window; the next ping retries.
+      }
+    },
+    [],
+  );
+
+  const sendPongRef = useRef(sendPong);
+  sendPongRef.current = sendPong;
+
+  /**
+   * Restart the dead-stream watchdog. Called on every ping: if two intervals pass with
+   * no challenge, the stream is half-open and must be replaced.
+   */
+  const armDeadStreamWatchdog = useCallback(() => {
+    clearDeadStreamTimer();
+    deadStreamTimerRef.current = setTimeout(() => {
+      debugNotificationStream("no ping for two intervals, treating stream as dead");
+      closeStreamRef.current({ intentional: true });
+      if (AppState.currentState === "active") {
+        connectRef.current();
+      }
+    }, DEAD_STREAM_TIMEOUT_MS);
+  }, [clearDeadStreamTimer]);
+
+  /** Report a material presence change without waiting for the next ping. */
+  const reportPresence = useCallback((status: PresenceStatus) => {
+    if (presenceStatusRef.current === status) {
+      return;
+    }
+    presenceStatusRef.current = status;
+
+    if (unsolicitedPongTimerRef.current) {
+      clearTimeout(unsolicitedPongTimerRef.current);
+    }
+    unsolicitedPongTimerRef.current = setTimeout(() => {
+      unsolicitedPongTimerRef.current = null;
+      void sendPongRef.current({ status });
+    }, UNSOLICITED_PONG_DEBOUNCE_MS);
+  }, []);
 
   const markConnectionHealthy = useCallback(() => {
     backoffRef.current = INITIAL_BACKOFF_MS;
@@ -1339,6 +1439,16 @@ export function NotificationStreamProvider({
         if (eventConnectionId && connectionIdRef.current !== eventConnectionId) {
           connectionIdRef.current = eventConnectionId;
           setConnectionId(eventConnectionId);
+          armDeadStreamWatchdog();
+        }
+
+        if (eventType === "ping" || payload.eventType === "ping") {
+          // A liveness challenge: answer it, echoing the ping id. Nothing server-side
+          // refreshes this connection's liveness, so failing to answer is exactly how a
+          // client that has gone away is detected.
+          armDeadStreamWatchdog();
+          const pingId = typeof payload.eventId === "string" ? payload.eventId : undefined;
+          void sendPongRef.current({ pingId });
         }
 
         debugNotificationStream("stream event", {
@@ -1416,6 +1526,7 @@ export function NotificationStreamProvider({
       }, delay);
     });
   }, [
+    armDeadStreamWatchdog,
     auth?.isAuthenticated,
     auth?.token,
     clearReconnectGraceTimer,
@@ -1430,6 +1541,7 @@ export function NotificationStreamProvider({
   ]);
 
   connectRef.current = connect;
+  closeStreamRef.current = closeStream;
 
   // Reconnect/disconnect based on AppState
   useEffect(() => {
@@ -1442,8 +1554,13 @@ export function NotificationStreamProvider({
         }
         appStateRef.current = state;
         if (state === "active") {
+          reportPresence("online");
           connectRef.current();
         } else {
+          // Backgrounded: report idle now rather than letting the person linger as
+          // present until the responsive window elapses.
+          reportPresence("idle");
+          void sendPongRef.current({ status: "idle" });
           flushAllNotificationGroups("native");
           // Pause SSE when app goes to background to preserve battery
           clearReconnectTimer();
@@ -1463,6 +1580,7 @@ export function NotificationStreamProvider({
     closeStream,
     flushReceiptBatch,
     flushAllNotificationGroups,
+    reportPresence,
   ]);
 
   // Initial connection when auth changes
@@ -1472,6 +1590,9 @@ export function NotificationStreamProvider({
     if (auth?.isAuthenticated) {
       connectRef.current();
     } else {
+      // Signed out: announce the departure so colleagues see it now. Fire-and-forget —
+      // a departing pong that never lands is exactly what the responsive window covers.
+      void sendPongRef.current({ departing: true, status: "offline" });
       clearReconnectTimer();
       clearReconnectGraceTimer();
       clearSessionRotationTimer();
@@ -1486,6 +1607,7 @@ export function NotificationStreamProvider({
     }
 
     return () => {
+      void sendPongRef.current({ departing: true, status: "offline" });
       flushAllNotificationGroups("native");
       flushReceiptBatch();
       liveNotificationGroupsRef.current.clear();

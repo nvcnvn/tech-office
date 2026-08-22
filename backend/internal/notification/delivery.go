@@ -159,8 +159,10 @@ func (s *NotificationService) processDueRescuePushesForOrg(ctx context.Context, 
 			continue
 		}
 
+		// The recipient looked reachable when the notification was routed but never
+		// confirmed receipt: their connections stopped answering presence pings.
 		payload := rescuePushPayloadFromRow(row)
-		if err := s.sendPushAndRecord(ctx, tx, row.EmployeeID, orgID, row.RecipientID, payload, FallbackReasonGhostConnectionTimeout); err != nil {
+		if err := s.sendPushAndRecord(ctx, tx, row.EmployeeID, orgID, row.RecipientID, payload, FallbackReasonConnectionUnresponsive); err != nil {
 			return err
 		}
 	}

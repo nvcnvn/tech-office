@@ -10,9 +10,25 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { confirmNotificationReceipt, streamNotifications } from 'apis';
+import {
+	confirmNotificationReceipt,
+	streamNotifications,
+	presencePong,
+	PING_INTERVAL_SECONDS,
+} from 'apis';
 import type { SSEConnectionState, ConnectionStatus, DeliveryStatus, Notification, SourceDomain } from './types';
-import { SSE_CONFIG } from './types';
+import { SSE_CONFIG, SSE_EVENT_TYPE } from './types';
+import { getPresenceState, setPresenceState, subscribeToPresenceState } from './presenceState';
+
+/**
+ * A stream that has delivered no ping for two intervals is dead — most likely
+ * half-open, where a proxy or radio dropped it while this tab kept believing it was
+ * connected. Noticing that is the client-side half of what ping-pong buys.
+ */
+const DEAD_STREAM_TIMEOUT_MS = 2 * PING_INTERVAL_SECONDS * 1000;
+
+/** At most one unsolicited pong per this window, per the protocol's client obligations. */
+const UNSOLICITED_PONG_DEBOUNCE_MS = 500;
 
 type TimestampLike = {
 	seconds?: bigint | number | string;
@@ -62,6 +78,8 @@ export function useSSEConnection({
 	const receiptFlushTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const pendingReceiptIdsRef = useRef(new Set<string>());
 	const connectionIdRef = useRef<string | null>(null);
+	const deadStreamTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+	const unsolicitedPongTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 	const mountedRef = useRef(false);
 	const isConnectingRef = useRef(false); // Prevent race conditions during React remounts
 
@@ -82,19 +100,16 @@ export function useSSEConnection({
 		onErrorRef.current = onError;
 	}, [onError]);
 
-	// Load saved identifiers from localStorage (eventId) and sessionStorage (connectionId) on mount
+	// Only the last event ID is persisted. The connection id is never stored: it is
+	// announced by connection_established on every stream, and a stored one could
+	// outlive the connection it describes — the bug the old sessionStorage handshake
+	// needed an explicit recovery path for.
 	useEffect(() => {
 		const savedEventId = localStorage.getItem(SSE_CONFIG.LAST_EVENT_ID_KEY);
-		// Use sessionStorage for connection_id - clears on page reload/tab close
-		const savedConnectionId = sessionStorage.getItem(SSE_CONFIG.CONNECTION_ID_KEY);
-		if (savedConnectionId) {
-			connectionIdRef.current = savedConnectionId;
-		}
-		if (savedEventId || savedConnectionId) {
+		if (savedEventId) {
 			setConnectionState((prev) => ({
 				...prev,
-				lastEventId: savedEventId ?? prev.lastEventId,
-				connectionId: savedConnectionId ?? prev.connectionId,
+				lastEventId: savedEventId,
 			}));
 		}
 	}, []);
@@ -105,8 +120,8 @@ export function useSSEConnection({
 		}
 
 		connectionIdRef.current = connectionId;
-		// Use sessionStorage for connection_id - clears on page reload/tab close
-		sessionStorage.setItem(SSE_CONFIG.CONNECTION_ID_KEY, connectionId);
+		// Publish it so the presence tracker can send a departing pong on teardown.
+		setPresenceState({ connectionId });
 		setConnectionState((prev) => {
 			if (prev.connectionId === connectionId) {
 				return prev;
@@ -116,6 +131,57 @@ export function useSSEConnection({
 				connectionId,
 			};
 		});
+	}, []);
+
+	/**
+	 * Answer a ping, or report a state change unsolicited.
+	 *
+	 * A RECONNECT directive means this connection no longer exists server-side; the
+	 * only correct response is to drop the stream and re-establish, never to retry the
+	 * pong against a dead connection id.
+	 */
+	const sendPong = useCallback(async (pingId?: string) => {
+		const connectionId = connectionIdRef.current;
+		if (!connectionId) {
+			return;
+		}
+
+		const presence = getPresenceState();
+		try {
+			const directive = await presencePong({
+				connectionId,
+				pingId,
+				status: presence.status,
+				activeChannelId: presence.activeChannelId,
+				lastInteractionAt: presence.lastInteractionAt,
+			});
+
+			if (directive === 'reconnect') {
+				console.warn('[SSE] Server no longer knows this connection, re-establishing');
+				connectionIdRef.current = null;
+				setPresenceState({ connectionId: null });
+				disconnectRef.current?.();
+				connectRef.current?.();
+			}
+		} catch (err) {
+			// A dropped pong is covered by the responsive window; the next ping retries.
+			console.warn('[SSE] Failed to answer presence ping', err);
+		}
+	}, []);
+
+	/**
+	 * Restart the dead-stream watchdog. Called on every ping: if two intervals pass with
+	 * no challenge, the stream is half-open and must be replaced.
+	 */
+	const armDeadStreamWatchdog = useCallback(() => {
+		if (deadStreamTimeoutRef.current) {
+			clearTimeout(deadStreamTimeoutRef.current);
+		}
+		deadStreamTimeoutRef.current = setTimeout(() => {
+			console.warn('[SSE] No ping received for two intervals, treating stream as dead');
+			disconnectRef.current?.();
+			connectRef.current?.();
+		}, DEAD_STREAM_TIMEOUT_MS);
 	}, []);
 
 	const flushReceiptBatch = useCallback(() => {
@@ -182,6 +248,11 @@ export function useSSEConnection({
 		if (proactiveDisconnectTimeoutRef.current) {
 			clearTimeout(proactiveDisconnectTimeoutRef.current);
 			proactiveDisconnectTimeoutRef.current = null;
+		}
+
+		if (deadStreamTimeoutRef.current) {
+			clearTimeout(deadStreamTimeoutRef.current);
+			deadStreamTimeoutRef.current = null;
 		}
 
 		flushReceiptBatch();
@@ -282,14 +353,20 @@ export function useSSEConnection({
 				}
 
 				// Handle different event types
-				if (event.eventType === 'heartbeat') {
+				if (event.eventType === SSE_EVENT_TYPE.PING) {
+					// A liveness challenge: answer it, echoing the ping id. Nothing
+					// server-side refreshes this connection's liveness, so failing to
+					// answer is exactly how a client that has gone away is detected.
 					setConnectionState((prev) => ({
 						...prev,
 						lastHeartbeat: new Date(),
 					}));
-				} else if (event.eventType === 'connection_established') {
+					armDeadStreamWatchdog();
+					void sendPong(event.eventId);
+				} else if (event.eventType === SSE_EVENT_TYPE.CONNECTION_ESTABLISHED) {
 					if (event.connectionId) {
 						applyConnectionId(event.connectionId);
+						armDeadStreamWatchdog();
 					}
 
 					if (event.eventId) {
@@ -300,7 +377,7 @@ export function useSSEConnection({
 						}));
 						localStorage.setItem(SSE_CONFIG.LAST_EVENT_ID_KEY, event.eventId);
 					}
-				} else if (event.eventType === 'notification' && event.notification) {
+				} else if (event.eventType === SSE_EVENT_TYPE.NOTIFICATION && event.notification) {
 					const timestampToDate = (ts?: TimestampLike | null): Date | null => {
 						if (!ts) return null;
 						const seconds = typeof ts.seconds === 'bigint' ? Number(ts.seconds) : Number(ts.seconds ?? 0);
@@ -400,7 +477,7 @@ export function useSSEConnection({
 			// Schedule reconnection with exponential backoff
 			scheduleReconnect();
 		}
-	}, [applyConnectionId, enabled, enqueueNotificationReceipt, scheduleReconnect]); // Depend on enabled, scheduleReconnect, and connection handler
+	}, [applyConnectionId, armDeadStreamWatchdog, enabled, enqueueNotificationReceipt, scheduleReconnect, sendPong]);
 
 	// Update connect ref whenever connect changes
 	useEffect(() => {
@@ -411,6 +488,35 @@ export function useSSEConnection({
 	useEffect(() => {
 		disconnectRef.current = disconnect;
 	}, [disconnect]);
+
+	/**
+	 * Report material presence changes — idle, return from idle, hidden, in a meeting,
+	 * a channel switch — without waiting for the next ping. Debounced so a burst of
+	 * changes costs one pong.
+	 */
+	useEffect(() => {
+		if (!enabled) {
+			return;
+		}
+
+		const unsubscribe = subscribeToPresenceState(() => {
+			if (unsolicitedPongTimeoutRef.current) {
+				clearTimeout(unsolicitedPongTimeoutRef.current);
+			}
+			unsolicitedPongTimeoutRef.current = setTimeout(() => {
+				unsolicitedPongTimeoutRef.current = null;
+				void sendPong();
+			}, UNSOLICITED_PONG_DEBOUNCE_MS);
+		});
+
+		return () => {
+			unsubscribe();
+			if (unsolicitedPongTimeoutRef.current) {
+				clearTimeout(unsolicitedPongTimeoutRef.current);
+				unsolicitedPongTimeoutRef.current = null;
+			}
+		};
+	}, [enabled, sendPong]);
 
 	// Manual reconnect
 	const reconnect = useCallback(() => {

@@ -3986,10 +3986,9 @@ type NotificationActiveConnection struct {
 	// Denormalized department membership for single-query department → users → instances resolution. Updated only on reconnect.
 	DepartmentIds []dbuuid.UUID      `json:"department_ids"`
 	ConnectedAt   pgtype.Timestamptz `json:"connected_at"`
-	// Updated every 30 seconds by SSE connection. Entries with last_heartbeat > 60s old are considered stale and cleaned up.
-	LastHeartbeat    pgtype.Timestamptz `json:"last_heartbeat"`
-	ConnectionStatus pgtype.Text        `json:"connection_status"`
-	// Real-time presence indicator. Allowed values: online, online_hidden, idle, offline. Aligned with rpc.v1.PresenceStatus enum.
+	// Instant the database observed a client answer a presence ping (PresencePong RPC). Advanced ONLY by a received pong — nothing server-side ever refreshes it. Liveness is derived: a connection is a live-delivery target iff last_pong_at >= now() - 45s, and is deleted by the janitor once silent for 90s.
+	LastPongAt pgtype.Timestamptz `json:"last_pong_at"`
+	// Real-time presence indicator reported by each pong. Allowed values: online, online_hidden, idle, offline, in_meeting. Aligned with rpc.v1.PresenceStatus enum.
 	PresenceStatus string `json:"presence_status"`
 	// Channel currently viewed by the connection. Nullable: may be NULL when the connection is not viewing any channel. Used for targeted ephemeral signal routing.
 	ActiveChannelID dbuuid.NullUUID `json:"active_channel_id"`
@@ -4013,8 +4012,7 @@ func (s *NotificationActiveConnection) Fields() ([]string, []any) {
 			"organization_id",
 			"department_ids",
 			"connected_at",
-			"last_heartbeat",
-			"connection_status",
+			"last_pong_at",
 			"presence_status",
 			"active_channel_id",
 			"last_interaction_at",
@@ -4028,8 +4026,7 @@ func (s *NotificationActiveConnection) Fields() ([]string, []any) {
 			&s.OrganizationID,
 			&s.DepartmentIds,
 			&s.ConnectedAt,
-			&s.LastHeartbeat,
-			&s.ConnectionStatus,
+			&s.LastPongAt,
 			&s.PresenceStatus,
 			&s.ActiveChannelID,
 			&s.LastInteractionAt,
@@ -4047,8 +4044,7 @@ func (s *NotificationActiveConnection) FieldsMap() map[string]any {
 		"organization_id":     &s.OrganizationID,
 		"department_ids":      &s.DepartmentIds,
 		"connected_at":        &s.ConnectedAt,
-		"last_heartbeat":      &s.LastHeartbeat,
-		"connection_status":   &s.ConnectionStatus,
+		"last_pong_at":        &s.LastPongAt,
 		"presence_status":     &s.PresenceStatus,
 		"active_channel_id":   &s.ActiveChannelID,
 		"last_interaction_at": &s.LastInteractionAt,
@@ -4568,7 +4564,7 @@ type NotificationNotificationRecipient struct {
 	AcknowledgementAction pgtype.Text `json:"acknowledgement_action"`
 	// Latest offline delivery outcome summary: not_applicable, queued, sent, skipped, failed.
 	FallbackStatus string `json:"fallback_status"`
-	// Why fallback was queued, skipped, sent, or failed. Values: live_only_policy, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, ghost_connection_timeout, delivery_error.
+	// Why fallback was queued, skipped, sent, or failed. Values: live_only_policy, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, delivery_error.
 	FallbackReason    pgtype.Text        `json:"fallback_reason"`
 	FallbackUpdatedAt pgtype.Timestamptz `json:"fallback_updated_at"`
 	// Deadline for delayed rescue push when SSE delivery is ambiguous. NULL when no rescue job is queued.

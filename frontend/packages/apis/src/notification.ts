@@ -397,7 +397,11 @@ async function* createNotificationSseStream({
 	};
 
 	eventSource.onmessage = handleMessage;
-	['notification', 'heartbeat', 'connection_established'].forEach((eventType) => {
+	// Named SSE events must be subscribed to explicitly: onmessage only fires for
+	// unnamed frames. Missing one here makes that event type silently invisible to the
+	// whole client — which is what happened to `ping` when it replaced `heartbeat`.
+	// MUST stay aligned with EventType* in backend/internal/notification/constants.go.
+	['notification', 'ping', 'connection_established'].forEach((eventType) => {
 		eventSource.addEventListener(eventType, (evt) => handleMessage(evt as MessageEvent<string>));
 	});
 
