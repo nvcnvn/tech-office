@@ -1,7 +1,15 @@
 {
-  "integration": "agy",
-  "version": "0.7.2",
-  "scripts": {
-    "update-context": ".specify/integrations/agy/scripts/update-context.sh"
-  }
+  "version": "1.0.1",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "cline"
+  ],
+  "integration_settings": {
+    "cline": {
+      "script": "sh",
+      "invoke_separator": "-"
+    }
+  },
+  "integration": "cline",
+  "default_integration": "cline"
 }

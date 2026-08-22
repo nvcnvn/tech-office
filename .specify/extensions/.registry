@@ -21,6 +21,13 @@
           "speckit.git.remote",
           "speckit.git.initialize",
           "speckit.git.commit"
+        ],
+        "cline": [
+          "speckit.git.feature",
+          "speckit.git.validate",
+          "speckit.git.remote",
+          "speckit.git.initialize",
+          "speckit.git.commit"
         ]
       },
       "registered_skills": [],
@@ -38,6 +45,10 @@
           "speckit.iterate.apply"
         ],
         "copilot": [
+          "speckit.iterate.define",
+          "speckit.iterate.apply"
+        ],
+        "cline": [
           "speckit.iterate.define",
           "speckit.iterate.apply"
         ]

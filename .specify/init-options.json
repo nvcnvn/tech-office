@@ -1,10 +1,9 @@
 {
-  "ai": "agy",
-  "ai_skills": true,
+  "ai": "cline",
   "branch_numbering": "sequential",
   "here": true,
-  "integration": "agy",
+  "integration": "cline",
   "preset": null,
   "script": "sh",
-  "speckit_version": "0.7.2"
+  "speckit_version": "1.0.1"
 }
