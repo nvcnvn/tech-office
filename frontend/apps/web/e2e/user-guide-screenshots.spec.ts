@@ -1,6 +1,7 @@
 /**
  * Seeds the "Bright Bean Coffee" demo workspace and captures the screenshots
- * used by the end-user guides in docs/users/.
+ * used by the end-user guides in content/guides/, which are also what the
+ * public /docs site renders.
  *
  * Run against a live local backend + postgres:
  *   cd frontend && pnpm --filter web exec playwright test \
@@ -18,7 +19,9 @@ import fs from 'fs';
 
 const API_BASE = process.env.E2E_API_URL || 'http://localhost:18080';
 const SUBDOMAIN = process.env.SEED_SUBDOMAIN || 'brightbean';
-const IMAGES_DIR = path.resolve(process.cwd(), '../../../docs/users/images');
+// The guides reference these as `images/foo.png`; the site serves the same
+// files from /docs/foo.png. public/docs is the one place they live.
+const IMAGES_DIR = path.resolve(process.cwd(), 'public/docs');
 const OWNER_EMAIL = `dana.whitfield@${SUBDOMAIN}.example`;
 
 // ---------------------------------------------------------------------------

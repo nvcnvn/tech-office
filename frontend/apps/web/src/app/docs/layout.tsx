@@ -2,8 +2,11 @@ import { Box } from '@mui/material';
 
 import { MarketingHeader } from '../components/MarketingHeader';
 import { DocsNavigation } from './components/DocsNavigation';
+import { getGuideNav } from './guides';
 
 export default function DocsLayout({ children }: { children: React.ReactNode }) {
+  const navItems = getGuideNav().map(({ slug, title }) => ({ slug, title }));
+
   return (
     <Box
       sx={{
@@ -52,7 +55,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
             boxShadow: '0 14px 30px rgba(15,23,42,0.06)',
           }}
         >
-          <DocsNavigation />
+          <DocsNavigation items={navItems} />
         </Box>
 
         <Box
@@ -69,7 +72,7 @@ export default function DocsLayout({ children }: { children: React.ReactNode }) 
             boxShadow: '0 16px 34px rgba(15,23,42,0.07)',
           }}
         >
-          <DocsNavigation />
+          <DocsNavigation items={navItems} />
         </Box>
 
         <Box component="main" sx={{ minWidth: 0, pb: 8, display: 'flex', flexDirection: 'column', gap: 3 }}>

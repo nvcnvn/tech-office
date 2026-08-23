@@ -25,7 +25,6 @@ import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import { APP_VERSION } from 'apis';
 
-import { docsScreenshots } from './docs/content';
 import { MarketingHeader } from './components/MarketingHeader';
 import { versionedPublicAssetPath } from '@/lib/publicAsset';
 
@@ -156,7 +155,7 @@ export default function Home() {
         }}
       >
         <Image
-          src={versionedPublicAssetPath(docsScreenshots.chat.src)}
+          src={versionedPublicAssetPath('/docs/employee-chat.png')}
           alt="TechOffice workspace showing chat, task discussions, notifications, and shared context"
           fill
           priority
@@ -313,7 +312,7 @@ export default function Home() {
               <Paper sx={{ overflow: 'hidden', bgcolor: '#101720', borderRadius: 3, boxShadow: '0 24px 48px rgba(15,23,42,0.14)' }}>
                 <Box sx={{ position: 'relative', aspectRatio: '16 / 10' }}>
                   <Image
-                    src={versionedPublicAssetPath(docsScreenshots.tasks.src)}
+                    src={versionedPublicAssetPath('/docs/employee-my-work.png')}
                     alt="TechOffice task workspace with project context and shared planning surfaces"
                     fill
                     sizes="(max-width: 1200px) 100vw, 560px"
