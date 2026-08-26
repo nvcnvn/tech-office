@@ -1,0 +1,45 @@
+// Contract delta for feature 035 — additions to backend/rpc/v1/organization.proto.
+// Only changed or added messages are shown.
+
+syntax = "proto3";
+package rpc.v1;
+
+service OrganizationService {
+  // NEW. Checks whether a workspace address is free and well-formed, so the
+  // mobile signup screen can validate before submit instead of surfacing a raw
+  // unique-constraint violation. Unauthenticated — it is called before an
+  // account exists.
+  //
+  // Returns InvalidArgument with a google.rpc.BadRequest detail when the format
+  // is wrong; a taken-but-valid address is a successful response with
+  // available=false, not an error.
+  rpc CheckSubdomainAvailable(CheckSubdomainAvailableRequest)
+      returns (CheckSubdomainAvailableResponse) {}
+}
+
+message CheckSubdomainAvailableRequest {
+  // The candidate address, without the domain suffix. Case-insensitive.
+  string subdomain = 1;
+}
+
+message CheckSubdomainAvailableResponse {
+  bool available = 1;
+
+  // Populated only when available=false: the next free variant of the
+  // requested address (e.g. "annas-cafe" taken -> "annas-cafe-2"), so the
+  // client can offer it inline without a second round trip.
+  string suggested = 2;
+}
+
+// UNCHANGED in shape, but the handler now validates `subdomain` server-side
+// (format and availability) before insert. A conflict returns AlreadyExists
+// with a google.rpc.BadRequest detail naming the `subdomain` field, rather
+// than the raw database error surfaced today.
+message RegisterOrganizationWithAdminPasswordRequest {
+  string company_name = 1;
+  string subdomain = 2;
+  string admin_email = 3;
+  string admin_password = 4;
+  string admin_given_name = 5;
+  string admin_family_name = 6;
+}

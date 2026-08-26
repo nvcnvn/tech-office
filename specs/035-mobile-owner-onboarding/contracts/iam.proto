@@ -1,0 +1,52 @@
+// Contract delta for feature 035 — additions to backend/rpc/v1/iam.proto.
+// Only changed messages are shown.
+
+syntax = "proto3";
+package rpc.v1;
+
+// BEHAVIOUR CHANGE (breaking). `login_identifier` is now matched against the
+// identity's login_identifier OR its email address, so an owner registered by
+// email can sign in with a PIN. An exact login_identifier match takes
+// precedence over an email match.
+//
+// The field is intentionally NOT renamed: clients present it as a single
+// "who are you" input, and the server decides how to resolve it.
+message LoginWithPINRequest {
+  string organization_subdomain = 1;
+
+  // Org login identifier (badge number, username) OR the member's email.
+  string login_identifier = 2;
+
+  string pin = 3;
+}
+
+// BEHAVIOUR CHANGE (breaking). `current_pin` is now REQUIRED for a voluntary
+// PIN change and is verified. It was previously declared, documented as
+// required, and ignored by the handler — any holder of a valid session could
+// rotate a PIN without knowing the existing one.
+//
+// Exempt (first-time set, current_pin not required):
+//   - a pin_change_token is supplied, or
+//   - the identity has no PIN credential, or
+//   - the existing credential is in state `temporary`.
+//
+// Otherwise a missing or wrong current_pin returns InvalidArgument /
+// PermissionDenied respectively.
+message SetPINRequest {
+  string new_pin = 1;
+  optional string pin_change_token = 2;
+  optional string current_pin = 3;
+}
+
+// UNCHANGED in shape. New validation: `login_identifier` MUST NOT contain '@'.
+// This keeps the login_identifier and email namespaces disjoint, which is what
+// makes the widened PIN lookup above unambiguous.
+message CreateOrgAccountRequest {
+  string login_identifier = 1;
+  string display_name = 2;
+  string given_name = 3;
+  string family_name = 4;
+  optional string department_id = 5;
+  optional string date_of_birth = 6;
+  optional string phone_number = 7;
+}
