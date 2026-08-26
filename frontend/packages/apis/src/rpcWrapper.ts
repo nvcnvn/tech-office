@@ -24,7 +24,11 @@ export async function rpcCall<T>(fn: () => Promise<T>): Promise<T> {
 		const cErr = ConnectError.from(err);
 
 		if (cErr.code === Code.Unauthenticated) {
-			const message = cErr.message || "Your session is no longer valid. Please sign in again.";
+			// The transport's own text ("[unauthenticated] authentication token required")
+			// describes a missing header, not anything a person can act on, so it never
+			// reaches the UI. Listeners decide whether this is worth showing — a request
+			// that raced a sign-out is not a session ending.
+			const message = "Your session is no longer valid. Please sign in again.";
 			await notifyAuthFailure({
 				reason: "unauthenticated",
 				message,

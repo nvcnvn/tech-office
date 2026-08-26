@@ -86,14 +86,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return onAuthFailure(async (event) => {
       await clearStoredAuth();
       resetAuthenticatedAppState();
-      setState({
+      setState((prev) => ({
         isLoading: false,
         isAuthenticated: false,
         token: null,
         organizationId: null,
         employeeId: null,
-        authErrorMessage: event.message,
-      });
+        // Only a session that was actually running can end. Signing out cancels
+        // nothing the user cares about, but the queries still in flight when the
+        // token disappears come back unauthenticated — reporting those as
+        // "Session ended" accuses the app of failing at the moment it obeyed.
+        authErrorMessage: prev.isAuthenticated ? event.message : null,
+      }));
     });
   }, [clearStoredAuth, resetAuthenticatedAppState]);
 
@@ -166,12 +170,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const signOut = useCallback(async () => {
-    await clearStoredAuth();
-    resetAuthenticatedAppState();
-    // Onboarding belongs to the session that started it. Leaving it set would send the
-    // next person to sign in on this device into someone else's PIN step.
-    clearOnboarding();
-
+    // Signed out is recorded before the token is destroyed, not after. Clearing first
+    // leaves a window in which the screens are still mounted and still refetching with
+    // no credential, and every one of those failures would read as a session ending.
     setState({
       isLoading: false,
       isAuthenticated: false,
@@ -180,6 +181,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       employeeId: null,
       authErrorMessage: null,
     });
+
+    await clearStoredAuth();
+    resetAuthenticatedAppState();
+    // Onboarding belongs to the session that started it. Leaving it set would send the
+    // next person to sign in on this device into someone else's PIN step.
+    clearOnboarding();
   }, [clearStoredAuth, resetAuthenticatedAppState]);
 
   const switchOrganization = useCallback(
