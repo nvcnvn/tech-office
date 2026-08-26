@@ -80,6 +80,8 @@ export default function ForgotPasswordScreen() {
               textContentType="emailAddress"
               value={email}
               onChangeText={setEmail}
+            
+              testID="forgot-password-email"
             />
             <Pressable
               onPress={handleSubmit}
@@ -92,6 +94,8 @@ export default function ForgotPasswordScreen() {
                 alignItems: "center",
                 opacity: loading ? 0.7 : 1,
               })}
+            
+              testID="forgot-password-submit"
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />

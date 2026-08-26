@@ -95,19 +95,24 @@ export async function getOrganizationBySubdomain(subdomain: string): Promise<Org
 }
 
 /**
- * Register a new organization with admin user password
- * Public endpoint for organization signup
+ * Register a new organization together with its owner.
+ * Public endpoint for workspace signup.
+ *
+ * The response carries no session token: the caller signs in immediately afterwards and
+ * MUST distinguish "workspace created but sign-in failed" from "signup failed", because a
+ * retry of signup would collide on the owner's own address.
  * 
  * @param data - Signup form data
  * @returns Created organization details
- * @throws OrganizationError if subdomain/email already registered (409)
- * @throws ValidationError if form data is invalid (400)
+ * @throws OrganizationError if the address is already taken (409) — the error carries a
+ *         google.rpc.BadRequest naming the `subdomain` field; read it with `fieldViolation`
+ * @throws ValidationError if the address is malformed or form data is invalid (400)
  * @throws NetworkError for connectivity issues (500)
  * 
  * @example
  * ```ts
  * try {
- *   const org = await registerOrganizationWithAdminPassword({
+ *   const org = await registerOrganization({
  *     companyName: 'Acme Corp',
  *     subdomain: 'acme',
  *     adminEmail: 'admin@acme.com',
@@ -123,7 +128,7 @@ export async function getOrganizationBySubdomain(subdomain: string): Promise<Org
  * }
  * ```
  */
-export async function registerOrganizationWithAdminPassword(data: {
+export async function registerOrganization(data: {
 	companyName: string;
 	subdomain: string;
 	adminEmail: string;
@@ -164,37 +169,126 @@ export async function registerOrganizationWithAdminPassword(data: {
 }
 
 /**
- * Check if subdomain is available for registration
- * Returns true if available (not found), false if taken
- * 
- * @param subdomain - Subdomain to check
- * @returns True if available, false if taken
- * @throws ValidationError if subdomain format is invalid
+ * Workspace-address format rules.
+ *
+ * MUST align with backend Go: internal/organization/subdomain.go
+ * (SubdomainMinLength, SubdomainMaxLength, reservedSubdomains, subdomainPattern).
+ * The server is the authority; these exist so a form can validate without a round-trip.
+ */
+export const SUBDOMAIN_MIN_LENGTH = 3;
+export const SUBDOMAIN_MAX_LENGTH = 63; // a DNS label cannot exceed 63 octets
+
+const RESERVED_SUBDOMAINS = new Set([
+	'www',
+	'api',
+	'app',
+	'admin',
+	'mail',
+	'static',
+	'assets',
+]);
+
+const SUBDOMAIN_PATTERN = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
+
+/** Lower-case and trim a candidate address. Does not validate. */
+export function normalizeSubdomain(subdomain: string): string {
+	return subdomain.trim().toLowerCase();
+}
+
+/**
+ * Whether a normalized address satisfies the format rules. Mirrors the server so a form
+ * can give immediate feedback; the server still validates before insert.
+ */
+export function isValidSubdomain(subdomain: string): boolean {
+	const s = normalizeSubdomain(subdomain);
+	return (
+		s.length >= SUBDOMAIN_MIN_LENGTH &&
+		s.length <= SUBDOMAIN_MAX_LENGTH &&
+		SUBDOMAIN_PATTERN.test(s) &&
+		!s.includes('--') &&
+		!RESERVED_SUBDOMAINS.has(s)
+	);
+}
+
+/**
+ * Derive a workspace address from a company name: "Anna's Café" -> "annas-cafe".
+ *
+ * Mirrors backend Derive in internal/organization/subdomain.go. Returns '' when the name
+ * yields nothing usable, in which case the caller must ask for an address rather than
+ * inventing one.
+ */
+export function deriveSubdomain(companyName: string): string {
+	// Decompose, then drop combining marks, so "é" folds to "e" instead of vanishing.
+	const folded = companyName.normalize('NFD').replace(/\p{Mn}/gu, '').toLowerCase();
+
+	let out = '';
+	let lastHyphen = false;
+	for (const ch of folded) {
+		if ((ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9')) {
+			out += ch;
+			lastHyphen = false;
+		} else if ("'\u2019`\u00b4".includes(ch)) {
+			// Apostrophes join a word rather than separating one: "Anna's" is "annas".
+			continue;
+		} else if (!lastHyphen && out.length > 0) {
+			// Collapse any run of non-alphanumerics into a single hyphen.
+			out += '-';
+			lastHyphen = true;
+		}
+	}
+
+	let candidate = out.replace(/^-+|-+$/g, '');
+	if (candidate.length > SUBDOMAIN_MAX_LENGTH) {
+		candidate = candidate.slice(0, SUBDOMAIN_MAX_LENGTH).replace(/^-+|-+$/g, '');
+	}
+
+	return isValidSubdomain(candidate) ? candidate : '';
+}
+
+/**
+ * Result of a workspace-address availability check.
+ */
+export interface SubdomainAvailability {
+	available: boolean;
+	/**
+	 * The next free variant of the requested address, populated only when it is taken
+	 * (e.g. "annas-cafe" taken -> "annas-cafe-2"). Empty when the address is free, or
+	 * when no variant was found.
+	 */
+	suggested: string;
+}
+
+/**
+ * Check whether a workspace address is free and well-formed.
+ *
+ * Unauthenticated: a signup form calls this before an account exists. A taken address is a
+ * successful response with `available: false` plus a suggested alternative, not an error —
+ * only a malformed address throws.
+ *
+ * @param subdomain - Candidate address, without the domain suffix. Case-insensitive.
+ * @returns Availability, and an alternative to offer when the address is taken
+ * @throws ValidationError if the address format is invalid (400)
  * @throws NetworkError for connectivity issues
- * 
+ *
  * @example
  * ```ts
- * const isAvailable = await checkSubdomainAvailability('acme');
- * if (isAvailable) {
- *   console.log('Subdomain is available');
- * } else {
- *   console.log('Subdomain is already taken');
+ * const result = await checkSubdomainAvailable('annas-cafe');
+ * if (!result.available && result.suggested) {
+ *   console.log(`Taken. Try ${result.suggested} instead.`);
  * }
  * ```
  */
-export async function checkSubdomainAvailability(subdomain: string): Promise<boolean> {
-	try {
-		await getOrganizationBySubdomain(subdomain);
-		// If we get here, organization exists -> subdomain is taken
-		return false;
-	} catch (err) {
-		if (err instanceof OrganizationError && err.code === 'ORGANIZATION_NOT_FOUND') {
-			// Organization not found -> subdomain is available
-			return true;
-		}
-		// Re-throw other errors (validation, network)
-		throw err;
-	}
+export async function checkSubdomainAvailable(subdomain: string): Promise<SubdomainAvailability> {
+	return rpcCall(async () => {
+		const resp = await organizationClient.checkSubdomainAvailable({
+			subdomain,
+		}) as organizations.CheckSubdomainAvailableResponse;
+
+		return {
+			available: resp.available,
+			suggested: resp.suggested ?? '',
+		};
+	});
 }
 
 // ============================================================================

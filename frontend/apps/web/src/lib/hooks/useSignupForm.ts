@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { signupFormSchema, SignupFormData } from '../validations/signup';
-import { registerOrganizationWithAdminPassword } from 'apis';
+import { registerOrganization } from 'apis';
 import { useState } from 'react';
 
 interface UseSignupFormResult {
@@ -50,7 +50,7 @@ export function useSignupForm(): UseSignupFormResult {
 		setSubmitSuccess(false);
 
 		try {
-			await registerOrganizationWithAdminPassword({
+			await registerOrganization({
 				companyName: data.companyName,
 				subdomain: data.subdomain,
 				adminEmail: data.adminEmail,

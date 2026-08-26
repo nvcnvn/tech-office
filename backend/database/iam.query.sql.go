@@ -1013,20 +1013,30 @@ const getIdentityByOrgAndLoginIdentifier = `-- name: GetIdentityByOrgAndLoginIde
 SELECT i.id, i.organization_id, i.email, i.login_identifier, i.identity_type, i.updated_at
 FROM iam.identity i
 WHERE i.organization_id = $1::uuid
-  AND i.login_identifier = $2::text
+  AND (i.login_identifier = $2::text
+       OR lower(i.email) = lower($2::text))
+ORDER BY (i.login_identifier = $2::text) DESC NULLS LAST
+LIMIT 1
 `
 
 type GetIdentityByOrgAndLoginIdentifierParams struct {
-	OrganizationID  dbuuid.UUID `json:"organization_id"`
-	LoginIdentifier string      `json:"login_identifier"`
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	Identifier     string      `json:"identifier"`
 }
 
 // =============================================================================
 // Org-Managed Accounts: Identity Lookup for PIN Login
 // =============================================================================
-// Finds an org-scoped identity by login_identifier for PIN-based login.
+// Finds an org-scoped identity for PIN-based login by login_identifier OR email.
+// Org-managed workers are keyed on login_identifier; owners registered by email have a
+// NULL login_identifier, so the email fallback is what lets an owner hold a PIN.
+// Both columns are unique per organization but their union is not, so an exact
+// login_identifier match is ordered first to make the result deterministic.
+// CreateOrgAccount rejects '@' in login_identifier, which keeps the namespaces disjoint.
+// NULLS LAST matters: an owner's login_identifier is NULL, and Postgres orders NULLs
+// first under DESC, which would rank a non-matching owner above an exact worker match.
 func (q *Queries) GetIdentityByOrgAndLoginIdentifier(ctx context.Context, db DBTX, arg *GetIdentityByOrgAndLoginIdentifierParams) (*IamIdentity, error) {
-	row := db.QueryRow(ctx, getIdentityByOrgAndLoginIdentifier, arg.OrganizationID, arg.LoginIdentifier)
+	row := db.QueryRow(ctx, getIdentityByOrgAndLoginIdentifier, arg.OrganizationID, arg.Identifier)
 	var i IamIdentity
 	err := row.Scan(
 		&i.ID,

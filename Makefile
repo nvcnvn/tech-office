@@ -179,9 +179,15 @@ export MAESTRO_CLI_NO_ANALYTICS := 1
 MAESTRO_BIN := $(shell command -v maestro 2>/dev/null \
 	|| echo /opt/homebrew/Cellar/maestro/2.3.0/libexec/bin/maestro)
 
+# A per-run identifier. The owner-signup flow derives a workspace address from the company
+# name it types, so without this a second local run would collide on the address the first
+# one claimed. Empty entries in .env are dropped so this default survives.
+MAESTRO_RUN_ID ?= $(shell date +%H%M%S)
+
 # Build -e KEY=VALUE flags from .env file
 MAESTRO_ENV_FLAGS = $(shell test -f $(MAESTRO_ENV) && \
-	grep -v '^\#' $(MAESTRO_ENV) | grep '=' | sed 's/^/-e /' | tr '\n' ' ')
+	grep -v '^\#' $(MAESTRO_ENV) | grep '=.' | sed 's/^/-e /' | tr '\n' ' ') \
+	-e MAESTRO_RUN_ID=$(MAESTRO_RUN_ID)
 
 .PHONY: check-maestro
 check-maestro:

@@ -18,7 +18,22 @@ service OrganizationService {
   }
 
   // RegisterOrganizationWithAdminPassword allows unauthenticated users to register a new organization along with an admin user using email and password.
+  // The subdomain is validated server-side for format and availability before insert. A
+  // taken address returns AlreadyExists and a malformed one InvalidArgument, both with a
+  // google.rpc.BadRequest naming the `subdomain` field.
   rpc RegisterOrganizationWithAdminPassword(RegisterOrganizationWithAdminPasswordRequest) returns (RegisterOrganizationWithAdminPasswordResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: true
+    };
+  }
+
+  // CheckSubdomainAvailable reports whether a workspace address is free and well-formed,
+  // so a signup form can validate before submit instead of surfacing a raw unique-constraint
+  // violation. Unauthenticated — it is called before an account exists.
+  //
+  // A malformed address returns InvalidArgument with a google.rpc.BadRequest detail.
+  // A taken-but-valid address is a successful response with available=false, not an error.
+  rpc CheckSubdomainAvailable(CheckSubdomainAvailableRequest) returns (CheckSubdomainAvailableResponse) {
     option (rpc.v1.access_control) = {
       allow_unauthenticated: true
     };
@@ -69,6 +84,20 @@ message RegisterOrganizationWithAdminPasswordRequest {
 
 message RegisterOrganizationWithAdminPasswordResponse {
   Organization organization = 1;
+}
+
+message CheckSubdomainAvailableRequest {
+  // The candidate address, without the domain suffix. Case-insensitive.
+  string subdomain = 1;
+}
+
+message CheckSubdomainAvailableResponse {
+  bool available = 1;
+
+  // Populated only when available=false: the next free variant of the requested address
+  // (e.g. "annas-cafe" taken -> "annas-cafe-2"), so the client can offer it inline
+  // without a second round trip.
+  string suggested = 2;
 }
 
 message Organization {

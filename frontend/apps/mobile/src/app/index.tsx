@@ -9,6 +9,7 @@ import { Redirect, useLocalSearchParams } from "expo-router";
 import { ActivityIndicator, View } from "react-native";
 import { AuthContext } from "@/hooks/use-auth";
 import { setPendingPostSignInRedirect } from "@/lib/auth-redirect-handoff";
+import { getOnboardingStep } from "@/lib/onboarding-progress";
 
 export default function Index() {
   const auth = React.use(AuthContext);
@@ -32,6 +33,11 @@ export default function Index() {
   }
 
   if (auth.isAuthenticated) {
+    // An owner interrupted mid-onboarding resumes where they stopped. Sending them back to
+    // signup would collide on the workspace address they already claimed.
+    if (getOnboardingStep() !== null) {
+      return <Redirect href="/(onboarding)/set-pin" />;
+    }
     return <Redirect href="/(app)/(chat)" />;
   }
 

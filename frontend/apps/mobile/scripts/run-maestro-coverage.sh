@@ -32,10 +32,26 @@ mkdir -p tmp/maestro-screenshots frontend/apps/mobile/tmp/maestro-screenshots
 env_flags=()
 while IFS= read -r line; do
   [[ -z "$line" || "$line" == \#* || "$line" != *=* ]] && continue
+  # Skip keys with an empty value so a placeholder in .env cannot shadow a default set here.
+  [[ "${line#*=}" == "" ]] && continue
   env_flags+=(-e "$line")
 done < "$APP_DIR/.maestro/.env"
 
-flows=($APP_DIR/.maestro/coverage/[0-9][0-9]-*.yaml)
+# A per-run identifier. The owner-signup flow derives a workspace address from the company
+# name it types, so without this a second run would collide on the address the first
+# one claimed.
+if [[ -z ${MAESTRO_RUN_ID:-} ]]; then
+  MAESTRO_RUN_ID=$(date +%H%M%S)
+fi
+env_flags+=(-e "MAESTRO_RUN_ID=$MAESTRO_RUN_ID")
+
+# Story flows run before the coverage sweep: they exercise sign-in and onboarding from a
+# fresh install, which the coverage flows then assume already works.
+flows=(
+  $APP_DIR/.maestro/auth/signin-known-device.yaml
+  $APP_DIR/.maestro/onboarding/owner-signup.yaml
+  $APP_DIR/.maestro/coverage/[0-9][0-9]-*.yaml
+)
 failures=0
 
 for flow in $flows; do

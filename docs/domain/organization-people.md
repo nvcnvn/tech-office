@@ -4,7 +4,7 @@ Tenant creation, the employee roster, and the department hierarchy. Owned by
 `internal/organization` (`OrganizationService`) and `internal/department`
 (`DepartmentService`).
 
-**Status date: 2026-08-22.** Supersedes specs 001, 003, 004, 005, 006, 025.
+**Status date: 2026-08-26.** Supersedes specs 001, 003, 004, 005, 006, 025, 035.
 
 ## Organization
 
@@ -13,7 +13,7 @@ distributed table is colocated with it.
 
 | Column | Notes |
 |---|---|
-| `subdomain` | `varchar(63)`, unique. The tenant key used in URLs and PIN login. |
+| `subdomain` | `varchar(63)`, unique. The tenant key used in URLs and PIN login, and the "workspace address" users see. Validated server-side — see [Workspace address](#workspace-address). |
 | `company_name` | display name |
 | `status` | `active \| suspended \| deleted` |
 | `project_id`, `app_id` | `NOT NULL` UUIDs, commented "legacy external auth project (deprecated)". Populated with fresh UUIDs at registration and otherwise unused — Zitadel residue (see [D6](README.md#drift-register)). |
@@ -21,6 +21,43 @@ distributed table is colocated with it.
 
 `GetOrganizationBySubdomain` is `allow_unauthenticated` — the login pages call it to
 resolve the tenant before anyone has a token.
+
+### Workspace address
+
+`internal/organization/subdomain.go` owns the format, and registration enforces it before
+any insert. Before feature 035 there was **no** validation at all: a duplicate reached the
+UNIQUE index and surfaced to the caller as a raw pg error.
+
+| Rule | Value |
+|---|---|
+| Charset | `a-z`, `0-9`, `-` |
+| Boundaries | must start and end alphanumeric |
+| Length | 3–63 characters (a DNS label cannot exceed 63 octets) |
+| Repeats | no consecutive hyphens |
+| Reserved | `www`, `api`, `app`, `admin`, `mail`, `static`, `assets` |
+
+`Derive(companyName)` produces a candidate from a business name — accents folded via NFD,
+apostrophes dropped so `Anna's` becomes `annas`, every other run of non-alphanumerics
+collapsed to one hyphen, trimmed and truncated. `Anna's Café` → `annas-cafe`. It returns
+`""` when the name yields nothing usable, in which case the caller must ask rather than
+invent. `NextVariant(base, n)` gives the disambiguated form `annas-cafe-2`.
+
+`CheckSubdomainAvailable` (`allow_unauthenticated`, called before an account exists)
+reports whether an address is free and, when it is not, returns the next free variant so
+the client can offer it without a second round trip. A **taken but valid** address is a
+successful response with `available=false`, not an error; only a malformed one returns
+`InvalidArgument`. The search for a variant is bounded at 50 attempts.
+
+`RegisterOrganizationWithAdminPassword` validates format and availability before insert and
+returns `AlreadyExists` (taken) or `InvalidArgument` (malformed), both carrying a
+`google.rpc.BadRequest` naming the `subdomain` field, so a six-field signup form knows which
+input to correct. The stored value is normalized (trimmed, lower-cased).
+
+The rules are mirrored client-side in `packages/apis/src/organization.ts`
+(`deriveSubdomain`, `isValidSubdomain`, `normalizeSubdomain`, `SUBDOMAIN_MIN_LENGTH`,
+`SUBDOMAIN_MAX_LENGTH`) so a form can validate and show the derived address without a round
+trip. The server remains the authority; the Go table test in `subdomain_test.go` is the
+reference the TypeScript copy must match.
 
 ### Registration
 
@@ -122,15 +159,25 @@ These four RPCs are half of what the federated search box actually calls; see
 - Web: `/signup` (registration), `/workspace/organization` with tabs — Overview,
   Employees, Departments, Permissions — plus `DepartmentOrgChart.tsx` /
   `DepartmentTreeView.tsx` for the org chart, and the assign/move/manager dialogs.
-- Mobile: no dedicated org-admin surface. People appear through chat member lists, task
-  assignees and presence.
-- Clients: `packages/apis/src/organization.ts`, `department.ts`, `iam-employee-list.ts`,
+- Mobile: no ongoing org-admin surface — people appear through chat member lists, task
+  assignees and presence. **First-run onboarding is the one exception**: `app/(auth)/signup`
+  creates the organization and `app/(onboarding)/add-teammate` creates the first
+  org-managed accounts. Constitution Principle XIII permits exactly these two otherwise-web-only
+  capabilities, and only during first run; role editing, department management, bulk import,
+  deactivation and credential reset for other members stay web-only. See
+  [auth-identity.md](auth-identity.md#client-surfaces).
+- Clients: `packages/apis/src/organization.ts` (`registerOrganization`,
+  `checkSubdomainAvailable`, `deriveSubdomain`), `department.ts`, `iam-employee-list.ts`,
   `iam-employee-import.ts`.
 
 ## Tests
 
-`integration/organization_onboarding_test.go`, `department_test.go`,
-`iam_employee_cards_test.go`, `multi_tenancy_test.go`.
+`integration/organization_onboarding_test.go`, `mobile_owner_onboarding_test.go`
+(address derivation, collision, typed conflicts, owner-to-teammate flow),
+`department_test.go`, `iam_employee_cards_test.go`, `multi_tenancy_test.go`.
+`internal/organization/subdomain_test.go` is the derivation/validation reference table.
+
+Mobile: `.maestro/onboarding/owner-signup.yaml`.
 
 ## Known drift
 

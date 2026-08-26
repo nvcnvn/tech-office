@@ -1,0 +1,158 @@
+appId: com.devguards.TechOffice
+name: "Auth — Returning worker signs in with six taps"
+# User story 1. Signs in once on a fresh device through the revealed sequence, relaunches
+# without clearing state, and proves the screen has become a PIN pad with a name on it:
+# no workspace field, no identifier field, six digits and nothing else.
+#
+# Requires MAESTRO_TEST_SUBDOMAIN, MAESTRO_TEST_PIN and an account whose login identifier
+# is MAESTRO_TEST_EMAIL — the identifier field accepts either an ID or a work email.
+---
+# ---------------------------------------------------------------------------
+# First run — fresh device, the revealed sequence
+# ---------------------------------------------------------------------------
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- runFlow:
+    when:
+      visible: "DEVELOPMENT SERVERS"
+    commands:
+      - tapOn:
+          text: "Tech Office"
+          index: 1
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+# Step 1 — where do you work
+- extendedWaitUntil:
+    visible:
+      id: "signin-workspace-input"
+    timeout: 15000
+- assertVisible: "Where do you work\\?"
+- tapOn:
+    id: "signin-workspace-input"
+- eraseText: 64
+- inputText: "${MAESTRO_TEST_SUBDOMAIN}"
+- tapOn:
+    id: "signin-workspace-continue"
+
+# Step 2 — who are you. The workspace collapses to a checked line.
+- extendedWaitUntil:
+    visible:
+      id: "signin-identifier-input"
+    timeout: 15000
+- assertVisible:
+    id: "signin-workspace-answered"
+- assertVisible: "Who are you\\?"
+- tapOn:
+    id: "signin-identifier-input"
+- eraseText: 64
+- inputText: "${MAESTRO_TEST_EMAIL}"
+- tapOn:
+    id: "signin-identifier-continue"
+
+# Step 3 — the PIN. The six boxes are the visible affordance; the field behind them is
+# transparent by design, so assertions target the boxes and typing goes to the focused
+# field. Secure fields keep stale text between runs unless erased first.
+- extendedWaitUntil:
+    visible:
+      id: "pin-boxes"
+    timeout: 15000
+- assertVisible: "Enter your PIN"
+- tapOn:
+    id: "pin-boxes"
+- eraseText: 20
+- inputText: "${MAESTRO_TEST_PIN}"
+
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"
+
+# ---------------------------------------------------------------------------
+# Second run — the device now knows who this is
+# ---------------------------------------------------------------------------
+# The session token lives in the keychain (SecureStore) and the remembered person lives in
+# app data (MMKV). Clearing only the keychain reproduces US1's precondition exactly: the
+# app opens with no session, but the device still knows whose phone this is. Keeping the
+# keychain would resume the 30-day session and never reach the sign-in screen at all.
+- launchApp:
+    clearState: false
+    clearKeychain: true
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+- extendedWaitUntil:
+    visible:
+      id: "pin-boxes"
+    timeout: 20000
+
+# The person is recognised, not asked to identify themselves.
+- assertVisible:
+    id: "signin-display-name"
+- assertVisible:
+    id: "signin-workspace-name"
+- assertVisible:
+    id: "signin-not-you"
+
+# The questions from the fresh-device sequence are gone: no typing is required.
+- assertNotVisible:
+    id: "signin-workspace-input"
+- assertNotVisible:
+    id: "signin-identifier-input"
+
+# Six digits and nothing else.
+- tapOn:
+    id: "pin-boxes"
+- eraseText: 20
+- inputText: "${MAESTRO_TEST_PIN}"
+
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"

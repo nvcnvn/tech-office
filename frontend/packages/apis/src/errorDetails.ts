@@ -49,14 +49,43 @@ export interface VoiceErrorInfoDetail extends ErrorInfoDetail {
 
 /**
  * Extract RetryInfo detail from a ConnectError.
+ *
+ * Returns null when the detail is absent or carries no delay, so a caller can tell
+ * "no retry time was transmitted" apart from "retry immediately". A PIN lockout at the
+ * full-lock tier deliberately carries no delay — nothing resolves it but an admin.
  */
 export function extractRetryInfo(error: unknown): RetryDetail | null {
 	const cErr = ConnectError.from(error);
 	const details = cErr.findDetails(RetryInfoSchema);
 	if (details.length === 0) return null;
-	const d = details[0];
-	const seconds = d.retryDelay ? Number(d.retryDelay.seconds) : 0;
+	const delay = details[0].retryDelay;
+	if (!delay) return null;
+	const seconds = Number(delay.seconds) + Number(delay.nanos ?? 0) / 1e9;
+	if (!Number.isFinite(seconds)) return null;
 	return { retryDelaySeconds: seconds };
+}
+
+/**
+ * Seconds a PIN lockout still has to run, or undefined when the server sent no retry time.
+ *
+ * Undefined is the tier-4 (full lock) case and the fallback for a missing or malformed
+ * detail: the caller shows its generic message rather than an invented countdown.
+ */
+export function lockoutRetrySeconds(error: unknown): number | undefined {
+	const retry = extractRetryInfo(error);
+	if (!retry || retry.retryDelaySeconds <= 0) return undefined;
+	return retry.retryDelaySeconds;
+}
+
+/**
+ * Description of the BadRequest violation on a named field, or undefined when the error
+ * carries no violation for it. Lets a form with several inputs attach a server-side
+ * complaint to the input that caused it instead of to the form as a whole.
+ */
+export function fieldViolation(error: unknown, field: string): string | undefined {
+	const violations = extractFieldViolations(error);
+	if (!violations) return undefined;
+	return violations.find((v) => v.field === field)?.description;
 }
 
 /**

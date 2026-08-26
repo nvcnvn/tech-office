@@ -1,6 +1,8 @@
 appId: com.devguards.TechOffice
-name: "Auth — Sign In"
-# T12.2: Launch app → enter subdomain → enter email/password → submit from keyboard → assert Chat tab
+name: "Auth — Sign in with email"
+# The email path, reached as the quiet secondary action on the PIN-first sign-in screen.
+# Coverage flows use this as their shared bootstrap, so it authenticates with credentials
+# that do not depend on a PIN having been set.
 ---
 - launchApp:
     clearState: true
@@ -36,12 +38,15 @@ name: "Auth — Sign In"
         commands:
             - tapOn:
                     id: "xmark"
-- runFlow:
-        when:
-            visible: 'How do you sign in\?'
-        commands:
-            - tapOn:
-                id: "signin-method-email"
+
+# The sign-in screen opens on the PIN sequence. Email is the quiet secondary action.
+- extendedWaitUntil:
+    visible:
+      id: "signin-with-email"
+    timeout: 15000
+- tapOn:
+    id: "signin-with-email"
+
 - extendedWaitUntil:
     visible:
       id: "subdomain-input"
@@ -62,7 +67,7 @@ name: "Auth — Sign In"
 - tapOn:
     id: "password-input"
 
-# Enter password and submit via keyboard return
+# Secure fields keep stale text between runs unless erased first.
 - eraseText: 20
 - inputText: "${MAESTRO_TEST_PASSWORD}"
 - tapOn: "Sign in to your workspace"

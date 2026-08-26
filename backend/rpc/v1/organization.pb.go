@@ -238,6 +238,106 @@ func (x *RegisterOrganizationWithAdminPasswordResponse) GetOrganization() *Organ
 	return nil
 }
 
+type CheckSubdomainAvailableRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The candidate address, without the domain suffix. Case-insensitive.
+	Subdomain     string `protobuf:"bytes,1,opt,name=subdomain,proto3" json:"subdomain,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckSubdomainAvailableRequest) Reset() {
+	*x = CheckSubdomainAvailableRequest{}
+	mi := &file_rpc_v1_organization_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckSubdomainAvailableRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSubdomainAvailableRequest) ProtoMessage() {}
+
+func (x *CheckSubdomainAvailableRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_organization_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSubdomainAvailableRequest.ProtoReflect.Descriptor instead.
+func (*CheckSubdomainAvailableRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *CheckSubdomainAvailableRequest) GetSubdomain() string {
+	if x != nil {
+		return x.Subdomain
+	}
+	return ""
+}
+
+type CheckSubdomainAvailableResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Available bool                   `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	// Populated only when available=false: the next free variant of the requested address
+	// (e.g. "annas-cafe" taken -> "annas-cafe-2"), so the client can offer it inline
+	// without a second round trip.
+	Suggested     string `protobuf:"bytes,2,opt,name=suggested,proto3" json:"suggested,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CheckSubdomainAvailableResponse) Reset() {
+	*x = CheckSubdomainAvailableResponse{}
+	mi := &file_rpc_v1_organization_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CheckSubdomainAvailableResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CheckSubdomainAvailableResponse) ProtoMessage() {}
+
+func (x *CheckSubdomainAvailableResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_organization_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CheckSubdomainAvailableResponse.ProtoReflect.Descriptor instead.
+func (*CheckSubdomainAvailableResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *CheckSubdomainAvailableResponse) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *CheckSubdomainAvailableResponse) GetSuggested() string {
+	if x != nil {
+		return x.Suggested
+	}
+	return ""
+}
+
 type Organization struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -252,7 +352,7 @@ type Organization struct {
 
 func (x *Organization) Reset() {
 	*x = Organization{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[4]
+	mi := &file_rpc_v1_organization_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -264,7 +364,7 @@ func (x *Organization) String() string {
 func (*Organization) ProtoMessage() {}
 
 func (x *Organization) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[4]
+	mi := &file_rpc_v1_organization_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -277,7 +377,7 @@ func (x *Organization) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Organization.ProtoReflect.Descriptor instead.
 func (*Organization) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{4}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Organization) GetId() string {
@@ -333,7 +433,7 @@ type SearchEmployeesRequest struct {
 
 func (x *SearchEmployeesRequest) Reset() {
 	*x = SearchEmployeesRequest{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[5]
+	mi := &file_rpc_v1_organization_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -345,7 +445,7 @@ func (x *SearchEmployeesRequest) String() string {
 func (*SearchEmployeesRequest) ProtoMessage() {}
 
 func (x *SearchEmployeesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[5]
+	mi := &file_rpc_v1_organization_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -358,7 +458,7 @@ func (x *SearchEmployeesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchEmployeesRequest.ProtoReflect.Descriptor instead.
 func (*SearchEmployeesRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{5}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SearchEmployeesRequest) GetQueryText() string {
@@ -393,7 +493,7 @@ type SearchEmployeesResponse struct {
 
 func (x *SearchEmployeesResponse) Reset() {
 	*x = SearchEmployeesResponse{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[6]
+	mi := &file_rpc_v1_organization_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -405,7 +505,7 @@ func (x *SearchEmployeesResponse) String() string {
 func (*SearchEmployeesResponse) ProtoMessage() {}
 
 func (x *SearchEmployeesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[6]
+	mi := &file_rpc_v1_organization_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -418,7 +518,7 @@ func (x *SearchEmployeesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchEmployeesResponse.ProtoReflect.Descriptor instead.
 func (*SearchEmployeesResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{6}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SearchEmployeesResponse) GetResults() []*EmployeeSearchResult {
@@ -457,7 +557,7 @@ type EmployeeSearchResult struct {
 
 func (x *EmployeeSearchResult) Reset() {
 	*x = EmployeeSearchResult{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[7]
+	mi := &file_rpc_v1_organization_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -469,7 +569,7 @@ func (x *EmployeeSearchResult) String() string {
 func (*EmployeeSearchResult) ProtoMessage() {}
 
 func (x *EmployeeSearchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[7]
+	mi := &file_rpc_v1_organization_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -482,7 +582,7 @@ func (x *EmployeeSearchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmployeeSearchResult.ProtoReflect.Descriptor instead.
 func (*EmployeeSearchResult) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{7}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *EmployeeSearchResult) GetId() string {
@@ -545,7 +645,7 @@ type SearchDepartmentsRequest struct {
 
 func (x *SearchDepartmentsRequest) Reset() {
 	*x = SearchDepartmentsRequest{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[8]
+	mi := &file_rpc_v1_organization_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -557,7 +657,7 @@ func (x *SearchDepartmentsRequest) String() string {
 func (*SearchDepartmentsRequest) ProtoMessage() {}
 
 func (x *SearchDepartmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[8]
+	mi := &file_rpc_v1_organization_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -570,7 +670,7 @@ func (x *SearchDepartmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchDepartmentsRequest.ProtoReflect.Descriptor instead.
 func (*SearchDepartmentsRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{8}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SearchDepartmentsRequest) GetQueryText() string {
@@ -605,7 +705,7 @@ type SearchDepartmentsResponse struct {
 
 func (x *SearchDepartmentsResponse) Reset() {
 	*x = SearchDepartmentsResponse{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[9]
+	mi := &file_rpc_v1_organization_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -617,7 +717,7 @@ func (x *SearchDepartmentsResponse) String() string {
 func (*SearchDepartmentsResponse) ProtoMessage() {}
 
 func (x *SearchDepartmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[9]
+	mi := &file_rpc_v1_organization_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -630,7 +730,7 @@ func (x *SearchDepartmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchDepartmentsResponse.ProtoReflect.Descriptor instead.
 func (*SearchDepartmentsResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{9}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SearchDepartmentsResponse) GetResults() []*DepartmentSearchResult {
@@ -669,7 +769,7 @@ type DepartmentSearchResult struct {
 
 func (x *DepartmentSearchResult) Reset() {
 	*x = DepartmentSearchResult{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[10]
+	mi := &file_rpc_v1_organization_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -681,7 +781,7 @@ func (x *DepartmentSearchResult) String() string {
 func (*DepartmentSearchResult) ProtoMessage() {}
 
 func (x *DepartmentSearchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[10]
+	mi := &file_rpc_v1_organization_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -694,7 +794,7 @@ func (x *DepartmentSearchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DepartmentSearchResult.ProtoReflect.Descriptor instead.
 func (*DepartmentSearchResult) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{10}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DepartmentSearchResult) GetId() string {
@@ -756,7 +856,7 @@ type AutocompleteEmployeesRequest struct {
 
 func (x *AutocompleteEmployeesRequest) Reset() {
 	*x = AutocompleteEmployeesRequest{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[11]
+	mi := &file_rpc_v1_organization_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -768,7 +868,7 @@ func (x *AutocompleteEmployeesRequest) String() string {
 func (*AutocompleteEmployeesRequest) ProtoMessage() {}
 
 func (x *AutocompleteEmployeesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[11]
+	mi := &file_rpc_v1_organization_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -781,7 +881,7 @@ func (x *AutocompleteEmployeesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutocompleteEmployeesRequest.ProtoReflect.Descriptor instead.
 func (*AutocompleteEmployeesRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{11}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *AutocompleteEmployeesRequest) GetPrefix() string {
@@ -807,7 +907,7 @@ type AutocompleteEmployeesResponse struct {
 
 func (x *AutocompleteEmployeesResponse) Reset() {
 	*x = AutocompleteEmployeesResponse{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[12]
+	mi := &file_rpc_v1_organization_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -819,7 +919,7 @@ func (x *AutocompleteEmployeesResponse) String() string {
 func (*AutocompleteEmployeesResponse) ProtoMessage() {}
 
 func (x *AutocompleteEmployeesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[12]
+	mi := &file_rpc_v1_organization_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -832,7 +932,7 @@ func (x *AutocompleteEmployeesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutocompleteEmployeesResponse.ProtoReflect.Descriptor instead.
 func (*AutocompleteEmployeesResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{12}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *AutocompleteEmployeesResponse) GetSuggestions() []*EmployeeAutocompleteSuggestion {
@@ -854,7 +954,7 @@ type EmployeeAutocompleteSuggestion struct {
 
 func (x *EmployeeAutocompleteSuggestion) Reset() {
 	*x = EmployeeAutocompleteSuggestion{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[13]
+	mi := &file_rpc_v1_organization_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -866,7 +966,7 @@ func (x *EmployeeAutocompleteSuggestion) String() string {
 func (*EmployeeAutocompleteSuggestion) ProtoMessage() {}
 
 func (x *EmployeeAutocompleteSuggestion) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[13]
+	mi := &file_rpc_v1_organization_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -879,7 +979,7 @@ func (x *EmployeeAutocompleteSuggestion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmployeeAutocompleteSuggestion.ProtoReflect.Descriptor instead.
 func (*EmployeeAutocompleteSuggestion) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{13}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *EmployeeAutocompleteSuggestion) GetId() string {
@@ -920,7 +1020,7 @@ type AutocompleteDepartmentsRequest struct {
 
 func (x *AutocompleteDepartmentsRequest) Reset() {
 	*x = AutocompleteDepartmentsRequest{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[14]
+	mi := &file_rpc_v1_organization_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -932,7 +1032,7 @@ func (x *AutocompleteDepartmentsRequest) String() string {
 func (*AutocompleteDepartmentsRequest) ProtoMessage() {}
 
 func (x *AutocompleteDepartmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[14]
+	mi := &file_rpc_v1_organization_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -945,7 +1045,7 @@ func (x *AutocompleteDepartmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutocompleteDepartmentsRequest.ProtoReflect.Descriptor instead.
 func (*AutocompleteDepartmentsRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{14}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AutocompleteDepartmentsRequest) GetPrefix() string {
@@ -971,7 +1071,7 @@ type AutocompleteDepartmentsResponse struct {
 
 func (x *AutocompleteDepartmentsResponse) Reset() {
 	*x = AutocompleteDepartmentsResponse{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[15]
+	mi := &file_rpc_v1_organization_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -983,7 +1083,7 @@ func (x *AutocompleteDepartmentsResponse) String() string {
 func (*AutocompleteDepartmentsResponse) ProtoMessage() {}
 
 func (x *AutocompleteDepartmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[15]
+	mi := &file_rpc_v1_organization_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -996,7 +1096,7 @@ func (x *AutocompleteDepartmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutocompleteDepartmentsResponse.ProtoReflect.Descriptor instead.
 func (*AutocompleteDepartmentsResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{15}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *AutocompleteDepartmentsResponse) GetSuggestions() []*DepartmentAutocompleteSuggestion {
@@ -1017,7 +1117,7 @@ type DepartmentAutocompleteSuggestion struct {
 
 func (x *DepartmentAutocompleteSuggestion) Reset() {
 	*x = DepartmentAutocompleteSuggestion{}
-	mi := &file_rpc_v1_organization_proto_msgTypes[16]
+	mi := &file_rpc_v1_organization_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1029,7 +1129,7 @@ func (x *DepartmentAutocompleteSuggestion) String() string {
 func (*DepartmentAutocompleteSuggestion) ProtoMessage() {}
 
 func (x *DepartmentAutocompleteSuggestion) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_organization_proto_msgTypes[16]
+	mi := &file_rpc_v1_organization_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1042,7 +1142,7 @@ func (x *DepartmentAutocompleteSuggestion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DepartmentAutocompleteSuggestion.ProtoReflect.Descriptor instead.
 func (*DepartmentAutocompleteSuggestion) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{16}
+	return file_rpc_v1_organization_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *DepartmentAutocompleteSuggestion) GetId() string {
@@ -1084,7 +1184,12 @@ const file_rpc_v1_organization_proto_rawDesc = "" +
 	"\x10admin_given_name\x18\x05 \x01(\tR\x0eadminGivenName\x12*\n" +
 	"\x11admin_family_name\x18\x06 \x01(\tR\x0fadminFamilyName\"i\n" +
 	"-RegisterOrganizationWithAdminPasswordResponse\x128\n" +
-	"\forganization\x18\x01 \x01(\v2\x14.rpc.v1.OrganizationR\forganization\"\xcf\x01\n" +
+	"\forganization\x18\x01 \x01(\v2\x14.rpc.v1.OrganizationR\forganization\">\n" +
+	"\x1eCheckSubdomainAvailableRequest\x12\x1c\n" +
+	"\tsubdomain\x18\x01 \x01(\tR\tsubdomain\"]\n" +
+	"\x1fCheckSubdomainAvailableResponse\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x1c\n" +
+	"\tsuggested\x18\x02 \x01(\tR\tsuggested\"\xcf\x01\n" +
 	"\fOrganization\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fcompany_name\x18\x02 \x01(\tR\vcompanyName\x12\x1c\n" +
@@ -1153,10 +1258,11 @@ const file_rpc_v1_organization_proto_rawDesc = "" +
 	" DepartmentAutocompleteSuggestion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription2\xa2\x06\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription2\x96\a\n" +
 	"\x13OrganizationService\x12{\n" +
 	"\x1aGetOrganizationBySubdomain\x12).rpc.v1.GetOrganizationBySubdomainRequest\x1a*.rpc.v1.GetOrganizationBySubdomainResponse\"\x06\x82\xf9+\x02\x10\x01\x12\x9c\x01\n" +
-	"%RegisterOrganizationWithAdminPassword\x124.rpc.v1.RegisterOrganizationWithAdminPasswordRequest\x1a5.rpc.v1.RegisterOrganizationWithAdminPasswordResponse\"\x06\x82\xf9+\x02\x10\x01\x12m\n" +
+	"%RegisterOrganizationWithAdminPassword\x124.rpc.v1.RegisterOrganizationWithAdminPasswordRequest\x1a5.rpc.v1.RegisterOrganizationWithAdminPasswordResponse\"\x06\x82\xf9+\x02\x10\x01\x12r\n" +
+	"\x17CheckSubdomainAvailable\x12&.rpc.v1.CheckSubdomainAvailableRequest\x1a'.rpc.v1.CheckSubdomainAvailableResponse\"\x06\x82\xf9+\x02\x10\x01\x12m\n" +
 	"\x0fSearchEmployees\x12\x1e.rpc.v1.SearchEmployeesRequest\x1a\x1f.rpc.v1.SearchEmployeesResponse\"\x19\x82\xf9+\x15\n" +
 	"\x13org.searchEmployees\x12u\n" +
 	"\x11SearchDepartments\x12 .rpc.v1.SearchDepartmentsRequest\x1a!.rpc.v1.SearchDepartmentsResponse\"\x1b\x82\xf9+\x17\n" +
@@ -1180,51 +1286,55 @@ func file_rpc_v1_organization_proto_rawDescGZIP() []byte {
 	return file_rpc_v1_organization_proto_rawDescData
 }
 
-var file_rpc_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_rpc_v1_organization_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_rpc_v1_organization_proto_goTypes = []any{
 	(*GetOrganizationBySubdomainRequest)(nil),             // 0: rpc.v1.GetOrganizationBySubdomainRequest
 	(*GetOrganizationBySubdomainResponse)(nil),            // 1: rpc.v1.GetOrganizationBySubdomainResponse
 	(*RegisterOrganizationWithAdminPasswordRequest)(nil),  // 2: rpc.v1.RegisterOrganizationWithAdminPasswordRequest
 	(*RegisterOrganizationWithAdminPasswordResponse)(nil), // 3: rpc.v1.RegisterOrganizationWithAdminPasswordResponse
-	(*Organization)(nil),                                  // 4: rpc.v1.Organization
-	(*SearchEmployeesRequest)(nil),                        // 5: rpc.v1.SearchEmployeesRequest
-	(*SearchEmployeesResponse)(nil),                       // 6: rpc.v1.SearchEmployeesResponse
-	(*EmployeeSearchResult)(nil),                          // 7: rpc.v1.EmployeeSearchResult
-	(*SearchDepartmentsRequest)(nil),                      // 8: rpc.v1.SearchDepartmentsRequest
-	(*SearchDepartmentsResponse)(nil),                     // 9: rpc.v1.SearchDepartmentsResponse
-	(*DepartmentSearchResult)(nil),                        // 10: rpc.v1.DepartmentSearchResult
-	(*AutocompleteEmployeesRequest)(nil),                  // 11: rpc.v1.AutocompleteEmployeesRequest
-	(*AutocompleteEmployeesResponse)(nil),                 // 12: rpc.v1.AutocompleteEmployeesResponse
-	(*EmployeeAutocompleteSuggestion)(nil),                // 13: rpc.v1.EmployeeAutocompleteSuggestion
-	(*AutocompleteDepartmentsRequest)(nil),                // 14: rpc.v1.AutocompleteDepartmentsRequest
-	(*AutocompleteDepartmentsResponse)(nil),               // 15: rpc.v1.AutocompleteDepartmentsResponse
-	(*DepartmentAutocompleteSuggestion)(nil),              // 16: rpc.v1.DepartmentAutocompleteSuggestion
-	(*timestamppb.Timestamp)(nil),                         // 17: google.protobuf.Timestamp
+	(*CheckSubdomainAvailableRequest)(nil),                // 4: rpc.v1.CheckSubdomainAvailableRequest
+	(*CheckSubdomainAvailableResponse)(nil),               // 5: rpc.v1.CheckSubdomainAvailableResponse
+	(*Organization)(nil),                                  // 6: rpc.v1.Organization
+	(*SearchEmployeesRequest)(nil),                        // 7: rpc.v1.SearchEmployeesRequest
+	(*SearchEmployeesResponse)(nil),                       // 8: rpc.v1.SearchEmployeesResponse
+	(*EmployeeSearchResult)(nil),                          // 9: rpc.v1.EmployeeSearchResult
+	(*SearchDepartmentsRequest)(nil),                      // 10: rpc.v1.SearchDepartmentsRequest
+	(*SearchDepartmentsResponse)(nil),                     // 11: rpc.v1.SearchDepartmentsResponse
+	(*DepartmentSearchResult)(nil),                        // 12: rpc.v1.DepartmentSearchResult
+	(*AutocompleteEmployeesRequest)(nil),                  // 13: rpc.v1.AutocompleteEmployeesRequest
+	(*AutocompleteEmployeesResponse)(nil),                 // 14: rpc.v1.AutocompleteEmployeesResponse
+	(*EmployeeAutocompleteSuggestion)(nil),                // 15: rpc.v1.EmployeeAutocompleteSuggestion
+	(*AutocompleteDepartmentsRequest)(nil),                // 16: rpc.v1.AutocompleteDepartmentsRequest
+	(*AutocompleteDepartmentsResponse)(nil),               // 17: rpc.v1.AutocompleteDepartmentsResponse
+	(*DepartmentAutocompleteSuggestion)(nil),              // 18: rpc.v1.DepartmentAutocompleteSuggestion
+	(*timestamppb.Timestamp)(nil),                         // 19: google.protobuf.Timestamp
 }
 var file_rpc_v1_organization_proto_depIdxs = []int32{
-	4,  // 0: rpc.v1.GetOrganizationBySubdomainResponse.organization:type_name -> rpc.v1.Organization
-	4,  // 1: rpc.v1.RegisterOrganizationWithAdminPasswordResponse.organization:type_name -> rpc.v1.Organization
-	17, // 2: rpc.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
-	7,  // 3: rpc.v1.SearchEmployeesResponse.results:type_name -> rpc.v1.EmployeeSearchResult
-	17, // 4: rpc.v1.EmployeeSearchResult.updated_at:type_name -> google.protobuf.Timestamp
-	10, // 5: rpc.v1.SearchDepartmentsResponse.results:type_name -> rpc.v1.DepartmentSearchResult
-	17, // 6: rpc.v1.DepartmentSearchResult.updated_at:type_name -> google.protobuf.Timestamp
-	13, // 7: rpc.v1.AutocompleteEmployeesResponse.suggestions:type_name -> rpc.v1.EmployeeAutocompleteSuggestion
-	16, // 8: rpc.v1.AutocompleteDepartmentsResponse.suggestions:type_name -> rpc.v1.DepartmentAutocompleteSuggestion
+	6,  // 0: rpc.v1.GetOrganizationBySubdomainResponse.organization:type_name -> rpc.v1.Organization
+	6,  // 1: rpc.v1.RegisterOrganizationWithAdminPasswordResponse.organization:type_name -> rpc.v1.Organization
+	19, // 2: rpc.v1.Organization.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 3: rpc.v1.SearchEmployeesResponse.results:type_name -> rpc.v1.EmployeeSearchResult
+	19, // 4: rpc.v1.EmployeeSearchResult.updated_at:type_name -> google.protobuf.Timestamp
+	12, // 5: rpc.v1.SearchDepartmentsResponse.results:type_name -> rpc.v1.DepartmentSearchResult
+	19, // 6: rpc.v1.DepartmentSearchResult.updated_at:type_name -> google.protobuf.Timestamp
+	15, // 7: rpc.v1.AutocompleteEmployeesResponse.suggestions:type_name -> rpc.v1.EmployeeAutocompleteSuggestion
+	18, // 8: rpc.v1.AutocompleteDepartmentsResponse.suggestions:type_name -> rpc.v1.DepartmentAutocompleteSuggestion
 	0,  // 9: rpc.v1.OrganizationService.GetOrganizationBySubdomain:input_type -> rpc.v1.GetOrganizationBySubdomainRequest
 	2,  // 10: rpc.v1.OrganizationService.RegisterOrganizationWithAdminPassword:input_type -> rpc.v1.RegisterOrganizationWithAdminPasswordRequest
-	5,  // 11: rpc.v1.OrganizationService.SearchEmployees:input_type -> rpc.v1.SearchEmployeesRequest
-	8,  // 12: rpc.v1.OrganizationService.SearchDepartments:input_type -> rpc.v1.SearchDepartmentsRequest
-	11, // 13: rpc.v1.OrganizationService.AutocompleteEmployees:input_type -> rpc.v1.AutocompleteEmployeesRequest
-	14, // 14: rpc.v1.OrganizationService.AutocompleteDepartments:input_type -> rpc.v1.AutocompleteDepartmentsRequest
-	1,  // 15: rpc.v1.OrganizationService.GetOrganizationBySubdomain:output_type -> rpc.v1.GetOrganizationBySubdomainResponse
-	3,  // 16: rpc.v1.OrganizationService.RegisterOrganizationWithAdminPassword:output_type -> rpc.v1.RegisterOrganizationWithAdminPasswordResponse
-	6,  // 17: rpc.v1.OrganizationService.SearchEmployees:output_type -> rpc.v1.SearchEmployeesResponse
-	9,  // 18: rpc.v1.OrganizationService.SearchDepartments:output_type -> rpc.v1.SearchDepartmentsResponse
-	12, // 19: rpc.v1.OrganizationService.AutocompleteEmployees:output_type -> rpc.v1.AutocompleteEmployeesResponse
-	15, // 20: rpc.v1.OrganizationService.AutocompleteDepartments:output_type -> rpc.v1.AutocompleteDepartmentsResponse
-	15, // [15:21] is the sub-list for method output_type
-	9,  // [9:15] is the sub-list for method input_type
+	4,  // 11: rpc.v1.OrganizationService.CheckSubdomainAvailable:input_type -> rpc.v1.CheckSubdomainAvailableRequest
+	7,  // 12: rpc.v1.OrganizationService.SearchEmployees:input_type -> rpc.v1.SearchEmployeesRequest
+	10, // 13: rpc.v1.OrganizationService.SearchDepartments:input_type -> rpc.v1.SearchDepartmentsRequest
+	13, // 14: rpc.v1.OrganizationService.AutocompleteEmployees:input_type -> rpc.v1.AutocompleteEmployeesRequest
+	16, // 15: rpc.v1.OrganizationService.AutocompleteDepartments:input_type -> rpc.v1.AutocompleteDepartmentsRequest
+	1,  // 16: rpc.v1.OrganizationService.GetOrganizationBySubdomain:output_type -> rpc.v1.GetOrganizationBySubdomainResponse
+	3,  // 17: rpc.v1.OrganizationService.RegisterOrganizationWithAdminPassword:output_type -> rpc.v1.RegisterOrganizationWithAdminPasswordResponse
+	5,  // 18: rpc.v1.OrganizationService.CheckSubdomainAvailable:output_type -> rpc.v1.CheckSubdomainAvailableResponse
+	8,  // 19: rpc.v1.OrganizationService.SearchEmployees:output_type -> rpc.v1.SearchEmployeesResponse
+	11, // 20: rpc.v1.OrganizationService.SearchDepartments:output_type -> rpc.v1.SearchDepartmentsResponse
+	14, // 21: rpc.v1.OrganizationService.AutocompleteEmployees:output_type -> rpc.v1.AutocompleteEmployeesResponse
+	17, // 22: rpc.v1.OrganizationService.AutocompleteDepartments:output_type -> rpc.v1.AutocompleteDepartmentsResponse
+	16, // [16:23] is the sub-list for method output_type
+	9,  // [9:16] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -1242,7 +1352,7 @@ func file_rpc_v1_organization_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_v1_organization_proto_rawDesc), len(file_rpc_v1_organization_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

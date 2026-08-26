@@ -444,3 +444,61 @@ func TestOrgManagedAccounts(t *testing.T) {
 		})
 	})
 }
+
+// TestOrgManagedAccountPINChange covers FR-016: a voluntary change of an established PIN
+// must prove knowledge of the current one. First-time set stays exempt so a worker holding
+// a temporary PIN, and an owner holding none, can still get started.
+func TestOrgManagedAccountPINChange(t *testing.T) {
+	t.Parallel()
+	w := newTestWorld(t)
+	owner := w.withOwner()
+	subdomain := w.orgSubdomain()
+
+	t.Run("when an identity holds no PIN credential at all", func(t *testing.T) {
+		t.Run("a first PIN can be set without a current PIN", func(t *testing.T) {
+			_, err := w.setPIN(owner, "246810", "")
+			require.NoError(t, err, "first-time set is exempt")
+		})
+	})
+
+	t.Run("when an identity already holds an active PIN", func(t *testing.T) {
+		t.Run("changing it without a current PIN is rejected", func(t *testing.T) {
+			_, err := w.setPIN(owner, "864200", "")
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Contains(t, fieldViolations(t, err), "current_pin",
+				"the error should name the field the caller must supply")
+		})
+
+		t.Run("changing it with the wrong current PIN is rejected", func(t *testing.T) {
+			_, err := w.setPIN(owner, "864200", "111111")
+			require.Error(t, err)
+			assert.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+		})
+
+		t.Run("changing it with the correct current PIN succeeds", func(t *testing.T) {
+			_, err := w.setPIN(owner, "864200", "246810")
+			require.NoError(t, err)
+		})
+
+		t.Run("the old PIN no longer authenticates", func(t *testing.T) {
+			ownerEmail := w.employeeEmail(owner)
+			_, err := w.loginWithPIN(subdomain, ownerEmail, "246810")
+			require.Error(t, err)
+		})
+	})
+
+	t.Run("when a worker holds a temporary PIN", func(t *testing.T) {
+		loginID := "TMPX-" + strings.ReplaceAll(dbuuid.Must().String(), "-", "")[:8]
+		acct := w.createOrgAccount(owner, loginID, "Temp PIN Worker", "Temp", "Worker")
+
+		t.Run("a pin_change_token sets the first personal PIN without a current PIN", func(t *testing.T) {
+			loginResp, err := w.loginWithPIN(subdomain, loginID, acct.TemporaryPin)
+			require.NoError(t, err)
+			require.True(t, loginResp.PinChangeRequired)
+
+			_, err = w.setPINWithToken(loginResp.PinChangeToken, "975310")
+			require.NoError(t, err, "activating a temporary credential is exempt")
+		})
+	})
+}

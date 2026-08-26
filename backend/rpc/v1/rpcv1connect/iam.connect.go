@@ -275,12 +275,14 @@ type IAMServiceClient interface {
 	// GetEmployeePermissions: Returns the effective permission set for an employee.
 	// Computes the union of permissions from all assigned roles.
 	GetEmployeePermissions(context.Context, *connect.Request[v1.GetEmployeePermissionsRequest]) (*connect.Response[v1.GetEmployeePermissionsResponse], error)
-	// LoginWithPIN authenticates a worker using org-scoped login_identifier + PIN.
-	// Resolves organization from subdomain, then looks up identity by login_identifier.
+	// LoginWithPIN authenticates a member using an org-scoped identifier + PIN.
+	// Resolves organization from subdomain, then looks up the identity by
+	// login_identifier OR email, with login_identifier taking precedence.
 	LoginWithPIN(context.Context, *connect.Request[v1.LoginWithPINRequest]) (*connect.Response[v1.LoginWithPINResponse], error)
-	// SetPIN sets or changes a worker's PIN credential.
+	// SetPIN sets or changes a member's PIN credential.
 	// Required after first login with a temporary PIN (pin_change_required=true).
 	// Can be called with a pin_change_token (no auth header) or with a valid JWT.
+	// A voluntary change of an established PIN requires current_pin — see SetPINRequest.
 	SetPIN(context.Context, *connect.Request[v1.SetPINRequest]) (*connect.Response[v1.SetPINResponse], error)
 	// CreateOrgAccount creates a single org-managed worker account.
 	// Returns the generated temporary PIN (visible once).
@@ -932,12 +934,14 @@ type IAMServiceHandler interface {
 	// GetEmployeePermissions: Returns the effective permission set for an employee.
 	// Computes the union of permissions from all assigned roles.
 	GetEmployeePermissions(context.Context, *connect.Request[v1.GetEmployeePermissionsRequest]) (*connect.Response[v1.GetEmployeePermissionsResponse], error)
-	// LoginWithPIN authenticates a worker using org-scoped login_identifier + PIN.
-	// Resolves organization from subdomain, then looks up identity by login_identifier.
+	// LoginWithPIN authenticates a member using an org-scoped identifier + PIN.
+	// Resolves organization from subdomain, then looks up the identity by
+	// login_identifier OR email, with login_identifier taking precedence.
 	LoginWithPIN(context.Context, *connect.Request[v1.LoginWithPINRequest]) (*connect.Response[v1.LoginWithPINResponse], error)
-	// SetPIN sets or changes a worker's PIN credential.
+	// SetPIN sets or changes a member's PIN credential.
 	// Required after first login with a temporary PIN (pin_change_required=true).
 	// Can be called with a pin_change_token (no auth header) or with a valid JWT.
+	// A voluntary change of an established PIN requires current_pin — see SetPINRequest.
 	SetPIN(context.Context, *connect.Request[v1.SetPINRequest]) (*connect.Response[v1.SetPINResponse], error)
 	// CreateOrgAccount creates a single org-managed worker account.
 	// Returns the generated temporary PIN (visible once).

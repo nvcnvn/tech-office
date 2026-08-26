@@ -4703,7 +4703,11 @@ type LoginWithPINRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Organization subdomain for org resolution
 	OrganizationSubdomain string `protobuf:"bytes,1,opt,name=organization_subdomain,json=organizationSubdomain,proto3" json:"organization_subdomain,omitempty"`
-	// Worker's login identifier (badge number, username, etc.)
+	// The member's org login identifier (badge number, username) OR their email address.
+	// The server matches both columns and prefers an exact login_identifier match, so an
+	// owner registered by email and a worker issued a badge number use one field.
+	// The field is deliberately NOT renamed: clients present it as a single "who are you"
+	// input and the server decides how to resolve it.
 	LoginIdentifier string `protobuf:"bytes,2,opt,name=login_identifier,json=loginIdentifier,proto3" json:"login_identifier,omitempty"`
 	// PIN (6 numeric digits)
 	Pin           string `protobuf:"bytes,3,opt,name=pin,proto3" json:"pin,omitempty"`
@@ -4840,7 +4844,15 @@ type SetPINRequest struct {
 	NewPin string `protobuf:"bytes,1,opt,name=new_pin,json=newPin,proto3" json:"new_pin,omitempty"`
 	// Optional: temporary token from LoginWithPINResponse (for first-time PIN set)
 	PinChangeToken *string `protobuf:"bytes,2,opt,name=pin_change_token,json=pinChangeToken,proto3,oneof" json:"pin_change_token,omitempty"`
-	// Optional: current PIN (required for voluntary PIN change, not for first-time set)
+	// Current PIN. REQUIRED and VERIFIED for a voluntary change of an established PIN.
+	//
+	// Exempt (first-time set, current_pin not required):
+	//   - pin_change_token is supplied, or
+	//   - the identity holds no PIN credential, or
+	//   - the existing credential is in state `temporary`.
+	//
+	// Otherwise a missing current_pin returns InvalidArgument with a
+	// google.rpc.BadRequest naming the field, and a wrong one returns PermissionDenied.
 	CurrentPin    *string `protobuf:"bytes,3,opt,name=current_pin,json=currentPin,proto3,oneof" json:"current_pin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4951,6 +4963,9 @@ func (x *SetPINResponse) GetExpiresAt() int64 {
 	return 0
 }
 
+// login_identifier MUST NOT contain '@'. PIN login resolves an identifier against
+// login_identifier OR email, so the two namespaces are kept disjoint; a value containing
+// '@' returns InvalidArgument with a google.rpc.BadRequest naming the field.
 type CreateOrgAccountRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	LoginIdentifier string                 `protobuf:"bytes,1,opt,name=login_identifier,json=loginIdentifier,proto3" json:"login_identifier,omitempty"`

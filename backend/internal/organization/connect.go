@@ -2,9 +2,11 @@ package organization
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	"connectrpc.com/connect"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/nvcnvn/tech-office/backend/database"
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
@@ -101,7 +103,7 @@ func (s *OrganizationServiceConnect) RegisterOrganizationWithAdminPassword(
 			"function", "RegisterOrganizationWithAdminPassword",
 			"error", err,
 		)
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, toConnectError(err)
 	}
 
 	resp := &v1.RegisterOrganizationWithAdminPasswordResponse{
@@ -113,6 +115,62 @@ func (s *OrganizationServiceConnect) RegisterOrganizationWithAdminPassword(
 	)
 
 	return connect.NewResponse(resp), nil
+}
+
+// CheckSubdomainAvailable reports whether a workspace address is free and well-formed.
+// Unauthenticated: it is called by a signup form before an account exists.
+func (s *OrganizationServiceConnect) CheckSubdomainAvailable(
+	ctx context.Context,
+	req *connect.Request[v1.CheckSubdomainAvailableRequest],
+) (*connect.Response[v1.CheckSubdomainAvailableResponse], error) {
+	slog.DebugContext(ctx, "CheckSubdomainAvailable RPC called",
+		"function", "CheckSubdomainAvailable",
+		"subdomain", req.Msg.Subdomain,
+	)
+
+	// Read-only operation: pass pool directly
+	available, suggested, err := s.Logic.CheckSubdomainAvailable(ctx, s.AdminPool, req.Msg.Subdomain)
+	if err != nil {
+		// A taken address is not an error here — only a malformed one is.
+		return nil, toConnectError(err)
+	}
+
+	return connect.NewResponse(&v1.CheckSubdomainAvailableResponse{
+		Available: available,
+		Suggested: suggested,
+	}), nil
+}
+
+// toConnectError maps organization domain errors to Connect codes, attaching a
+// google.rpc.BadRequest naming `subdomain` so a six-field signup form knows which input to
+// correct rather than receiving a bare code for the whole request (Principle X).
+func toConnectError(err error) *connect.Error {
+	switch {
+	case errors.Is(err, ErrSubdomainTaken):
+		return subdomainViolation(connect.CodeAlreadyExists, err, "already in use")
+	case errors.Is(err, ErrSubdomainInvalid):
+		return subdomainViolation(connect.CodeInvalidArgument, err, err.Error())
+	default:
+		return connect.NewError(connect.CodeInternal, err)
+	}
+}
+
+func subdomainViolation(code connect.Code, err error, description string) *connect.Error {
+	cErr := connect.NewError(code, err)
+
+	badReq := &errdetails.BadRequest{
+		FieldViolations: []*errdetails.BadRequest_FieldViolation{
+			{
+				Field:       "subdomain",
+				Description: description,
+			},
+		},
+	}
+	if d, detailErr := connect.NewErrorDetail(badReq); detailErr == nil {
+		cErr.AddDetail(d)
+	}
+
+	return cErr
 }
 
 func (s *OrganizationServiceConnect) SearchEmployees(

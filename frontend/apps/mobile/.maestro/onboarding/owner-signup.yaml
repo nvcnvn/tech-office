@@ -1,0 +1,214 @@
+appId: com.devguards.TechOffice
+name: "Onboarding — Owner creates a workspace, sets a PIN, adds a teammate"
+# User stories 2 and 3, end to end from a fresh install:
+#   create a workspace -> choose a PIN with confirmation -> add a teammate -> see the code
+#
+# The company name and teammate ID carry a run-unique suffix so repeated local runs do not
+# collide on the derived workspace address or on the teammate's login identifier.
+#
+# Requires MAESTRO_OWNER_PIN and MAESTRO_OWNER_PASSWORD; MAESTRO_RUN_ID must differ per run
+# (the runner passes a timestamp).
+#
+# KNOWN BLOCKER — this flow does not pass on an iOS simulator today. iOS 18 lays its
+# automatic-strong-password cover view over the password field, chosen heuristically from
+# the surrounding signup form, and that overlay is a system view outside the app's
+# accessibility tree: Maestro cannot see it, tap it, or type past it, so the password never
+# reaches the field and the form stops at "Use at least 8 characters." Neither
+# `textContentType="password"` nor an explicit `autoComplete`/`passwordRules` suppresses it
+# (all tried). The only app-side fix is a full AutoFill opt-out on that field, which costs
+# password-manager fill on a credential the owner must be able to reproduce — see the
+# comment in `(auth)/signup.tsx`. Everything before and after the password field drives
+# correctly; the PIN and teammate steps are unverified as a consequence.
+---
+- launchApp:
+    clearState: true
+    clearKeychain: true
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- runFlow:
+    when:
+      visible: "DEVELOPMENT SERVERS"
+    commands:
+      - tapOn:
+          text: "Tech Office"
+          index: 1
+- runFlow:
+    when:
+      visible: "Continue"
+    commands:
+      - tapOn: "Continue"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+# ---------------------------------------------------------------------------
+# User story 2 — create a workspace
+# ---------------------------------------------------------------------------
+- extendedWaitUntil:
+    visible:
+      id: "signin-create-workspace"
+    timeout: 15000
+- tapOn:
+    id: "signin-create-workspace"
+
+- extendedWaitUntil:
+    visible:
+      id: "signup-company-name"
+    timeout: 15000
+
+- tapOn:
+    id: "signup-company-name"
+- eraseText: 64
+- inputText: "Annas Cafe ${MAESTRO_RUN_ID}"
+
+# The address is derived and explained, never asked for as an empty field.
+- assertVisible:
+    id: "signup-address-value"
+- assertVisible: "Your team will sign in at"
+
+# The word "subdomain" must not appear anywhere the owner can read it (SC-004).
+- assertNotVisible: "subdomain"
+
+# The later fields sit below the keyboard on a phone-sized screen. Dismissing it before
+# each tap keeps the tap landing on the field rather than on the keyboard covering it —
+# otherwise the text goes to whichever field still had focus.
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-owner-name"
+    direction: DOWN
+- tapOn:
+    id: "signup-owner-name"
+- eraseText: 64
+- inputText: "Anna Owner"
+
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-email"
+    direction: DOWN
+- tapOn:
+    id: "signup-email"
+- eraseText: 64
+- inputText: "owner-${MAESTRO_RUN_ID}@test.invalid"
+
+# Secure fields keep stale text between runs unless erased first.
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-password"
+    direction: DOWN
+- tapOn:
+    id: "signup-password"
+- eraseText: 20
+- inputText: "${MAESTRO_OWNER_PASSWORD}"
+
+- hideKeyboard
+- scrollUntilVisible:
+    element:
+      id: "signup-submit"
+    direction: DOWN
+- tapOn:
+    id: "signup-submit"
+
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"
+
+# ---------------------------------------------------------------------------
+# User story 3a — the PIN step, mandatory and confirmed
+# ---------------------------------------------------------------------------
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-pin-boxes"
+    timeout: 30000
+
+# Email and password are stated as the way back in (FR-010).
+- assertVisible:
+    id: "onboarding-pin-recovery"
+
+- tapOn:
+    id: "onboarding-pin-boxes"
+- eraseText: 20
+- inputText: "${MAESTRO_OWNER_PIN}"
+
+# The confirmation only appears once there is something to confirm.
+- extendedWaitUntil:
+    visible:
+      id: "onboarding-pin-confirm-boxes"
+    timeout: 10000
+- tapOn:
+    id: "onboarding-pin-confirm-boxes"
+- eraseText: 20
+- inputText: "${MAESTRO_OWNER_PIN}"
+
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"
+
+# ---------------------------------------------------------------------------
+# User story 3b — the first teammate, and their one-time code
+# ---------------------------------------------------------------------------
+- extendedWaitUntil:
+    visible:
+      id: "teammate-name-input"
+    timeout: 30000
+
+- assertVisible:
+    id: "teammate-skip"
+
+- tapOn:
+    id: "teammate-name-input"
+- eraseText: 64
+- inputText: "Ana Pham"
+
+- tapOn:
+    id: "teammate-identifier-input"
+- eraseText: 64
+- inputText: "ANA${MAESTRO_RUN_ID}"
+
+- tapOn:
+    id: "teammate-create"
+
+# The code is shown once, with its expiry, and a way to send it.
+- extendedWaitUntil:
+    visible:
+      id: "teammate-code"
+    timeout: 20000
+- assertVisible:
+    id: "teammate-code-card"
+- assertVisible:
+    id: "teammate-identifier"
+- assertVisible:
+    id: "teammate-share"
+- assertVisible: "Shown once"
+
+- tapOn:
+    id: "teammate-done"
+
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 20000
+- runFlow:
+    when:
+      visible: "Not Now"
+    commands:
+      - tapOn: "Not Now"

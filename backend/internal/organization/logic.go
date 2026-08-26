@@ -2,10 +2,12 @@ package organization
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/nvcnvn/tech-office/backend/database"
@@ -26,6 +28,11 @@ type CollaborationLogic interface {
 type OrganizationLogic interface {
 	GetOrganizationBySubdomain(ctx context.Context, tx database.DBTX, subdomain string) (*database.Organization, error)
 	RegisterOrganizationWithAdmin(ctx context.Context, tx database.DBTX, req *RegisterOrgParams) (*database.Organization, error)
+
+	// CheckSubdomainAvailable reports whether a workspace address is free. A malformed
+	// address returns ErrSubdomainInvalid. A taken one returns available=false plus the
+	// next free variant, so the caller can offer an alternative without a second call.
+	CheckSubdomainAvailable(ctx context.Context, tx database.DBTX, subdomain string) (available bool, suggested string, err error)
 
 	// Search methods (multilingual fuzzy search)
 	SearchEmployees(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, queryText string, limit int32, cursor *dbuuid.UUID) ([]*database.SearchEmployeesRow, error)
@@ -113,6 +120,57 @@ func (s *organizationLogicImpl) GetOrganizationBySubdomain(
 	return org, nil
 }
 
+// maxSubdomainVariants bounds the search for a free alternative. Collisions are rare and a
+// caller staring at "annas-cafe-50" is better served by typing their own address.
+const maxSubdomainVariants = 50
+
+// subdomainTaken reports whether an address is already registered.
+func (s *organizationLogicImpl) subdomainTaken(ctx context.Context, tx database.DBTX, subdomain string) (bool, error) {
+	_, err := s.Queries.GetOrganizationBySubdomain(ctx, tx, subdomain)
+	if err == nil {
+		return true, nil
+	}
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	return false, fmt.Errorf("failed to check workspace address: %w", err)
+}
+
+// CheckSubdomainAvailable validates the format and then the availability of an address.
+func (s *organizationLogicImpl) CheckSubdomainAvailable(
+	ctx context.Context,
+	tx database.DBTX,
+	subdomain string,
+) (bool, string, error) {
+	normalized := Normalize(subdomain)
+	if err := Validate(normalized); err != nil {
+		return false, "", err
+	}
+
+	taken, err := s.subdomainTaken(ctx, tx, normalized)
+	if err != nil {
+		return false, "", err
+	}
+	if !taken {
+		return true, "", nil
+	}
+
+	for n := 2; n <= maxSubdomainVariants; n++ {
+		variant := NextVariant(normalized, n)
+		variantTaken, err := s.subdomainTaken(ctx, tx, variant)
+		if err != nil {
+			return false, "", err
+		}
+		if !variantTaken {
+			return false, variant, nil
+		}
+	}
+
+	// Every variant within the bound is taken; report unavailable with no suggestion
+	// rather than inventing one the caller cannot use.
+	return false, "", nil
+}
+
 // RegisterOrganizationWithAdmin handles the registration of a new organization along with an admin user.
 // This method performs all operations within the provided transaction.
 // TODO: implement idempotency to prevent duplicate orgs on retries
@@ -126,6 +184,22 @@ func (s *organizationLogicImpl) RegisterOrganizationWithAdmin(
 		"subdomain", req.Subdomain,
 		"adminEmail", req.AdminEmail,
 	)
+
+	// Step 0: Validate the workspace address before anything is written. Without this a
+	// duplicate reaches the UNIQUE index and surfaces to the caller as a raw pg error.
+	subdomain := Normalize(req.Subdomain)
+	if err := Validate(subdomain); err != nil {
+		slog.WarnContext(ctx, "rejected malformed workspace address", "subdomain", req.Subdomain, "error", err)
+		return nil, err
+	}
+	taken, err := s.subdomainTaken(ctx, tx, subdomain)
+	if err != nil {
+		return nil, err
+	}
+	if taken {
+		slog.WarnContext(ctx, "rejected taken workspace address", "subdomain", subdomain)
+		return nil, fmt.Errorf("%w: %q", ErrSubdomainTaken, subdomain)
+	}
 
 	now := pgtype.Timestamptz{
 		Time:  time.Now(),
@@ -141,7 +215,7 @@ func (s *organizationLogicImpl) RegisterOrganizationWithAdmin(
 		ProjectID:   organizationProjectUUID,
 		AppID:       appID,
 		Status:      OrganizationStatusActive,
-		Subdomain:   req.Subdomain,
+		Subdomain:   subdomain,
 		UpdatedAt:   now,
 	}
 	slog.InfoContext(ctx, "creating organization record",
@@ -150,7 +224,7 @@ func (s *organizationLogicImpl) RegisterOrganizationWithAdmin(
 		"subdomain", organizationRecord.Subdomain,
 	)
 
-	err := dbcrud.Create(ctx, tx, &organizationRecord)
+	err = dbcrud.Create(ctx, tx, &organizationRecord)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create organization record",
 			"error", err,

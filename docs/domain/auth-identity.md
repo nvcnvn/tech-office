@@ -3,7 +3,7 @@
 Who a person is, how they prove it, which organizations they belong to, and what they are
 allowed to do. Owned by `internal/iam` and `rpc/v1/iam.proto` (`IAMService`, 40 RPCs).
 
-**Status date: 2026-08-22.** Supersedes specs 001, 002, 018, 020, 024.
+**Status date: 2026-08-26.** Supersedes specs 001, 002, 018, 020, 024, 035.
 
 ## The identity model
 
@@ -55,8 +55,23 @@ creates the account (`CreateOrgAccount` / `BatchCreateOrgAccounts`); the respons
   either a `pin_change_token` (10-minute expiry, no auth header) or a valid JWT.
 - `ComparePINWithPersonalData` rejects a chosen PIN that matches the worker's date of birth
   in `YYMMDD`/`DDMMYY`/`MMDDYY` form, or the last 6 digits of their phone number.
-- Login is `subdomain + login_identifier + PIN`; `login_identifier` is unique per org
-  (badge number, username) via a partial unique index.
+- Login is `subdomain + identifier + PIN`. The `login_identifier` request field is resolved
+  against `iam.identity.login_identifier` **or** `lower(email)`, with an exact
+  `login_identifier` match ordered first (`DESC NULLS LAST` — an owner's NULL
+  `login_identifier` would otherwise sort ahead of a real match). `login_identifier` is
+  unique per org via a partial unique index, and `email` is unique per org, but their union
+  is not, so the ordering is what makes resolution deterministic.
+- Because of that resolution, **an owner registered by email holds a PIN with no schema
+  change**: `iam.user.id == iam.identity.id == organization.employee.id` for one person, so
+  `SetPIN` writes `iam.credential` against a key `LoginWithPIN` can find. Clients present
+  one "who are you" field and let the server decide how to resolve it.
+- `CreateOrgAccount` rejects a `login_identifier` containing `@` (`ErrLoginIdentifierInvalid`,
+  `InvalidArgument` with a `BadRequest` naming the field). This keeps the identifier and
+  email namespaces disjoint, which is what makes the widened lookup unambiguous.
+- **A voluntary PIN change requires `current_pin`**, verified with `ComparePINHash`. Missing
+  → `InvalidArgument` with a `BadRequest` naming `current_pin`; wrong → `PermissionDenied`.
+  First-time set is exempt: a `pin_change_token` was supplied, the identity holds no PIN
+  credential, or the existing credential is still `temporary`.
 
 **Lockout** (`iam.account_lockout`, per identity, escalating on consecutive failures):
 
@@ -71,6 +86,14 @@ creates the account (`CreateOrgAccount` / `BatchCreateOrgAccounts`); the respons
 A successful authentication resets to tier 0. Admins also have
 `ResetOrgAccountCredential` (new temporary PIN, revokes existing) and
 `DeactivateOrgAccount` (immediately invalidates all sessions).
+
+A lockout returns `ResourceExhausted` carrying `rpc.v1.PinAuthErrorDetail` (tier,
+`admin_reset_required`, `lockout_until_unix`). Tiers 1–3 **also** carry
+`google.rpc.RetryInfo` with the time actually remaining, so a client renders a live
+countdown rather than a static "try later"; tier 4 carries none, because no delay resolves
+a full lock, and adds `ErrorInfo{reason: PIN_ACCOUNT_LOCKED}`. Email sign-in is **not**
+gated by PIN lockout — `checkLockout` is called from `LoginWithPIN` only — which is what
+makes email and password the way back in for a fully locked owner.
 
 ## Sessions
 
@@ -130,17 +153,54 @@ document ACL), which is a different question.
 
 - Web: `/signup`, `/signin`, `/login/pin`, `/login/pin/set-pin`, `/forgot-password`,
   `/reset-password`, `/accept-invitation`, `/callback` (SSO), `/workspace/profile`.
-- Mobile: `app/(auth)/` — `signin`, `signup`, `pin`, `set-pin`, `forgot-password`,
-  `reset-password`, `accept-invitation`, `sso-callback`, plus `canonical-signin.tsx` for
-  the deep-link entry path.
+- Mobile `app/(auth)/`:
+  - `index` — **the sign-in screen, PIN first.** There is no method picker; the screen
+    reads the device's remembered state and renders one of two shapes. Known device: the
+    remembered display name and workspace as text, six PIN boxes, keypad focused on mount,
+    auto-submit on the sixth digit, and "Not you?" to forget. Fresh device: workspace →
+    identifier → PIN revealed one step at a time, each validated at its own step, with
+    answered steps collapsed to a checked line. `canonical-signin.tsx` and
+    `link-handoff.tsx` re-export it for the deep-link entry paths.
+  - `signup` — owner workspace creation: company name, owner name, email, password. The
+    workspace address is derived from the company name and shown as "Your team will sign in
+    at …" with a Change affordance; availability is checked on blur and a taken address is
+    offered an alternative inline. Registration returns no token, so the screen chains
+    `registerOrganization` → `login` behind one spinner and reports a failed second half as
+    "workspace is ready, but we couldn't sign you in".
+  - `set-pin` — a worker choosing their own PIN after signing in with a one-time code,
+    authorised by `pin_change_token`.
+  - `signin` (email + password + SSO), `forgot-password`, `reset-password`,
+    `accept-invitation`, `sso-callback`.
+- Mobile `app/(onboarding)/` — the owner's first-run sequence, entered from `signup`:
+  - `set-pin` — mandatory, non-dismissible, with a confirmation entry and a card stating
+    that email and password remain the recovery path.
+  - `add-teammate` — creates one org-managed account and hands the one-time code to the OS
+    share sheet as the primary action, with clipboard copy as a quieter secondary.
+    Skippable.
+  - `_layout` redirects into the first incomplete step, so an owner interrupted after their
+    workspace was created resumes there instead of at signup, where a retry would collide
+    on the address they just claimed.
+- Mobile device state (MMKV, id `tech-office`): `auth.last_subdomain`,
+  `auth.last_login_identifier`, `auth.last_email`, `auth.last_display_name` (all cleared
+  together by "Not you?" and sign-out; partial state is treated as absent), and
+  `onboarding.step` / `onboarding.subdomain`.
 - Shared clients: `packages/apis/src/iam.ts`, `iam-org-accounts.ts`, `token.ts`,
-  `auth-events.ts`.
+  `auth-events.ts`, `errorDetails.ts` (`lockoutRetrySeconds`, `fieldViolation`),
+  `organization.ts` (`registerOrganization`, `checkSubdomainAvailable`, `deriveSubdomain`).
+  `PIN_LENGTH` and `TEMPORARY_PIN_EXPIRY_DAYS` live in `iam-org-accounts.ts` and are the
+  synced counterparts of `iam.PINLength` and `iam.TemporaryPINExpiry`.
 
 ## Tests
 
-`integration/iam_auth_methods_test.go`, `iam_permission_test.go`,
-`iam_role_lifecycle_test.go`, `iam_employee_cards_test.go`, `org_managed_accounts_test.go`,
+`integration/iam_auth_methods_test.go` (incl. `TestIAMPINIdentifierResolution` and
+`TestIAMPINLockoutRetryInfo`), `iam_permission_test.go`, `iam_role_lifecycle_test.go`,
+`iam_employee_cards_test.go`, `org_managed_accounts_test.go` (incl.
+`TestOrgManagedAccountPINChange`), `mobile_owner_onboarding_test.go`,
 `organization_onboarding_test.go`, `multi_tenancy_test.go`.
+
+Mobile: `.maestro/auth/signin.yaml` (email path), `.maestro/auth/signin-known-device.yaml`
+(six-tap returning sign-in), `.maestro/onboarding/owner-signup.yaml` (create workspace →
+PIN → teammate). All three run under `make test-mobile`.
 
 ## Known drift
 
@@ -150,8 +210,10 @@ with escalating lockout. Two artefacts of the abandoned half remain:
 
 - `iam.credential.credential_type` allows `'biometric'`, and
   `iam.CredentialTypeBiometric` is declared, but nothing ever writes or reads it.
-- `apps/mobile/src/hooks/use-biometrics.ts` wraps `expo-local-authentication` and is
-  imported by nothing.
+- `apps/mobile/src/hooks/use-biometrics.ts` was deleted in feature 035; the
+  `expo-local-authentication` dependency it wrapped is still in
+  `apps/mobile/package.json` and is now imported by nothing. Removing it forces a native
+  rebuild, so it was left for a change that is already rebuilding.
 
 Read spec 024 for intent only; the file name and title are misleading.
 

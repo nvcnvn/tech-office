@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 )
@@ -41,6 +42,15 @@ var (
 	ErrTemporaryPINExpired      = errors.New("temporary PIN has expired")
 	ErrInvalidPINChangeToken    = errors.New("invalid or expired PIN change token")
 	ErrWorkerAccountSuspended   = errors.New("worker account is suspended")
+
+	// ErrLoginIdentifierInvalid keeps the login_identifier and email namespaces disjoint.
+	// PIN login resolves an identifier against either column, so a login identifier that
+	// looks like an email could match two identities.
+	ErrLoginIdentifierInvalid = errors.New("login identifier must not contain '@' — use a badge number or username, not an email address")
+
+	// Voluntary PIN change errors. First-time set is exempt — see logic SetPIN.
+	ErrCurrentPINRequired  = errors.New("current PIN is required to change an existing PIN")
+	ErrCurrentPINIncorrect = errors.New("current PIN is incorrect")
 )
 
 // ErrAccountLocked is returned when an account is locked due to failed PIN attempts.
@@ -110,6 +120,16 @@ func ToConnectError(err error) *connect.Error {
 	case errors.Is(err, ErrDuplicateLoginIdentifier):
 		return duplicateIdentifierToConnectError(err)
 
+	// Malformed login identifier → InvalidArgument naming the field
+	case errors.Is(err, ErrLoginIdentifierInvalid):
+		return fieldViolationToConnectError(connect.CodeInvalidArgument, "login_identifier", err)
+
+	// Voluntary PIN change: missing current PIN is a bad request, a wrong one is denied
+	case errors.Is(err, ErrCurrentPINRequired):
+		return fieldViolationToConnectError(connect.CodeInvalidArgument, "current_pin", err)
+	case errors.Is(err, ErrCurrentPINIncorrect):
+		return connect.NewError(connect.CodePermissionDenied, err)
+
 	case errors.Is(err, ErrTemporaryPINExpired):
 		return connect.NewError(connect.CodeUnauthenticated, err)
 	case errors.Is(err, ErrInvalidPINChangeToken):
@@ -136,6 +156,19 @@ func lockoutToConnectError(lockoutErr *ErrAccountLocked) *connect.Error {
 		cErr.AddDetail(d)
 	}
 
+	// Tiers 1-3: attach google.rpc.RetryInfo so the client can render a live countdown
+	// rather than a static "try later". Tier 4 carries none — no delay resolves a full lock.
+	if !lockoutErr.AdminRequired && !lockoutErr.LockoutUntil.IsZero() {
+		remaining := time.Until(lockoutErr.LockoutUntil)
+		if remaining < 0 {
+			remaining = 0
+		}
+		retryInfo := &errdetails.RetryInfo{RetryDelay: durationpb.New(remaining)}
+		if d, detailErr := connect.NewErrorDetail(retryInfo); detailErr == nil {
+			cErr.AddDetail(d)
+		}
+	}
+
 	// Tier 4: also attach ErrorInfo
 	if lockoutErr.AdminRequired {
 		errorInfo := &errdetails.ErrorInfo{
@@ -152,12 +185,18 @@ func lockoutToConnectError(lockoutErr *ErrAccountLocked) *connect.Error {
 
 // pinValidationToConnectError creates an InvalidArgument error with BadRequest.FieldViolation.
 func pinValidationToConnectError(err error) *connect.Error {
-	cErr := connect.NewError(connect.CodeInvalidArgument, err)
+	return fieldViolationToConnectError(connect.CodeInvalidArgument, "new_pin", err)
+}
+
+// fieldViolationToConnectError attaches a google.rpc.BadRequest naming the offending field,
+// so a client with several inputs on screen knows which one to correct.
+func fieldViolationToConnectError(code connect.Code, field string, err error) *connect.Error {
+	cErr := connect.NewError(code, err)
 
 	badReq := &errdetails.BadRequest{
 		FieldViolations: []*errdetails.BadRequest_FieldViolation{
 			{
-				Field:       "new_pin",
+				Field:       field,
 				Description: err.Error(),
 			},
 		},

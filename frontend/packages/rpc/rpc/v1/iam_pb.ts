@@ -2291,7 +2291,11 @@ export type LoginWithPINRequest = Message<"rpc.v1.LoginWithPINRequest"> & {
   organizationSubdomain: string;
 
   /**
-   * Worker's login identifier (badge number, username, etc.)
+   * The member's org login identifier (badge number, username) OR their email address.
+   * The server matches both columns and prefers an exact login_identifier match, so an
+   * owner registered by email and a worker issued a badge number use one field.
+   * The field is deliberately NOT renamed: clients present it as a single "who are you"
+   * input and the server decides how to resolve it.
    *
    * @generated from field: string login_identifier = 2;
    */
@@ -2371,7 +2375,15 @@ export type SetPINRequest = Message<"rpc.v1.SetPINRequest"> & {
   pinChangeToken?: string;
 
   /**
-   * Optional: current PIN (required for voluntary PIN change, not for first-time set)
+   * Current PIN. REQUIRED and VERIFIED for a voluntary change of an established PIN.
+   *
+   * Exempt (first-time set, current_pin not required):
+   *   - pin_change_token is supplied, or
+   *   - the identity holds no PIN credential, or
+   *   - the existing credential is in state `temporary`.
+   *
+   * Otherwise a missing current_pin returns InvalidArgument with a
+   * google.rpc.BadRequest naming the field, and a wrong one returns PermissionDenied.
    *
    * @generated from field: optional string current_pin = 3;
    */
@@ -2412,6 +2424,10 @@ export const SetPINResponseSchema: GenMessage<SetPINResponse> = /*@__PURE__*/
   messageDesc(file_rpc_v1_iam, 81);
 
 /**
+ * login_identifier MUST NOT contain '@'. PIN login resolves an identifier against
+ * login_identifier OR email, so the two namespaces are kept disjoint; a value containing
+ * '@' returns InvalidArgument with a google.rpc.BadRequest naming the field.
+ *
  * @generated from message rpc.v1.CreateOrgAccountRequest
  */
 export type CreateOrgAccountRequest = Message<"rpc.v1.CreateOrgAccountRequest"> & {
@@ -3275,8 +3291,9 @@ export const IAMService: GenService<{
     output: typeof GetEmployeePermissionsResponseSchema;
   },
   /**
-   * LoginWithPIN authenticates a worker using org-scoped login_identifier + PIN.
-   * Resolves organization from subdomain, then looks up identity by login_identifier.
+   * LoginWithPIN authenticates a member using an org-scoped identifier + PIN.
+   * Resolves organization from subdomain, then looks up the identity by
+   * login_identifier OR email, with login_identifier taking precedence.
    *
    * @generated from rpc rpc.v1.IAMService.LoginWithPIN
    */
@@ -3286,9 +3303,10 @@ export const IAMService: GenService<{
     output: typeof LoginWithPINResponseSchema;
   },
   /**
-   * SetPIN sets or changes a worker's PIN credential.
+   * SetPIN sets or changes a member's PIN credential.
    * Required after first login with a temporary PIN (pin_change_required=true).
    * Can be called with a pin_change_token (no auth header) or with a valid JWT.
+   * A voluntary change of an established PIN requires current_pin — see SetPINRequest.
    *
    * @generated from rpc rpc.v1.IAMService.SetPIN
    */

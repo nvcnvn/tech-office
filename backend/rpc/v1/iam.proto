@@ -313,15 +313,17 @@ service IAMService {
 
   // === Org-Managed Accounts (PIN-Based Workers) ===
 
-  // LoginWithPIN authenticates a worker using org-scoped login_identifier + PIN.
-  // Resolves organization from subdomain, then looks up identity by login_identifier.
+  // LoginWithPIN authenticates a member using an org-scoped identifier + PIN.
+  // Resolves organization from subdomain, then looks up the identity by
+  // login_identifier OR email, with login_identifier taking precedence.
   rpc LoginWithPIN(LoginWithPINRequest) returns (LoginWithPINResponse) {
     option (rpc.v1.access_control) = {allow_unauthenticated: true};
   }
 
-  // SetPIN sets or changes a worker's PIN credential.
+  // SetPIN sets or changes a member's PIN credential.
   // Required after first login with a temporary PIN (pin_change_required=true).
   // Can be called with a pin_change_token (no auth header) or with a valid JWT.
+  // A voluntary change of an established PIN requires current_pin — see SetPINRequest.
   rpc SetPIN(SetPINRequest) returns (SetPINResponse) {
     option (rpc.v1.access_control) = {allow_unauthenticated: true};
   }
@@ -1165,7 +1167,11 @@ message GetEmployeeCardsResponse {
 message LoginWithPINRequest {
   // Organization subdomain for org resolution
   string organization_subdomain = 1;
-  // Worker's login identifier (badge number, username, etc.)
+  // The member's org login identifier (badge number, username) OR their email address.
+  // The server matches both columns and prefers an exact login_identifier match, so an
+  // owner registered by email and a worker issued a badge number use one field.
+  // The field is deliberately NOT renamed: clients present it as a single "who are you"
+  // input and the server decides how to resolve it.
   string login_identifier = 2;
   // PIN (6 numeric digits)
   string pin = 3;
@@ -1187,7 +1193,15 @@ message SetPINRequest {
   string new_pin = 1;
   // Optional: temporary token from LoginWithPINResponse (for first-time PIN set)
   optional string pin_change_token = 2;
-  // Optional: current PIN (required for voluntary PIN change, not for first-time set)
+  // Current PIN. REQUIRED and VERIFIED for a voluntary change of an established PIN.
+  //
+  // Exempt (first-time set, current_pin not required):
+  //   - pin_change_token is supplied, or
+  //   - the identity holds no PIN credential, or
+  //   - the existing credential is in state `temporary`.
+  //
+  // Otherwise a missing current_pin returns InvalidArgument with a
+  // google.rpc.BadRequest naming the field, and a wrong one returns PermissionDenied.
   optional string current_pin = 3;
 }
 
@@ -1202,6 +1216,9 @@ message SetPINResponse {
 // Org-Managed Accounts — Admin Management Messages
 // =============================================================================
 
+// login_identifier MUST NOT contain '@'. PIN login resolves an identifier against
+// login_identifier OR email, so the two namespaces are kept disjoint; a value containing
+// '@' returns InvalidArgument with a google.rpc.BadRequest naming the field.
 message CreateOrgAccountRequest {
   string login_identifier = 1;
   string display_name = 2;

@@ -13,6 +13,7 @@ import { onAuthFailure } from "apis";
 import { createMobileAdapter } from "@/lib/platform-adapter";
 import { API_BASE_URL } from "@/lib/constants";
 import { clearPersistedQueryCache, queryClient } from "@/lib/query-client";
+import { clearOnboarding } from "@/lib/onboarding-progress";
 
 const TOKEN_KEY = "tech_office_access_token";
 const TOKEN_EXPIRES_KEY = "tech_office_token_expires_at";
@@ -167,6 +168,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = useCallback(async () => {
     await clearStoredAuth();
     resetAuthenticatedAppState();
+    // Onboarding belongs to the session that started it. Leaving it set would send the
+    // next person to sign in on this device into someone else's PIN step.
+    clearOnboarding();
 
     setState({
       isLoading: false,

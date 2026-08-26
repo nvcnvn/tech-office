@@ -74,8 +74,15 @@ type IAMLogic interface {
 	GetActiveSessionsForUser(ctx context.Context, tx database.DBTX, userID dbuuid.UUID) ([]*database.IamSession, error)
 
 	// Org-managed accounts (PIN-based workers)
-	LoginWithPIN(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, loginIdentifier, pin string) (*LoginWithPINResult, error)
-	SetPIN(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID, newPIN string) error
+	// LoginWithPIN authenticates a member with a PIN. identifier is matched against the
+	// identity's login_identifier OR its email, with login_identifier taking precedence,
+	// so an owner registered by email and a worker issued a badge number use one field.
+	LoginWithPIN(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, identifier, pin string) (*LoginWithPINResult, error)
+	// SetPIN sets or rotates a PIN credential. currentPIN is REQUIRED and verified when the
+	// identity already holds an `active` PIN and no pin_change_token authorised the call.
+	// First-time set — no credential, a `temporary` credential, or a pin_change_token — is
+	// exempt and passes an empty currentPIN.
+	SetPIN(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID, newPIN, currentPIN string, viaPINChangeToken bool) error
 	CreateOrgAccount(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, createdBy dbuuid.UUID, req CreateOrgAccountParams) (*CreateOrgAccountResult, error)
 	DeactivateOrgAccount(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID) error
 	UnlockOrgAccount(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID, resetPIN bool) (*string, error)

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file rpc/v1/organization.proto.
  */
 export const file_rpc_v1_organization: GenFile = /*@__PURE__*/
-  fileDesc("ChlycGMvdjEvb3JnYW5pemF0aW9uLnByb3RvEgZycGMudjEiNgohR2V0T3JnYW5pemF0aW9uQnlTdWJkb21haW5SZXF1ZXN0EhEKCXN1YmRvbWFpbhgBIAEoCSJQCiJHZXRPcmdhbml6YXRpb25CeVN1YmRvbWFpblJlc3BvbnNlEioKDG9yZ2FuaXphdGlvbhgBIAEoCzIULnJwYy52MS5Pcmdhbml6YXRpb24iuQEKLFJlZ2lzdGVyT3JnYW5pemF0aW9uV2l0aEFkbWluUGFzc3dvcmRSZXF1ZXN0EhQKDGNvbXBhbnlfbmFtZRgBIAEoCRIRCglzdWJkb21haW4YAiABKAkSEwoLYWRtaW5fZW1haWwYAyABKAkSFgoOYWRtaW5fcGFzc3dvcmQYBCABKAkSGAoQYWRtaW5fZ2l2ZW5fbmFtZRgFIAEoCRIZChFhZG1pbl9mYW1pbHlfbmFtZRgGIAEoCSJbCi1SZWdpc3Rlck9yZ2FuaXphdGlvbldpdGhBZG1pblBhc3N3b3JkUmVzcG9uc2USKgoMb3JnYW5pemF0aW9uGAEgASgLMhQucnBjLnYxLk9yZ2FuaXphdGlvbiKWAQoMT3JnYW5pemF0aW9uEgoKAmlkGAEgASgJEhQKDGNvbXBhbnlfbmFtZRgCIAEoCRIRCglzdWJkb21haW4YAyABKAkSEQoJY2xpZW50X2lkGAQgASgJEg4KBnN0YXR1cxgFIAEoCRIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChZTZWFyY2hFbXBsb3llZXNSZXF1ZXN0EhIKCnF1ZXJ5X3RleHQYASABKAkSDQoFbGltaXQYAiABKAUSDgoGY3Vyc29yGAMgASgJIngKF1NlYXJjaEVtcGxveWVlc1Jlc3BvbnNlEi0KB3Jlc3VsdHMYASADKAsyHC5ycGMudjEuRW1wbG95ZWVTZWFyY2hSZXN1bHQSEwoLbmV4dF9jdXJzb3IYAiABKAkSGQoRcXVlcnlfZHVyYXRpb25fbXMYAyABKAUitgEKFEVtcGxveWVlU2VhcmNoUmVzdWx0EgoKAmlkGAEgASgJEg0KBWVtYWlsGAIgASgJEhIKCmdpdmVuX25hbWUYAyABKAkSEwoLZmFtaWx5X25hbWUYBCABKAkSEQoJaXNfYWN0aXZlGAUgASgIEhcKD3JlbGV2YW5jZV9zY29yZRgGIAEoAhIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJNChhTZWFyY2hEZXBhcnRtZW50c1JlcXVlc3QSEgoKcXVlcnlfdGV4dBgBIAEoCRINCgVsaW1pdBgCIAEoBRIOCgZjdXJzb3IYAyABKAkifAoZU2VhcmNoRGVwYXJ0bWVudHNSZXNwb25zZRIvCgdyZXN1bHRzGAEgAygLMh4ucnBjLnYxLkRlcGFydG1lbnRTZWFyY2hSZXN1bHQSEwoLbmV4dF9jdXJzb3IYAiABKAkSGQoRcXVlcnlfZHVyYXRpb25fbXMYAyABKAUixAEKFkRlcGFydG1lbnRTZWFyY2hSZXN1bHQSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIUCgxtZW1iZXJfY291bnQYBCABKAUSHAoUcGFyZW50X2RlcGFydG1lbnRfaWQYBSABKAkSFwoPcmVsZXZhbmNlX3Njb3JlGAYgASgCEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIj0KHEF1dG9jb21wbGV0ZUVtcGxveWVlc1JlcXVlc3QSDgoGcHJlZml4GAEgASgJEg0KBWxpbWl0GAIgASgFIlwKHUF1dG9jb21wbGV0ZUVtcGxveWVlc1Jlc3BvbnNlEjsKC3N1Z2dlc3Rpb25zGAEgAygLMiYucnBjLnYxLkVtcGxveWVlQXV0b2NvbXBsZXRlU3VnZ2VzdGlvbiJkCh5FbXBsb3llZUF1dG9jb21wbGV0ZVN1Z2dlc3Rpb24SCgoCaWQYASABKAkSDQoFZW1haWwYAiABKAkSEgoKZ2l2ZW5fbmFtZRgDIAEoCRITCgtmYW1pbHlfbmFtZRgEIAEoCSI/Ch5BdXRvY29tcGxldGVEZXBhcnRtZW50c1JlcXVlc3QSDgoGcHJlZml4GAEgASgJEg0KBWxpbWl0GAIgASgFImAKH0F1dG9jb21wbGV0ZURlcGFydG1lbnRzUmVzcG9uc2USPQoLc3VnZ2VzdGlvbnMYASADKAsyKC5ycGMudjEuRGVwYXJ0bWVudEF1dG9jb21wbGV0ZVN1Z2dlc3Rpb24iUQogRGVwYXJ0bWVudEF1dG9jb21wbGV0ZVN1Z2dlc3Rpb24SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCTKiBgoTT3JnYW5pemF0aW9uU2VydmljZRJ7ChpHZXRPcmdhbml6YXRpb25CeVN1YmRvbWFpbhIpLnJwYy52MS5HZXRPcmdhbml6YXRpb25CeVN1YmRvbWFpblJlcXVlc3QaKi5ycGMudjEuR2V0T3JnYW5pemF0aW9uQnlTdWJkb21haW5SZXNwb25zZSIGgvkrAhABEpwBCiVSZWdpc3Rlck9yZ2FuaXphdGlvbldpdGhBZG1pblBhc3N3b3JkEjQucnBjLnYxLlJlZ2lzdGVyT3JnYW5pemF0aW9uV2l0aEFkbWluUGFzc3dvcmRSZXF1ZXN0GjUucnBjLnYxLlJlZ2lzdGVyT3JnYW5pemF0aW9uV2l0aEFkbWluUGFzc3dvcmRSZXNwb25zZSIGgvkrAhABEm0KD1NlYXJjaEVtcGxveWVlcxIeLnJwYy52MS5TZWFyY2hFbXBsb3llZXNSZXF1ZXN0Gh8ucnBjLnYxLlNlYXJjaEVtcGxveWVlc1Jlc3BvbnNlIhmC+SsVChNvcmcuc2VhcmNoRW1wbG95ZWVzEnUKEVNlYXJjaERlcGFydG1lbnRzEiAucnBjLnYxLlNlYXJjaERlcGFydG1lbnRzUmVxdWVzdBohLnJwYy52MS5TZWFyY2hEZXBhcnRtZW50c1Jlc3BvbnNlIhuC+SsXChVvcmcuc2VhcmNoRGVwYXJ0bWVudHMSfwoVQXV0b2NvbXBsZXRlRW1wbG95ZWVzEiQucnBjLnYxLkF1dG9jb21wbGV0ZUVtcGxveWVlc1JlcXVlc3QaJS5ycGMudjEuQXV0b2NvbXBsZXRlRW1wbG95ZWVzUmVzcG9uc2UiGYL5KxUKE29yZy5zZWFyY2hFbXBsb3llZXMShwEKF0F1dG9jb21wbGV0ZURlcGFydG1lbnRzEiYucnBjLnYxLkF1dG9jb21wbGV0ZURlcGFydG1lbnRzUmVxdWVzdBonLnJwYy52MS5BdXRvY29tcGxldGVEZXBhcnRtZW50c1Jlc3BvbnNlIhuC+SsXChVvcmcuc2VhcmNoRGVwYXJ0bWVudHNCjAEKCmNvbS5ycGMudjFCEU9yZ2FuaXphdGlvblByb3RvUAFaMmdpdGh1Yi5jb20vbnZjbnZuL3RlY2gtb2ZmaWNlL2JhY2tlbmQvcnBjL3YxO3JwY3YxogIDUlhYqgIGUnBjLlYxygIGUnBjXFYx4gISUnBjXFYxXEdQQk1ldGFkYXRh6gIHUnBjOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp, file_rpc_v1_rbac]);
+  fileDesc("ChlycGMvdjEvb3JnYW5pemF0aW9uLnByb3RvEgZycGMudjEiNgohR2V0T3JnYW5pemF0aW9uQnlTdWJkb21haW5SZXF1ZXN0EhEKCXN1YmRvbWFpbhgBIAEoCSJQCiJHZXRPcmdhbml6YXRpb25CeVN1YmRvbWFpblJlc3BvbnNlEioKDG9yZ2FuaXphdGlvbhgBIAEoCzIULnJwYy52MS5Pcmdhbml6YXRpb24iuQEKLFJlZ2lzdGVyT3JnYW5pemF0aW9uV2l0aEFkbWluUGFzc3dvcmRSZXF1ZXN0EhQKDGNvbXBhbnlfbmFtZRgBIAEoCRIRCglzdWJkb21haW4YAiABKAkSEwoLYWRtaW5fZW1haWwYAyABKAkSFgoOYWRtaW5fcGFzc3dvcmQYBCABKAkSGAoQYWRtaW5fZ2l2ZW5fbmFtZRgFIAEoCRIZChFhZG1pbl9mYW1pbHlfbmFtZRgGIAEoCSJbCi1SZWdpc3Rlck9yZ2FuaXphdGlvbldpdGhBZG1pblBhc3N3b3JkUmVzcG9uc2USKgoMb3JnYW5pemF0aW9uGAEgASgLMhQucnBjLnYxLk9yZ2FuaXphdGlvbiIzCh5DaGVja1N1YmRvbWFpbkF2YWlsYWJsZVJlcXVlc3QSEQoJc3ViZG9tYWluGAEgASgJIkcKH0NoZWNrU3ViZG9tYWluQXZhaWxhYmxlUmVzcG9uc2USEQoJYXZhaWxhYmxlGAEgASgIEhEKCXN1Z2dlc3RlZBgCIAEoCSKWAQoMT3JnYW5pemF0aW9uEgoKAmlkGAEgASgJEhQKDGNvbXBhbnlfbmFtZRgCIAEoCRIRCglzdWJkb21haW4YAyABKAkSEQoJY2xpZW50X2lkGAQgASgJEg4KBnN0YXR1cxgFIAEoCRIuCgp1cGRhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJLChZTZWFyY2hFbXBsb3llZXNSZXF1ZXN0EhIKCnF1ZXJ5X3RleHQYASABKAkSDQoFbGltaXQYAiABKAUSDgoGY3Vyc29yGAMgASgJIngKF1NlYXJjaEVtcGxveWVlc1Jlc3BvbnNlEi0KB3Jlc3VsdHMYASADKAsyHC5ycGMudjEuRW1wbG95ZWVTZWFyY2hSZXN1bHQSEwoLbmV4dF9jdXJzb3IYAiABKAkSGQoRcXVlcnlfZHVyYXRpb25fbXMYAyABKAUitgEKFEVtcGxveWVlU2VhcmNoUmVzdWx0EgoKAmlkGAEgASgJEg0KBWVtYWlsGAIgASgJEhIKCmdpdmVuX25hbWUYAyABKAkSEwoLZmFtaWx5X25hbWUYBCABKAkSEQoJaXNfYWN0aXZlGAUgASgIEhcKD3JlbGV2YW5jZV9zY29yZRgGIAEoAhIuCgp1cGRhdGVkX2F0GAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJNChhTZWFyY2hEZXBhcnRtZW50c1JlcXVlc3QSEgoKcXVlcnlfdGV4dBgBIAEoCRINCgVsaW1pdBgCIAEoBRIOCgZjdXJzb3IYAyABKAkifAoZU2VhcmNoRGVwYXJ0bWVudHNSZXNwb25zZRIvCgdyZXN1bHRzGAEgAygLMh4ucnBjLnYxLkRlcGFydG1lbnRTZWFyY2hSZXN1bHQSEwoLbmV4dF9jdXJzb3IYAiABKAkSGQoRcXVlcnlfZHVyYXRpb25fbXMYAyABKAUixAEKFkRlcGFydG1lbnRTZWFyY2hSZXN1bHQSCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIUCgxtZW1iZXJfY291bnQYBCABKAUSHAoUcGFyZW50X2RlcGFydG1lbnRfaWQYBSABKAkSFwoPcmVsZXZhbmNlX3Njb3JlGAYgASgCEi4KCnVwZGF0ZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIj0KHEF1dG9jb21wbGV0ZUVtcGxveWVlc1JlcXVlc3QSDgoGcHJlZml4GAEgASgJEg0KBWxpbWl0GAIgASgFIlwKHUF1dG9jb21wbGV0ZUVtcGxveWVlc1Jlc3BvbnNlEjsKC3N1Z2dlc3Rpb25zGAEgAygLMiYucnBjLnYxLkVtcGxveWVlQXV0b2NvbXBsZXRlU3VnZ2VzdGlvbiJkCh5FbXBsb3llZUF1dG9jb21wbGV0ZVN1Z2dlc3Rpb24SCgoCaWQYASABKAkSDQoFZW1haWwYAiABKAkSEgoKZ2l2ZW5fbmFtZRgDIAEoCRITCgtmYW1pbHlfbmFtZRgEIAEoCSI/Ch5BdXRvY29tcGxldGVEZXBhcnRtZW50c1JlcXVlc3QSDgoGcHJlZml4GAEgASgJEg0KBWxpbWl0GAIgASgFImAKH0F1dG9jb21wbGV0ZURlcGFydG1lbnRzUmVzcG9uc2USPQoLc3VnZ2VzdGlvbnMYASADKAsyKC5ycGMudjEuRGVwYXJ0bWVudEF1dG9jb21wbGV0ZVN1Z2dlc3Rpb24iUQogRGVwYXJ0bWVudEF1dG9jb21wbGV0ZVN1Z2dlc3Rpb24SCgoCaWQYASABKAkSDAoEbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCTKWBwoTT3JnYW5pemF0aW9uU2VydmljZRJ7ChpHZXRPcmdhbml6YXRpb25CeVN1YmRvbWFpbhIpLnJwYy52MS5HZXRPcmdhbml6YXRpb25CeVN1YmRvbWFpblJlcXVlc3QaKi5ycGMudjEuR2V0T3JnYW5pemF0aW9uQnlTdWJkb21haW5SZXNwb25zZSIGgvkrAhABEpwBCiVSZWdpc3Rlck9yZ2FuaXphdGlvbldpdGhBZG1pblBhc3N3b3JkEjQucnBjLnYxLlJlZ2lzdGVyT3JnYW5pemF0aW9uV2l0aEFkbWluUGFzc3dvcmRSZXF1ZXN0GjUucnBjLnYxLlJlZ2lzdGVyT3JnYW5pemF0aW9uV2l0aEFkbWluUGFzc3dvcmRSZXNwb25zZSIGgvkrAhABEnIKF0NoZWNrU3ViZG9tYWluQXZhaWxhYmxlEiYucnBjLnYxLkNoZWNrU3ViZG9tYWluQXZhaWxhYmxlUmVxdWVzdBonLnJwYy52MS5DaGVja1N1YmRvbWFpbkF2YWlsYWJsZVJlc3BvbnNlIgaC+SsCEAESbQoPU2VhcmNoRW1wbG95ZWVzEh4ucnBjLnYxLlNlYXJjaEVtcGxveWVlc1JlcXVlc3QaHy5ycGMudjEuU2VhcmNoRW1wbG95ZWVzUmVzcG9uc2UiGYL5KxUKE29yZy5zZWFyY2hFbXBsb3llZXMSdQoRU2VhcmNoRGVwYXJ0bWVudHMSIC5ycGMudjEuU2VhcmNoRGVwYXJ0bWVudHNSZXF1ZXN0GiEucnBjLnYxLlNlYXJjaERlcGFydG1lbnRzUmVzcG9uc2UiG4L5KxcKFW9yZy5zZWFyY2hEZXBhcnRtZW50cxJ/ChVBdXRvY29tcGxldGVFbXBsb3llZXMSJC5ycGMudjEuQXV0b2NvbXBsZXRlRW1wbG95ZWVzUmVxdWVzdBolLnJwYy52MS5BdXRvY29tcGxldGVFbXBsb3llZXNSZXNwb25zZSIZgvkrFQoTb3JnLnNlYXJjaEVtcGxveWVlcxKHAQoXQXV0b2NvbXBsZXRlRGVwYXJ0bWVudHMSJi5ycGMudjEuQXV0b2NvbXBsZXRlRGVwYXJ0bWVudHNSZXF1ZXN0GicucnBjLnYxLkF1dG9jb21wbGV0ZURlcGFydG1lbnRzUmVzcG9uc2UiG4L5KxcKFW9yZy5zZWFyY2hEZXBhcnRtZW50c0KMAQoKY29tLnJwYy52MUIRT3JnYW5pemF0aW9uUHJvdG9QAVoyZ2l0aHViLmNvbS9udmNudm4vdGVjaC1vZmZpY2UvYmFja2VuZC9ycGMvdjE7cnBjdjGiAgNSWFiqAgZScGMuVjHKAgZScGNcVjHiAhJScGNcVjFcR1BCTWV0YWRhdGHqAgdScGM6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp, file_rpc_v1_rbac]);
 
 /**
  * @generated from message rpc.v1.GetOrganizationBySubdomainRequest
@@ -111,6 +111,51 @@ export const RegisterOrganizationWithAdminPasswordResponseSchema: GenMessage<Reg
   messageDesc(file_rpc_v1_organization, 3);
 
 /**
+ * @generated from message rpc.v1.CheckSubdomainAvailableRequest
+ */
+export type CheckSubdomainAvailableRequest = Message<"rpc.v1.CheckSubdomainAvailableRequest"> & {
+  /**
+   * The candidate address, without the domain suffix. Case-insensitive.
+   *
+   * @generated from field: string subdomain = 1;
+   */
+  subdomain: string;
+};
+
+/**
+ * Describes the message rpc.v1.CheckSubdomainAvailableRequest.
+ * Use `create(CheckSubdomainAvailableRequestSchema)` to create a new message.
+ */
+export const CheckSubdomainAvailableRequestSchema: GenMessage<CheckSubdomainAvailableRequest> = /*@__PURE__*/
+  messageDesc(file_rpc_v1_organization, 4);
+
+/**
+ * @generated from message rpc.v1.CheckSubdomainAvailableResponse
+ */
+export type CheckSubdomainAvailableResponse = Message<"rpc.v1.CheckSubdomainAvailableResponse"> & {
+  /**
+   * @generated from field: bool available = 1;
+   */
+  available: boolean;
+
+  /**
+   * Populated only when available=false: the next free variant of the requested address
+   * (e.g. "annas-cafe" taken -> "annas-cafe-2"), so the client can offer it inline
+   * without a second round trip.
+   *
+   * @generated from field: string suggested = 2;
+   */
+  suggested: string;
+};
+
+/**
+ * Describes the message rpc.v1.CheckSubdomainAvailableResponse.
+ * Use `create(CheckSubdomainAvailableResponseSchema)` to create a new message.
+ */
+export const CheckSubdomainAvailableResponseSchema: GenMessage<CheckSubdomainAvailableResponse> = /*@__PURE__*/
+  messageDesc(file_rpc_v1_organization, 5);
+
+/**
  * @generated from message rpc.v1.Organization
  */
 export type Organization = Message<"rpc.v1.Organization"> & {
@@ -150,7 +195,7 @@ export type Organization = Message<"rpc.v1.Organization"> & {
  * Use `create(OrganizationSchema)` to create a new message.
  */
 export const OrganizationSchema: GenMessage<Organization> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 4);
+  messageDesc(file_rpc_v1_organization, 6);
 
 /**
  * @generated from message rpc.v1.SearchEmployeesRequest
@@ -183,7 +228,7 @@ export type SearchEmployeesRequest = Message<"rpc.v1.SearchEmployeesRequest"> & 
  * Use `create(SearchEmployeesRequestSchema)` to create a new message.
  */
 export const SearchEmployeesRequestSchema: GenMessage<SearchEmployeesRequest> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 5);
+  messageDesc(file_rpc_v1_organization, 7);
 
 /**
  * @generated from message rpc.v1.SearchEmployeesResponse
@@ -212,7 +257,7 @@ export type SearchEmployeesResponse = Message<"rpc.v1.SearchEmployeesResponse"> 
  * Use `create(SearchEmployeesResponseSchema)` to create a new message.
  */
 export const SearchEmployeesResponseSchema: GenMessage<SearchEmployeesResponse> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 6);
+  messageDesc(file_rpc_v1_organization, 8);
 
 /**
  * @generated from message rpc.v1.EmployeeSearchResult
@@ -261,7 +306,7 @@ export type EmployeeSearchResult = Message<"rpc.v1.EmployeeSearchResult"> & {
  * Use `create(EmployeeSearchResultSchema)` to create a new message.
  */
 export const EmployeeSearchResultSchema: GenMessage<EmployeeSearchResult> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 7);
+  messageDesc(file_rpc_v1_organization, 9);
 
 /**
  * @generated from message rpc.v1.SearchDepartmentsRequest
@@ -288,7 +333,7 @@ export type SearchDepartmentsRequest = Message<"rpc.v1.SearchDepartmentsRequest"
  * Use `create(SearchDepartmentsRequestSchema)` to create a new message.
  */
 export const SearchDepartmentsRequestSchema: GenMessage<SearchDepartmentsRequest> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 8);
+  messageDesc(file_rpc_v1_organization, 10);
 
 /**
  * @generated from message rpc.v1.SearchDepartmentsResponse
@@ -315,7 +360,7 @@ export type SearchDepartmentsResponse = Message<"rpc.v1.SearchDepartmentsRespons
  * Use `create(SearchDepartmentsResponseSchema)` to create a new message.
  */
 export const SearchDepartmentsResponseSchema: GenMessage<SearchDepartmentsResponse> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 9);
+  messageDesc(file_rpc_v1_organization, 11);
 
 /**
  * @generated from message rpc.v1.DepartmentSearchResult
@@ -364,7 +409,7 @@ export type DepartmentSearchResult = Message<"rpc.v1.DepartmentSearchResult"> & 
  * Use `create(DepartmentSearchResultSchema)` to create a new message.
  */
 export const DepartmentSearchResultSchema: GenMessage<DepartmentSearchResult> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 10);
+  messageDesc(file_rpc_v1_organization, 12);
 
 /**
  * @generated from message rpc.v1.AutocompleteEmployeesRequest
@@ -390,7 +435,7 @@ export type AutocompleteEmployeesRequest = Message<"rpc.v1.AutocompleteEmployees
  * Use `create(AutocompleteEmployeesRequestSchema)` to create a new message.
  */
 export const AutocompleteEmployeesRequestSchema: GenMessage<AutocompleteEmployeesRequest> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 11);
+  messageDesc(file_rpc_v1_organization, 13);
 
 /**
  * @generated from message rpc.v1.AutocompleteEmployeesResponse
@@ -407,7 +452,7 @@ export type AutocompleteEmployeesResponse = Message<"rpc.v1.AutocompleteEmployee
  * Use `create(AutocompleteEmployeesResponseSchema)` to create a new message.
  */
 export const AutocompleteEmployeesResponseSchema: GenMessage<AutocompleteEmployeesResponse> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 12);
+  messageDesc(file_rpc_v1_organization, 14);
 
 /**
  * @generated from message rpc.v1.EmployeeAutocompleteSuggestion
@@ -439,7 +484,7 @@ export type EmployeeAutocompleteSuggestion = Message<"rpc.v1.EmployeeAutocomplet
  * Use `create(EmployeeAutocompleteSuggestionSchema)` to create a new message.
  */
 export const EmployeeAutocompleteSuggestionSchema: GenMessage<EmployeeAutocompleteSuggestion> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 13);
+  messageDesc(file_rpc_v1_organization, 15);
 
 /**
  * @generated from message rpc.v1.AutocompleteDepartmentsRequest
@@ -461,7 +506,7 @@ export type AutocompleteDepartmentsRequest = Message<"rpc.v1.AutocompleteDepartm
  * Use `create(AutocompleteDepartmentsRequestSchema)` to create a new message.
  */
 export const AutocompleteDepartmentsRequestSchema: GenMessage<AutocompleteDepartmentsRequest> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 14);
+  messageDesc(file_rpc_v1_organization, 16);
 
 /**
  * @generated from message rpc.v1.AutocompleteDepartmentsResponse
@@ -478,7 +523,7 @@ export type AutocompleteDepartmentsResponse = Message<"rpc.v1.AutocompleteDepart
  * Use `create(AutocompleteDepartmentsResponseSchema)` to create a new message.
  */
 export const AutocompleteDepartmentsResponseSchema: GenMessage<AutocompleteDepartmentsResponse> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 15);
+  messageDesc(file_rpc_v1_organization, 17);
 
 /**
  * @generated from message rpc.v1.DepartmentAutocompleteSuggestion
@@ -505,7 +550,7 @@ export type DepartmentAutocompleteSuggestion = Message<"rpc.v1.DepartmentAutocom
  * Use `create(DepartmentAutocompleteSuggestionSchema)` to create a new message.
  */
 export const DepartmentAutocompleteSuggestionSchema: GenMessage<DepartmentAutocompleteSuggestion> = /*@__PURE__*/
-  messageDesc(file_rpc_v1_organization, 16);
+  messageDesc(file_rpc_v1_organization, 18);
 
 /**
  * @generated from service rpc.v1.OrganizationService
@@ -525,6 +570,9 @@ export const OrganizationService: GenService<{
   },
   /**
    * RegisterOrganizationWithAdminPassword allows unauthenticated users to register a new organization along with an admin user using email and password.
+   * The subdomain is validated server-side for format and availability before insert. A
+   * taken address returns AlreadyExists and a malformed one InvalidArgument, both with a
+   * google.rpc.BadRequest naming the `subdomain` field.
    *
    * @generated from rpc rpc.v1.OrganizationService.RegisterOrganizationWithAdminPassword
    */
@@ -532,6 +580,21 @@ export const OrganizationService: GenService<{
     methodKind: "unary";
     input: typeof RegisterOrganizationWithAdminPasswordRequestSchema;
     output: typeof RegisterOrganizationWithAdminPasswordResponseSchema;
+  },
+  /**
+   * CheckSubdomainAvailable reports whether a workspace address is free and well-formed,
+   * so a signup form can validate before submit instead of surfacing a raw unique-constraint
+   * violation. Unauthenticated — it is called before an account exists.
+   *
+   * A malformed address returns InvalidArgument with a google.rpc.BadRequest detail.
+   * A taken-but-valid address is a successful response with available=false, not an error.
+   *
+   * @generated from rpc rpc.v1.OrganizationService.CheckSubdomainAvailable
+   */
+  checkSubdomainAvailable: {
+    methodKind: "unary";
+    input: typeof CheckSubdomainAvailableRequestSchema;
+    output: typeof CheckSubdomainAvailableResponseSchema;
   },
   /**
    * Search Methods (Multilingual Fuzzy Search)

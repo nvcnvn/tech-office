@@ -80,6 +80,8 @@ export default function ResetPasswordScreen() {
                 borderRadius: 12,
                 marginTop: 8,
               }}
+            
+              testID="reset-password-back-to-signin"
             >
               <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
                 Sign In
@@ -102,7 +104,9 @@ export default function ResetPasswordScreen() {
                 textContentType="newPassword"
                 value={password}
                 onChangeText={setPassword}
-              />
+              
+              testID="reset-password-new"
+            />
             </View>
             <View style={{ gap: 4 }}>
               <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
@@ -115,7 +119,9 @@ export default function ResetPasswordScreen() {
                 textContentType="newPassword"
                 value={confirm}
                 onChangeText={setConfirm}
-              />
+              
+              testID="reset-password-confirm"
+            />
             </View>
             <Pressable
               onPress={handleSubmit}
@@ -128,6 +134,8 @@ export default function ResetPasswordScreen() {
                 alignItems: "center",
                 marginTop: 8,
               })}
+            
+              testID="reset-password-submit"
             >
               {loading ? (
                 <ActivityIndicator color="#fff" />

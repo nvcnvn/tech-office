@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -20,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/nvcnvn/tech-office/backend/database"
@@ -3521,4 +3523,199 @@ func (w *testWorld) getChannelContextSummaryError(actor testUser, channelID stri
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	_, err := w.chat.GetChannelContextSummary(context.Background(), req)
 	return err
+}
+
+// ---------------------------------------------------------------------------
+// Act: Organization — workspace address (feature 035)
+// ---------------------------------------------------------------------------
+
+// checkSubdomainAvailable asks whether a workspace address is free. Unauthenticated:
+// a signup form calls this before an account exists.
+func (w *testWorld) checkSubdomainAvailable(subdomain string) *rpcv1.CheckSubdomainAvailableResponse {
+	w.t.Helper()
+	resp, err := w.org.CheckSubdomainAvailable(context.Background(),
+		connect.NewRequest(&rpcv1.CheckSubdomainAvailableRequest{Subdomain: subdomain}))
+	require.NoError(w.t, err, "checkSubdomainAvailable")
+	return resp.Msg
+}
+
+func (w *testWorld) checkSubdomainAvailableError(subdomain string) error {
+	w.t.Helper()
+	_, err := w.org.CheckSubdomainAvailable(context.Background(),
+		connect.NewRequest(&rpcv1.CheckSubdomainAvailableRequest{Subdomain: subdomain}))
+	return err
+}
+
+// registerOrganization registers a workspace and returns the owner's email, the created
+// organization, and the subdomain actually stored. Unauthenticated.
+func (w *testWorld) registerOrganization(companyName, subdomain string) (*rpcv1.Organization, string) {
+	w.t.Helper()
+	email := uniqueTestEmail("owner")
+	resp, err := w.org.RegisterOrganizationWithAdminPassword(context.Background(),
+		connect.NewRequest(&rpcv1.RegisterOrganizationWithAdminPasswordRequest{
+			CompanyName:     companyName,
+			Subdomain:       subdomain,
+			AdminEmail:      email,
+			AdminPassword:   "Test1234!",
+			AdminGivenName:  "Test",
+			AdminFamilyName: "Owner",
+		}))
+	require.NoError(w.t, err, "registerOrganization")
+	orgID, parseErr := dbuuid.Parse(resp.Msg.Organization.Id)
+	require.NoError(w.t, parseErr, "parse org ID")
+	rememberOrg(orgID)
+	return resp.Msg.Organization, email
+}
+
+func (w *testWorld) registerOrganizationError(companyName, subdomain string) error {
+	w.t.Helper()
+	_, err := w.org.RegisterOrganizationWithAdminPassword(context.Background(),
+		connect.NewRequest(&rpcv1.RegisterOrganizationWithAdminPasswordRequest{
+			CompanyName:     companyName,
+			Subdomain:       subdomain,
+			AdminEmail:      uniqueTestEmail("owner"),
+			AdminPassword:   "Test1234!",
+			AdminGivenName:  "Test",
+			AdminFamilyName: "Owner",
+		}))
+	return err
+}
+
+// ---------------------------------------------------------------------------
+// Act: IAM — PIN (feature 035)
+// ---------------------------------------------------------------------------
+
+// setPIN calls SetPIN with a session token. currentPIN is empty for a first-time set and
+// populated for a voluntary change of an established PIN.
+func (w *testWorld) setPIN(actor testUser, newPIN, currentPIN string) (*rpcv1.SetPINResponse, error) {
+	w.t.Helper()
+	msg := &rpcv1.SetPINRequest{NewPin: newPIN}
+	if currentPIN != "" {
+		msg.CurrentPin = &currentPIN
+	}
+	req := connect.NewRequest(msg)
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.iamClient.SetPIN(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+// subdomainOf returns the subdomain stored for an organization.
+func (w *testWorld) subdomainOf(orgID dbuuid.UUID) string {
+	w.t.Helper()
+	var subdomain string
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT subdomain FROM public.organization WHERE id = $1`, orgID,
+	).Scan(&subdomain)
+	require.NoError(w.t, err, "query org subdomain")
+	return subdomain
+}
+
+// ownerUserOf returns the owner identity of an organization as an authenticated testUser.
+func (w *testWorld) ownerUserOf(orgID dbuuid.UUID, email string) testUser {
+	w.t.Helper()
+	var ownerID dbuuid.UUID
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT er.employee_id FROM iam.employee_role er
+		 JOIN iam.role r ON r.organization_id = er.organization_id AND r.id = er.role_id
+		 WHERE er.organization_id = $1 AND r.source_default_role_id = 'owner'
+		 LIMIT 1`, orgID,
+	).Scan(&ownerID)
+	require.NoError(w.t, err, "find owner user in DB")
+
+	token, _, _, err := globalSigner.GenerateTokenWithOrg(ownerID, email, orgID)
+	require.NoError(w.t, err, "generate owner JWT")
+	return testUser{ID: ownerID, OrgID: orgID, Token: token}
+}
+
+// retryDelayFromError extracts the google.rpc.RetryInfo delay attached to a lockout error.
+// Returns ok=false when the detail is absent, which is the tier-4 (full lock) case.
+func retryDelayFromError(t *testing.T, err error) (time.Duration, bool) {
+	t.Helper()
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) {
+		return 0, false
+	}
+	for _, detail := range connectErr.Details() {
+		value, valueErr := detail.Value()
+		if valueErr != nil {
+			continue
+		}
+		if retryInfo, ok := value.(*errdetails.RetryInfo); ok {
+			return retryInfo.GetRetryDelay().AsDuration(), true
+		}
+	}
+	return 0, false
+}
+
+// fieldViolations returns the google.rpc.BadRequest field names carried by an error.
+func fieldViolations(t *testing.T, err error) []string {
+	t.Helper()
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) {
+		return nil
+	}
+	var fields []string
+	for _, detail := range connectErr.Details() {
+		value, valueErr := detail.Value()
+		if valueErr != nil {
+			continue
+		}
+		if badRequest, ok := value.(*errdetails.BadRequest); ok {
+			for _, violation := range badRequest.GetFieldViolations() {
+				fields = append(fields, violation.GetField())
+			}
+		}
+	}
+	return fields
+}
+
+// employeeEmail returns the email recorded on an actor's employee record.
+func (w *testWorld) employeeEmail(actor testUser) string {
+	w.t.Helper()
+	var email string
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT email FROM organization.employee WHERE organization_id = $1 AND id = $2`,
+		actor.OrgID, actor.ID,
+	).Scan(&email)
+	require.NoError(w.t, err, "query employee email")
+	return email
+}
+
+// identityIDByLoginIdentifier resolves an org-managed account's identity ID.
+func (w *testWorld) identityIDByLoginIdentifier(orgID dbuuid.UUID, loginIdentifier string) dbuuid.UUID {
+	w.t.Helper()
+	var id dbuuid.UUID
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT id FROM iam.identity WHERE organization_id = $1 AND login_identifier = $2`,
+		orgID, loginIdentifier,
+	).Scan(&id)
+	require.NoError(w.t, err, "query identity by login identifier")
+	return id
+}
+
+// forceLockout puts an identity into a given lockout tier directly. Escalation past tier 1
+// needs the previous lockout to expire in wall-clock time, which a test cannot wait out, so
+// tests that exercise a specific tier arrange it rather than provoke it. Pass a zero
+// duration for the full lock, which has no expiry.
+func (w *testWorld) forceLockout(orgID, identityID dbuuid.UUID, tier int, remaining time.Duration) {
+	w.t.Helper()
+	var lockoutUntil any
+	if remaining > 0 {
+		lockoutUntil = time.Now().Add(remaining)
+	}
+	_, err := globalDB.Exec(context.Background(),
+		`INSERT INTO iam.account_lockout
+		     (organization_id, identity_id, failed_attempts, lockout_tier, lockout_until, last_failed_at, updated_at)
+		 VALUES ($1, $2, $3, $3, $4, now(), now())
+		 ON CONFLICT (organization_id, identity_id) DO UPDATE
+		 SET failed_attempts = EXCLUDED.failed_attempts,
+		     lockout_tier    = EXCLUDED.lockout_tier,
+		     lockout_until   = EXCLUDED.lockout_until,
+		     last_failed_at  = EXCLUDED.last_failed_at,
+		     updated_at      = EXCLUDED.updated_at`,
+		orgID, identityID, tier, lockoutUntil)
+	require.NoError(w.t, err, "force lockout tier %d", tier)
 }

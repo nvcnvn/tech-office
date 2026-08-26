@@ -39,6 +39,9 @@ const (
 	// OrganizationServiceRegisterOrganizationWithAdminPasswordProcedure is the fully-qualified name of
 	// the OrganizationService's RegisterOrganizationWithAdminPassword RPC.
 	OrganizationServiceRegisterOrganizationWithAdminPasswordProcedure = "/rpc.v1.OrganizationService/RegisterOrganizationWithAdminPassword"
+	// OrganizationServiceCheckSubdomainAvailableProcedure is the fully-qualified name of the
+	// OrganizationService's CheckSubdomainAvailable RPC.
+	OrganizationServiceCheckSubdomainAvailableProcedure = "/rpc.v1.OrganizationService/CheckSubdomainAvailable"
 	// OrganizationServiceSearchEmployeesProcedure is the fully-qualified name of the
 	// OrganizationService's SearchEmployees RPC.
 	OrganizationServiceSearchEmployeesProcedure = "/rpc.v1.OrganizationService/SearchEmployees"
@@ -60,7 +63,17 @@ type OrganizationServiceClient interface {
 	// Example: subdomain="acme" → returns {id: "uuid", company_name: "Acme Corporation"}
 	GetOrganizationBySubdomain(context.Context, *connect.Request[v1.GetOrganizationBySubdomainRequest]) (*connect.Response[v1.GetOrganizationBySubdomainResponse], error)
 	// RegisterOrganizationWithAdminPassword allows unauthenticated users to register a new organization along with an admin user using email and password.
+	// The subdomain is validated server-side for format and availability before insert. A
+	// taken address returns AlreadyExists and a malformed one InvalidArgument, both with a
+	// google.rpc.BadRequest naming the `subdomain` field.
 	RegisterOrganizationWithAdminPassword(context.Context, *connect.Request[v1.RegisterOrganizationWithAdminPasswordRequest]) (*connect.Response[v1.RegisterOrganizationWithAdminPasswordResponse], error)
+	// CheckSubdomainAvailable reports whether a workspace address is free and well-formed,
+	// so a signup form can validate before submit instead of surfacing a raw unique-constraint
+	// violation. Unauthenticated — it is called before an account exists.
+	//
+	// A malformed address returns InvalidArgument with a google.rpc.BadRequest detail.
+	// A taken-but-valid address is a successful response with available=false, not an error.
+	CheckSubdomainAvailable(context.Context, *connect.Request[v1.CheckSubdomainAvailableRequest]) (*connect.Response[v1.CheckSubdomainAvailableResponse], error)
 	// Search Methods (Multilingual Fuzzy Search)
 	SearchEmployees(context.Context, *connect.Request[v1.SearchEmployeesRequest]) (*connect.Response[v1.SearchEmployeesResponse], error)
 	SearchDepartments(context.Context, *connect.Request[v1.SearchDepartmentsRequest]) (*connect.Response[v1.SearchDepartmentsResponse], error)
@@ -89,6 +102,12 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			httpClient,
 			baseURL+OrganizationServiceRegisterOrganizationWithAdminPasswordProcedure,
 			connect.WithSchema(organizationServiceMethods.ByName("RegisterOrganizationWithAdminPassword")),
+			connect.WithClientOptions(opts...),
+		),
+		checkSubdomainAvailable: connect.NewClient[v1.CheckSubdomainAvailableRequest, v1.CheckSubdomainAvailableResponse](
+			httpClient,
+			baseURL+OrganizationServiceCheckSubdomainAvailableProcedure,
+			connect.WithSchema(organizationServiceMethods.ByName("CheckSubdomainAvailable")),
 			connect.WithClientOptions(opts...),
 		),
 		searchEmployees: connect.NewClient[v1.SearchEmployeesRequest, v1.SearchEmployeesResponse](
@@ -122,6 +141,7 @@ func NewOrganizationServiceClient(httpClient connect.HTTPClient, baseURL string,
 type organizationServiceClient struct {
 	getOrganizationBySubdomain            *connect.Client[v1.GetOrganizationBySubdomainRequest, v1.GetOrganizationBySubdomainResponse]
 	registerOrganizationWithAdminPassword *connect.Client[v1.RegisterOrganizationWithAdminPasswordRequest, v1.RegisterOrganizationWithAdminPasswordResponse]
+	checkSubdomainAvailable               *connect.Client[v1.CheckSubdomainAvailableRequest, v1.CheckSubdomainAvailableResponse]
 	searchEmployees                       *connect.Client[v1.SearchEmployeesRequest, v1.SearchEmployeesResponse]
 	searchDepartments                     *connect.Client[v1.SearchDepartmentsRequest, v1.SearchDepartmentsResponse]
 	autocompleteEmployees                 *connect.Client[v1.AutocompleteEmployeesRequest, v1.AutocompleteEmployeesResponse]
@@ -137,6 +157,11 @@ func (c *organizationServiceClient) GetOrganizationBySubdomain(ctx context.Conte
 // rpc.v1.OrganizationService.RegisterOrganizationWithAdminPassword.
 func (c *organizationServiceClient) RegisterOrganizationWithAdminPassword(ctx context.Context, req *connect.Request[v1.RegisterOrganizationWithAdminPasswordRequest]) (*connect.Response[v1.RegisterOrganizationWithAdminPasswordResponse], error) {
 	return c.registerOrganizationWithAdminPassword.CallUnary(ctx, req)
+}
+
+// CheckSubdomainAvailable calls rpc.v1.OrganizationService.CheckSubdomainAvailable.
+func (c *organizationServiceClient) CheckSubdomainAvailable(ctx context.Context, req *connect.Request[v1.CheckSubdomainAvailableRequest]) (*connect.Response[v1.CheckSubdomainAvailableResponse], error) {
+	return c.checkSubdomainAvailable.CallUnary(ctx, req)
 }
 
 // SearchEmployees calls rpc.v1.OrganizationService.SearchEmployees.
@@ -166,7 +191,17 @@ type OrganizationServiceHandler interface {
 	// Example: subdomain="acme" → returns {id: "uuid", company_name: "Acme Corporation"}
 	GetOrganizationBySubdomain(context.Context, *connect.Request[v1.GetOrganizationBySubdomainRequest]) (*connect.Response[v1.GetOrganizationBySubdomainResponse], error)
 	// RegisterOrganizationWithAdminPassword allows unauthenticated users to register a new organization along with an admin user using email and password.
+	// The subdomain is validated server-side for format and availability before insert. A
+	// taken address returns AlreadyExists and a malformed one InvalidArgument, both with a
+	// google.rpc.BadRequest naming the `subdomain` field.
 	RegisterOrganizationWithAdminPassword(context.Context, *connect.Request[v1.RegisterOrganizationWithAdminPasswordRequest]) (*connect.Response[v1.RegisterOrganizationWithAdminPasswordResponse], error)
+	// CheckSubdomainAvailable reports whether a workspace address is free and well-formed,
+	// so a signup form can validate before submit instead of surfacing a raw unique-constraint
+	// violation. Unauthenticated — it is called before an account exists.
+	//
+	// A malformed address returns InvalidArgument with a google.rpc.BadRequest detail.
+	// A taken-but-valid address is a successful response with available=false, not an error.
+	CheckSubdomainAvailable(context.Context, *connect.Request[v1.CheckSubdomainAvailableRequest]) (*connect.Response[v1.CheckSubdomainAvailableResponse], error)
 	// Search Methods (Multilingual Fuzzy Search)
 	SearchEmployees(context.Context, *connect.Request[v1.SearchEmployeesRequest]) (*connect.Response[v1.SearchEmployeesResponse], error)
 	SearchDepartments(context.Context, *connect.Request[v1.SearchDepartmentsRequest]) (*connect.Response[v1.SearchDepartmentsResponse], error)
@@ -191,6 +226,12 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 		OrganizationServiceRegisterOrganizationWithAdminPasswordProcedure,
 		svc.RegisterOrganizationWithAdminPassword,
 		connect.WithSchema(organizationServiceMethods.ByName("RegisterOrganizationWithAdminPassword")),
+		connect.WithHandlerOptions(opts...),
+	)
+	organizationServiceCheckSubdomainAvailableHandler := connect.NewUnaryHandler(
+		OrganizationServiceCheckSubdomainAvailableProcedure,
+		svc.CheckSubdomainAvailable,
+		connect.WithSchema(organizationServiceMethods.ByName("CheckSubdomainAvailable")),
 		connect.WithHandlerOptions(opts...),
 	)
 	organizationServiceSearchEmployeesHandler := connect.NewUnaryHandler(
@@ -223,6 +264,8 @@ func NewOrganizationServiceHandler(svc OrganizationServiceHandler, opts ...conne
 			organizationServiceGetOrganizationBySubdomainHandler.ServeHTTP(w, r)
 		case OrganizationServiceRegisterOrganizationWithAdminPasswordProcedure:
 			organizationServiceRegisterOrganizationWithAdminPasswordHandler.ServeHTTP(w, r)
+		case OrganizationServiceCheckSubdomainAvailableProcedure:
+			organizationServiceCheckSubdomainAvailableHandler.ServeHTTP(w, r)
 		case OrganizationServiceSearchEmployeesProcedure:
 			organizationServiceSearchEmployeesHandler.ServeHTTP(w, r)
 		case OrganizationServiceSearchDepartmentsProcedure:
@@ -246,6 +289,10 @@ func (UnimplementedOrganizationServiceHandler) GetOrganizationBySubdomain(contex
 
 func (UnimplementedOrganizationServiceHandler) RegisterOrganizationWithAdminPassword(context.Context, *connect.Request[v1.RegisterOrganizationWithAdminPasswordRequest]) (*connect.Response[v1.RegisterOrganizationWithAdminPasswordResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.OrganizationService.RegisterOrganizationWithAdminPassword is not implemented"))
+}
+
+func (UnimplementedOrganizationServiceHandler) CheckSubdomainAvailable(context.Context, *connect.Request[v1.CheckSubdomainAvailableRequest]) (*connect.Response[v1.CheckSubdomainAvailableResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.OrganizationService.CheckSubdomainAvailable is not implemented"))
 }
 
 func (UnimplementedOrganizationServiceHandler) SearchEmployees(context.Context, *connect.Request[v1.SearchEmployeesRequest]) (*connect.Response[v1.SearchEmployeesResponse], error) {

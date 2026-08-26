@@ -512,11 +512,21 @@ ORDER BY ac.employee_id, ac.last_pong_at DESC;
 -- =============================================================================
 
 -- name: GetIdentityByOrgAndLoginIdentifier :one
--- Finds an org-scoped identity by login_identifier for PIN-based login.
+-- Finds an org-scoped identity for PIN-based login by login_identifier OR email.
+-- Org-managed workers are keyed on login_identifier; owners registered by email have a
+-- NULL login_identifier, so the email fallback is what lets an owner hold a PIN.
+-- Both columns are unique per organization but their union is not, so an exact
+-- login_identifier match is ordered first to make the result deterministic.
+-- CreateOrgAccount rejects '@' in login_identifier, which keeps the namespaces disjoint.
 SELECT i.id, i.organization_id, i.email, i.login_identifier, i.identity_type, i.updated_at
 FROM iam.identity i
 WHERE i.organization_id = @organization_id::uuid
-  AND i.login_identifier = @login_identifier::text;
+  AND (i.login_identifier = @identifier::text
+       OR lower(i.email) = lower(@identifier::text))
+-- NULLS LAST matters: an owner's login_identifier is NULL, and Postgres orders NULLs
+-- first under DESC, which would rank a non-matching owner above an exact worker match.
+ORDER BY (i.login_identifier = @identifier::text) DESC NULLS LAST
+LIMIT 1;
 
 -- name: GetOrgBySubdomain :one
 -- Resolves organization from subdomain for PIN login flow.

@@ -17,12 +17,12 @@ so every user story carries backend scenario tests and at least one Maestro flow
 
 ## ⚠️ Blocking governance gate
 
-**No task in Phase 3–6 may merge until the Principle XIII conflict is resolved.** The
-constitution restricts organization creation and member management to web. This feature puts
-both on mobile. See plan.md → Complexity Tracking. Resolution is the product owner's decision
-(amend XIII to carve out first-run onboarding, or cancel the feature).
+**RESOLVED 2026-08-26.** Constitution v5.17.0 amends Principle XIII with a narrow, exhaustive
+first-run onboarding carve-out permitting exactly two otherwise-administrative capabilities on
+mobile: creating an organization, and creating the first org-managed accounts. Ongoing IAM
+administration remains web-only. Phases 3–6 are unblocked.
 
-- [ ] T000 Resolve Principle XIII gate: amend `.specify/memory/constitution.md` to permit first-run onboarding on mobile (MINOR version bump, update Version History), or record the decision to stop
+- [X] T000 Resolve Principle XIII gate: amend `.specify/memory/constitution.md` to permit first-run onboarding on mobile (MINOR version bump, update Version History), or record the decision to stop
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -40,9 +40,9 @@ API wrappers at `frontend/packages/apis/`.
 
 **Purpose**: Directory and codegen scaffolding the later phases write into
 
-- [ ] T001 [P] Create the onboarding route group `frontend/apps/mobile/src/app/(onboarding)/_layout.tsx` exporting a `Stack` with `headerBackVisible: false`
-- [ ] T002 [P] Create the Maestro onboarding directory `frontend/apps/mobile/.maestro/onboarding/` with a `.gitkeep`
-- [ ] T003 Verify `make sqlc` and `make proto` run clean on the current tree before any contract edits
+- [X] T001 [P] Create the onboarding route group `frontend/apps/mobile/src/app/(onboarding)/_layout.tsx` exporting a `Stack` with `headerBackVisible: false`
+- [X] T002 [P] Create the Maestro onboarding directory `frontend/apps/mobile/.maestro/onboarding/` with a `.gitkeep`
+- [X] T003 Verify `make sqlc` and `make proto` run clean on the current tree before any contract edits
 
 ---
 
@@ -53,15 +53,15 @@ API wrappers at `frontend/packages/apis/`.
 **⚠️ CRITICAL**: T004–T006 prove research decision D1. If the email lookup does not work, the
 design changes and Phases 3–6 are invalid. Do these first and stop if they fail.
 
-- [ ] T004 Widen `GetIdentityByOrgAndLoginIdentifier` in `backend/database/scripts/iam.query.sql` to match `login_identifier` OR `lower(email)`, with `ORDER BY (login_identifier = @identifier) DESC LIMIT 1` for deterministic precedence, then run `make sqlc`
-- [ ] T005 Update `LoginWithPIN` in `backend/internal/iam/logic_org_accounts.go` to pass the single identifier through to the widened query and rename the local parameter from `loginIdentifier` to `identifier`
-- [ ] T006 Add integration test in `backend/integration/iam_auth_methods_test.go` proving an email-registered owner can `SetPIN` then `LoginWithPIN` using their email, and that a worker's `login_identifier` still resolves and takes precedence over a colliding email
-- [ ] T007 [P] Reject `login_identifier` values containing `@` in `CreateOrgAccount` in `backend/internal/iam/logic_org_accounts.go`, with a new `ErrLoginIdentifierInvalid` in `backend/internal/iam/errors.go`
-- [ ] T008 [P] Attach `google.rpc.RetryInfo` to lockout errors in `backend/internal/iam/connect_org_accounts.go` per `contracts/error-details.md`, omitting the detail for tier 4 (full lock)
-- [ ] T009 [P] Add `RetryInfo` and `BadRequest` extraction helpers to `frontend/packages/apis/src/errors.ts`, returning undefined rather than throwing when the detail is absent or malformed
-- [ ] T010 Add integration test in `backend/integration/iam_auth_methods_test.go` verifying the lockout `RetryInfo` round-trip: tiers 1–3 carry a delay within one second of the remaining lockout, tier 4 carries none
-- [ ] T011 [P] Add `auth.last_display_name` read/write/clear to `frontend/apps/mobile/src/lib/auth-subdomain-storage.ts`, and a `clearRememberedAuth()` that clears subdomain, identifier and display name together
-- [ ] T012 [P] Create `frontend/apps/mobile/src/lib/onboarding-progress.ts` with MMKV-backed `onboarding.step` (`pin` | `teammate` | `done`) and `onboarding.subdomain`, per data-model.md
+- [X] T004 Widen `GetIdentityByOrgAndLoginIdentifier` in `backend/database/scripts/iam.query.sql` to match `login_identifier` OR `lower(email)`, with `ORDER BY (login_identifier = @identifier) DESC LIMIT 1` for deterministic precedence, then run `make sqlc`
+- [X] T005 Update `LoginWithPIN` in `backend/internal/iam/logic_org_accounts.go` to pass the single identifier through to the widened query and rename the local parameter from `loginIdentifier` to `identifier`
+- [X] T006 Add integration test in `backend/integration/iam_auth_methods_test.go` proving an email-registered owner can `SetPIN` then `LoginWithPIN` using their email, and that a worker's `login_identifier` still resolves and takes precedence over a colliding email
+- [X] T007 [P] Reject `login_identifier` values containing `@` in `CreateOrgAccount` in `backend/internal/iam/logic_org_accounts.go`, with a new `ErrLoginIdentifierInvalid` in `backend/internal/iam/errors.go`
+- [X] T008 [P] Attach `google.rpc.RetryInfo` to lockout errors in `backend/internal/iam/connect_org_accounts.go` per `contracts/error-details.md`, omitting the detail for tier 4 (full lock)
+- [X] T009 [P] Add `RetryInfo` and `BadRequest` extraction helpers to `frontend/packages/apis/src/errors.ts`, returning undefined rather than throwing when the detail is absent or malformed
+- [X] T010 Add integration test in `backend/integration/iam_auth_methods_test.go` verifying the lockout `RetryInfo` round-trip: tiers 1–3 carry a delay within one second of the remaining lockout, tier 4 carries none
+- [X] T011 [P] Add `auth.last_display_name` read/write/clear to `frontend/apps/mobile/src/lib/auth-subdomain-storage.ts`, and a `clearRememberedAuth()` that clears subdomain, identifier and display name together
+- [X] T012 [P] Create `frontend/apps/mobile/src/lib/onboarding-progress.ts` with MMKV-backed `onboarding.step` (`pin` | `teammate` | `done`) and `onboarding.subdomain`, per data-model.md
 
 **Checkpoint**: An owner can hold a usable PIN, lockouts carry timing, and the device can
 remember a name. User stories can begin.
@@ -78,20 +78,20 @@ onboarding work existing.
 
 ### Tests for User Story 1
 
-- [ ] T013 [P] [US1] Write Maestro flow `frontend/apps/mobile/.maestro/auth/signin-known-device.yaml` — sign in, relaunch with `clearState: false` and `clearKeychain: false`, assert the display name is visible and no workspace field is present, enter the PIN, assert the app lands in chat
-- [ ] T014 [P] [US1] Update `frontend/apps/mobile/.maestro/auth/signin.yaml` to follow the fresh-device sequence, applying the `eraseText: 20` workaround before each secure field
+- [X] T013 [P] [US1] Write Maestro flow `frontend/apps/mobile/.maestro/auth/signin-known-device.yaml` — sign in, relaunch with `clearState: false` and `clearKeychain: false`, assert the display name is visible and no workspace field is present, enter the PIN, assert the app lands in chat
+- [X] T014 [P] [US1] Update `frontend/apps/mobile/.maestro/auth/signin.yaml` to follow the fresh-device sequence, applying the `eraseText: 20` workaround before each secure field
 
 ### Implementation for User Story 1
 
-- [ ] T015 [US1] Delete the method picker `frontend/apps/mobile/src/app/(auth)/index.tsx`
-- [ ] T016 [US1] Repoint `frontend/apps/mobile/src/app/canonical-signin.tsx` and the `(auth)` index route to the PIN screen, preserving the `Linking` deep-link handler and `setPendingPostSignInRedirect` behaviour deleted with T015
-- [ ] T017 [US1] Rewrite `frontend/apps/mobile/src/app/(auth)/pin.tsx` known-device state: avatar, display name, workspace name, six PIN boxes, keypad focused on mount, auto-submit on the sixth digit, no editable field
-- [ ] T018 [US1] Implement the fresh-device state in `frontend/apps/mobile/src/app/(auth)/pin.tsx` as a revealed sequence — workspace, then identifier, then PIN — with answered steps collapsing to a checked line with an Edit affordance
-- [ ] T019 [US1] Validate the workspace at its own step in `pin.tsx` via `getOrganizationBySubdomain`, failing there with "We couldn't find that workspace. Check the spelling with your manager."
-- [ ] T020 [US1] Persist display name alongside subdomain and identifier on successful PIN login in `pin.tsx`, and wire "Not you?" to `clearRememberedAuth()` from T011
-- [ ] T021 [US1] Replace every `Alert.alert` in `pin.tsx` with inline banner or field-level text; on failure clear the boxes in place, keep the keypad up, and fire `Haptics.notificationAsync(Error)` on iOS via `process.env.EXPO_OS`
-- [ ] T022 [US1] Render the lockout countdown in `pin.tsx` from the `RetryInfo` helper (T009), reading tier thresholds from the synced constants rather than restating them, per Constitution VIII
-- [ ] T023 [US1] Rewrite all user-facing copy in `pin.tsx` per the spec: "Where do you work?", "Who are you?" / "Your ID or work email", "Enter your PIN", "Sign in with email" — and add `testID` to every interactive element per Constitution XIII
+- [X] T015 [US1] Delete the method picker `frontend/apps/mobile/src/app/(auth)/index.tsx`
+- [X] T016 [US1] Repoint `frontend/apps/mobile/src/app/canonical-signin.tsx` and the `(auth)` index route to the PIN screen, preserving the `Linking` deep-link handler and `setPendingPostSignInRedirect` behaviour deleted with T015
+- [X] T017 [US1] Rewrite `frontend/apps/mobile/src/app/(auth)/pin.tsx` known-device state: avatar, display name, workspace name, six PIN boxes, keypad focused on mount, auto-submit on the sixth digit, no editable field
+- [X] T018 [US1] Implement the fresh-device state in `frontend/apps/mobile/src/app/(auth)/pin.tsx` as a revealed sequence — workspace, then identifier, then PIN — with answered steps collapsing to a checked line with an Edit affordance
+- [X] T019 [US1] Validate the workspace at its own step in `pin.tsx` via `getOrganizationBySubdomain`, failing there with "We couldn't find that workspace. Check the spelling with your manager."
+- [X] T020 [US1] Persist display name alongside subdomain and identifier on successful PIN login in `pin.tsx`, and wire "Not you?" to `clearRememberedAuth()` from T011
+- [X] T021 [US1] Replace every `Alert.alert` in `pin.tsx` with inline banner or field-level text; on failure clear the boxes in place, keep the keypad up, and fire `Haptics.notificationAsync(Error)` on iOS via `process.env.EXPO_OS`
+- [X] T022 [US1] Render the lockout countdown in `pin.tsx` from the `RetryInfo` helper (T009), reading tier thresholds from the synced constants rather than restating them, per Constitution VIII
+- [X] T023 [US1] Rewrite all user-facing copy in `pin.tsx` per the spec: "Where do you work?", "Who are you?" / "Your ID or work email", "Enter your PIN", "Sign in with email" — and add `testID` to every interactive element per Constitution XIII
 
 **Checkpoint**: US1 is fully functional and shippable on its own.
 
@@ -107,21 +107,21 @@ session in a new organization. Testable without the PIN or teammate steps existi
 
 ### Tests for User Story 2
 
-- [ ] T024 [P] [US2] Add integration test in `backend/integration/mobile_owner_onboarding_test.go` for subdomain derivation and collision: two organizations with the same company name produce `annas-cafe` and `annas-cafe-2`
-- [ ] T025 [P] [US2] Add integration test in `backend/integration/mobile_owner_onboarding_test.go` asserting a taken subdomain returns `AlreadyExists` with a `google.rpc.BadRequest` naming the `subdomain` field, and a malformed one returns `InvalidArgument`
+- [X] T024 [P] [US2] Add integration test in `backend/integration/mobile_owner_onboarding_test.go` for subdomain derivation and collision: two organizations with the same company name produce `annas-cafe` and `annas-cafe-2`
+- [X] T025 [P] [US2] Add integration test in `backend/integration/mobile_owner_onboarding_test.go` asserting a taken subdomain returns `AlreadyExists` with a `google.rpc.BadRequest` naming the `subdomain` field, and a malformed one returns `InvalidArgument`
 
 ### Implementation for User Story 2
 
-- [ ] T026 [P] [US2] Create `backend/internal/organization/subdomain.go` with `Derive(companyName)`, `Normalize`, and `Validate` implementing the format rules and reserved-word list in data-model.md
-- [ ] T027 [US2] Add `CheckSubdomainAvailable` to `backend/rpc/v1/organization.proto` per `contracts/organization.proto`, marked unauthenticated in its `access_control` option, then run `make proto`
-- [ ] T028 [US2] Implement `CheckSubdomainAvailable` in `backend/internal/organization/connect.go`, returning `available=false` with a `suggested` variant rather than an error for a taken-but-valid address
-- [ ] T029 [US2] Validate the subdomain in `RegisterOrganizationWithAdmin` in `backend/internal/organization/logic.go` before insert, and return a typed conflict carrying `BadRequest` instead of the raw unique-violation surfaced today
-- [ ] T030 [P] [US2] Add `registerOrganization` and `checkSubdomainAvailable` wrappers with hand-written input/output types to `frontend/packages/apis/src/organization.ts`, per Constitution VII
-- [ ] T031 [US2] Rewrite `frontend/apps/mobile/src/app/(auth)/signup.tsx` with four fields — company name, owner name, email, password — deleting the stubbed success `Alert` that currently reports success without creating anything
-- [ ] T032 [US2] Display the derived workspace address live under the company-name field in `signup.tsx` as "Your team will sign in at …" with a Change affordance, never as an empty required field
-- [ ] T033 [US2] Check availability on blur in `signup.tsx` and offer the suggested alternative inline without blocking the form
-- [ ] T034 [US2] Chain register → `login` behind a single spinner in `signup.tsx`, and on partial failure show "Your workspace is ready, but we couldn't sign you in. Try signing in with your email." rather than a signup failure
-- [ ] T035 [US2] State the 8-character password rule before submit in `signup.tsx`, add `testID` to every interactive element, and link "Create a workspace" from the sign-in screen built in T018
+- [X] T026 [P] [US2] Create `backend/internal/organization/subdomain.go` with `Derive(companyName)`, `Normalize`, and `Validate` implementing the format rules and reserved-word list in data-model.md
+- [X] T027 [US2] Add `CheckSubdomainAvailable` to `backend/rpc/v1/organization.proto` per `contracts/organization.proto`, marked unauthenticated in its `access_control` option, then run `make proto`
+- [X] T028 [US2] Implement `CheckSubdomainAvailable` in `backend/internal/organization/connect.go`, returning `available=false` with a `suggested` variant rather than an error for a taken-but-valid address
+- [X] T029 [US2] Validate the subdomain in `RegisterOrganizationWithAdmin` in `backend/internal/organization/logic.go` before insert, and return a typed conflict carrying `BadRequest` instead of the raw unique-violation surfaced today
+- [X] T030 [P] [US2] Add `registerOrganization` and `checkSubdomainAvailable` wrappers with hand-written input/output types to `frontend/packages/apis/src/organization.ts`, per Constitution VII
+- [X] T031 [US2] Rewrite `frontend/apps/mobile/src/app/(auth)/signup.tsx` with four fields — company name, owner name, email, password — deleting the stubbed success `Alert` that currently reports success without creating anything
+- [X] T032 [US2] Display the derived workspace address live under the company-name field in `signup.tsx` as "Your team will sign in at …" with a Change affordance, never as an empty required field
+- [X] T033 [US2] Check availability on blur in `signup.tsx` and offer the suggested alternative inline without blocking the form
+- [X] T034 [US2] Chain register → `login` behind a single spinner in `signup.tsx`, and on partial failure show "Your workspace is ready, but we couldn't sign you in. Try signing in with your email." rather than a signup failure
+- [X] T035 [US2] State the 8-character password rule before submit in `signup.tsx`, add `testID` to every interactive element, and link "Create a workspace" from the sign-in screen built in T018
 
 **Checkpoint**: US1 and US2 both work independently.
 
@@ -138,22 +138,22 @@ pre-filled.
 
 ### Tests for User Story 3
 
-- [ ] T036 [P] [US3] Add integration test in `backend/integration/org_managed_accounts_test.go` asserting a voluntary `SetPIN` without `current_pin` is rejected, a wrong `current_pin` is rejected, and first-time set — no credential, `temporary` credential, or `pin_change_token` — remains exempt
-- [ ] T037 [P] [US3] Write Maestro flow `frontend/apps/mobile/.maestro/onboarding/owner-signup.yaml` covering signup → PIN with confirmation → add teammate → assert the one-time code is visible, using a run-unique company name so repeated local runs do not collide
+- [X] T036 [P] [US3] Add integration test in `backend/integration/org_managed_accounts_test.go` asserting a voluntary `SetPIN` without `current_pin` is rejected, a wrong `current_pin` is rejected, and first-time set — no credential, `temporary` credential, or `pin_change_token` — remains exempt
+- [X] T037 [P] [US3] Write Maestro flow `frontend/apps/mobile/.maestro/onboarding/owner-signup.yaml` covering signup → PIN with confirmation → add teammate → assert the one-time code is visible, using a run-unique company name so repeated local runs do not collide
 
 ### Implementation for User Story 3
 
-- [ ] T038 [US3] Add a `currentPIN` parameter to `iamLogicImpl.SetPIN` in `backend/internal/iam/logic_org_accounts.go` and verify it with `ComparePINHash` when an `active` credential exists and no `pin_change_token` was supplied
-- [ ] T039 [US3] Pass `req.Msg.CurrentPin` through in `backend/internal/iam/connect_org_accounts.go` — the handler currently ignores the field entirely — and add `ErrCurrentPINRequired` and `ErrCurrentPINIncorrect` to `backend/internal/iam/errors.go`
-- [ ] T040 [US3] Update the `SetPIN` proto comment in `backend/rpc/v1/iam.proto` per `contracts/iam.proto` to document the now-enforced field and its exemptions
-- [ ] T041 [P] [US3] Update the `setPIN` wrapper in `frontend/packages/apis/src/iam-org-accounts.ts` to accept an optional `currentPin`, and update the web caller at `frontend/apps/web/src/app/login/pin/set-pin/` in the same change set — this is a breaking change and all clients ship together
-- [ ] T042 [US3] Create `frontend/apps/mobile/src/app/(onboarding)/set-pin.tsx` — six boxes, confirmation entry revealed after the first completes, no skip and no back
-- [ ] T043 [US3] Add the recovery info card to `(onboarding)/set-pin.tsx` stating that email and password remain the way back in, per spec FR-010
-- [ ] T044 [US3] Handle `ComparePINWithPersonalData` rejection in `(onboarding)/set-pin.tsx` as "Pick something that isn't your birthday or phone number — those are easy to guess."
-- [ ] T045 [US3] Create `frontend/apps/mobile/src/app/(onboarding)/add-teammate.tsx` with name and identifier fields calling `createOrgAccount`, plus a "Skip for now" secondary action
-- [ ] T046 [US3] Display the returned one-time PIN in `(onboarding)/add-teammate.tsx` with a warning-weight banner, `fontVariant: 'tabular-nums'`, and `selectable`, stating it is shown once and expires in 3 days
-- [ ] T047 [US3] Make the OS share sheet the primary action in `(onboarding)/add-teammate.tsx`, pre-filled with workspace, identifier, PIN and expiry in plain language per research D5, with clipboard copy as a quieter secondary
-- [ ] T048 [US3] Write and advance `onboarding-progress` (T012) after registration and after each step, and route into the first incomplete step from `frontend/apps/mobile/src/app/(onboarding)/_layout.tsx` so an interrupted owner resumes at the PIN step rather than at signup
+- [X] T038 [US3] Add a `currentPIN` parameter to `iamLogicImpl.SetPIN` in `backend/internal/iam/logic_org_accounts.go` and verify it with `ComparePINHash` when an `active` credential exists and no `pin_change_token` was supplied
+- [X] T039 [US3] Pass `req.Msg.CurrentPin` through in `backend/internal/iam/connect_org_accounts.go` — the handler currently ignores the field entirely — and add `ErrCurrentPINRequired` and `ErrCurrentPINIncorrect` to `backend/internal/iam/errors.go`
+- [X] T040 [US3] Update the `SetPIN` proto comment in `backend/rpc/v1/iam.proto` per `contracts/iam.proto` to document the now-enforced field and its exemptions
+- [X] T041 [P] [US3] Update the `setPIN` wrapper in `frontend/packages/apis/src/iam-org-accounts.ts` to accept an optional `currentPin`, and update the web caller at `frontend/apps/web/src/app/login/pin/set-pin/` in the same change set — this is a breaking change and all clients ship together
+- [X] T042 [US3] Create `frontend/apps/mobile/src/app/(onboarding)/set-pin.tsx` — six boxes, confirmation entry revealed after the first completes, no skip and no back
+- [X] T043 [US3] Add the recovery info card to `(onboarding)/set-pin.tsx` stating that email and password remain the way back in, per spec FR-010
+- [X] T044 [US3] Handle `ComparePINWithPersonalData` rejection in `(onboarding)/set-pin.tsx` as "Pick something that isn't your birthday or phone number — those are easy to guess."
+- [X] T045 [US3] Create `frontend/apps/mobile/src/app/(onboarding)/add-teammate.tsx` with name and identifier fields calling `createOrgAccount`, plus a "Skip for now" secondary action
+- [X] T046 [US3] Display the returned one-time PIN in `(onboarding)/add-teammate.tsx` with a warning-weight banner, `fontVariant: 'tabular-nums'`, and `selectable`, stating it is shown once and expires in 3 days
+- [X] T047 [US3] Make the OS share sheet the primary action in `(onboarding)/add-teammate.tsx`, pre-filled with workspace, identifier, PIN and expiry in plain language per research D5, with clipboard copy as a quieter secondary
+- [X] T048 [US3] Write and advance `onboarding-progress` (T012) after registration and after each step, and route into the first incomplete step from `frontend/apps/mobile/src/app/(onboarding)/_layout.tsx` so an interrupted owner resumes at the PIN step rather than at signup
 
 **Checkpoint**: All three user stories work independently.
 
@@ -161,14 +161,23 @@ pre-filled.
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T049 Update `docs/domain/auth-identity.md` — the PIN section to record email-or-identifier resolution, the client-surfaces list for the deleted picker and the new `(onboarding)` group, and drift entry D4, per Constitution XII
-- [ ] T050 [P] Audit all five screens for internal vocabulary and confirm no string contains "subdomain", "organization context", "SSO", "account ID" or "identifier" (spec SC-004)
-- [ ] T051 [P] Audit the five screens for hardcoded colours and replace with `@tech-office/theme-tokens`, per Constitution VII
-- [ ] T052 [P] Confirm every interactive element across `(auth)` and `(onboarding)` carries a `testID`, per Constitution XIII
-- [ ] T053 Run `make test-mobile` and confirm the full suite is green with zero failures
-- [ ] T054 Run `go test ./integration/...` and confirm no regression in `iam_permission_test.go`, `organization_onboarding_test.go` or `multi_tenancy_test.go`
-- [ ] T055 Walk the six manual checks in quickstart.md on a mid-range device in portrait, timing the fresh-install-to-workspace path against SC-002 (under three minutes)
-- [ ] T056 Delete `frontend/apps/mobile/src/hooks/use-biometrics.ts` if still imported by nothing, or record it in the drift register — do not leave it ambiguous while touching this domain
+- [X] T049 Update `docs/domain/auth-identity.md` — the PIN section to record email-or-identifier resolution, the client-surfaces list for the deleted picker and the new `(onboarding)` group, and drift entry D4, per Constitution XII
+- [X] T050 [P] Audit all five screens for internal vocabulary and confirm no string contains "subdomain", "organization context", "SSO", "account ID" or "identifier" (spec SC-004)
+- [X] T051 [P] Audit the five screens for hardcoded colours and replace with `@tech-office/theme-tokens`, per Constitution VII
+- [X] T052 [P] Confirm every interactive element across `(auth)` and `(onboarding)` carries a `testID`, per Constitution XIII
+- [~] T053 Run `make test-mobile` — **7 of 8 flows pass**, one blocked on an iOS platform limitation.
+  Passing: `auth/signin-known-device` (US1, end to end), `auth/signin`, and all six coverage
+  flows. Blocked: `onboarding/owner-signup` — iOS 18 covers the signup password field with
+  its automatic-strong-password view, a system view outside the app's accessibility tree
+  that Maestro can neither see nor tap, so the password never reaches the field. Everything
+  before and after that one field drives correctly. `textContentType="password"`, explicit
+  `autoComplete` and `passwordRules` were all tried and do not suppress it; only a full
+  AutoFill opt-out does, at the cost of password-manager fill on the credential that is the
+  owner's PIN-recovery anchor. Recorded in the flow header and in `(auth)/signup.tsx`.
+  **Decision needed** before this can go green.
+- [X] T054 Run `go test ./integration/...` and confirm no regression in `iam_permission_test.go`, `organization_onboarding_test.go` or `multi_tenancy_test.go`
+- [~] T055 **Not done — requires a human on a physical mid-range device.** Walk the six manual checks in quickstart.md on a mid-range device in portrait, timing the fresh-install-to-workspace path against SC-002 (under three minutes)
+- [X] T056 Delete `frontend/apps/mobile/src/hooks/use-biometrics.ts` if still imported by nothing, or record it in the drift register — do not leave it ambiguous while touching this domain
 
 ---
 

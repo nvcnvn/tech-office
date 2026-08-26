@@ -1,20 +1,72 @@
 import { ConnectError, Code } from "@connectrpc/connect";
 import { iamClient } from "./rpc";
 import { rpcCall } from "./rpcWrapper";
-import { extractPinAuthErrorDetail, extractFieldViolations } from "./errorDetails";
+import {
+	extractPinAuthErrorDetail,
+	extractFieldViolations,
+	fieldViolation,
+	lockoutRetrySeconds,
+} from "./errorDetails";
 import type { PinAuthErrorDetail, FieldViolation } from "./errorDetails";
+
+/**
+ * PIN length, in digits.
+ *
+ * MUST align with:
+ * - Backend Go constant: internal/iam/constants.go
+ * - Backend validation: iam.ValidatePINFormat
+ *
+ * Clients mask input and size their entry boxes from this value rather than restating 6.
+ */
+export const PIN_LENGTH = 6;
+
+/**
+ * Days a temporary PIN issued by CreateOrgAccount remains usable.
+ *
+ * MUST align with the backend expiry written to iam.credential.expires_at.
+ * Copy that tells a worker how long their code lasts reads this rather than restating 3.
+ */
+export const TEMPORARY_PIN_EXPIRY_DAYS = 3;
 
 // Custom error classes for PIN-based auth
 export class AccountLockedError extends Error {
 	public detail: PinAuthErrorDetail;
 
-	constructor(detail: PinAuthErrorDetail) {
+	/**
+	 * Seconds remaining on the lockout, from the server's google.rpc.RetryInfo. Undefined
+	 * at the full-lock tier, and whenever no retry time was transmitted — a caller with no
+	 * value shows its generic message rather than an invented countdown.
+	 */
+	public retrySeconds?: number;
+
+	constructor(detail: PinAuthErrorDetail, retrySeconds?: number) {
 		const msg = detail.adminResetRequired
 			? "Account is locked. Contact your administrator to unlock."
 			: `Account is locked until ${new Date(Number(detail.lockoutUntilUnix) * 1000).toISOString()}`;
 		super(msg);
 		this.name = "AccountLockedError";
 		this.detail = detail;
+		this.retrySeconds = retrySeconds;
+	}
+}
+
+/**
+ * Thrown when a voluntary PIN change is attempted without the current PIN, or with a wrong
+ * one. First-time set — no credential, a temporary credential, or a PIN change token — is
+ * exempt and never raises this.
+ */
+export class CurrentPINError extends Error {
+	/** True when the current PIN was supplied but did not match. */
+	public incorrect: boolean;
+
+	constructor(incorrect: boolean) {
+		super(
+			incorrect
+				? "That current PIN is not right."
+				: "Enter your current PIN to change it.",
+		);
+		this.name = "CurrentPINError";
+		this.incorrect = incorrect;
 	}
 }
 
@@ -67,7 +119,7 @@ export async function loginWithPIN(
 		if (cErr.code === Code.ResourceExhausted) {
 			const detail = extractPinAuthErrorDetail(cErr);
 			if (detail) {
-				throw new AccountLockedError(detail);
+				throw new AccountLockedError(detail, lockoutRetrySeconds(cErr));
 			}
 		}
 
@@ -84,7 +136,13 @@ export async function loginWithPIN(
 }
 
 /**
- * Set or change a worker's PIN. Handles field violations.
+ * Set or change a member's PIN.
+ *
+ * `currentPin` is REQUIRED for a voluntary change of an established PIN and is verified by
+ * the server. First-time set is exempt: a `pinChangeToken` was supplied, the member holds
+ * no PIN credential, or the existing one is still temporary. Omitting it on a voluntary
+ * change throws CurrentPINError; supplying a wrong one throws CurrentPINError with
+ * `incorrect: true`.
  */
 export async function setPIN(
 	newPin: string,
@@ -105,10 +163,16 @@ export async function setPIN(
 	} catch (err) {
 		const cErr = ConnectError.from(err);
 		if (cErr.code === Code.InvalidArgument) {
+			if (fieldViolation(cErr, "current_pin")) {
+				throw new CurrentPINError(false);
+			}
 			const violations = extractFieldViolations(cErr);
 			if (violations) {
 				throw new PINValidationError(violations);
 			}
+		}
+		if (cErr.code === Code.PermissionDenied) {
+			throw new CurrentPINError(true);
 		}
 		throw err;
 	}

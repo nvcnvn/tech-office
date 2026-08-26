@@ -427,7 +427,10 @@ export default function SignInScreen() {
               <View style={styles.fieldGroup}>
                 <View style={styles.fieldLabelRow}>
                   <Text style={styles.fieldLabel}>Password</Text>
-                  <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
+                  <Pressable
+                    onPress={() => router.push("/(auth)/forgot-password")}
+                    testID="signin-forgot-password"
+                  >
                     <Text style={styles.inlineLink}>Forgot password?</Text>
                   </Pressable>
                 </View>
@@ -456,6 +459,7 @@ export default function SignInScreen() {
                   <Pressable
                     onPress={() => setPasswordVisible((current) => !current)}
                     style={styles.trailingAction}
+                    testID="signin-password-visibility"
                   >
                     <SFIcon
                       name={passwordVisible ? "eye.slash" : "eye"}
@@ -549,14 +553,16 @@ export default function SignInScreen() {
 
         <View style={styles.footerActions}>
           <Pressable
-            onPress={() => router.replace("/(auth)/pin")}
+            onPress={() => router.replace("/(auth)")}
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            testID="signin-use-pin"
           >
-            <Text style={styles.secondaryButtonText}>Use account ID and PIN instead</Text>
+            <Text style={styles.secondaryButtonText}>Sign in with a PIN instead</Text>
           </Pressable>
           <Pressable
             onPress={() => router.push("/(auth)/signup")}
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.secondaryButtonPressed]}
+            testID="signin-create-workspace"
           >
             <Text style={styles.secondaryButtonText}>Create workspace</Text>
           </Pressable>

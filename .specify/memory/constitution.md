@@ -1,62 +1,46 @@
 <!--
-SYNC IMPACT REPORT - Constitution v5.16.0
-Generated: 2026-08-22
+SYNC IMPACT REPORT - Constitution v5.17.0
+Generated: 2026-08-26
 
-VERSION CHANGE: 5.15.0 → 5.16.0 (MINOR)
+VERSION CHANGE: 5.16.0 → 5.17.0 (MINOR)
 
 MODIFIED PRINCIPLES:
-- Principle XII: renamed "Architecture Documentation Maintenance" →
-  "Living Documentation & Architecture Documentation Maintenance" and extended
-  to govern `docs/domain/` alongside `backend/docs/`.
-  Key changes:
-  - `docs/domain/` declared the source of truth for CURRENT system behaviour,
-    one living document per business domain plus README index + drift register
-  - `specs/NNN-*` explicitly demoted to historical INTENT only; deriving current
-    behaviour by replaying spec history is now prohibited
-  - Where a spec and the code disagree, the code wins and the disagreement is
-    recorded in the drift register in `docs/domain/README.md`
-  - Superseded behaviour MUST be DELETED from snapshots, not annotated
-    (present tense documents, not changelogs)
-  - "Consult Before Architectural Changes" broadened to "Consult Before Changes"
-    with a new first bullet requiring the domain snapshot to be read before
-    specify/plan/implement
-  - Definition of Done extended with two new checklist items (snapshot updated +
-    "Status date" refreshed; drift register reconciled)
-  - `backend/docs/` explicitly NOT superseded — both document sets are maintained
-  - Rationale expanded to state why specs cannot serve as the behaviour reference
+- Principle XIII (Mobile Application Design & Testing): "Feature Scope
+  (NON-NEGOTIABLE)" gains a narrow, exhaustive first-run onboarding carve-out.
+  Mobile MAY now surface exactly two otherwise-administrative capabilities, and
+  only during first-run onboarding:
+    1. Creating an organization (SMB owner registering their own workspace)
+    2. Creating the first org-managed accounts (so a new workspace is not
+       stranded as a one-person workspace)
+  The carve-out is explicitly about *starting* a workspace, never *administering*
+  an existing one. Role and permission editing, department management, bulk
+  member import, account deactivation, credential reset for other members,
+  billing and plan management all remain web-only. Any mobile surface beyond the
+  two named capabilities requires a further amendment.
+
+RATIONALE:
+  The target user is a small-business owner who may not use a desktop computer
+  for work at all. Requiring a laptop to create the workspace defeats the
+  product's stated purpose, and a mid-flow handoff to a browser is the highest
+  drop-off point available. A workspace with no employees has no value, so the
+  first teammate must be creatable where the workspace was created.
 
 ADDED SECTIONS:
-- Principle XII: "Domain Snapshots (`docs/domain/`)" subsection with the full
-  document-to-coverage table (11 domain documents)
-- Reference Documents: "Domain Snapshots — source of truth for current behaviour"
+- None (carve-out added inside an existing subsection)
 
 REMOVED SECTIONS:
 - None
 
 TEMPLATE UPDATE STATUS:
-✅ .specify/memory/constitution.md - MINOR version bump (5.15.0 → 5.16.0)
-✅ AGENTS.md - Added "# Domain Snapshots - READ BEFORE CHANGING BEHAVIOUR" section
-✅ .specify/workflows/speckit/workflow.yml - `update-snapshot` step repaired
-   (`message:` → `prompt:`, which is the field PromptStep validates on; added
-   explicit `integration:`) and expanded with delete-superseded-behaviour and
-   drift-register requirements
-✅ docs/domain/ - 12 documents authored (11 domains + README index/drift register)
-✅ .specify/extensions/docs/ - New "docs" extension providing speckit.docs.snapshot,
-   registered as a MANDATORY (optional: false) hook on after_implement and
-   after_converge in .specify/extensions.yml. Ordered BEFORE the git auto-commit
-   hook so snapshot edits land in the implementation commit, as principle XII
-   requires. Installed as .claude/skills/speckit-docs-snapshot/SKILL.md.
-   This covers direct /speckit.implement invocations, not only full workflow runs.
-⚠️ GEMINI.md - NOT updated; it is a stale truncated copy of AGENTS.md and already
-   lags on the notification guardrail and presence ping-pong debugging note.
-   Recommended follow-up: replace its body with a pointer to AGENTS.md.
-✅ .specify/templates/plan-template.md - No changes needed (references Principle XII
-   generically)
+✅ .specify/memory/constitution.md - MINOR version bump (5.16.0 → 5.17.0)
+✅ Version history updated with v5.17.0 entry
+✅ .specify/templates/plan-template.md - No changes needed (references principles generically)
 ✅ .specify/templates/tasks-template.md - No changes needed
 ✅ .specify/templates/spec-template.md - No changes needed
+✅ AGENTS.md - No changes needed (does not restate the XIII feature-scope list)
 
-FOLLOW-UP TODOS:
-- GEMINI.md: collapse to a pointer at AGENTS.md so it stops drifting
+UNBLOCKS:
+- specs/035-mobile-owner-onboarding (T000 governance gate)
 
 PLACEHOLDERS: None
 
@@ -64,15 +48,12 @@ VALIDATION SUMMARY:
 ✅ No placeholder tokens found
 ✅ All 13 core principles defined
 ✅ All dates in ISO format (YYYY-MM-DD)
-✅ Version history updated with v5.16.0 entry
 ✅ Governance procedures defined
-✅ All 11 domain documents referenced in Principle XII exist on disk
-✅ after_implement / after_converge hooks resolve to an installed, invocable skill
 -->
 
 # Tech Office Constitution
 
-**Version**: 5.16.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-08-22
+**Version**: 5.17.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-08-26
 
 ## Purpose & Scope
 
@@ -1430,6 +1411,17 @@ feature works end-to-end on a real or simulated device.
   task checking, chat, notifications, calendar events, personal profile, global search.
 - Administrative / configuration features (department management, member import, IAM
   settings, billing, etc.) MUST remain web-only.
+- **First-run onboarding carve-out (narrow, exhaustive)**: mobile MAY surface exactly two
+  otherwise-administrative capabilities, and only as part of first-run onboarding:
+  1. **Creating an organization** — an SMB owner registering their own workspace from a
+     phone, before any account exists.
+  2. **Creating the first org-managed accounts** — so a newly created workspace is not
+     stranded as a one-person workspace.
+  Everything else in IAM administration stays web-only: role and permission editing,
+  department management, bulk member import, account deactivation, credential reset for
+  other members, billing and plan management. The carve-out covers *starting* a workspace,
+  never *administering* an existing one. Any mobile surface beyond these two capabilities
+  requires a further amendment.
 - When implementing a new backend feature, mobile is NOT required to expose it unless it
   is clearly part of an employee's day-to-day workflow. Justify any mobile additions
   that are not obviously day-to-day employee actions.
@@ -1570,6 +1562,7 @@ exercised before release.
 - Plan template includes "Constitution Check" gate (`.specify/templates/plan-template.md`)
 
 ### Version History
+- v5.17.0 (2026-08-26): MINOR — Principle XIII Feature Scope gains a narrow, exhaustive first-run onboarding carve-out permitting exactly two otherwise-administrative capabilities on mobile: creating an organization, and creating the first org-managed accounts. Rationale: the target user is a small-business owner who may not use a desktop computer for work at all, so requiring a laptop to create the workspace defeats the product's purpose, and a workspace with no employees has no value. Ongoing IAM administration — role and permission editing, department management, bulk import, deactivation, credential reset for others, billing — remains web-only. Unblocks feature 035 (mobile SMB owner onboarding & PIN-first login)
 - v5.16.0 (2026-08-22): MINOR — Principle XII renamed to "Living Documentation & Architecture Documentation Maintenance" and extended to cover `docs/domain/`: per-domain living snapshots are declared the source of truth for current system behaviour, `specs/NNN-*` is demoted to historical intent, agents MUST read the snapshot rather than replaying spec history, superseded behaviour MUST be deleted rather than annotated, and the drift register in `docs/domain/README.md` MUST be reconciled; Definition of Done extended with snapshot and drift-register items; Reference Documents section updated
 - v5.15.0 (2026-04-02): MINOR — Replaced golang-migrate workflow with a forward-only `psql` migration runner in `backend/scripts/migrate.sh`; updated migration policy to use timestamped `.up.sql` files, `public.schema_migrations` bookkeeping, status checks via `./scripts/migrate.sh status`, and compensating forward migrations instead of automated down execution
 - v5.14.0 (2026-03-22): MINOR — Added Principle XIII (Mobile Application Design & Testing — Expo + Maestro): defines employee-only feature scope for mobile, UX rules (simplicity, screen-size optimization, layout independence from web), testID attribute requirement (React Native equivalent of data-testid), and Maestro blackbox testing mandate (happy-path flows per domain in `frontend/apps/mobile/.maestro/`, full suite via `make test-mobile`); Principle II Definition of Done extended with mobile Maestro requirement

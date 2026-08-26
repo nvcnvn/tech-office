@@ -92,8 +92,14 @@ func (s *IAMServiceConnect) SetPIN(
 	var userID dbuuid.UUID
 	var orgID dbuuid.UUID
 
+	viaPINChangeToken := req.Msg.PinChangeToken != nil && *req.Msg.PinChangeToken != ""
+	currentPIN := ""
+	if req.Msg.CurrentPin != nil {
+		currentPIN = *req.Msg.CurrentPin
+	}
+
 	// Determine auth: either via pin_change_token or standard auth context
-	if req.Msg.PinChangeToken != nil && *req.Msg.PinChangeToken != "" {
+	if viaPINChangeToken {
 		// Parse the pin_change_token (it's a JWT with user_id + org_id)
 		claims, err := s.jwtSigner.ParseToken(*req.Msg.PinChangeToken)
 		if err != nil {
@@ -125,7 +131,7 @@ func (s *IAMServiceConnect) SetPIN(
 	// Use adminPool because SetPIN may be called with a pin_change_token (no JWT/org context).
 	// All queries pass orgID and userID explicitly, so tenant-scoped RLS is not required.
 	if err := txn.WithTxn(ctx, s.adminPool, func(ctx context.Context, tx database.DBTX) error {
-		return s.logic.SetPIN(ctx, tx, orgID, userID, req.Msg.NewPin)
+		return s.logic.SetPIN(ctx, tx, orgID, userID, req.Msg.NewPin, currentPIN, viaPINChangeToken)
 	}); err != nil {
 		slog.WarnContext(ctx, "SetPIN failed", "error", err, "user_id", userID)
 		return nil, ToConnectError(err)

@@ -122,7 +122,9 @@ export default function AcceptInvitationScreen() {
             textContentType="newPassword"
             value={password}
             onChangeText={setPassword}
-          />
+          
+              testID="accept-invitation-password"
+            />
         </View>
 
         <View style={{ gap: 4 }}>
@@ -136,7 +138,9 @@ export default function AcceptInvitationScreen() {
             textContentType="newPassword"
             value={confirm}
             onChangeText={setConfirm}
-          />
+          
+              testID="accept-invitation-confirm"
+            />
         </View>
 
         <Pressable
@@ -150,7 +154,9 @@ export default function AcceptInvitationScreen() {
             alignItems: "center",
             marginTop: 8,
           })}
-        >
+        
+              testID="accept-invitation-submit"
+            >
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (

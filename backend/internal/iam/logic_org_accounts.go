@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -56,12 +57,14 @@ type OrgAccountRow struct {
 	PinConfigured   bool
 }
 
-// LoginWithPIN authenticates a worker using org-scoped login_identifier + PIN.
-func (l *iamLogicImpl) LoginWithPIN(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, loginIdentifier, pin string) (*LoginWithPINResult, error) {
-	// 1. Look up identity by (orgID, loginIdentifier)
+// LoginWithPIN authenticates a member using an org-scoped identifier + PIN.
+// identifier is resolved against login_identifier OR email — see the query comment on
+// GetIdentityByOrgAndLoginIdentifier — so an email-registered owner can hold a PIN.
+func (l *iamLogicImpl) LoginWithPIN(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, identifier, pin string) (*LoginWithPINResult, error) {
+	// 1. Look up identity by (orgID, identifier), matching login_identifier or email
 	identity, err := l.queries.GetIdentityByOrgAndLoginIdentifier(ctx, tx, &database.GetIdentityByOrgAndLoginIdentifierParams{
-		OrganizationID:  orgID,
-		LoginIdentifier: loginIdentifier,
+		OrganizationID: orgID,
+		Identifier:     identifier,
 	})
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -167,8 +170,15 @@ func (l *iamLogicImpl) LoginWithPIN(ctx context.Context, tx database.DBTX, orgID
 	}, nil
 }
 
-// SetPIN sets or changes a worker's PIN credential.
-func (l *iamLogicImpl) SetPIN(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID, newPIN string) error {
+// SetPIN sets or changes a member's PIN credential.
+//
+// A voluntary change — the identity already holds an `active` PIN and the call was not
+// authorised by a pin_change_token — MUST supply the current PIN. Without that check any
+// holder of a valid session could silently rotate a PIN they do not know.
+//
+// Exempt (first-time set): a pin_change_token was supplied, the identity has no PIN
+// credential at all, or the existing credential is still in state `temporary`.
+func (l *iamLogicImpl) SetPIN(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID, newPIN, currentPIN string, viaPINChangeToken bool) error {
 	// 1. Validate format
 	if err := ValidatePINFormat(newPIN); err != nil {
 		return err
@@ -213,6 +223,16 @@ func (l *iamLogicImpl) SetPIN(ctx context.Context, tx database.DBTX, orgID, iden
 		return fmt.Errorf("failed to get active credential: %w", credErr)
 	}
 
+	// 4a. Voluntary change of an established PIN must prove knowledge of the current one.
+	if cred != nil && cred.State == CredentialStateActive && !viaPINChangeToken {
+		if currentPIN == "" {
+			return ErrCurrentPINRequired
+		}
+		if err := ComparePINHash(cred.CredentialHash, currentPIN); err != nil {
+			return ErrCurrentPINIncorrect
+		}
+	}
+
 	if cred != nil && cred.State == CredentialStateTemporary {
 		// Activate the temporary credential with the user's chosen PIN hash
 		return l.queries.ActivateTemporaryCredential(ctx, tx, &database.ActivateTemporaryCredentialParams{
@@ -248,6 +268,12 @@ func (l *iamLogicImpl) SetPIN(ctx context.Context, tx database.DBTX, orgID, iden
 
 // CreateOrgAccount creates a single org-managed worker account.
 func (l *iamLogicImpl) CreateOrgAccount(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, createdBy dbuuid.UUID, req CreateOrgAccountParams) (*CreateOrgAccountResult, error) {
+	// PIN login resolves an identifier against login_identifier OR email, so the two
+	// namespaces must stay disjoint or one identifier could match two identities.
+	if strings.Contains(req.LoginIdentifier, "@") {
+		return nil, ErrLoginIdentifierInvalid
+	}
+
 	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	sharedID := dbuuid.Must()
 

@@ -3,7 +3,7 @@
 The cross-cutting client experience: federated search, canonical cross-platform links, the
 context rail, theme preferences, and the shape of the web and mobile apps.
 
-**Status date: 2026-08-22.** Supersedes specs 011, 012, 013, 027, 030, 031.
+**Status date: 2026-08-26.** Supersedes specs 011, 012, 013, 027, 030, 031, 035.
 
 ## Canonical resource links
 
@@ -141,22 +141,34 @@ E2E with Playwright in `apps/web/e2e`; `make test-frontend`.
 
 ## Mobile application
 
-Expo Router in `apps/mobile/src/app`, four route groups:
+Expo Router in `apps/mobile/src/app`, five route groups:
 
-- `(auth)` — sign-in, sign-up, PIN, set-PIN, SSO callback, invitation, password reset
+- `(auth)` — `index` is the sign-in screen and is PIN-first: it reads the device's
+  remembered state and renders either the known-device shape (name, workspace, six PIN
+  boxes) or a revealed workspace → identifier → PIN sequence. There is no method picker.
+  Also `signin` (email, password, SSO), `signup` (owner workspace creation), `set-pin`
+  (a worker choosing their own PIN), `sso-callback`, `accept-invitation`,
+  `forgot-password`, `reset-password`.
+- `(onboarding)` — the owner's first-run sequence after signup: `set-pin` (mandatory,
+  non-dismissible) then `add-teammate` (skippable). Its `_layout` redirects into the first
+  incomplete step so an interrupted owner resumes there. See
+  [auth-identity.md](auth-identity.md#client-surfaces).
 - `(app)` — the tab hierarchy: `(chat)`, `(tasks)`, `(calendar)`, `(notifications)`,
   `(more)` (docs, files, profile, settings, search, navigation-debug)
 - `(shared)` — resource routes reached from a deep link rather than a tab, so a link opens
   the resource without hijacking tab state
 - top level — `booking/[token]`, `canonical-link/[encoded]`, `o/[tenantKey]/r/…`,
-  `+native-intent`, `link-handoff`, `link-status`, `[...path]` catch-all
+  `+native-intent`, `link-handoff`, `link-status`, `[...path]` catch-all. `link-handoff`
+  and `canonical-signin` both re-export the `(auth)` sign-in screen, which parks a pending
+  redirect and follows it once the user authenticates.
 
 Notable hooks: `use-sse`, `use-presence`, `use-app-state-presence` (presence follows
 foreground/background), `use-push-notifications`, `use-stream-recovery-refresh` (refetch
 after a stream gap), `use-resolved-project-id`, `use-ghost-loading`.
 
-E2E with Maestro; `make test-mobile`. Design guidance lives in the `building-native-ui`
-skill and `specs/mobile-ui-design.md`.
+E2E with Maestro; `make test-mobile`, which runs the two user-story flows
+(`auth/signin-known-device`, `onboarding/owner-signup`) before the six coverage flows.
+Design guidance lives in the `building-native-ui` skill and `specs/mobile-ui-design.md`.
 
 ## Shared frontend packages
 
@@ -169,12 +181,27 @@ skill and `specs/mobile-ui-design.md`.
 | `theme-tokens` | shared design tokens |
 | `validations` | shared input validation |
 
+`apis` also owns values the backend duplicates, so screens read them rather than restate
+them: `PIN_LENGTH` and `TEMPORARY_PIN_EXPIRY_DAYS` (`iam-org-accounts.ts`), and the
+workspace-address rules `deriveSubdomain` / `isValidSubdomain` / `normalizeSubdomain`
+(`organization.ts`). See Constitution VIII.
+
 ## Tests
 
 `integration/canonical_links_test.go`, `context_rail_test.go`, `preference_test.go`;
 `apps/web/e2e/`; Maestro flows for mobile.
 
 ## Known drift
+
+**D18 — a Maestro flow cannot drive the mobile signup password field.** iOS 18 lays its
+automatic-strong-password cover view over the field on `(auth)/signup`, chosen
+heuristically from the surrounding form. That view is a system view outside the app's
+accessibility tree, so Maestro can neither see it, tap it, nor type past it, and
+`onboarding/owner-signup.yaml` stops there. `textContentType="password"`, explicit
+`autoComplete` and `passwordRules` were all tried and none suppress it; only a full
+AutoFill opt-out does, at the cost of password-manager fill on the credential that is the
+owner's PIN-recovery anchor. US2 and US3 therefore have backend scenario coverage but no
+passing blackbox flow.
 
 **D5 — spec 011's "global search system" is four client-side calls.** Server-side search
 exists for documents (`SearchDocuments`), files (`SearchFiles`, with access filtering),

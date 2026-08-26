@@ -1,9 +1,10 @@
 /**
- * Choose your PIN — for a worker signing in with the one-time code they were given.
+ * Choose your PIN — the first step after a workspace is created.
  *
- * The counterpart of the owner's onboarding PIN step. Reached from sign-in when the server
- * reports pin_change_required, carrying a pin_change_token instead of a session, which is
- * why this screen finishes the sign-in itself rather than returning to the previous one.
+ * Mandatory and not dismissible. An owner who skips this ends up on a sign-in path their
+ * staff do not share, which is exactly the person least able to help a stuck employee.
+ * Email and password stay as the way back in, and the screen says so, because a PIN is the
+ * one credential this product can lock you out of.
  */
 
 import React, { useRef, useState } from "react";
@@ -18,15 +19,8 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import {
-  getOrganizationBySubdomain,
-  getProfile,
-  PIN_LENGTH,
-  PINValidationError,
-  setAuthToken,
-  setPIN,
-} from "apis";
+import { Stack, useRouter } from "expo-router";
+import { PIN_LENGTH, PINValidationError, setPIN } from "apis";
 import {
   border,
   lightPalette,
@@ -34,14 +28,14 @@ import {
   mobileTypography,
   radius,
 } from "@tech-office/theme-tokens";
-import { AuthContext } from "@/hooks/use-auth";
 import { SFIcon } from "@/components/ui/sf-icon";
-import { rememberAuthDisplayName } from "@/lib/auth-subdomain-storage";
+import { setOnboardingStep } from "@/lib/onboarding-progress";
 
 /**
- * Turn a server PIN complaint into something a person can act on. The backend rejects a
- * PIN matching the holder's date of birth or phone number; its wording names the rule,
- * this names the fix.
+ * Turn a server PIN complaint into something a person can act on.
+ *
+ * The backend rejects a PIN that matches the holder's date of birth or phone number. Its
+ * own wording names the rule; this names the fix.
  */
 function pinRejectionMessage(err: unknown): string {
   if (err instanceof PINValidationError) {
@@ -56,10 +50,8 @@ function pinRejectionMessage(err: unknown): string {
     : "We couldn't save that PIN. Try again.";
 }
 
-export default function SetPinScreen() {
+export default function OnboardingSetPinScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ pinChangeToken?: string; subdomain?: string }>();
-  const auth = React.use(AuthContext);
 
   const firstRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
@@ -69,6 +61,7 @@ export default function SetPinScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // The confirmation only appears once there is something to confirm.
   const confirming = firstPin.length === PIN_LENGTH;
 
   const fail = (message: string) => {
@@ -99,6 +92,7 @@ export default function SetPinScreen() {
     if (cleaned.length !== PIN_LENGTH) return;
 
     if (cleaned !== firstPin) {
+      // A mismatch costs the confirmation, not the whole screen.
       setConfirmPin("");
       fail("Those didn't match. Enter the same six digits again.");
       confirmRef.current?.focus();
@@ -107,45 +101,15 @@ export default function SetPinScreen() {
 
     setLoading(true);
     try {
-      // The change token authorises this call, so no current PIN is required or sent.
-      const result = await setPIN(cleaned, { pinChangeToken: params.pinChangeToken });
-
-      const subdomain = params.subdomain?.trim().toLowerCase();
-      if (params.pinChangeToken) {
-        if (!subdomain) {
-          fail("We lost track of your workspace. Sign in again to continue.");
-          setLoading(false);
-          return;
-        }
-
-        await setAuthToken(result.accessToken, Number(result.expiresAt));
-
-        const org = await getOrganizationBySubdomain(subdomain);
-        const profile = await getProfile();
-        const membership = profile.organizations.find(
-          (item) => item.organizationId === org.id,
-        );
-
-        await auth?.signIn({
-          token: result.accessToken,
-          expiresAt: Number(result.expiresAt),
-          organizationId: org.id,
-          employeeId: membership?.id ?? profile.user.id,
-        });
-
-        // The next sign-in on this device shows this person by name.
-        rememberAuthDisplayName(profile.user.displayName || org.companyName);
-      }
+      // First PIN for this owner: there is no credential to prove knowledge of, so no
+      // current PIN is required or sent.
+      await setPIN(cleaned);
 
       if (process.env.EXPO_OS === "ios") {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-
-      if (params.pinChangeToken) {
-        router.replace("/(app)/(chat)");
-      } else {
-        router.back();
-      }
+      setOnboardingStep("teammate");
+      router.replace("/(onboarding)/add-teammate");
     } catch (err) {
       setConfirmPin("");
       setFirstPin("");
@@ -164,12 +128,13 @@ export default function SetPinScreen() {
         contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
       >
-        <Stack.Screen options={{ title: "Choose your PIN" }} />
+        <Stack.Screen
+          options={{ title: "Choose your PIN", headerBackVisible: false, gestureEnabled: false }}
+        />
 
         <View style={styles.card}>
           <Text style={styles.lede} selectable>
-            Pick six digits of your own. You'll use these to sign in from now on — the code
-            you were given won't work again.
+            Six digits to sign in from now on. Your staff will use one too.
           </Text>
 
           <PinBoxes
@@ -179,7 +144,7 @@ export default function SetPinScreen() {
             onChange={handleFirstChange}
             disabled={loading}
             autoFocus
-            testID="set-pin"
+            testID="onboarding-pin"
           />
 
           {confirming ? (
@@ -189,7 +154,7 @@ export default function SetPinScreen() {
               inputRef={confirmRef}
               onChange={handleConfirmChange}
               disabled={loading}
-              testID="set-pin-confirm"
+              testID="onboarding-pin-confirm"
             />
           ) : null}
 
@@ -198,7 +163,7 @@ export default function SetPinScreen() {
           ) : null}
 
           {error ? (
-            <View style={styles.errorBanner} testID="set-pin-error">
+            <View style={styles.errorBanner} testID="onboarding-pin-error">
               <SFIcon
                 name="exclamationmark.circle.fill"
                 size={16}
@@ -209,6 +174,14 @@ export default function SetPinScreen() {
               </Text>
             </View>
           ) : null}
+        </View>
+
+        <View style={styles.infoCard} testID="onboarding-pin-recovery">
+          <SFIcon name="lifepreserver" size={18} color={lightPalette.info.main} />
+          <Text style={styles.infoText} selectable>
+            Forget your PIN? Sign in with your email and password instead — that always
+            works, even if your PIN is locked.
+          </Text>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -375,6 +348,23 @@ const styles = StyleSheet.create({
   errorText: {
     ...mobileTypography.listSecondary,
     color: lightPalette.error.dark,
+    flex: 1,
+  },
+  infoCard: {
+    marginHorizontal: mobileLayout.screenPadding,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: mobileLayout.iconTextGap,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    backgroundColor: lightPalette.background.paper,
+    borderWidth: border.thin,
+    borderColor: lightPalette.info.light,
+    padding: mobileLayout.cardPadding,
+  },
+  infoText: {
+    ...mobileTypography.listSecondary,
+    color: lightPalette.text.secondary,
     flex: 1,
   },
 });
