@@ -16,38 +16,6 @@ type routingLogicStub struct {
 	decisions map[dbuuid.UUID]FallbackDecision
 }
 
-func TestPushDataFromPublishRequestIncludesRoutingData(t *testing.T) {
-	notificationID := dbuuid.Must()
-	req := &rpcv1.PublishNotificationRequest{
-		SourceDomain:     SourceDomainChat,
-		NotificationType: NotificationTypeVoiceCallIncoming,
-		PolicyKey:        PolicyKeyChatVoiceCallIncoming,
-		ActionData: map[string]string{
-			"channelId":    "channel-123",
-			"messageId":    "message-456",
-			"invitationId": "invite-789",
-		},
-		NavigationTarget: &rpcv1.NavigationTarget{
-			Domain:       SourceDomainChat,
-			ResourceType: "channel",
-			ResourceId:   "channel-123",
-			SecondaryId:  "invite-789",
-			Action:       "join_voice_call",
-		},
-	}
-
-	data := pushDataFromPublishRequest(req, notificationID)
-
-	assert.Equal(t, notificationID.String(), data["notificationId"])
-	assert.Equal(t, notificationID.String(), data["notification_id"])
-	assert.Equal(t, NotificationTypeVoiceCallIncoming, data["notificationType"])
-	assert.Equal(t, NotificationTypeVoiceCallIncoming, data["notification_type"])
-	assert.Equal(t, "channel-123", data["navigationResourceId"])
-	assert.Equal(t, "join_voice_call", data["navigationAction"])
-	assert.Equal(t, "/workspace/chat?channel=channel-123&message=message-456", data["click_action"])
-	assert.True(t, isIncomingVoiceCallPush(&PushNotificationPayload{Data: data}))
-}
-
 func TestRescuePushPayloadIncludesRecipientRoutingData(t *testing.T) {
 	notificationID := dbuuid.Must()
 	recipientID := dbuuid.Must()

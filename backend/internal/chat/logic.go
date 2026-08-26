@@ -1001,7 +1001,8 @@ func (s *chatLogicImpl) SendMessage(ctx context.Context, tx database.DBTX, orgID
 	}
 
 	// Broadcast new message notification to all channel members (use sanitized text)
-	if err := s.broadcastNewMessage(ctx, tx, orgID, employeeID, channelID, fullMessage.ID, sanitizedText); err != nil {
+	channel, err := s.broadcastNewMessage(ctx, tx, orgID, employeeID, fullMessage, sanitizedText)
+	if err != nil {
 		slog.WarnContext(ctx, "failed to broadcast new message",
 			"error", err,
 			"messageID", fullMessage.ID.String(),
@@ -1022,7 +1023,9 @@ func (s *chatLogicImpl) SendMessage(ctx context.Context, tx database.DBTX, orgID
 
 	// V2: If this channel is a task discussion surface, bridge to task_commented
 	// and auto-subscribe the commenter to the parent task.
-	s.bridgeTaskChannelMessage(ctx, tx, orgID, employeeID, channelID, fullMessage, sanitizedText, mentions)
+	if channel != nil && channel.ChannelType == ChannelTypeProjectTicketThread {
+		s.bridgeTaskChannelMessage(ctx, tx, orgID, employeeID, channelID, fullMessage, sanitizedText, mentions)
+	}
 
 	slog.InfoContext(ctx, "message sent successfully",
 		"messageID", fullMessage.ID.String(),
@@ -1122,9 +1125,13 @@ func (s *chatLogicImpl) createChannelMessage(
 func (s *chatLogicImpl) broadcastNewMessage(
 	ctx context.Context,
 	tx database.DBTX,
-	orgID, authorID, channelID, messageID dbuuid.UUID,
+	orgID, authorID dbuuid.UUID,
+	message *database.GetMessageByIDRow,
 	messageText string,
-) error {
+) (*database.ChatChannel, error) {
+	channelID := message.ChannelID
+	messageID := message.ID
+
 	slog.DebugContext(ctx, "broadcasting new message",
 		"function", "broadcastNewMessage",
 		"messageID", messageID.String(),
@@ -1137,16 +1144,7 @@ func (s *chatLogicImpl) broadcastNewMessage(
 		OrganizationID: orgID,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to get channel: %w", err)
-	}
-
-	// Get message with author details
-	message, err := s.Queries.GetMessageByID(ctx, tx, &database.GetMessageByIDParams{
-		ID:             messageID,
-		OrganizationID: orgID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to get message: %w", err)
+		return nil, fmt.Errorf("failed to get channel: %w", err)
 	}
 
 	// Extract author name from message
@@ -1162,7 +1160,7 @@ func (s *chatLogicImpl) broadcastNewMessage(
 		Column3:        false, // is_mention = false (all members get new message events)
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list channel members: %w", err)
+		return nil, fmt.Errorf("failed to list channel members: %w", err)
 	}
 
 	// Build recipient list (include all members, including the author).
@@ -1179,7 +1177,7 @@ func (s *chatLogicImpl) broadcastNewMessage(
 		slog.DebugContext(ctx, "no recipients for broadcast (empty channel)",
 			"channelID", channelID.String(),
 		)
-		return nil
+		return channel, nil
 	}
 
 	previewText := messageNotificationPreview(messageText, 200)
@@ -1233,7 +1231,7 @@ func (s *chatLogicImpl) broadcastNewMessage(
 			"error", err,
 			"messageID", messageID.String(),
 		)
-		return fmt.Errorf("failed to publish message notification: %w", err)
+		return nil, fmt.Errorf("failed to publish message notification: %w", err)
 	}
 
 	slog.InfoContext(ctx, "💬 message notification published to channel members",
@@ -1241,7 +1239,7 @@ func (s *chatLogicImpl) broadcastNewMessage(
 		"recipientCount", len(recipientIDs),
 	)
 
-	return nil
+	return channel, nil
 }
 
 // notifyMentionedUsersV2 sends targeted @mention notifications for TipTap-formatted mentions.

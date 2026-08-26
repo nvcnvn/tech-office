@@ -62,8 +62,8 @@ domain publishes → PublishNotification
    │                                                       ▼
    │                                          client receives → ConfirmNotificationReceipt
    │                                                             (writes live_receipt)
-   └─ queue rescue push with fallback_due_at
-                │  (2 s direct-target / 4 s subscribed, 5 s max)
+   └─ queue push with fallback_due_at
+                │  (0 s if already unreachable; else 2 s direct-target / 4 s subscribed, 5 s max)
                 ▼
       rescue push worker (1 s tick, batch 100)
                 │
@@ -87,6 +87,14 @@ got the event:
 - cancelled by `sse_receipt_confirmed` (a `live_receipt` from a **foreground/visible**
   client) or `acknowledged_before_fallback`
 - otherwise sent, recording the reason it survived
+
+**Every** push goes through this worker — there is no inline send. Recipients that routing
+already judged unreachable (`connection_unresponsive`, hidden status, priority 0) are queued
+with a **zero** window and carry their routing reason as `fallback_reason`; they are picked
+up on the next worker tick. `PublishNotification` therefore performs no FCM I/O, so an
+unresponsive FCM can no longer hold the publishing request's Postgres transaction open for
+the 10 s `fcmBatchTimeout`. The cost is that push for an offline recipient lands up to one
+worker tick (1 s) later than the commit.
 
 `delivery_attempt.reason` is the auditable answer to "why did this person never see it":
 `live_only_policy`, `no_active_context_match`, `no_push_target`, `recipient_ineligible`,

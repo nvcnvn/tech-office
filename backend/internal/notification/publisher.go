@@ -67,32 +67,6 @@ func navigationTargetFromJSON(data []byte) *rpcv1.NavigationTarget {
 	}
 }
 
-func pushDataFromPublishRequest(req *rpcv1.PublishNotificationRequest, notificationID dbuuid.UUID) map[string]string {
-	data := make(map[string]string, len(req.ActionData)+12)
-	for key, value := range req.ActionData {
-		data[key] = value
-	}
-	data["notificationId"] = notificationID.String()
-	data["notification_id"] = notificationID.String()
-	data["sourceDomain"] = req.SourceDomain
-	data["source_domain"] = req.SourceDomain
-	data["notificationType"] = req.NotificationType
-	data["notification_type"] = req.NotificationType
-	if req.PolicyKey != "" {
-		data["policyKey"] = req.PolicyKey
-		data["policy_key"] = req.PolicyKey
-	}
-	if req.NavigationTarget != nil {
-		data["navigationDomain"] = req.NavigationTarget.GetDomain()
-		data["navigationResourceType"] = req.NavigationTarget.GetResourceType()
-		data["navigationResourceId"] = req.NavigationTarget.GetResourceId()
-		data["navigationSecondaryId"] = req.NavigationTarget.GetSecondaryId()
-		data["navigationAction"] = req.NavigationTarget.GetAction()
-	}
-	applyPushClickAction(data, req.SourceDomain, req.NotificationType, req.NavigationTarget)
-	return data
-}
-
 func pushDataFromNotificationRecord(record *database.NotificationNotification) map[string]string {
 	return pushDataFromNotificationFields(record.ID, dbuuid.UUID{}, record.ActionData, record.NavigationTarget, record.SourceDomain, record.NotificationType, record.PolicyKey)
 }
@@ -312,6 +286,7 @@ func (s *NotificationService) queueRescueFallbacks(
 	orgID dbuuid.UUID,
 	employeeIDs []dbuuid.UUID,
 	window time.Duration,
+	reason string,
 ) ([]*database.SetFallbackQueuedForRecipientsRow, error) {
 	if len(employeeIDs) == 0 {
 		return nil, nil
@@ -319,7 +294,7 @@ func (s *NotificationService) queueRescueFallbacks(
 
 	now := time.Now().UTC()
 	rows, err := s.Queries.SetFallbackQueuedForRecipients(ctx, tx, &database.SetFallbackQueuedForRecipientsParams{
-		FallbackReason: pgtype.Text{String: FallbackReasonRecipientOnline, Valid: true},
+		FallbackReason: pgtype.Text{String: reason, Valid: true},
 		FallbackDueAt:  pgtype.Timestamptz{Time: now.Add(window), Valid: true},
 		UpdatedAt:      pgtype.Timestamptz{Time: now, Valid: true},
 		OrganizationID: orgID,
@@ -332,7 +307,7 @@ func (s *NotificationService) queueRescueFallbacks(
 
 	attemptedAt := pgtype.Timestamptz{Time: now, Valid: true}
 	for _, row := range rows {
-		if err := s.recordDeliveryAttempt(ctx, tx, orgID, row.ID, "push", "queued", FallbackReasonRecipientOnline, attemptedAt, map[string]string{
+		if err := s.recordDeliveryAttempt(ctx, tx, orgID, row.ID, "push", "queued", reason, attemptedAt, map[string]string{
 			"fallbackDueAt": now.Add(window).Format(time.RFC3339Nano),
 		}); err != nil {
 			return nil, err
@@ -381,29 +356,6 @@ func (s *NotificationService) markSkippedFallbacks(
 	}
 
 	return nil
-}
-
-func (s *NotificationService) notificationRecipientIDsByEmployee(
-	ctx context.Context,
-	tx database.DBTX,
-	notificationID dbuuid.UUID,
-	orgID dbuuid.UUID,
-	employeeIDs []dbuuid.UUID,
-) (map[dbuuid.UUID]dbuuid.UUID, error) {
-	rows, err := s.Queries.ListNotificationRecipientIDsByEmployeeIDs(ctx, tx, &database.ListNotificationRecipientIDsByEmployeeIDsParams{
-		OrganizationID: orgID,
-		NotificationID: notificationID,
-		EmployeeIds:    employeeIDs,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	idsByEmployee := make(map[dbuuid.UUID]dbuuid.UUID, len(rows))
-	for _, row := range rows {
-		idsByEmployee[row.EmployeeID] = row.ID
-	}
-	return idsByEmployee, nil
 }
 
 func (s *NotificationService) sendPushAndRecord(
@@ -679,12 +631,30 @@ func (s *NotificationService) PublishNotification(ctx context.Context, tx databa
 		)
 	}
 
-	queuedRows, err := s.queueRescueFallbacks(ctx, tx, notificationID, orgID, fallbackPlan.rescueQueueRecipients, rescuePushWindowForRequest(req))
+	queuedRows, err := s.queueRescueFallbacks(ctx, tx, notificationID, orgID, fallbackPlan.rescueQueueRecipients, rescuePushWindowForRequest(req), FallbackReasonRecipientOnline)
 	if err != nil {
 		return nil, fmt.Errorf("failed to queue rescue push fallbacks: %w", err)
 	}
 	if err := s.markSkippedFallbacks(ctx, tx, notificationID, orgID, fallbackPlan.skippedRecipients); err != nil {
 		return nil, fmt.Errorf("failed to mark skipped push fallbacks: %w", err)
+	}
+
+	// Recipients that cannot be reached live are queued with a zero window instead of
+	// being pushed inline. The rescue push worker (1s tick) does the FCM round-trip on
+	// its own connection, so an unresponsive FCM can no longer hold this request — and
+	// its Postgres transaction — open for the full fcmBatchTimeout.
+	immediateByReason := make(map[string][]dbuuid.UUID, len(fallbackPlan.immediatePushRecipients))
+	for _, empID := range fallbackPlan.immediatePushRecipients {
+		reason := fallbackPlan.pushReasons[empID]
+		if reason == "" {
+			reason = FallbackReasonConnectionUnresponsive
+		}
+		immediateByReason[reason] = append(immediateByReason[reason], empID)
+	}
+	for reason, empIDs := range immediateByReason {
+		if _, err := s.queueRescueFallbacks(ctx, tx, notificationID, orgID, empIDs, 0, reason); err != nil {
+			return nil, fmt.Errorf("failed to queue immediate push fallbacks: %w", err)
+		}
 	}
 
 	slog.InfoContext(ctx, "push fallback evaluation complete",
@@ -695,61 +665,6 @@ func (s *NotificationService) PublishNotification(ctx context.Context, tx databa
 		"rescue_queue_count", len(queuedRows),
 		"push_configured", s.PushLogic != nil,
 	)
-
-	// Send push notifications to fallback recipients (after transaction commits)
-	if len(fallbackPlan.immediatePushRecipients) > 0 {
-		slog.InfoContext(ctx, "🔔 sending push notifications to fallback recipients",
-			"count", len(fallbackPlan.immediatePushRecipients),
-			"notificationID", notificationID.String())
-
-		recipientIDs, err := s.notificationRecipientIDsByEmployee(ctx, tx, notificationID, orgID, fallbackPlan.immediatePushRecipients)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve immediate push recipient rows: %w", err)
-		}
-
-		for _, empID := range fallbackPlan.immediatePushRecipients {
-			recipientID, ok := recipientIDs[empID]
-			if !ok {
-				slog.WarnContext(ctx, "missing notification recipient row for immediate push",
-					"employee_id", empID.String(),
-					"notificationID", notificationID.String())
-				continue
-			}
-
-			pushData := pushDataFromPublishRequest(req, notificationID)
-			pushData["notificationRecipientId"] = recipientID.String()
-			pushData["notification_recipient_id"] = recipientID.String()
-			payload := &PushNotificationPayload{
-				Title:    req.Title,
-				Body:     req.Message,
-				Data:     pushData,
-				Priority: "high",
-			}
-			// Record the routing decision itself before attempting delivery. The
-			// recipient row's fallback_reason ends up describing the delivery OUTCOME
-			// (sent, no push target, error), so without this the reason live delivery
-			// was impossible would be lost — and FR-014 requires that decision to stay
-			// auditable.
-			routingReason := fallbackPlan.pushReasons[empID]
-			if routingReason != "" {
-				attemptedAt := pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true}
-				if err := s.recordDeliveryAttempt(ctx, tx, orgID, recipientID, "push", "queued", routingReason, attemptedAt, nil); err != nil {
-					slog.ErrorContext(ctx, "failed to record push routing decision",
-						"employee_id", empID.String(),
-						"notificationID", notificationID.String(),
-						"reason", routingReason,
-						"error", err)
-				}
-			}
-
-			if err := s.sendPushAndRecord(ctx, tx, empID, orgID, recipientID, payload, routingReason); err != nil {
-				slog.ErrorContext(ctx, "failed to track immediate push fallback",
-					"employee_id", empID.String(),
-					"notificationID", notificationID.String(),
-					"error", err)
-			}
-		}
-	}
 
 	// Convert UUIDs to strings for response
 	recipientIDStrings := make([]string, len(recipientEmployeeIDs))
