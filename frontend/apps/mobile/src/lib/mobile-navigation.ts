@@ -1,4 +1,17 @@
-type MobileOwnerTab = "chat" | "tasks" | "calendar" | "alerts" | "more";
+/**
+ * Owner tab for back-navigation context.
+ *
+ * `calendar` and `alerts` are no longer tab-bar slots, but they are still
+ * route groups a screen can belong to, so they stay in this union: it decides
+ * where "back" lands, not what the tab bar shows.
+ */
+type MobileOwnerTab =
+  | "chat"
+  | "today"
+  | "tasks"
+  | "calendar"
+  | "alerts"
+  | "more";
 
 type RouteParamValue = string | string[] | undefined;
 
@@ -9,6 +22,7 @@ const NAV_LABEL_PARAM = "navLabel";
 
 const TAB_ROOT_HREFS: Record<MobileOwnerTab, string> = {
   chat: "/(app)/(chat)",
+  today: "/(app)/(today)",
   tasks: "/(app)/(tasks)",
   calendar: "/(app)/(calendar)",
   alerts: "/(app)/(notifications)",
@@ -17,7 +31,8 @@ const TAB_ROOT_HREFS: Record<MobileOwnerTab, string> = {
 
 const TAB_LABELS: Record<MobileOwnerTab, string> = {
   chat: "Chat",
-  tasks: "Tasks",
+  today: "Today",
+  tasks: "My Work",
   calendar: "Schedule",
   alerts: "Alerts",
   more: "More",
@@ -73,6 +88,10 @@ export function inferOwnerTabFromHref(href: string): MobileOwnerTab | undefined 
 
   if (href.startsWith("/(shared)/resource/chat")) {
     return "chat";
+  }
+
+  if (href.startsWith("/(app)/(today)")) {
+    return "today";
   }
 
   if (href.startsWith("/(app)/(tasks)")) {
@@ -156,6 +175,7 @@ export function parseNavigationContext(
     fallbackHref: getRouteParamValue(input.navFallback) ?? input.fallbackHref,
     ownerTab:
       ownerTab === "chat" ||
+      ownerTab === "today" ||
       ownerTab === "tasks" ||
       ownerTab === "calendar" ||
       ownerTab === "alerts" ||

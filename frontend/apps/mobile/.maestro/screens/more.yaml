@@ -1,0 +1,83 @@
+appId: com.devguards.TechOffice
+name: "Screen — More"
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible: "Sign Out"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/01-more-overview"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/02-more-overview-scrolled"
+- tapOn:
+    id: "menu-documents"
+- extendedWaitUntil:
+    visible: "Search documents…"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/03-documents"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/04-documents-scrolled"
+- tapOn:
+    id: "more-back-button"
+- swipe:
+    direction: DOWN
+    duration: 700
+- extendedWaitUntil:
+    visible:
+      id: "menu-files"
+    timeout: 8000
+- tapOn:
+    id: "menu-files"
+- extendedWaitUntil:
+    visible: "Files"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/05-files"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/06-files-scrolled"
+- tapOn:
+    id: "more-back-button"
+- extendedWaitUntil:
+    visible:
+      id: "edit-profile-button"
+    timeout: 8000
+- tapOn:
+    id: "edit-profile-button"
+- extendedWaitUntil:
+    visible: "Profile"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/07-profile"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/08-profile-scrolled"
+- tapOn:
+    id: "more-back-button"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible:
+      id: "setting-dark-mode"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/09-settings"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/10-settings-scrolled"

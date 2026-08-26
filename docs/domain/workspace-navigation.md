@@ -73,7 +73,9 @@ project, chat channel, chat thread, calendar event, booking.
 ## Federated search
 
 Entry point is the workspace search box; results page at `/workspace/search`, mobile at
-`app/(app)/(more)/search.tsx` and `app/(app)/(chat)/search.tsx`.
+`app/(app)/(more)/search.tsx` and `app/(app)/(chat)/search.tsx`. On mobile the only entry
+point is the `SearchPill` at the top of Chat, Today, My Work and Schedule — the More menu
+no longer lists Search, because a menu row made a top-level verb look like a setting.
 
 There is **no backend federated-search service**. `packages/apis/src/search.ts` fans out
 client-side with `Promise.all` over four RPCs, each individually `.catch(() => [])` so one
@@ -153,8 +155,17 @@ Expo Router in `apps/mobile/src/app`, five route groups:
   non-dismissible) then `add-teammate` (skippable). Its `_layout` redirects into the first
   incomplete step so an interrupted owner resumes there. See
   [auth-identity.md](auth-identity.md#client-surfaces).
-- `(app)` — the tab hierarchy: `(chat)`, `(tasks)`, `(calendar)`, `(notifications)`,
-  `(more)` (docs, files, profile, settings, search, navigation-debug)
+- `(app)` — the tab hierarchy. **Four tabs are on the bar: `(chat)`, `(today)`, `(tasks)`
+  (labelled "My Work"), `(more)`** (docs, files, profile, settings, search,
+  navigation-debug). `(calendar)` and `(notifications)` are still full route groups —
+  registered with `href: null` so deep links, push taps and canonical links resolve — but
+  they own no tab slot: Schedule opens from the Today header, Alerts from the bell in the
+  Chat header, which carries the `GetUnreadCount` badge.
+  - `(today)` is the single day view: overdue assigned work, today's events, then work due
+    today. It reads `CollaborationService.GetAssignedWorkSummary` (overdue + due-today
+    across every project, no client fan-out) and `CalendarService.ListEvents` over today.
+  - `(tasks)` opens in Focus mode; the project-first drilldown is behind the
+    `task-mode-toggle` header action rather than a body segmented control.
 - `(shared)` — resource routes reached from a deep link rather than a tab, so a link opens
   the resource without hijacking tab state
 - top level — `booking/[token]`, `canonical-link/[encoded]`, `o/[tenantKey]/r/…`,
@@ -178,8 +189,12 @@ Notable hooks: `use-sse`, `use-presence`, `use-app-state-presence` (presence fol
 foreground/background), `use-push-notifications`, `use-stream-recovery-refresh` (refetch
 after a stream gap), `use-resolved-project-id`, `use-ghost-loading`.
 
-E2E with Maestro; `make test-mobile`, which runs the two user-story flows
-(`auth/signin-known-device`, `onboarding/owner-signup`) before the six coverage flows.
+E2E with Maestro, laid out in `apps/mobile/.maestro/`: `screens/` holds one flow per
+top-level surface (`chat`, `today`, `my-work`, `schedule`, `alerts`, `more`), `auth/` and
+`onboarding/` hold the user-story flows, and the root holds per-feature behavioural flows.
+`make test-mobile` (`scripts/run-maestro-suite.sh`) runs the two story flows
+(`auth/signin-known-device`, `onboarding/owner-signup`), then the screen sweep, then the
+behavioural flows the runner names.
 Design guidance lives in the `building-native-ui` skill and `specs/mobile-ui-design.md`.
 
 ## Shared frontend packages

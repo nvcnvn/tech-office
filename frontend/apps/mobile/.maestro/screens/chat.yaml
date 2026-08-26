@@ -1,0 +1,58 @@
+appId: com.devguards.TechOffice
+name: "Screen — Chat"
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 15000
+- takeScreenshot: "tmp/maestro-screenshots/01-chat-overview"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/02-chat-overview-scrolled"
+- runFlow:
+    when:
+      visible:
+        id: "channel-row-.*"
+    commands:
+      - tapOn:
+          id: "channel-row-.*"
+          index: 0
+      - extendedWaitUntil:
+          visible:
+            id: "channel-header-title"
+          timeout: 8000
+      - takeScreenshot: "tmp/maestro-screenshots/03-chat-channel"
+      - swipe:
+          direction: UP
+          duration: 700
+      - takeScreenshot: "tmp/maestro-screenshots/04-chat-channel-scrolled"
+      - tapOn:
+          id: "channel-back-button"
+      - extendedWaitUntil:
+          visible:
+            id: "new-channel-button"
+          timeout: 8000
+- tapOn:
+    id: "new-channel-button"
+- extendedWaitUntil:
+    visible: "New Channel"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/05-chat-new-channel"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/06-chat-new-channel-scrolled"
+- tapOn:
+    id: "new-channel-cancel-button"
+- extendedWaitUntil:
+    visible:
+      id: "new-channel-button"
+    timeout: 8000

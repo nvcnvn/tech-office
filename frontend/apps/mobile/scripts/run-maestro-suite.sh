@@ -7,7 +7,7 @@ APP_DIR=${SCRIPT_DIR:h}
 REPO_ROOT=${APP_DIR:h:h:h}
 
 if (( $# > 0 )); then
-  print -u2 "This runner does not accept arguments. Run a split flow directly with maestro test if needed."
+  print -u2 "This runner does not accept arguments. Run a single flow directly with maestro test if needed."
   exit 2
 fi
 
@@ -45,12 +45,15 @@ if [[ -z ${MAESTRO_RUN_ID:-} ]]; then
 fi
 env_flags+=(-e "MAESTRO_RUN_ID=$MAESTRO_RUN_ID")
 
-# Story flows run before the coverage sweep: they exercise sign-in and onboarding from a
-# fresh install, which the coverage flows then assume already works.
+# Story flows run first: they exercise sign-in and onboarding from a fresh install, which
+# every screen flow then assumes already works. The screen sweep walks one top-level
+# surface per file, and behavioural flows that belong to the standing suite are listed
+# after it by name.
 flows=(
   $APP_DIR/.maestro/auth/signin-known-device.yaml
   $APP_DIR/.maestro/onboarding/owner-signup.yaml
-  $APP_DIR/.maestro/coverage/[0-9][0-9]-*.yaml
+  $APP_DIR/.maestro/screens/*.yaml
+  $APP_DIR/.maestro/presence-ping-pong.yaml
 )
 failures=0
 
@@ -67,8 +70,8 @@ for flow in $flows; do
 done
 
 if (( failures > 0 )); then
-  print -u2 "\n${failures} coverage flow(s) failed."
+  print -u2 "\n${failures} flow(s) failed."
   exit 1
 fi
 
-print "\nAll split coverage flows passed."
+print "\nAll suite flows passed."

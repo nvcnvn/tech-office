@@ -39,6 +39,7 @@ import {
   radius,
   spacing,
   statusColors,
+  tabIcons,
 } from "@tech-office/theme-tokens";
 
 type TaskMode = "focus" | "projects";
@@ -124,7 +125,7 @@ const taskScreenLayout = {
   sectionHeaderGap: mobileLayout.itemGap, // 8
   /** Outer card group radius. */
   cardRadius: radius.md, // 12
-  /** Pill / segment radius. */
+  /** Pill / chip radius. */
   controlRadius: radius.xl, // 24
   /** Vertical padding inside a task row. */
   rowVerticalPadding: spacing[1.5], // 12
@@ -598,33 +599,29 @@ function getCardColors(tone: CardTone): {
   }
 }
 
-function TaskModeToggle({
-  mode,
-  onChange,
-}: {
-  mode: TaskMode;
-  onChange: (value: TaskMode) => void;
-}) {
-  return (
-    <View style={styles.controlsWrap}>
-      <View style={styles.segmentRow}>
-        {([
-          ["focus", "Focus"],
-          ["projects", "Projects"],
-        ] as const).map(([value, label]) => (
-          <Pressable
-            key={value}
-            onPress={() => onChange(value)}
-            style={[styles.segment, mode === value && styles.segmentActive]}
-          >
-            <Text style={[styles.segmentText, mode === value && styles.segmentTextActive]}>
-              {label}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  );
+/**
+ * Mode switch lives in the header, not the body.
+ *
+ * "Projects" is project-management vocabulary that the people this app is for
+ * do not use; leading the screen with it made the first thing they read a word
+ * they had to decode. The tab now opens straight into their own work, and the
+ * project-first drilldown stays one tap away for whoever runs the projects.
+ */
+function taskModeHeaderAction(mode: TaskMode, onChange: (value: TaskMode) => void) {
+  const goingToProjects = mode === "focus";
+  return {
+    key: "task-mode",
+    testID: "task-mode-toggle",
+    accessibilityLabel: goingToProjects ? "Show projects" : "Show my work",
+    onPress: () => onChange(goingToProjects ? "projects" : "focus"),
+    icon: (
+      <SFIcon
+        name={goingToProjects ? "folder" : "checkmark.square.fill"}
+        size={22}
+        color={lightPalette.primary.main}
+      />
+    ),
+  };
 }
 
 function FocusFilterRow({
@@ -985,22 +982,26 @@ export default function TasksScreen() {
     queryFn: async () => {
       const snapshots = await Promise.all(
         (projects ?? []).map(async (project) => {
-          const [statesResult, standardResult, ritualResult, ritualDefinitions] = await Promise.all([
+          // One ListTasks per project, partitioned client-side by task_kind.
+          // Two filtered calls returned the same rows split in two and doubled
+          // the request count on a screen that already fans out per project.
+          const [statesResult, assignedResult, ritualDefinitions] = await Promise.all([
             listProjectStates(project.id),
             listTasks({
               projectId: project.id,
               assigneeEmployeeId: employeeId,
-              taskKind: "standard",
-              limit: 100,
-            }),
-            listTasks({
-              projectId: project.id,
-              assigneeEmployeeId: employeeId,
-              taskKind: "ritual_instance",
-              limit: 100,
+              limit: 200,
             }),
             listRitualDefinitions(project.id),
           ]);
+
+          const assignedTasks = assignedResult.tasks ?? [];
+          const standardResult = {
+            tasks: assignedTasks.filter((task) => task.taskKind === "standard"),
+          };
+          const ritualResult = {
+            tasks: assignedTasks.filter((task) => task.taskKind === "ritual_instance"),
+          };
 
           const stateMap = new Map(statesResult.states.map((state) => [state.id, state]));
 
@@ -1256,14 +1257,16 @@ export default function TasksScreen() {
   if (isLoading) {
     return (
       <>
-        <Stack.Screen options={createTopLevelTabHeader("Tasks")} />
+        <Stack.Screen options={createTopLevelTabHeader(
+          mode === "focus" ? tabIcons.tasks.label : "Projects",
+          [taskModeHeaderAction(mode, setMode)],
+        )} />
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
           style={styles.container}
           contentContainerStyle={styles.loadingScrollContent}
         >
           <SearchPill placeholder="Search tasks, projects…" />
-          <TaskModeToggle mode={mode} onChange={setMode} />
           {mode === "projects" ? (
             <SkeletonProjectList count={6} showSearchPlaceholder={false} />
           ) : (
@@ -1289,7 +1292,10 @@ export default function TasksScreen() {
   if (mode === "projects") {
     return (
       <>
-        <Stack.Screen options={createTopLevelTabHeader("Tasks")} />
+        <Stack.Screen options={createTopLevelTabHeader(
+          "Projects",
+          [taskModeHeaderAction(mode, setMode)],
+        )} />
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
           style={styles.container}
@@ -1305,7 +1311,6 @@ export default function TasksScreen() {
             secondaryCount={quietProjectCount}
             secondaryLabel="Quiet"
           />
-          <TaskModeToggle mode={mode} onChange={setMode} />
 
           {(projectOverviewItems?.length ?? 0) === 0 ? (
             <EmptyState
@@ -1341,7 +1346,10 @@ export default function TasksScreen() {
 
   return (
     <>
-      <Stack.Screen options={createTopLevelTabHeader("Tasks")} />
+      <Stack.Screen options={createTopLevelTabHeader(
+        tabIcons.tasks.label,
+        [taskModeHeaderAction(mode, setMode)],
+      )} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
         style={styles.container}
@@ -1357,8 +1365,6 @@ export default function TasksScreen() {
           secondaryCount={todayVisibleCount}
           secondaryLabel="Today"
         />
-        <TaskModeToggle mode={mode} onChange={setMode} />
-
         <FocusFilterRow value={focusFilter} onChange={setFocusFilter} />
 
         {visibleTaskSections.length === 0 ? (
@@ -1470,38 +1476,6 @@ const styles = StyleSheet.create({
     width: border.hairline,
     alignSelf: "stretch",
     backgroundColor: lightPalette.divider,
-  },
-  controlsWrap: {
-    paddingHorizontal: mobileLayout.screenPadding,
-    paddingTop: mobileLayout.itemGap,
-  },
-  segmentRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[0.5],
-    backgroundColor: lightPalette.background.paper,
-    borderRadius: taskScreenLayout.controlRadius,
-    padding: spacing[0.5],
-    borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-  },
-  segment: {
-    flex: 1,
-    minHeight: 40,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  segmentActive: {
-    backgroundColor: lightPalette.background.default,
-  },
-  segmentText: {
-    fontSize: mobileTypography.buttonSm.fontSize as number,
-    fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
-  },
-  segmentTextActive: {
-    color: lightPalette.text.primary,
   },
   focusFilterRow: {
     flexDirection: "row",

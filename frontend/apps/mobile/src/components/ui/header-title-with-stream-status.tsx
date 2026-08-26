@@ -8,10 +8,13 @@
 
 import React from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useNavigation, useRouter } from "expo-router";
+import { SFIcon } from "@/components/ui/sf-icon";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
 import {
   lightPalette,
   mobileTypography,
+  spacing,
 } from "@tech-office/theme-tokens";
 
 const headerActionGap = 4;
@@ -111,9 +114,44 @@ function HeaderActionRow({
   );
 }
 
+/**
+ * Back control for a screen that is a tab root but has no tab button —
+ * Schedule and Alerts, which are pushed from the Today and Chat headers.
+ * Without it there is no way out except tapping another tab, and a cold
+ * deep link (a push notification tap) has no history at all, so it falls
+ * back to replacing with the tab that owns the entry point.
+ */
+function TopLevelBackButton({ label, href }: { label: string; href: string }) {
+  const router = useRouter();
+  const navigation = useNavigation();
+
+  return (
+    <Pressable
+      testID="top-level-back-button"
+      accessibilityRole="button"
+      accessibilityLabel={`Back to ${label}`}
+      hitSlop={8}
+      onPress={() => {
+        if (navigation.canGoBack()) {
+          router.back();
+          return;
+        }
+
+        router.replace(href as never);
+      }}
+      style={styles.backButton}
+    >
+      <SFIcon name="chevron.left" size={16} color={lightPalette.info.main} />
+      <Text style={styles.backLabel}>{label}</Text>
+    </Pressable>
+  );
+}
+
 export function createTopLevelTabHeader(
   title: string,
   actions: TopLevelHeaderAction[] = [],
+  /** Set on tab roots that have no tab button, so they can be left. */
+  back?: { label: string; href: string },
 ) {
   const sideWidth =
     actions.length === 0
@@ -126,7 +164,12 @@ export function createTopLevelTabHeader(
     title,
     headerTitleAlign: "center" as const,
     headerTitle: () => <HeaderTitleWithStreamStatus title={title} />,
-    headerLeft: () => <View style={{ width: sideWidth }} />,
+    headerLeft: () =>
+      back ? (
+        <TopLevelBackButton label={back.label} href={back.href} />
+      ) : (
+        <View style={{ width: sideWidth }} />
+      ),
     headerRight: () =>
       actions.length > 0 ? <HeaderActionRow actions={actions} /> : null,
   };
@@ -177,5 +220,17 @@ const styles = StyleSheet.create({
     height: headerActionSize,
     alignItems: "center",
     justifyContent: "center",
+  },
+  backButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[0.5],
+    paddingLeft: headerActionInset,
+    minHeight: headerActionSize,
+  },
+  backLabel: {
+    color: lightPalette.info.main,
+    fontSize: mobileTypography.listPrimary.fontSize,
+    fontWeight: "600",
   },
 });

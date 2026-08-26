@@ -25,7 +25,7 @@ import {
 } from "react-native";
 import { Stack, useNavigation, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { listRecentChannels, type ChannelWithDetails } from "apis";
+import { getUnreadCount, listRecentChannels, type ChannelWithDetails } from "apis";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { parseChatStreamEvent } from "@/lib/chat-stream-events";
@@ -42,6 +42,7 @@ import { ghostLoadingTimings, useGhostLoading } from "@/hooks/use-ghost-loading"
 import { useManualRefresh } from "@/hooks/use-manual-refresh";
 import { useStreamRecoveryRefresh } from "@/hooks/use-stream-recovery-refresh";
 import { notificationStreamBehavior } from "@/lib/notification-stream-behavior";
+import { NOTIFICATIONS_HOME_HREF } from "@/lib/linking";
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
 import {
@@ -53,6 +54,7 @@ import {
   radius,
   spacing,
   chatIcons,
+  tabIcons,
 } from "@tech-office/theme-tokens";
 
 // ── Time formatting ────────────────────────────────────────────────────────
@@ -241,6 +243,32 @@ function ChatOverviewCard({
   );
 }
 
+/**
+ * Alerts bell for the Chat header.
+ *
+ * Alerts used to be its own tab whose entire content was pointers into the
+ * other tabs. It now lives here, where the unread badge is next to the
+ * conversations it is usually about.
+ */
+function AlertsBell({ unreadCount }: { unreadCount: number }) {
+  return (
+    <View>
+      <SFIcon
+        name={tabIcons.alerts.name}
+        size={22}
+        color={lightPalette.primary.main}
+      />
+      {unreadCount > 0 ? (
+        <View style={styles.alertsBadge}>
+          <Text style={styles.alertsBadgeText}>
+            {unreadCount > 99 ? "99+" : unreadCount}
+          </Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
 // ── Main screen ─────────────────────────────────────────────────────────────
 
 export default function ChatIndexScreen() {
@@ -256,15 +284,62 @@ export default function ChatIndexScreen() {
     queryFn: listRecentChannels,
     staleTime: 30_000,
   });
-  const { isRefreshing, onRefresh } = useManualRefresh(refetch);
+
+  const { data: unreadData, refetch: refetchUnreadCount } = useQuery({
+    queryKey: ["unread-count"],
+    queryFn: () => getUnreadCount(),
+  });
+  const alertsUnreadCount = (unreadData as { unreadCount?: number } | undefined)?.unreadCount ?? 0;
+  const refetchAll = useCallback(
+    () => Promise.all([refetch(), refetchUnreadCount()]),
+    [refetch, refetchUnreadCount],
+  );
+
+  const { isRefreshing, onRefresh } = useManualRefresh(refetchAll);
   const { isGhostLoading, runGhostLoad } = useGhostLoading(
-    refetch,
+    refetchAll,
     ghostLoadingTimings.tabMinimumMs,
   );
 
-  useStreamRecoveryRefresh(refetch, {
+  useStreamRecoveryRefresh(refetchAll, {
     intervalMs: notificationStreamBehavior.fallbackPollMs.chat,
   });
+
+  const chatHeader = createTopLevelTabHeader("Chat", [
+    {
+      key: "alerts",
+      testID: tabIcons.alerts.testID,
+      accessibilityLabel: `${tabIcons.alerts.label}${alertsUnreadCount > 0 ? `, ${alertsUnreadCount} unread` : ""}`,
+      onPress: () => router.push(NOTIFICATIONS_HOME_HREF as never),
+      icon: <AlertsBell unreadCount={alertsUnreadCount} />,
+    },
+    {
+      key: "new-channel",
+      testID: chatIcons.newChannel.testID,
+      accessibilityLabel: chatIcons.newChannel.label,
+      onPress: () => router.push("/(app)/(chat)/new-channel"),
+      icon: (
+        <SFIcon
+          name={chatIcons.newChannel.name}
+          size={22}
+          color={lightPalette.primary.main}
+        />
+      ),
+    },
+    {
+      key: "new-dm",
+      testID: chatIcons.newDM.testID,
+      accessibilityLabel: chatIcons.newDM.label,
+      onPress: () => router.push("/(app)/(chat)/new-dm"),
+      icon: (
+        <SFIcon
+          name={chatIcons.newDM.name}
+          size={22}
+          color={lightPalette.primary.main}
+        />
+      ),
+    },
+  ]);
 
   useEffect(() => {
     if (!isLoading) {
@@ -322,34 +397,7 @@ export default function ChatIndexScreen() {
     return (
       <>
         <Stack.Screen
-          options={createTopLevelTabHeader("Chat", [
-            {
-              key: "new-channel",
-              testID: chatIcons.newChannel.testID,
-              accessibilityLabel: chatIcons.newChannel.label,
-              onPress: () => router.push("/(app)/(chat)/new-channel"),
-              icon: (
-                <SFIcon
-                  name={chatIcons.newChannel.name}
-                  size={22}
-                  color={lightPalette.primary.main}
-                />
-              ),
-            },
-            {
-              key: "new-dm",
-              testID: chatIcons.newDM.testID,
-              accessibilityLabel: chatIcons.newDM.label,
-              onPress: () => router.push("/(app)/(chat)/new-dm"),
-              icon: (
-                <SFIcon
-                  name={chatIcons.newDM.name}
-                  size={22}
-                  color={lightPalette.primary.main}
-                />
-              ),
-            },
-          ])}
+          options={chatHeader}
         />
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
@@ -389,34 +437,7 @@ export default function ChatIndexScreen() {
   return (
     <>
       <Stack.Screen
-        options={createTopLevelTabHeader("Chat", [
-          {
-            key: "new-channel",
-            testID: chatIcons.newChannel.testID,
-            accessibilityLabel: chatIcons.newChannel.label,
-            onPress: () => router.push("/(app)/(chat)/new-channel"),
-            icon: (
-              <SFIcon
-                name={chatIcons.newChannel.name}
-                size={22}
-                color={lightPalette.primary.main}
-              />
-            ),
-          },
-          {
-            key: "new-dm",
-            testID: chatIcons.newDM.testID,
-            accessibilityLabel: chatIcons.newDM.label,
-            onPress: () => router.push("/(app)/(chat)/new-dm"),
-            icon: (
-              <SFIcon
-                name={chatIcons.newDM.name}
-                size={22}
-                color={lightPalette.primary.main}
-              />
-            ),
-          },
-        ])}
+        options={chatHeader}
       />
       {sections.length === 0 ? (
         <EmptyState
@@ -470,6 +491,22 @@ export default function ChatIndexScreen() {
 }
 
 const styles = StyleSheet.create({
+  alertsBadge: {
+    position: "absolute",
+    top: -4,
+    left: 12,
+    minWidth: 18,
+    height: 18,
+    paddingHorizontal: 4,
+    borderRadius: radius.full,
+    backgroundColor: lightPalette.error.main,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  alertsBadgeText: {
+    ...mobileTypography.badge,
+    color: lightPalette.error.contrastText,
+  },
   container: {
     flex: 1,
     backgroundColor: lightPalette.background.default,

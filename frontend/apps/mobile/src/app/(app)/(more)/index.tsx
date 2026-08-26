@@ -18,10 +18,12 @@ import {
   Alert,
   StyleSheet,
 } from "react-native";
+import { openBrowserAsync } from "expo-web-browser";
 import { useRouter } from "expo-router";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { AuthContext } from "@/hooks/use-auth";
 import { UserCard } from "@/components/common/user-card";
+import { buildWebUrl } from "@/lib/constants";
 import {
   border,
   lightPalette,
@@ -37,21 +39,26 @@ import {
 // ── Menu definitions ────────────────────────────────────────────────────────
 
 interface MenuItem {
+  /** In-app route, or an https URL opened in the system browser. */
   href: string;
   sfIcon: string;
   label: string;
   testID: string;
 }
 
+// Search is deliberately absent: it is a top-level verb, reachable from the
+// SearchPill at the top of Chat, Today, My Work and Schedule. Listing it here
+// as well made it look like a setting.
 const featureItems: MenuItem[] = [
-  { href: "/(app)/(more)/search", sfIcon: moreMenuIcons.search.name, label: moreMenuIcons.search.label, testID: moreMenuIcons.search.testID },
   { href: "/(app)/(more)/docs", sfIcon: moreMenuIcons.documents.name, label: moreMenuIcons.documents.label, testID: moreMenuIcons.documents.testID },
   { href: "/(app)/(more)/files", sfIcon: moreMenuIcons.files.name, label: moreMenuIcons.files.label, testID: moreMenuIcons.files.testID },
 ];
 
 const settingsItems: MenuItem[] = [
   { href: "/(app)/(more)/settings", sfIcon: moreMenuIcons.settings.name, label: moreMenuIcons.settings.label, testID: moreMenuIcons.settings.testID },
-  { href: "/(app)/(more)/settings", sfIcon: moreMenuIcons.help.name, label: moreMenuIcons.help.label, testID: moreMenuIcons.help.testID },
+  // Help pointed at Settings, so the one row a confused user taps went nowhere
+  // useful. It now opens the guide site the web app already serves at /docs.
+  { href: buildWebUrl("/docs"), sfIcon: moreMenuIcons.help.name, label: moreMenuIcons.help.label, testID: moreMenuIcons.help.testID },
 ];
 
 const devItems: MenuItem[] = __DEV__
@@ -94,6 +101,18 @@ export default function MoreScreen() {
   const router = useRouter();
 
   const employeeId = auth?.employeeId ?? "";
+
+  const openMenuItem = React.useCallback(
+    (item: MenuItem) => {
+      if (item.href.startsWith("http")) {
+        void openBrowserAsync(item.href);
+        return;
+      }
+
+      router.push(item.href);
+    },
+    [router],
+  );
 
   const handleSignOut = () => {
     Alert.alert(
@@ -141,7 +160,7 @@ export default function MoreScreen() {
       <View style={styles.section}>
         {featureItems.map((item, idx) => (
           <React.Fragment key={item.testID}>
-            <MenuRow item={item} onPress={() => router.push(item.href)} />
+            <MenuRow item={item} onPress={() => openMenuItem(item)} />
             {idx < featureItems.length - 1 && <View style={styles.separator} />}
           </React.Fragment>
         ))}
@@ -151,7 +170,7 @@ export default function MoreScreen() {
       <View style={styles.section}>
         {settingsItems.map((item, idx) => (
           <React.Fragment key={item.testID}>
-            <MenuRow item={item} onPress={() => router.push(item.href)} />
+            <MenuRow item={item} onPress={() => openMenuItem(item)} />
             {idx < settingsItems.length - 1 && <View style={styles.separator} />}
           </React.Fragment>
         ))}
@@ -161,7 +180,7 @@ export default function MoreScreen() {
         <View style={styles.section}>
           {devItems.map((item, idx) => (
             <React.Fragment key={item.testID}>
-              <MenuRow item={item} onPress={() => router.push(item.href)} />
+              <MenuRow item={item} onPress={() => openMenuItem(item)} />
               {idx < devItems.length - 1 && <View style={styles.separator} />}
             </React.Fragment>
           ))}

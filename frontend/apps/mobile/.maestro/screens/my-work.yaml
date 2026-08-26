@@ -1,0 +1,31 @@
+appId: com.devguards.TechOffice
+name: "Screen — My Work"
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- tapOn:
+    id: "tab-tasks"
+- extendedWaitUntil:
+    visible: "My Work"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/01-my-work-focus"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/02-my-work-focus-scrolled"
+- tapOn:
+    id: "task-mode-toggle"
+- extendedWaitUntil:
+    visible: "Projects"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/03-my-work-projects"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/04-my-work-projects-scrolled"

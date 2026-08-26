@@ -223,7 +223,7 @@ check-maestro-canonical-env: check-maestro-env
 ## Run all Maestro flows on the connected simulator/emulator.
 test-mobile: check-backend check-maestro check-maestro-env
 	@echo "\n=== Running all Maestro flows ==="
-	frontend/apps/mobile/scripts/run-maestro-coverage.sh
+	frontend/apps/mobile/scripts/run-maestro-suite.sh
 
 .PHONY: test-mobile-one
 ## Run a single Maestro flow. Usage: make test-mobile-one F=auth/signin

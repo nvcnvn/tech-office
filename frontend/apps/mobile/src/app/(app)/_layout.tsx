@@ -1,8 +1,13 @@
 /**
  * Authenticated App Layout — Tab Bar
  *
- * Professional workspace tab navigation with 5 tabs:
- * Chat, Tasks, Calendar, Notifications, More
+ * Four tabs: Chat, Today, My Work, More.
+ *
+ * Schedule and Alerts are still full route groups — they are simply not tab
+ * slots. Alerts was a second inbox pointing at the other tabs' content, so it
+ * now lives behind the bell in the Chat header; Schedule is reached from the
+ * Today header, because Today already answers "what is on today" and a
+ * separate agenda tab duplicated that answer.
  *
  * High-contrast light theme with subtle borders and restrained styling.
  */
@@ -10,8 +15,7 @@
 import { Redirect, Tabs, useRouter } from "expo-router";
 import React from "react";
 import { ActivityIndicator, View } from "react-native";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { getUnreadCount } from "apis";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   joinVoiceCall,
   leaveVoiceCall,
@@ -28,8 +32,6 @@ import { OfflineBanner } from "@/components/ui/offline-banner";
 import { useAppStatePresence } from "@/hooks/use-app-state-presence";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
-import { useStreamRecoveryRefresh } from "@/hooks/use-stream-recovery-refresh";
-import { notificationStreamBehavior } from "@/lib/notification-stream-behavior";
 import { NOTIFICATIONS_HOME_HREF } from "@/lib/linking";
 import {
   getTabLabel,
@@ -53,9 +55,8 @@ import {
 /** Map tab keys to Ionicons names (outline / filled) */
 const TAB_IONICONS = {
   chat: { outline: "chatbubble-outline", filled: "chatbubble" },
+  today: { outline: "sunny-outline", filled: "sunny" },
   tasks: { outline: "checkbox-outline", filled: "checkbox" },
-  calendar: { outline: "calendar-outline", filled: "calendar" },
-  alerts: { outline: "notifications-outline", filled: "notifications" },
   more: { outline: "ellipsis-horizontal", filled: "ellipsis-horizontal" },
 } as const;
 
@@ -249,18 +250,6 @@ export default function AppLayout() {
     }
   }, [activeVoiceLeaving, queryClient, voiceSnapshot.activeCallId, voiceSnapshot.activeChannelId]);
 
-  const { data: unreadData, refetch: refetchUnreadCount } = useQuery({
-    queryKey: ["unread-count"],
-    queryFn: () => getUnreadCount(),
-    enabled: !!auth?.isAuthenticated,
-  });
-
-  useStreamRecoveryRefresh(refetchUnreadCount, {
-    intervalMs: notificationStreamBehavior.fallbackPollMs.unreadCount,
-    enabled: !!auth?.isAuthenticated,
-    requireFocus: false,
-  });
-
   if (auth?.isLoading) {
     return (
       <View
@@ -281,7 +270,6 @@ export default function AppLayout() {
     return <Redirect href="/(auth)" />;
   }
 
-  const unreadCount = (unreadData as any)?.unreadCount ?? 0;
   const showActiveVoiceCallBar = Boolean(
     voiceSnapshot.activeCallId &&
       voiceSnapshot.activeChannelId &&
@@ -370,6 +358,18 @@ export default function AppLayout() {
           }}
         />
         <Tabs.Screen
+          name="(today)"
+          options={{
+            title: tabIcons.today.label,
+            headerShown: false,
+            popToTopOnBlur: true,
+            tabBarButtonTestID: tabIcons.today.testID,
+            tabBarIcon: ({ color, focused }) => (
+              <TabIcon tab="today" focused={focused} color={color} />
+            ),
+          }}
+        />
+        <Tabs.Screen
           name="(tasks)"
           options={{
             title: tabIcons.tasks.label,
@@ -378,36 +378,6 @@ export default function AppLayout() {
             tabBarButtonTestID: tabIcons.tasks.testID,
             tabBarIcon: ({ color, focused }) => (
               <TabIcon tab="tasks" focused={focused} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="(calendar)"
-          options={{
-            title: tabIcons.calendar.label,
-            headerShown: false,
-            popToTopOnBlur: true,
-            tabBarButtonTestID: tabIcons.calendar.testID,
-            tabBarIcon: ({ color, focused }) => (
-              <TabIcon tab="calendar" focused={focused} color={color} />
-            ),
-          }}
-        />
-        <Tabs.Screen
-          name="(notifications)"
-          options={{
-            title: tabIcons.alerts.label,
-            headerShown: false,
-            popToTopOnBlur: true,
-            tabBarButtonTestID: tabIcons.alerts.testID,
-            tabBarBadge:
-              unreadCount > 0
-                ? unreadCount > 99
-                  ? "99+"
-                  : String(unreadCount)
-                : undefined,
-            tabBarIcon: ({ color, focused }) => (
-              <TabIcon tab="alerts" focused={focused} color={color} />
             ),
           }}
         />
@@ -424,6 +394,13 @@ export default function AppLayout() {
             ),
           }}
         />
+        {/*
+          Reachable, but not tab slots: Schedule opens from the Today header,
+          Alerts from the bell in the Chat header. Both keep their route group
+          so deep links, push notifications and canonical links still resolve.
+        */}
+        <Tabs.Screen name="(calendar)" options={{ href: null, headerShown: false }} />
+        <Tabs.Screen name="(notifications)" options={{ href: null, headerShown: false }} />
       </Tabs>
     </View>
   );

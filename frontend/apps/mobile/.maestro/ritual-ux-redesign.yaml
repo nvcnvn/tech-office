@@ -30,6 +30,12 @@ env:
 - assertVisible:
     id: "ritual-proof-section"
 - tapOn:
+    id: "tab-chat"
+- extendedWaitUntil:
+    visible:
+        id: "tab-alerts"
+    timeout: 8000
+- tapOn:
     id: "tab-alerts"
 - extendedWaitUntil:
     visible: "Alerts"

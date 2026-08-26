@@ -1,0 +1,41 @@
+appId: com.devguards.TechOffice
+name: "Screen — Today"
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- tapOn:
+    id: "tab-today"
+- extendedWaitUntil:
+    visible:
+      id: "global-search-pill"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/01-today-overview"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/02-today-overview-scrolled"
+- swipe:
+    direction: DOWN
+    duration: 700
+# The Schedule header action is Today's only route to the calendar now that
+# Schedule has no tab of its own, so the sweep has to prove it still opens and
+# that the back control returns here.
+- tapOn:
+    id: "tab-calendar"
+- extendedWaitUntil:
+    visible:
+      id: "add-event-button"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/03-today-schedule-handoff"
+- tapOn:
+    id: "top-level-back-button"
+- extendedWaitUntil:
+    visible:
+      id: "tab-calendar"
+    timeout: 8000

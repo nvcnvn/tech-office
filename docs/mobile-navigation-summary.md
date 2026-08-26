@@ -4,7 +4,7 @@
 
 This document defines the recommended simplified contract for mobile navigation in the Expo Router app.
 
-It keeps the five-tab workspace model, but reduces the amount of synthetic back-routing logic. The goal is to make navigation feel more native and easier to predict for operational users:
+It keeps the tab-per-work-area workspace model, but reduces the amount of synthetic back-routing logic. The goal is to make navigation feel more native and easier to predict for operational users:
 
 - normal in-app movement should behave like a standard stack
 - task-linked chat should clearly show its task context
@@ -32,20 +32,33 @@ Recommended interpretation:
 
 ## Top-Level Navigation Model
 
-The authenticated mobile app remains organized around five primary tabs:
+The authenticated mobile app is organized around four primary tabs:
 
 | Tab | Route Root | Label Shown to User |
 |-----|------------|---------------------|
 | Chat | `/(app)/(chat)` | `Chat` |
-| Tasks | `/(app)/(tasks)` | `Tasks` |
-| Calendar | `/(app)/(calendar)` | `Schedule` |
-| Notifications | `/(app)/(notifications)` | `Alerts` |
+| Today | `/(app)/(today)` | `Today` |
+| Tasks | `/(app)/(tasks)` | `My Work` |
 | More | `/(app)/(more)` | `More` |
+
+Two further route groups are work areas without a tab slot. They are registered on the
+tab navigator with `href: null`, so they keep their own stack and still resolve deep
+links, push taps and canonical links — they are simply entered from a header action
+rather than the bar:
+
+| Route Root | Label | Entered from |
+|------------|-------|--------------|
+| `/(app)/(calendar)` | `Schedule` | Today header action (`tab-calendar`) |
+| `/(app)/(notifications)` | `Alerts` | Chat header bell (`tab-alerts`), with unread badge |
+
+Alerts lost its tab because its entire content was pointers into the other tabs, which
+taught users they had two inboxes to check. Schedule lost its tab because Today already
+answers "what is on today"; the month grid is a browse tool, not a destination.
 
 Expected behavior:
 
 - Signed-out users are redirected to the auth flow.
-- Signed-in users work primarily inside these five tab roots.
+- Signed-in users work primarily inside these four tab roots.
 - Each tab represents a stable work area.
 - Navigation inside a tab should normally behave like a standard stack: list -> detail -> subdetail -> back.
 
@@ -114,7 +127,7 @@ If a resource is opened from a push notification, universal link, or other cold 
 In that case:
 
 - the screen should expose one fallback destination
-- that fallback should usually be the owning work area or the alerts tab
+- that fallback should usually be the owning work area, or Alerts
 - the fallback is only used when stack history does not exist
 
 This keeps the rule simple:

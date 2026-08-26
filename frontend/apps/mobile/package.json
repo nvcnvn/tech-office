@@ -11,7 +11,7 @@
     "ios:device:embedded": "./scripts/ios-device-build.sh --embedded",
     "android": "expo run:android",
     "prebuild": "expo prebuild",
-    "maestro:coverage": "./scripts/run-maestro-coverage.sh",
+    "maestro:suite": "./scripts/run-maestro-suite.sh",
     "eas-build-pre-install": "./scripts/eas-inject-secrets.sh"
   },
   "dependencies": {

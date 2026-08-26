@@ -1,19 +1,26 @@
-appId: com.devguards.TechOffice
-
-# Coverage flows are split by surface so they can be run independently.
-# Keep auth/signin.yaml as the shared bootstrap used by those flows.
-# Prefer ./scripts/run-maestro-coverage.sh to execute them sequentially.
-flows:
-  - "coverage/[0-9][0-9]-*.yaml"
 # Maestro global config
+#
 # Usage:
-#   pnpm maestro:coverage            # run split coverage flows sequentially
-#   maestro test .maestro/coverage/02-tasks.yaml  # run one split flow
-#   maestro test .maestro/auth/signin.yaml        # run shared auth bootstrap only
+#   pnpm maestro:suite                          # run the standing suite in order
+#   maestro test .maestro/screens/my-work.yaml  # run one screen flow
+#   maestro test .maestro/auth/signin.yaml      # run shared auth bootstrap only
+#
+# Layout:
+#   screens/     one flow per top-level surface, each independently runnable
+#   auth/        sign-in flows; auth/signin.yaml is the shared bootstrap the
+#                screen flows start from
+#   onboarding/  owner first-run story flow
+#   *.yaml       behavioural flows for a single feature, run on demand; the ones
+#                that belong to the standing suite are named in the runner
 #
 # Environment variables:
-#   MAESTRO_API_BASE_URL  — override API base URL (default: http://localhost:18080)
-#   MAESTRO_TEST_EMAIL    — employee email for login tests
-#   MAESTRO_TEST_PASSWORD — employee password for login tests
+#   MAESTRO_API_BASE_URL   — override API base URL (default: http://localhost:18080)
+#   MAESTRO_TEST_EMAIL     — employee email for login tests
+#   MAESTRO_TEST_PASSWORD  — employee password for login tests
 #   MAESTRO_TEST_SUBDOMAIN — org subdomain (e.g. "acme")
-#   MAESTRO_TEST_PIN      — numeric PIN for PIN-entry flow
+#   MAESTRO_TEST_PIN       — numeric PIN for PIN-entry flow
+
+appId: com.devguards.TechOffice
+
+flows:
+  - "screens/*.yaml"

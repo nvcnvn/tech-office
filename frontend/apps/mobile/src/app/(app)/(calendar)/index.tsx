@@ -582,7 +582,10 @@ export default function CalendarScreen() {
               />
             ),
           },
-        ])}
+        ],
+        // Schedule is not a tab any more; it is opened from the Today header.
+        { label: "Today", href: "/(app)/(today)" },
+        )}
       />
 
       <ScrollView

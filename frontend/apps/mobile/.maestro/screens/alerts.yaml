@@ -1,0 +1,41 @@
+appId: com.devguards.TechOffice
+name: "Screen — Alerts"
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- tapOn:
+    id: "tab-chat"
+- extendedWaitUntil:
+    visible:
+        id: "tab-alerts"
+    timeout: 8000
+- tapOn:
+    id: "tab-alerts"
+- extendedWaitUntil:
+    visible: "All"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/01-alerts-overview"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/02-alerts-overview-scrolled"
+- tapOn: "Unread"
+- takeScreenshot: "tmp/maestro-screenshots/03-alerts-unread"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/04-alerts-unread-scrolled"
+# Alerts is a tab root without a tab button, so the header back control is the
+# only way out that does not abandon the screen for another tab.
+- tapOn:
+    id: "top-level-back-button"
+- extendedWaitUntil:
+    visible:
+        id: "new-channel-button"
+    timeout: 8000

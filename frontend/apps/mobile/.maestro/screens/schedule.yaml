@@ -1,0 +1,49 @@
+appId: com.devguards.TechOffice
+name: "Screen — Schedule"
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+        when:
+            visible:
+                id: "xmark"
+        commands:
+            - tapOn:
+                    id: "xmark"
+- tapOn:
+    id: "tab-today"
+- extendedWaitUntil:
+    visible:
+        id: "tab-calendar"
+    timeout: 8000
+- tapOn:
+    id: "tab-calendar"
+- extendedWaitUntil:
+    visible: "Next Up"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/01-schedule-overview"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/02-schedule-overview-scrolled"
+- swipe:
+    direction: DOWN
+    duration: 700
+- tapOn:
+    id: "add-event-content-button"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+      - tapOn:
+          id: "add-event-content-button"
+- extendedWaitUntil:
+    visible: "New Event"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/03-schedule-new-event"
+- swipe:
+    direction: UP
+    duration: 700
+- takeScreenshot: "tmp/maestro-screenshots/04-schedule-new-event-scrolled"

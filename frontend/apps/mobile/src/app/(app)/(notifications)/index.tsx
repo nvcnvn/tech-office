@@ -528,7 +528,12 @@ export default function AlertsScreen() {
   return (
     <>
       <Stack.Screen
-        options={createTopLevelTabHeader("Alerts")}
+        options={createTopLevelTabHeader(
+          "Alerts",
+          [],
+          // Alerts is not a tab any more; it is opened from the Chat header bell.
+          { label: "Chat", href: "/(app)/(chat)" },
+        )}
       />
 
       {showLoadingSkeleton ? (

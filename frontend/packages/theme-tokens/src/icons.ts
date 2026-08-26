@@ -47,9 +47,16 @@ function icon(
 
 // ─── Tab Bar ─────────────────────────────────────────────────────────────────
 
+/**
+ * Four tabs are on the bar: chat, today, tasks, more.
+ * `calendar` and `alerts` stay here because both are still real destinations —
+ * they are just reached from a header action (Today -> Schedule, Chat -> Alerts)
+ * instead of owning a tab slot.
+ */
 export const tabIcons = {
     chat: icon('bubble.left', 'Chat', 'tab-chat', 'bubble.left.fill'),
-    tasks: icon('checkmark.square', 'Tasks', 'tab-tasks', 'checkmark.square.fill'),
+    today: icon('sun.max', 'Today', 'tab-today', 'sun.max.fill'),
+    tasks: icon('checkmark.square', 'My Work', 'tab-tasks', 'checkmark.square.fill'),
     calendar: icon('calendar', 'Schedule', 'tab-calendar', 'calendar'),
     alerts: icon('bell', 'Alerts', 'tab-alerts', 'bell.fill'),
     more: icon('ellipsis', 'More', 'tab-more', 'ellipsis'),

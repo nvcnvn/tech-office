@@ -1,7 +1,7 @@
 appId: com.devguards.TechOffice
 name: "Auth — Sign in with email"
 # The email path, reached as the quiet secondary action on the PIN-first sign-in screen.
-# Coverage flows use this as their shared bootstrap, so it authenticates with credentials
+# Screen flows use this as their shared bootstrap, so it authenticates with credentials
 # that do not depend on a PIN having been set.
 ---
 - launchApp:
