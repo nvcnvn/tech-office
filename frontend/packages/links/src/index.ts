@@ -367,7 +367,7 @@ function taskWebPath(target: CanonicalLinkTarget): string {
 
 function taskMobilePath(target: CanonicalLinkTarget): string {
 	if (target.parentResourceId) {
-		return `/(app)/(tasks)/${target.parentResourceId}/${target.resourceId}`;
+		return `/(app)/(tasks)/${target.parentResourceId}/task/${target.resourceId}`;
 	}
 	return '/(app)/(tasks)';
 }

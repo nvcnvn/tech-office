@@ -163,29 +163,31 @@ function resolveTaskFocusParams(
   queryParams?: URLSearchParams,
 ): RitualTaskFocusParams {
   const focusIntent = normalizeFocusIntent(
-    queryParams?.get("focusIntent") ??
-      queryParams?.get("intent") ??
-      actionData?.focusIntent ??
-      actionData?.ritualFocusIntent ??
-      target?.action,
+    queryParams?.get("focusIntent") ||
+      queryParams?.get("intent") ||
+      actionData?.focusIntent ||
+      actionData?.ritualFocusIntent ||
+      target?.action ||
+      undefined,
   ) ?? focusIntentFromNotificationType(notificationType);
   const requirementId =
-    queryParams?.get("requirementId") ??
-    queryParams?.get("evidenceRequirementId") ??
-    queryParams?.get("pendingRequirementId") ??
-    queryParams?.get("focusRequirementId") ??
-    actionData?.requirementId ??
-    actionData?.evidenceRequirementId ??
-    actionData?.pendingRequirementId ??
-    actionData?.focusRequirementId ??
+    queryParams?.get("requirementId") ||
+    queryParams?.get("evidenceRequirementId") ||
+    queryParams?.get("pendingRequirementId") ||
+    queryParams?.get("focusRequirementId") ||
+    actionData?.requirementId ||
+    actionData?.evidenceRequirementId ||
+    actionData?.pendingRequirementId ||
+    actionData?.focusRequirementId ||
     actionData?.latestPendingRequirementId;
   const entryContext =
     normalizeEntryContext(
-      queryParams?.get("entryContext") ??
-        queryParams?.get("taskContext") ??
-        actionData?.entryContext ??
-        actionData?.taskContext ??
-        actionData?.ritualContext,
+      queryParams?.get("entryContext") ||
+        queryParams?.get("taskContext") ||
+        actionData?.entryContext ||
+        actionData?.taskContext ||
+        actionData?.ritualContext ||
+        undefined,
     ) ??
     (asTruthyFlag(actionData?.detachedFromRitual) ? "detached" : undefined) ??
     (actionData?.skipReason ? "skipped" : undefined);
@@ -275,7 +277,7 @@ function notificationChannelId(
   actionData: Record<string, string> | undefined,
 ): string | undefined {
   return notificationTargetIsChatChannel(target)
-    ? target?.resourceId ?? actionData?.channelId
+    ? target?.resourceId || actionData?.channelId
     : actionData?.channelId;
 }
 
@@ -309,7 +311,7 @@ function resolveIncomingVoiceCallHref(
     return buildChatHref(channelId);
   }
 
-  const deepLinkHref = resolveNotificationHref(target?.deepLink ?? actionData?.deepLink);
+  const deepLinkHref = resolveNotificationHref(target?.deepLink || actionData?.deepLink);
   return deepLinkHref?.startsWith("/(app)/(chat)") ? deepLinkHref : NOTIFICATIONS_HOME_HREF;
 }
 
@@ -318,7 +320,7 @@ function buildTaskHref(
   taskId: string,
   focus?: RitualTaskFocusParams,
 ): string {
-  return appendQueryParams(`/(app)/(tasks)/${projectId}/${taskId}`, {
+  return appendQueryParams(`/(app)/(tasks)/${projectId}/task/${taskId}`, {
     focusIntent: focus?.focusIntent,
     requirementId: focus?.requirementId,
     entryContext: focus?.entryContext,
@@ -330,7 +332,7 @@ export function resolveNotificationTaskNavigation(
 ): NotificationTaskNavigation | null {
   const target = notification?.navigationTarget;
   const actionData = notification?.actionData;
-  const sourceDomain = notification?.sourceDomain ?? target?.domain;
+  const sourceDomain = notification?.sourceDomain || target?.domain;
 
   if (
     notificationHasExplicitChatContext(sourceDomain, target, actionData) &&
@@ -339,7 +341,7 @@ export function resolveNotificationTaskNavigation(
     return null;
   }
 
-  const deepLink = target?.deepLink ?? actionData?.deepLink;
+  const deepLink = target?.deepLink || actionData?.deepLink;
   if (deepLink) {
     const { parts, queryParams } = parseDeepLinkParts(deepLink);
     if (parts[0] === "tasks" && parts[1] && parts[2]) {
@@ -356,7 +358,7 @@ export function resolveNotificationTaskNavigation(
   }
 
   const projectId = actionData?.projectId;
-  const taskId = actionData?.taskId ?? target?.resourceId;
+  const taskId = actionData?.taskId || target?.resourceId;
   if (target?.resourceType === "task" && projectId && taskId) {
     const focus = resolveTaskFocusParams(notification?.notificationType, target, actionData);
     return {
@@ -385,7 +387,7 @@ export function resolveNotificationPayloadHref(
   const target = notification?.navigationTarget;
   const actionData = notification?.actionData;
   const notificationType = notification?.notificationType;
-  const sourceDomain = notification?.sourceDomain ?? target?.domain;
+  const sourceDomain = notification?.sourceDomain || target?.domain;
 
   if (notificationType === "voice_call_incoming") {
     return resolveIncomingVoiceCallHref(target, actionData);
@@ -393,10 +395,10 @@ export function resolveNotificationPayloadHref(
 
   const channelId = notificationChannelId(target, actionData);
   const parentMessageId = actionData?.parentMessageId;
-  const taskId = actionData?.taskId ?? target?.resourceId;
+  const taskId = actionData?.taskId || target?.resourceId;
   const projectId = actionData?.projectId;
-  const eventId = actionData?.eventId ?? target?.resourceId;
-  const documentSlug = actionData?.slug ?? actionData?.documentSlug ?? target?.resourceId;
+  const eventId = actionData?.eventId || target?.resourceId;
+  const documentSlug = actionData?.slug || actionData?.documentSlug || target?.resourceId;
   const isTaskViewNotification = notificationTargetsTaskView(notificationType);
 
   // Task-commented/mentioned notifications bridged from a task discussion chat
@@ -410,7 +412,7 @@ export function resolveNotificationPayloadHref(
   ) {
     if (
       parentMessageId &&
-      (target?.action ?? actionData?.action) === "view_thread"
+      (target?.action || actionData?.action) === "view_thread"
     ) {
       return `/(app)/(chat)/thread/${parentMessageId}`;
     }
@@ -421,7 +423,7 @@ export function resolveNotificationPayloadHref(
     if (
       parentMessageId &&
       (
-        (target?.action ?? actionData?.action) === "view_thread" ||
+        (target?.action || actionData?.action) === "view_thread" ||
         notificationType === "reply" ||
         notificationType === "thread_reply" ||
         notificationType === "message_reply" ||
@@ -432,7 +434,7 @@ export function resolveNotificationPayloadHref(
       return `/(app)/(chat)/thread/${parentMessageId}`;
     }
 
-    return buildChatHref(target?.resourceId ?? channelId!);
+    return buildChatHref(target?.resourceId || channelId!);
   }
 
   const taskNavigation = resolveNotificationTaskNavigation(notification);
@@ -453,7 +455,7 @@ export function resolveNotificationPayloadHref(
     return buildTaskHref(projectId, taskId, resolveTaskFocusParams(notificationType, target, actionData));
   }
 
-  const deepLinkHref = resolveNotificationHref(target?.deepLink ?? actionData?.deepLink);
+  const deepLinkHref = resolveNotificationHref(target?.deepLink || actionData?.deepLink);
   if (deepLinkHref) {
     return deepLinkHref;
   }
@@ -467,7 +469,7 @@ export function resolveNotificationPayloadHref(
     if (
       parentMessageId &&
       (
-        (target?.action ?? actionData?.action) === "view_thread" ||
+        (target?.action || actionData?.action) === "view_thread" ||
         notificationType === "reply" ||
         notificationType === "thread_reply" ||
         notificationType === "message_reply" ||
@@ -478,7 +480,7 @@ export function resolveNotificationPayloadHref(
       return `/(app)/(chat)/thread/${parentMessageId}`;
     }
 
-    return buildChatHref(target?.resourceId ?? channelId!);
+    return buildChatHref(target?.resourceId || channelId!);
   }
 
   if (target?.resourceType === "task") {

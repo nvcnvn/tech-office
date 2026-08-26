@@ -162,6 +162,18 @@ Expo Router in `apps/mobile/src/app`, five route groups:
   and `canonical-signin` both re-export the `(auth)` sign-in screen, which parks a pending
   redirect and follows it once the user authenticates.
 
+**Route patterns may never be all-dynamic at differing depths.** Expo Router compiles a
+group segment in a route pattern to an *optional* regex group and ranks candidates by
+static-segment count and then by segment count, so a route made only of dynamic segments
+outranks a shorter all-dynamic route and consumes the literal group token of its href.
+While the task screen lived at `(app)/(tasks)/[projectId]/[taskId]`, every
+`/(app)/(chat)/<channelId>` and `/(app)/(calendar)/<eventId>` push resolved to it as
+`{projectId: "(chat)", taskId: "<channelId>"}` — a notification tap on a direct message
+opened the Tasks tab showing "Task not found". The task screen therefore lives at
+`(app)/(tasks)/[projectId]/task/[taskId]` (and `(shared)/resource/tasks/[projectId]/task/[taskId]`),
+whose static `task` segment cannot match a group token.
+`apps/mobile/scripts/check-route-ambiguity.mjs` asserts the invariant.
+
 Notable hooks: `use-sse`, `use-presence`, `use-app-state-presence` (presence follows
 foreground/background), `use-push-notifications`, `use-stream-recovery-refresh` (refetch
 after a stream gap), `use-resolved-project-id`, `use-ghost-loading`.

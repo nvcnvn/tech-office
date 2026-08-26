@@ -23,7 +23,7 @@ export function TaskDiscussionContext({ linkedResource }: TaskDiscussionContextP
   }
 
   const taskHref = withNavigationContext(
-    `/(app)/(tasks)/${linkedResource.parentId}/${linkedResource.resourceId}`,
+    `/(app)/(tasks)/${linkedResource.parentId}/task/${linkedResource.resourceId}`,
     {
       fallbackHref: "/(app)/(tasks)",
       ownerTab: "tasks",

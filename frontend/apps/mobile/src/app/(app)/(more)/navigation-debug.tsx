@@ -21,7 +21,7 @@ import {
 } from "@tech-office/theme-tokens";
 
 function buildTaskHref(projectId: string, taskId: string): string {
-  return `/(app)/(tasks)/${projectId.trim()}/${taskId.trim()}`;
+  return `/(app)/(tasks)/${projectId.trim()}/task/${taskId.trim()}`;
 }
 
 function buildTaskContextHref(projectId: string, taskId: string): string {

@@ -423,7 +423,7 @@ function getRitualTaskFocusIntent(task: Task): RitualFocusIntent {
 }
 
 function buildRitualTaskHref(task: Task): string {
-  return `/(app)/(tasks)/${task.projectId}/${task.id}?focusIntent=${getRitualTaskFocusIntent(task)}`;
+  return `/(app)/(tasks)/${task.projectId}/task/${task.id}?focusIntent=${getRitualTaskFocusIntent(task)}`;
 }
 
 function getRitualOpenActionLabel(task: Task): string {
@@ -463,7 +463,7 @@ function StandardTaskRow({ item, today, nextWeek }: { item: StandardTaskItem; to
 
   return (
     <Link
-      href={withNavigationContext(`/(app)/(tasks)/${item.task.projectId}/${item.task.id}`, {
+      href={withNavigationContext(`/(app)/(tasks)/${item.task.projectId}/task/${item.task.id}`, {
         fallbackHref: "/(app)/(tasks)",
         ownerTab: "tasks",
         backLabel: "Tasks",

@@ -25,7 +25,7 @@ export default function TasksLayout() {
         options={{ headerLargeTitle: false, title: "Tasks" }}
       />
       <Stack.Screen
-        name="[projectId]/[taskId]"
+        name="[projectId]/task/[taskId]"
         options={{ headerLargeTitle: false, title: "Live Task" }}
       />
       <Stack.Screen
