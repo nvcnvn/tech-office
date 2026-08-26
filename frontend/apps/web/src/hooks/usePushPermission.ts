@@ -37,6 +37,25 @@ interface UsePushPermissionReturn {
 	isDenied: boolean;
 }
 
+const PUSH_INSTALLATION_ID_KEY = 'techoffice.push.installationId';
+
+/**
+ * Stable per-browser device identifier. The backend upserts push tokens on
+ * (organization, employee, device_identifier), so this must survive reloads --
+ * a fresh value each registration inserts a new row instead, and every one of
+ * them is then fanned out to on each notification.
+ */
+function getStablePushDeviceIdentifier(): string {
+	const existing = localStorage.getItem(PUSH_INSTALLATION_ID_KEY);
+	if (existing) {
+		return existing;
+	}
+
+	const deviceId = `web-${crypto.randomUUID()}`;
+	localStorage.setItem(PUSH_INSTALLATION_ID_KEY, deviceId);
+	return deviceId;
+}
+
 function shouldRequireSoundActivation(permissionState: PermissionState): boolean {
 	if (permissionState !== 'granted') {
 		return false;
@@ -85,9 +104,8 @@ export function usePushPermission(options: UsePushPermissionOptions = {}): UsePu
 	 */
 	const registerToken = useCallback(async (token: string) => {
 		try {
-			// Generate device identifier (user agent hash + timestamp)
 			const userAgent = navigator.userAgent;
-			const deviceId = `web-${btoa(userAgent).substring(0, 32)}-${Date.now()}`;
+			const deviceId = getStablePushDeviceIdentifier();
 
 			await registerPushToken({
 				fcmToken: token,

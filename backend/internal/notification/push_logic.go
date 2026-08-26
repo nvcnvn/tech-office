@@ -70,6 +70,9 @@ type pushTokenMetadata struct {
 	Platform         string `json:"platform"`
 }
 
+// fcmBatchTimeout bounds a single employee's push fan-out.
+const fcmBatchTimeout = 10 * time.Second
+
 const deleteDuplicatePushTokensByFCM = `
 DELETE FROM notification.push_token
 WHERE organization_id = $1
@@ -340,11 +343,18 @@ func (l *pushLogicImpl) SendPushNotification(ctx context.Context, employeeID, or
 		"token_count", len(tokens),
 	)
 
+	// Bound the whole FCM batch: these sends happen inside the caller's request
+	// transaction, so an unresponsive FCM must not stall message delivery.
+	sendCtx, cancelSend := context.WithTimeout(ctx, fcmBatchTimeout)
+	defer cancelSend()
+
 	// Send to all valid tokens (one by one for Firebase v3 compatibility)
 	successCount := 0
 	failureCount := 0
 	duplicateCount := 0
 	unsupportedCount := 0
+	invalidatedCount := 0
+	credentialFailure := false
 	seenFCMTokens := make(map[string]struct{}, len(tokens))
 
 	for _, token := range tokens {
@@ -424,16 +434,46 @@ func (l *pushLogicImpl) SendPushNotification(ctx context.Context, employeeID, or
 			msg.Notification.ImageURL = *notification.ImageURL
 		}
 
-		_, err := l.fcmClient.Send(ctx, msg)
+		_, err := l.fcmClient.Send(sendCtx, msg)
 		if err != nil {
+			failureCount++
+
+			// A 403 is reported as "mismatched-credential" whether the token belongs
+			// to another Firebase project or the server's own service account lacks
+			// cloudmessaging.messages.create. The second case is a server
+			// misconfiguration that would fail for every token, so abandon the batch
+			// instead of burning a round-trip each — and never invalidate tokens over
+			// it, they are fine and the devices would have no way to know.
+			if messaging.IsMismatchedCredential(err) {
+				slog.ErrorContext(ctx, "❌ FCM rejected the server credentials - abandoning push batch",
+					"error", err,
+					"token_id", token.TokenID.String(),
+					"employee_id", employeeID.String(),
+					"help", "The GOOGLE_APPLICATION_CREDENTIALS service account must belong to the same Firebase project as the app and hold roles/firebasecloudmessaging.admin.",
+				)
+				credentialFailure = true
+				break
+			}
+
+			// An unregistered token is dead for good (app uninstalled, token
+			// rotated), so stop paying a round-trip for it on every notification.
+			// A re-registration from the device flips is_valid back to true.
+			unregistered := messaging.IsRegistrationTokenNotRegistered(err)
 			slog.ErrorContext(ctx, "❌ FCM send failed for token",
 				"error", err,
 				"token_id", token.TokenID.String(),
 				"employee_id", employeeID.String(),
+				"unregistered", unregistered,
 			)
-			failureCount++
-			// Optionally mark token as invalid if it's a permanent failure
-			// This would require checking the error type
+			if unregistered {
+				invalidatedCount++
+				if markErr := l.MarkTokenInvalid(ctx, l.adminPool, token.TokenID, orgID); markErr != nil {
+					slog.WarnContext(ctx, "failed to mark unregistered push token invalid",
+						"error", markErr,
+						"token_id", token.TokenID.String(),
+					)
+				}
+			}
 		} else {
 			slog.InfoContext(ctx, "✅ push notification sent successfully",
 				"token_id", token.TokenID.String(),
@@ -448,8 +488,14 @@ func (l *pushLogicImpl) SendPushNotification(ctx context.Context, employeeID, or
 		"failure_count", failureCount,
 		"duplicate_count", duplicateCount,
 		"unsupported_count", unsupportedCount,
+		"invalidated_count", invalidatedCount,
+		"credential_failure", credentialFailure,
 		"employee_id", employeeID.String(),
 	)
+
+	if credentialFailure {
+		return fmt.Errorf("FCM rejected the server credentials for organization %s", orgID.String())
+	}
 
 	return nil
 }

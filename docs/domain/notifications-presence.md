@@ -180,10 +180,23 @@ resolved against the denormalised `active_connection.department_ids`.
 ## Push notifications
 
 FCM via `firebase.google.com/go/messaging`. `notification.push_token` holds one row per
-(employee, device) with `permission_state`, endpoint, keys, user agent. A 24-hour cleanup
+(employee, device) with `permission_state`, endpoint, keys, user agent. Registration
+upserts on `(organization_id, employee_id, device_identifier)`, so both clients must send
+a *stable* identifier — mobile persists a UUID in `SecureStore`, web in `localStorage`. A 24-hour cleanup
 worker prunes stale tokens. **When `GOOGLE_APPLICATION_CREDENTIALS` is unset the FCM client
 is not created and push is silently disabled** — the server logs a warning at startup and
 otherwise behaves normally.
+
+Delivery only reads tokens with `is_valid = true`. A send rejected with
+`registration-token-not-registered` (app uninstalled, token rotated) flips that token to
+`is_valid = false` immediately, so a dead device stops costing an HTTPS round-trip on
+every subsequent notification; re-registering via `RegisterPushToken` sets it back to
+valid. A `mismatched-credential` rejection is treated as a *server* fault instead — FCM
+returns that code both for a token from another Firebase project and for a service
+account lacking `cloudmessaging.messages.create`, so the fan-out abandons the rest of the
+batch, leaves every token valid, and `SendPushNotification` returns an error. The whole
+per-employee fan-out also runs under a 10-second deadline because it happens inside the
+caller's request transaction.
 
 Payload guardrail (from `AGENTS.md`, and enforced by
 `notification_frontend_parity_test.go`): every user-facing notification must carry
