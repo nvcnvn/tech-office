@@ -11,3 +11,21 @@ message PinAuthErrorDetail {
   int64  lockout_until_unix    = 2; // Unix seconds; 0 when admin_reset_required=true
   bool   admin_reset_required  = 3;
 }
+
+// BlockingOrganization — one workspace that stands in the way of account deletion.
+message BlockingOrganization {
+  string organization_id   = 1;
+  string organization_name = 2;
+  int32  member_count      = 3;
+}
+
+// SoleOwnerBlocksDeletion — attached to FAILED_PRECONDITION when DeleteMyAccount
+// is refused because the caller is the only owner of one or more workspaces that
+// still have other members (FR-005).
+//
+// Without this detail a client can only show a sentence. With it, mobile and web
+// can list exactly which workspaces are blocking and link to transfer-or-close for
+// each, which is what "tell the person what to do instead" requires.
+message SoleOwnerBlocksDeletion {
+  repeated BlockingOrganization organizations = 1;
+}

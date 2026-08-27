@@ -4,7 +4,7 @@ Tenant creation, the employee roster, and the department hierarchy. Owned by
 `internal/organization` (`OrganizationService`) and `internal/department`
 (`DepartmentService`).
 
-**Status date: 2026-08-26.** Supersedes specs 001, 003, 004, 005, 006, 025, 035.
+**Status date: 2026-08-27.** Supersedes specs 001, 003, 004, 005, 006, 025, 035.
 
 ## Organization
 
@@ -89,6 +89,14 @@ employee.
 
 `date_of_birth` and `phone_number` are not just profile data: PIN validation rejects a PIN
 derived from either (see [auth-identity.md](auth-identity.md#3-pin-org-managed-worker-accounts)).
+
+**The row survives its person.** Deleting an account does not delete the employee row: it
+strips it to a de-identified tombstone (`given_name` → `'Deleted'`, `family_name` →
+`'user'`, `email` → `''`, the rest NULL, `is_active` → false) so the organization keeps its
+messages, files, tasks and documents while they stop naming anybody. Roughly fifty columns
+across a dozen schemas FK to this row and Citus does not support `ON DELETE SET NULL`, so
+this is the only shape erasure can take here. See
+[compliance-safety.md](compliance-safety.md).
 
 ### Listing and cards
 

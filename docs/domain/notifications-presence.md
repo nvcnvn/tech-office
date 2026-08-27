@@ -4,7 +4,7 @@ The delivery backbone every other domain publishes into, plus the presence signa
 decides how something gets delivered. Owned by `internal/notification`; contract in
 `rpc/v1/notification.proto` (`NotificationService`, 19 RPCs + one server-streaming RPC).
 
-**Status date: 2026-08-22.** Supersedes specs 007, 008, 012, 019, 021, 033. Deeper
+**Status date: 2026-08-27.** Supersedes specs 007, 008, 012, 019, 021, 033. Deeper
 references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 `NOTIFICATION-RESCUE-PUSH-DESIGN.md`, `NOTIFICATION-RULES.md`, `FCM-SETUP.md`.
 
@@ -214,10 +214,17 @@ than inferring from loose IDs.
 
 ## Notification types
 
-31 values in the DB CHECK, grouped: chat (`message`, `mention`, `reply`, `typing`,
-`reaction`), voice (4), task (6), docs (3), ritual/evidence (7), calendar (6). Source
-domains: `chat`, `crm`, `projects`, `hr`, `support`, `finance`, `docs`, `system`,
-`calendar`.
+32 values in the DB CHECK, grouped: chat (`message`, `mention`, `reply`, `typing`,
+`reaction`), voice (4), task (6), docs (3), ritual/evidence (7), calendar (6), and
+`account_removal_requested`. Source domains: `chat`, `crm`, `projects`, `hr`, `support`,
+`finance`, `docs`, `system`, `calendar`.
+
+`account_removal_requested` is published on `system` by `internal/compliance` when an
+admin-provisioned worker asks to be removed from a workspace; it reaches that
+workspace's owners. It is the one notification whose publish shares its caller's
+transaction rather than being best-effort: a removal request nobody hears about is the
+off-app dead end both app stores reject, so a failure to notify rolls the request back.
+See [compliance-safety.md](compliance-safety.md).
 
 Adding a type means changing four places in one PR (Constitution VIII): the DB CHECK,
 `internal/notification/constants.go`, the proto, and

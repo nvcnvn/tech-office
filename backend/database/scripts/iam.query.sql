@@ -736,3 +736,154 @@ FROM iam.identity i
 WHERE i.organization_id = @organization_id::uuid
   AND i.id = ANY(@identity_ids::uuid[])
   AND i.login_identifier IS NOT NULL;
+
+-- =============================================================================
+-- Account deletion (Feature 036)
+-- =============================================================================
+
+-- name: ListIdentityOrganizations :many
+-- Every organization a person belongs to.
+--
+-- This query has no organization_id predicate and therefore fans out across every
+-- Citus shard. That is unavoidable: finding all of a person's organizations is
+-- precisely the question no single tenant context can answer, so TenantPool — which
+-- enforces an organization_id context — cannot serve it. It MUST run on AdminPool.
+-- The cost is acceptable because it runs only on the account-deletion path, an
+-- operation measured in single digits per day at any plausible scale
+-- (research.md R5, Constitution Principle I).
+SELECT organization_id
+FROM iam.identity
+WHERE id = $1
+ORDER BY organization_id;
+
+-- name: CountOrganizationOwners :one
+-- How many active people hold the owner role in this organization.
+SELECT COUNT(DISTINCT er.employee_id)::int AS owner_count
+FROM iam.employee_role er
+JOIN iam.role r
+  ON (er.organization_id, er.role_id) = (r.organization_id, r.id)
+JOIN organization.employee e
+  ON (er.organization_id, er.employee_id) = (e.organization_id, e.id)
+WHERE er.organization_id = $1
+  AND r.source_default_role_id = 'owner'
+  AND e.is_active = TRUE;
+
+-- name: CountActiveOrganizationMembers :one
+-- How many active people are in this organization, excluding the given person.
+-- Used to tell "sole owner of a populated workspace" (which blocks deletion) from
+-- "sole owner of an empty workspace" (which does not).
+SELECT COUNT(*)::int AS member_count
+FROM organization.employee
+WHERE organization_id = $1
+  AND id <> $2
+  AND is_active = TRUE;
+
+-- name: IsEmployeeOrganizationOwner :one
+SELECT EXISTS (
+    SELECT 1
+    FROM iam.employee_role er
+    JOIN iam.role r
+      ON (er.organization_id, er.role_id) = (r.organization_id, r.id)
+    WHERE er.organization_id = $1
+      AND er.employee_id = $2
+      AND r.source_default_role_id = 'owner'
+) AS is_owner;
+
+-- name: ListOrganizationOwnerIDs :many
+SELECT DISTINCT er.employee_id
+FROM iam.employee_role er
+JOIN iam.role r
+  ON (er.organization_id, er.role_id) = (r.organization_id, r.id)
+JOIN organization.employee e
+  ON (er.organization_id, er.employee_id) = (e.organization_id, e.id)
+WHERE er.organization_id = $1
+  AND r.source_default_role_id = 'owner'
+  AND e.is_active = TRUE;
+
+-- name: AnonymiseEmployee :exec
+-- Strips personal data from the employee record and deactivates it, leaving the
+-- de-identified tombstone the organization's messages, tasks, files and documents
+-- still point at (FR-006, research.md R1).
+--
+-- The row is NOT deleted: roughly fifty columns across a dozen schemas reference an
+-- employee id, and Citus does not support ON DELETE SET NULL, so deleting it would
+-- mean either breaking every one of those references or a fifty-table sweep in a
+-- cross-shard transaction. Anonymising is one UPDATE and gives the erasure the
+-- stores require while leaving the employer's business records intact.
+--
+-- Idempotent: running it again on an already-anonymised row changes nothing, which
+-- is what lets the background worker retry a failed erase from the start.
+UPDATE organization.employee
+SET given_name      = 'Deleted',
+    family_name     = 'user',
+    email           = '',
+    date_of_birth   = NULL,
+    phone_number    = NULL,
+    home_address    = NULL,
+    additional_info = NULL,
+    is_active       = FALSE,
+    updated_at      = $3
+WHERE organization_id = $1
+  AND id = $2;
+
+-- name: DeleteIdentityForOrganization :exec
+DELETE FROM iam.identity
+WHERE organization_id = $1 AND id = $2;
+
+-- name: DeleteCredentialsForOrganization :exec
+DELETE FROM iam.credential
+WHERE organization_id = $1 AND identity_id = $2;
+
+-- name: DeleteEmployeeRolesForOrganization :exec
+DELETE FROM iam.employee_role
+WHERE organization_id = $1 AND employee_id = $2;
+
+-- name: DeleteUserPreferencesForOrganization :exec
+DELETE FROM iam.user_preference
+WHERE organization_id = $1 AND employee_id = $2;
+
+-- name: DeleteAccountLockoutsForOrganization :exec
+DELETE FROM iam.account_lockout
+WHERE organization_id = $1 AND identity_id = $2;
+
+-- name: CountRemainingIdentities :one
+-- Whether any organization membership remains for this person. Cross-shard for the
+-- same reason as ListIdentityOrganizations; runs on AdminPool.
+SELECT COUNT(*)::int AS remaining
+FROM iam.identity
+WHERE id = $1;
+
+-- name: DeleteUser :exec
+-- Destroys the global identity record. iam.sso_identity, iam.password_credential,
+-- iam.password_reset_token and iam.session are removed by their existing
+-- ON DELETE CASCADE foreign keys.
+DELETE FROM iam.user
+WHERE id = $1;
+
+-- name: DeleteSessionsForUser :exec
+-- Invalidates every session synchronously, before the background erase is queued,
+-- so a backed-up queue cannot leave a deleted person still signed in (FR-003).
+DELETE FROM iam.session
+WHERE user_id = $1;
+
+-- name: IsUserOrgManaged :one
+SELECT is_org_managed
+FROM iam.user
+WHERE id = $1;
+
+-- =============================================================================
+-- Terms acceptance (Feature 036)
+-- =============================================================================
+
+-- name: AcceptTerms :one
+UPDATE iam.user
+SET terms_version_accepted = $2,
+    terms_accepted_at      = $3,
+    updated_at             = $3
+WHERE id = $1
+RETURNING id, terms_version_accepted, terms_accepted_at;
+
+-- name: GetTermsAcceptance :one
+SELECT terms_version_accepted, terms_accepted_at
+FROM iam.user
+WHERE id = $1;

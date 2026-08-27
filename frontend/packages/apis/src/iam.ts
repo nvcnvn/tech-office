@@ -407,11 +407,18 @@ export async function listInvitations(organizationId: string, status?: Invitatio
 
 export async function acceptInvitation(
 	token: string,
-	options?: {
+	options: {
 		displayName?: string;
 		ssoProvider?: SSOProviderType;
 		ssoIdToken?: string;
 		password?: string;
+		/**
+		 * The terms version the person acknowledged on the acceptance screen — pass
+		 * `TERMS_VERSION` from `./legal`, and only when they actually ticked the box.
+		 * An invited person may be creating their account here, so the same
+		 * acknowledgement is required as at signup (FR-010).
+		 */
+		acceptedTermsVersion: string;
 	}
 ): Promise<{
 	accessToken: string;
@@ -423,10 +430,11 @@ export async function acceptInvitation(
 		return await rpcCall(async () => {
 			const resp = await iamClient.acceptInvitation({
 				token,
-				displayName: options?.displayName,
-				ssoProvider: options?.ssoProvider ? toSSOProvider(options.ssoProvider) : undefined,
-				ssoIdToken: options?.ssoIdToken,
-				password: options?.password,
+				displayName: options.displayName,
+				ssoProvider: options.ssoProvider ? toSSOProvider(options.ssoProvider) : undefined,
+				ssoIdToken: options.ssoIdToken,
+				password: options.password,
+				acceptedTermsVersion: options.acceptedTermsVersion,
 			});
 			if (!resp.user) throw new AuthError('NO_USER', 'No user in response');
 			if (!resp.membership) throw new AuthError('NO_MEMBERSHIP', 'No membership in response');

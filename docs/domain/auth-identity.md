@@ -3,7 +3,7 @@
 Who a person is, how they prove it, which organizations they belong to, and what they are
 allowed to do. Owned by `internal/iam` and `rpc/v1/iam.proto` (`IAMService`, 40 RPCs).
 
-**Status date: 2026-08-26.** Supersedes specs 001, 002, 018, 020, 024, 035.
+**Status date: 2026-08-27.** Supersedes specs 001, 002, 018, 020, 024, 035.
 
 ## The identity model
 
@@ -18,9 +18,19 @@ Three layers, deliberately separate:
 A user can belong to many organizations; each membership is a separate `iam.identity` row,
 and switching orgs (`SwitchOrganization`) re-issues the JWT with a different org claim.
 
+**The three layers share one UUID.** `iam.user.id`, `iam.identity.id` and
+`organization.employee.id` are the same value for a person. This is load-bearing:
+`GetUserRoleNamesInOrg` filters `iam.employee_role.employee_id` with a JWT user id, and
+account deletion enumerates memberships with `SELECT organization_id FROM iam.identity
+WHERE id = $1`. There is no user↔organization mapping table and none is needed. Spec 036
+recorded the invariant as a `COMMENT ON COLUMN iam.identity.id`; before that it was
+implicit and had to be re-derived from a query's parameter name.
+
 Credentials hang off whichever layer they belong to:
 
 - `iam.password_credential` — global, bcrypt cost 12, 8–72 chars.
+- `iam.user.terms_version_accepted` / `terms_accepted_at` — global, the person's current
+  acceptance of the published terms. Only the current one is kept, not a history.
 - `iam.sso_identity` — global, provider `google` or `apple`.
 - `iam.credential` — **org-scoped**, `credential_type IN ('pin','biometric')`, states
   `active | temporary | revoked`, `expires_at` defaulting to `now() + 3 days`.
@@ -115,6 +125,33 @@ Two paths:
   onboarding. See [organization-people.md](organization-people.md).
 
 `GetUserOrganizations` lists memberships, `SwitchOrganization` re-issues the token.
+
+Both `RegisterOrganizationWithAdminPassword` and `AcceptInvitation` require an
+`accepted_terms_version` matching `iam.CurrentTermsVersion`, and record it on
+`iam.user.terms_version_accepted` / `terms_accepted_at` in the same transaction that
+creates the account. A request without it is rejected, so no account can exist without a
+stored acceptance. `AcceptTerms` / `GetTermsStatus` cover admin-provisioned workers, who
+never see a signup screen — see [compliance-safety.md](compliance-safety.md).
+
+## Leaving: deletion and removal
+
+Which path a person gets is decided by `iam.user.is_org_managed`:
+
+- **Self-registered** (`false`) — `IAMService.DeleteMyAccount` erases the account from
+  inside the app. `GetAccountDeletionPreview` states what is erased and what is retained,
+  server-assembled so both clients say the same thing.
+- **Admin-provisioned** (`true`) — refused, because the account and its content are the
+  employer's record. That person uses `ComplianceService.RequestAccountRemoval` instead.
+
+Deletion is **anonymisation at the tenant layer and destruction at the global layer**: the
+`organization.employee` row survives as a de-identified tombstone so the organization keeps
+its business records, while `iam.user` and everything cascading from it is destroyed once
+the last membership goes. Sessions are invalidated synchronously; the erase itself runs as
+a resumable background job. The sole owner of a workspace that still has members is refused
+with a structured `SoleOwnerBlocksDeletion` detail naming each blocking workspace.
+
+The mechanism, the state machine and the cross-shard membership query are documented in
+[compliance-safety.md](compliance-safety.md).
 
 ## Authorization: permissions, not roles
 

@@ -35,6 +35,12 @@ type IAMServiceConnect struct {
 	jwtSigner    *InternalJWTSigner
 	jwksVerifier *JWKSVerifier
 	emailSender  EmailSender
+
+	// Account deletion (Feature 036). Both are wired after construction because
+	// the erase enqueuer lives in internal/compliance, which is built later.
+	accountDeleter         *AccountDeleter
+	eraseEnqueuer          EraseEnqueuer
+	removalRequestResolver RemovalRequestResolver
 }
 
 // NewIAMServiceConnect creates a new IAM service connect layer.
@@ -721,6 +727,12 @@ func (s *IAMServiceConnect) AcceptInvitation(
 ) (*connect.Response[v1.AcceptInvitationResponse], error) {
 	slog.InfoContext(ctx, "AcceptInvitation called")
 
+	// An invited person may be creating their account here, so the terms must be
+	// acknowledged on this screen too (FR-010).
+	if err := ValidateAcceptedTermsVersion(req.Msg.GetAcceptedTermsVersion()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	var ssoClaims *SSOClaims
 	var provider *string
 	if req.Msg.SsoProvider != nil && req.Msg.SsoIdToken != nil {
@@ -754,9 +766,17 @@ func (s *IAMServiceConnect) AcceptInvitation(
 			return acceptErr
 		}
 
-		_, acceptErr = s.logic.CreateSessionForUser(ctx, tx, user.ID, jti,
+		if _, acceptErr = s.logic.CreateSessionForUser(ctx, tx, user.ID, jti,
 			time.Now(), time.Unix(expiresAt, 0),
-			extractIPAddress(req.Header()), extractUserAgent(req.Header()))
+			extractIPAddress(req.Header()), extractUserAgent(req.Header())); acceptErr != nil {
+			return acceptErr
+		}
+
+		_, acceptErr = database.New().AcceptTerms(ctx, tx, &database.AcceptTermsParams{
+			ID:                   user.ID,
+			TermsVersionAccepted: pgtype.Text{String: req.Msg.GetAcceptedTermsVersion(), Valid: true},
+			TermsAcceptedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		})
 		return acceptErr
 	})
 	if err != nil {

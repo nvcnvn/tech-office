@@ -29,6 +29,7 @@ import { LiveNotificationBanner } from "@/components/ui/live-notification-banner
 import { ActiveVoiceCallBar } from "@/components/voice/active-voice-call-bar";
 import { IncomingVoiceCallPrompt } from "@/components/voice/incoming-voice-call-prompt";
 import { OfflineBanner } from "@/components/ui/offline-banner";
+import { TermsGate } from "@/components/compliance/terms-gate";
 import { useAppStatePresence } from "@/hooks/use-app-state-presence";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
@@ -279,6 +280,7 @@ export default function AppLayout() {
   );
 
   return (
+    <TermsGate>
     <View style={{ flex: 1 }}>
       <OfflineBanner />
       {incomingVoiceCall ? (
@@ -403,5 +405,6 @@ export default function AppLayout() {
         <Tabs.Screen name="(notifications)" options={{ href: null, headerShown: false }} />
       </Tabs>
     </View>
+    </TermsGate>
   );
 }

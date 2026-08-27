@@ -33,6 +33,8 @@ import {
 import { Settings as SettingsIcon, Brightness4, Brightness7, Refresh } from '@mui/icons-material';
 import { useTheme } from '@/components/ThemeProvider';
 import { getUserPreference, updateUserPreference, resetUserPreference, ThemeMode } from 'apis';
+import { DeleteAccountSection } from './components/DeleteAccountSection';
+import { LegalAndSafetySection } from './components/LegalAndSafetySection';
 
 export default function SettingsPage() {
 	const { isLoading, user } = useRequireAuth();
@@ -231,6 +233,10 @@ export default function SettingsPage() {
 					Tip: Use the theme toggle button in the header for quick switching.
 				</Typography>
 			</Paper>
+
+			<LegalAndSafetySection />
+
+			<DeleteAccountSection />
 		</Container>
 	);
 }

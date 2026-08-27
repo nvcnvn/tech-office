@@ -59,27 +59,18 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>NSBonjourServices</key>
-	<array>
-		<string>_http._tcp</string>
-		<string>_expo._tcp</string>
-	</array>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSCameraUsageDescription</key>
-	<string>Allow Tech Office to access your camera.</string>
+	<string>Tech Office uses your camera to take photos to attach to messages, tasks and job records.</string>
 	<key>NSFaceIDUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to use Face ID</string>
-	<key>NSLocalNetworkUsageDescription</key>
-	<string>Allow Tech Office to connect to the local development server while debugging.</string>
-	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
-	<key>NSLocationAlwaysUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your location</string>
+	<string>Tech Office uses Face ID so you can sign in without typing your PIN each time.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>Allow Tech Office to access your location for ritual task verification.</string>
+	<string>Tech Office uses your location to confirm you are at the job site when you check in or complete a task. It is only used while the app is open.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Allow $(PRODUCT_NAME) to access your microphone</string>
+	<string>Tech Office uses your microphone for voice calls and voice messages with your colleagues.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Allow Tech Office to access your photos.</string>
+	<string>Tech Office needs access to your photos so you can attach them to messages, tasks and job records.</string>
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>

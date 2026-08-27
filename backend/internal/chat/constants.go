@@ -12,7 +12,11 @@
 // 5. Submit all changes in single PR with alignment verification
 package chat
 
-import "github.com/nvcnvn/tech-office/backend/internal/notification"
+import (
+	"errors"
+
+	"github.com/nvcnvn/tech-office/backend/internal/notification"
+)
 
 // Re-export notification type constants for chat domain use.
 // Chat service publishes these notification types.
@@ -113,3 +117,8 @@ func IsValidSystemEventType(eventType string) bool {
 		return false
 	}
 }
+
+// ErrDirectContactBlocked is returned when a block refuses direct contact. Its
+// text names neither party and does not say a block exists: the blocked person
+// must never learn they were blocked (Feature 036, FR-022).
+var ErrDirectContactBlocked = errors.New("this conversation is not available")

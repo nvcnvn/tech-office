@@ -75,8 +75,11 @@ import {
   type LinkedResource,
   type VoiceCallSession,
   type VoiceJoinCredentials,
+  listBlockedPeople,
 } from "apis";
 import { useAuth } from "@/hooks/use-auth";
+import { BlockConfirm } from "@/components/compliance/block-confirm";
+import { ReportSheet } from "@/components/compliance/report-sheet";
 import { generateCanonicalUrl } from "@/lib/canonical-links";
 import { API_BASE_URL } from "@/lib/constants";
 import { isSameDay } from "date-fns";
@@ -165,6 +168,18 @@ function voiceCallIdForMessage(message: ChatMessage): string | null {
   }
 }
 
+/**
+ * What a screen reader announces for a message row, and what Maestro matches on.
+ *
+ * `message_text` is sanitised HTML; the renderer that draws it contributes nothing
+ * to the accessibility tree, so without this the row is an unlabelled pressable.
+ */
+function messageAccessibilityLabel(message: ChatMessage): string {
+  const body = (message.messageText ?? "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  const author = message.authorName ? `${message.authorName}: ` : "";
+  return body ? `${author}${body}` : author.trim() || "Message";
+}
+
 function collapseVoiceCallTimelineMessages(messages: ChatMessage[]): ChatMessage[] {
   const terminalCallIds = new Set<string>();
   for (const message of messages) {
@@ -185,6 +200,8 @@ function collapseVoiceCallTimelineMessages(messages: ChatMessage[]): ChatMessage
 interface ChannelSummary {
   displayName?: string | null;
   titleSlug?: string | null;
+  /** 'chat' | 'direct_message' | ... — see chat.channel.channel_type. */
+  channelType?: string | null;
 }
 
 interface GetChannelResponseShape {
@@ -296,6 +313,35 @@ function ReactionPicker({
   );
 }
 
+/**
+ * Stands in for messages hidden because their author is blocked (FR-021).
+ *
+ * A block hides direct history rather than deleting it, and the reveal is
+ * per-group: somebody who blocked a colleague may still need to check what was
+ * said, and making that possible is what keeps the block a filter on attention
+ * rather than a hole in the record.
+ */
+function HiddenMessageGroup({
+  count,
+  onReveal,
+}: {
+  count: number;
+  onReveal: () => void;
+}) {
+  return (
+    <View style={styles.hiddenGroup} testID="hidden-message-group">
+      <SFIcon name="hand.raised.fill" size={14} color={lightPalette.text.secondary} />
+      <Text style={styles.hiddenGroupText}>
+        {count === 1 ? "1 message hidden" : `${count} messages hidden`} — you blocked this
+        person
+      </Text>
+      <Pressable onPress={onReveal} hitSlop={8} testID="hidden-message-reveal">
+        <Text style={styles.hiddenGroupAction}>Show</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function MessageActionSheet({
   visible,
   hasReplies,
@@ -304,6 +350,9 @@ function MessageActionSheet({
   onMoreEmoji,
   onCopyLink,
   onThread,
+  onReport,
+  onBlockAuthor,
+  canBlockAuthor,
 }: {
   visible: boolean;
   hasReplies: boolean;
@@ -312,6 +361,10 @@ function MessageActionSheet({
   onMoreEmoji: () => void;
   onCopyLink: () => void;
   onThread: () => void;
+  onReport: () => void;
+  onBlockAuthor: () => void;
+  /** False for your own messages: blocking yourself is not a thing. */
+  canBlockAuthor: boolean;
 }) {
   return (
     <Modal
@@ -413,6 +466,58 @@ function MessageActionSheet({
               color={lightPalette.text.secondary}
             />
           </Pressable>
+
+          {/* Reporting is two taps from here — long-press, Report, reason — which
+              is what keeps the whole flow within three (SC-003). */}
+          <Pressable
+            onPress={onReport}
+            style={({ pressed }) => [
+              styles.actionSheetRow,
+              pressed && styles.actionSheetRowPressed,
+            ]}
+            testID="message-action-report"
+          >
+            <View style={styles.actionSheetIconWrap}>
+              <SFIcon name="flag" size={16} color={lightPalette.error.main} />
+            </View>
+            <View style={styles.actionSheetRowBody}>
+              <Text style={styles.actionSheetRowTitle}>Report this message</Text>
+              <Text style={styles.actionSheetRowText}>
+                Tell the people who run this workspace that something here is wrong.
+              </Text>
+            </View>
+            <SFIcon
+              name="chevron.right"
+              size={14}
+              color={lightPalette.text.secondary}
+            />
+          </Pressable>
+
+          {canBlockAuthor ? (
+            <Pressable
+              onPress={onBlockAuthor}
+              style={({ pressed }) => [
+                styles.actionSheetRow,
+                pressed && styles.actionSheetRowPressed,
+              ]}
+              testID="message-action-block"
+            >
+              <View style={styles.actionSheetIconWrap}>
+                <SFIcon name="hand.raised" size={16} color={lightPalette.error.main} />
+              </View>
+              <View style={styles.actionSheetRowBody}>
+                <Text style={styles.actionSheetRowTitle}>Block this person</Text>
+                <Text style={styles.actionSheetRowText}>
+                  Stop them starting a direct conversation or calling you. They are not told.
+                </Text>
+              </View>
+              <SFIcon
+                name="chevron.right"
+                size={14}
+                color={lightPalette.text.secondary}
+              />
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -504,6 +609,15 @@ function MessageBubble({
             return (
               <Pressable
                 key={item.id}
+                // Long-pressing a message is how reporting and blocking are
+                // reached, so the bubble needs a stable handle for the Maestro
+                // flows that cover them.
+                testID={`message-bubble-${item.id}`}
+                // The message body renders sanitised HTML through a renderer that
+                // exposes no accessible text, so a screen reader on this row read
+                // nothing at all and Maestro could not find a message by its words.
+                // The label is what both of them read.
+                accessibilityLabel={messageAccessibilityLabel(item)}
                 disabled={Boolean(item.clientStatus)}
                 onPress={() => {
                   if (!item.clientStatus) {
@@ -679,6 +793,11 @@ export default function ChannelScreen() {
     null,
   );
   const [pendingShareUrl, setPendingShareUrl] = useState<string | null>(null);
+  // Feature 036: reporting and blocking, plus the direct-history hiding a block
+  // implies. Shared channels are deliberately untouched — see below.
+  const [reportTargetId, setReportTargetId] = useState<string | null>(null);
+  const [blockTarget, setBlockTarget] = useState<{ id: string; name: string } | null>(null);
+  const [revealedMessageIds, setRevealedMessageIds] = useState<Set<string>>(() => new Set());
   // ── Scroll behaviour (mirrors VirtualizedMessageList) ─────────────────────
   // In inverted FlatList, contentOffset.y = 0 means the user is at the bottom
   // (newest messages). We track this with both a ref (for stable SSE callbacks)
@@ -1006,6 +1125,26 @@ export default function ChannelScreen() {
     enabled: auth.isAuthenticated,
     staleTime: 300_000,
   });
+
+  // ── Blocked people (Feature 036) ─────────────────────────────────────────
+  // Only used to hide *direct* history from the blocker's own view (FR-021).
+  // Messages in a shared work channel stay visible whatever the block says
+  // (FR-021a): hiding a colleague there would let someone silently conceal
+  // instructions addressed to them.
+  const { data: blockedData } = useQuery({
+    queryKey: ["compliance", "blocked-people"],
+    queryFn: () => listBlockedPeople(),
+    enabled: auth.isAuthenticated,
+    staleTime: 60_000,
+  });
+
+  const isDirectConversation =
+    channelData?.channel?.channelType === "direct_message";
+
+  const blockedAuthorIds = useMemo(() => {
+    if (!isDirectConversation) return new Set<string>();
+    return new Set((blockedData?.blocked ?? []).map((person) => person.employeeId));
+  }, [blockedData, isDirectConversation]);
 
   const currentMembership = useMemo(
     () =>
@@ -2045,6 +2184,32 @@ export default function ChannelScreen() {
                 if (item.kind === "date") {
                   return <DateSeparator date={item.date} />;
                 }
+
+                // Hide a blocked person's direct messages from the blocker's own
+                // view, with a per-item reveal (FR-021). blockedAuthorIds is empty
+                // outside a direct conversation, so this never touches a shared
+                // work channel (FR-021a).
+                const hidden = item.messages.filter(
+                  (message: ChatMessage) =>
+                    message.authorEmployeeId &&
+                    blockedAuthorIds.has(message.authorEmployeeId) &&
+                    !revealedMessageIds.has(message.id),
+                );
+                if (hidden.length === item.messages.length && hidden.length > 0) {
+                  return (
+                    <HiddenMessageGroup
+                      count={hidden.length}
+                      onReveal={() =>
+                        setRevealedMessageIds((previous) => {
+                          const next = new Set(previous);
+                          for (const message of hidden) next.add(message.id);
+                          return next;
+                        })
+                      }
+                    />
+                  );
+                }
+
                 return (
                   <MessageBubble
                     messages={item.messages}
@@ -2271,6 +2436,46 @@ export default function ChannelScreen() {
             void handleShareMessageLink();
           }}
           onThread={handleThreadAction}
+          canBlockAuthor={
+            !!selectedMessage?.authorEmployeeId &&
+            selectedMessage.authorEmployeeId !== auth.employeeId
+          }
+          onReport={() => {
+            const messageId = selectedMessageId;
+            closeMessageActions();
+            if (messageId) setReportTargetId(messageId);
+          }}
+          onBlockAuthor={() => {
+            const target = selectedMessage?.authorEmployeeId
+              ? {
+                  id: selectedMessage.authorEmployeeId,
+                  name: selectedMessage.authorName || "this person",
+                }
+              : null;
+            closeMessageActions();
+            if (target) setBlockTarget(target);
+          }}
+        />
+
+        <ReportSheet
+          visible={reportTargetId !== null}
+          targetKind={isDirectConversation ? "direct_message" : "chat_message"}
+          targetId={reportTargetId ?? ""}
+          subjectLabel="this message"
+          onClose={() => setReportTargetId(null)}
+        />
+
+        <BlockConfirm
+          visible={blockTarget !== null}
+          mode="block"
+          employeeId={blockTarget?.id ?? ""}
+          displayName={blockTarget?.name ?? "this person"}
+          onClose={() => setBlockTarget(null)}
+          onDone={() => {
+            void queryClient.invalidateQueries({
+              queryKey: ["compliance", "blocked-people"],
+            });
+          }}
         />
       </KeyboardAvoidingView>
       <Stack.Toolbar placement="right">
@@ -2294,6 +2499,29 @@ export default function ChannelScreen() {
 }
 
 const styles = StyleSheet.create({
+  hiddenGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 12,
+    marginVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: lightPalette.background.default,
+  },
+  hiddenGroupText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
+    color: lightPalette.text.secondary,
+  },
+  hiddenGroupAction: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: "600",
+    color: lightPalette.primary.main,
+  },
   center: {
     flex: 1,
     justifyContent: "center",

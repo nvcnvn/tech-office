@@ -3,7 +3,7 @@
 The cross-cutting client experience: federated search, canonical cross-platform links, the
 context rail, theme preferences, and the shape of the web and mobile apps.
 
-**Status date: 2026-08-26.** Supersedes specs 011, 012, 013, 027, 030, 031, 035.
+**Status date: 2026-08-27.** Supersedes specs 011, 012, 013, 027, 030, 031, 035.
 
 ## Canonical resource links
 
@@ -133,11 +133,18 @@ Client: `packages/apis/src/preference.ts`, `theme-storage.ts`.
 Next.js App Router, MUI v7, in `apps/web/src/app`:
 
 - **Public** — `/`, `/pricing`, `/signup`, `/signin`, `/login/pin`, `/forgot-password`,
-  `/reset-password`, `/accept-invitation`, `/callback`, and a static help site under
-  `/docs` (product guide, features, owner and employee guides).
+  `/reset-password`, `/accept-invitation`, `/callback`, `/privacy`, `/terms`, and a static
+  help site under `/docs` (product guide, features, owner and employee guides).
+  `/privacy` and `/terms` are `force-static` and must stay reachable signed out: both app
+  stores require a policy URL anyone can open, and the mobile app links to these rather
+  than carrying a second copy of the text.
 - **Canonical** — `/o/[tenantKey]/r/[...slug]`.
 - **Workspace** — `/workspace/{chat, projects, tasks, docs, files, calendar,
-  notifications, organization, profile, search, voice, settings/{notifications,presence}}`.
+  notifications, organization, profile, search, voice,
+  settings/{notifications, presence, blocked, reports, removal-requests}}`.
+  The last three are administrative or personal-safety surfaces added with the compliance
+  domain; `reports` and `removal-requests` are web-only by Constitution XIII, enforced by
+  permissions on the RPCs rather than by hiding the links.
 
 E2E with Playwright in `apps/web/e2e`; `make test-frontend`.
 
@@ -166,6 +173,14 @@ Expo Router in `apps/mobile/src/app`, five route groups:
     across every project, no client fan-out) and `CalendarService.ListEvents` over today.
   - `(tasks)` opens in Focus mode; the project-first drilldown is behind the
     `task-mode-toggle` header action rather than a body segmented control.
+  - The layout is wrapped in `TermsGate`, which holds the app behind a read-and-accept
+    screen while `GetTermsStatus` says this person has not accepted the version currently
+    being served. It fails open on a network error, so a blip does not lock somebody out
+    of their work.
+  - `(more)/settings` carries the Safety, Legal and Account sections — blocked people,
+    abuse contact, the two published documents, and whichever of `delete-account` or
+    `request-removal` this person's path is, asked of the server rather than inferred.
+    See [compliance-safety.md](compliance-safety.md).
 - `(shared)` — resource routes reached from a deep link rather than a tab, so a link opens
   the resource without hijacking tab state
 - top level — `booking/[token]`, `canonical-link/[encoded]`, `o/[tenantKey]/r/…`,

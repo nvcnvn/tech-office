@@ -1028,3 +1028,43 @@ export async function deleteNotification(
     notificationRecipientId,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Compliance — reporting and blocking (Feature 036)
+// ---------------------------------------------------------------------------
+
+export async function inviteToChannel(user: TestUser, channelId: string, employeeId: string) {
+  return apiCall<Record<string, unknown>>(user, '/rpc.v1.ChatService/InviteMember', {
+    channelId,
+    employeeId,
+  });
+}
+
+export async function reportContent(
+  user: TestUser,
+  opts: {
+    targetKind: string;
+    targetId: string;
+    reason: string;
+    note?: string;
+  },
+) {
+  return apiCall<{ reportId: string }>(user, '/rpc.v1.ComplianceService/ReportContent', {
+    targetKind: opts.targetKind,
+    targetId: opts.targetId,
+    reason: opts.reason,
+    note: opts.note ?? '',
+  });
+}
+
+export async function blockPerson(user: TestUser, employeeId: string) {
+  return apiCall<{ blockId: string }>(user, '/rpc.v1.ComplianceService/BlockPerson', {
+    employeeId,
+  });
+}
+
+export async function unblockPerson(user: TestUser, employeeId: string) {
+  return apiCall<Record<string, unknown>>(user, '/rpc.v1.ComplianceService/UnblockPerson', {
+    employeeId,
+  });
+}

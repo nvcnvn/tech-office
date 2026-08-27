@@ -135,6 +135,14 @@ export async function registerOrganization(data: {
 	adminPassword: string;
 	adminGivenName: string;
 	adminFamilyName: string;
+	/**
+	 * The terms version the person acknowledged on the signup screen — pass
+	 * `TERMS_VERSION` from `./legal`, and only when they actually ticked the box.
+	 *
+	 * Required rather than defaulted so a screen cannot silently accept on the
+	 * person's behalf; the backend rejects a missing or stale value (FR-010).
+	 */
+	acceptedTermsVersion: string;
 }): Promise<Organization> {
 	return rpcCall(async () => {
 		const resp = await organizationClient.registerOrganizationWithAdminPassword({
@@ -144,6 +152,7 @@ export async function registerOrganization(data: {
 			adminPassword: data.adminPassword,
 			adminGivenName: data.adminGivenName,
 			adminFamilyName: data.adminFamilyName,
+			acceptedTermsVersion: data.acceptedTermsVersion,
 		}) as RegisterOrganizationWithAdminPasswordResponse;
 
 		if (!resp.organization) {

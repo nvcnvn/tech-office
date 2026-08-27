@@ -69,6 +69,16 @@ type ChatLogic interface {
 
 	// Direct Message methods
 	CreateOrGetDirectMessage(ctx context.Context, tx database.DBTX, orgID, currentEmployeeID, otherEmployeeID dbuuid.UUID) (*rpcv1.CreateOrGetDirectMessageResponse, error)
+
+	// SetContactGuard wires in the block check used by CreateOrGetDirectMessage
+	// (Feature 036). Wired after construction because the compliance domain is
+	// built later in server start-up.
+	SetContactGuard(guard ContactGuard)
+
+	// DirectMessageCounterpart returns the other person in a direct conversation,
+	// or ok=false when the channel is not a direct message. Voice uses it to apply
+	// the same block guard to call initiation without reaching into chat's tables.
+	DirectMessageCounterpart(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID) (dbuuid.UUID, bool, error)
 	AuthorizeVoiceChannel(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID) error
 	AnnounceVoiceCallStarted(ctx context.Context, tx database.DBTX, orgID, actorID, channelID, callID dbuuid.UUID) error
 	AnnounceVoiceCallEnded(ctx context.Context, tx database.DBTX, orgID, actorID, channelID, callID dbuuid.UUID, outcome string) error
@@ -92,9 +102,25 @@ type NotificationPublisher interface {
 	PublishNotification(ctx context.Context, tx database.DBTX, req *rpcv1.PublishNotificationRequest) (*rpcv1.PublishNotificationResponse, error)
 }
 
+// ContactGuard answers whether direct contact between two people is refused
+// because one has blocked the other (Feature 036, FR-020).
+//
+// It is declared here rather than imported so internal/chat keeps no dependency on
+// internal/compliance; the compliance logic satisfies it structurally and is wired
+// in at server start-up. Blocking is enforced at this one chokepoint and at voice
+// call initiation — not as a filter threaded through every message read path
+// (research.md R8).
+type ContactGuard interface {
+	IsDirectContactBlocked(ctx context.Context, tx database.DBTX, orgID, a, b dbuuid.UUID) (bool, error)
+}
+
 type chatLogicImpl struct {
 	Queries               *database.Queries
 	NotificationPublisher NotificationPublisher
+
+	// ContactGuard may be nil in tests and in any deployment where the compliance
+	// domain is not wired; a nil guard means no block is enforced, never a panic.
+	ContactGuard ContactGuard
 }
 
 // NewChatLogic creates a new chat logic layer implementation
@@ -104,6 +130,9 @@ func NewChatLogic(queries *database.Queries, notificationPublisher NotificationP
 		NotificationPublisher: notificationPublisher,
 	}
 }
+
+// SetContactGuard wires the block check in after construction.
+func (s *chatLogicImpl) SetContactGuard(guard ContactGuard) { s.ContactGuard = guard }
 
 func chatNotificationChannelName(channel *database.ChatChannel) string {
 	if name := strings.TrimSpace(channel.DisplayName); name != "" {
@@ -3181,6 +3210,19 @@ func (s *chatLogicImpl) CreateOrGetDirectMessage(
 		return nil, fmt.Errorf("cannot create direct message with yourself")
 	}
 
+	// A block refuses direct contact in both directions. The refusal deliberately
+	// does not say who blocked whom: the blocked person must not learn they were
+	// blocked (FR-020, FR-022).
+	if s.ContactGuard != nil {
+		blocked, err := s.ContactGuard.IsDirectContactBlocked(ctx, tx, orgID, currentEmployeeID, otherEmployeeID)
+		if err != nil {
+			return nil, fmt.Errorf("check direct contact block: %w", err)
+		}
+		if blocked {
+			return nil, ErrDirectContactBlocked
+		}
+	}
+
 	// Try to find existing DM channel between the two users
 	existingChannel, err := s.Queries.FindDirectMessageChannel(ctx, tx, &database.FindDirectMessageChannelParams{
 		OrganizationID: orgID,
@@ -4105,4 +4147,42 @@ func (s *chatLogicImpl) GetChannelContextSummary(
 		PinnedMessages: pinnedMessages,
 		DmCounterpart:  dmCounterpart,
 	}, nil
+}
+
+// DirectMessageCounterpart returns the other participant of a direct conversation.
+//
+// It exists so voice can apply the block guard to a call started in a DM without
+// querying chat's tables itself (Feature 036, FR-020). A channel that is not a
+// direct message returns ok=false and no error: group calls are not blocked, since
+// blocking is scoped to direct contact (research.md R8).
+func (s *chatLogicImpl) DirectMessageCounterpart(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, employeeID, channelID dbuuid.UUID,
+) (dbuuid.UUID, bool, error) {
+	channel, err := s.Queries.GetChannelByID(ctx, tx, &database.GetChannelByIDParams{
+		ID:             channelID,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		return dbuuid.UUID{}, false, fmt.Errorf("channel not found: %w", err)
+	}
+	if channel.ChannelType != ChannelTypeDirectMessage {
+		return dbuuid.UUID{}, false, nil
+	}
+
+	participants, err := s.Queries.GetDirectMessageParticipants(ctx, tx, &database.GetDirectMessageParticipantsParams{
+		ChannelID:      channelID,
+		OrganizationID: orgID,
+		EmployeeID:     employeeID,
+	})
+	if err != nil {
+		return dbuuid.UUID{}, false, fmt.Errorf("get direct message participants: %w", err)
+	}
+	if len(participants) != 1 {
+		// A direct conversation has exactly one other person in it. Anything else is
+		// not a two-person conversation, so the direct-contact block does not apply.
+		return dbuuid.UUID{}, false, nil
+	}
+	return participants[0].ID, true, nil
 }

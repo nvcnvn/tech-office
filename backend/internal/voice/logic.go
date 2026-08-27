@@ -24,6 +24,22 @@ import (
 
 type ChannelAuthorizer interface {
 	AuthorizeVoiceChannel(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID) error
+
+	// DirectMessageCounterpart returns the other person in a direct conversation,
+	// or ok=false when the channel is not one. Used to apply the block guard to
+	// calls placed in a direct conversation (Feature 036, FR-020).
+	DirectMessageCounterpart(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID) (dbuuid.UUID, bool, error)
+}
+
+// ContactGuard answers whether direct contact between two people is refused
+// because one has blocked the other.
+//
+// Declared here rather than imported so internal/voice keeps no dependency on
+// internal/compliance; the compliance logic satisfies it structurally. Group calls
+// in shared channels are deliberately untouched: blocking is scoped to direct
+// contact because this is a closed workplace tool (research.md R8).
+type ContactGuard interface {
+	IsDirectContactBlocked(ctx context.Context, tx database.DBTX, orgID, a, b dbuuid.UUID) (bool, error)
 }
 
 type MediaClient interface {
@@ -51,6 +67,10 @@ type Logic struct {
 	NotificationPublisher NotificationPublisher
 	ChatAnnouncer         ChatAnnouncer
 	TranscriptionWorker   *TranscriptionWorker
+
+	// ContactGuard may be nil where the compliance domain is not wired; a nil
+	// guard means no block is enforced, never a panic.
+	ContactGuard ContactGuard
 }
 
 func NewLogic(queries *database.Queries, channelAuthorizer ChannelAuthorizer, mediaClient MediaClient, config Config) *Logic {
@@ -64,6 +84,9 @@ func NewLogic(queries *database.Queries, channelAuthorizer ChannelAuthorizer, me
 
 func (l *Logic) StartVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID, requestRecording bool) (*rpcv1.VoiceCallSession, *rpcv1.VoiceJoinCredentials, error) {
 	if err := l.authorize(ctx, tx, orgID, employeeID, channelID); err != nil {
+		return nil, nil, err
+	}
+	if err := l.ensureDirectCallAllowed(ctx, tx, orgID, employeeID, channelID); err != nil {
 		return nil, nil, err
 	}
 	if _, err := l.Queries.GetActiveVoiceCallForChannel(ctx, tx, &database.GetActiveVoiceCallForChannelParams{OrganizationID: orgID, ChannelID: channelID}); err == nil {
@@ -1460,4 +1483,31 @@ func compactUUID(id dbuuid.UUID) string {
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == "23505"
+}
+
+// ensureDirectCallAllowed refuses a call placed in a direct conversation when
+// either person has blocked the other (FR-020).
+//
+// It applies only to direct conversations. A call in a shared workplace channel is
+// left alone, which is the agreed scope: hiding a colleague in a shared channel
+// would let someone silently conceal instructions addressed to them.
+func (l *Logic) ensureDirectCallAllowed(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID) error {
+	if l.ContactGuard == nil || l.ChannelAuthorizer == nil {
+		return nil
+	}
+	counterpart, isDirect, err := l.ChannelAuthorizer.DirectMessageCounterpart(ctx, tx, orgID, employeeID, channelID)
+	if err != nil {
+		return fmt.Errorf("resolve direct conversation counterpart: %w", err)
+	}
+	if !isDirect {
+		return nil
+	}
+	blocked, err := l.ContactGuard.IsDirectContactBlocked(ctx, tx, orgID, employeeID, counterpart)
+	if err != nil {
+		return fmt.Errorf("check direct contact block: %w", err)
+	}
+	if blocked {
+		return ErrDirectContactBlocked
+	}
+	return nil
 }

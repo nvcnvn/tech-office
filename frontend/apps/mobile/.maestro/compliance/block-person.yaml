@@ -1,0 +1,47 @@
+appId: com.devguards.TechOffice
+name: "Compliance — The blocked-people list explains what a block does"
+# FR-024, and the scope statement that FR-021a depends on being visible.
+#
+# What this flow does NOT do is block somebody. Blocking requires a message authored
+# by another person, and which messages a shared simulator account can see is not
+# something a flow can rely on — the previous version long-pressed whatever happened
+# to be last in the channel and hit a voice-call system row.
+#
+# The act of blocking is covered where it can be arranged deterministically:
+# backend/integration/compliance_block_test.go and
+# frontend/apps/web/e2e/compliance-block.spec.ts. What is asserted here is the part
+# only the mobile app has — that a person can find their blocks, and that the screen
+# states the scope, which surprises people and which a store reviewer will read.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- scrollUntilVisible:
+    element:
+      id: "setting-blocked-people"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "setting-blocked-people"
+
+- extendedWaitUntil:
+    visible: "What blocking does"
+    timeout: 10000
+# The scope, stated where somebody managing their blocks will read it: direct
+# contact only, shared channels untouched, and the other person is never told.
+- assertVisible: ".*They stay in the same work.*"
+- assertVisible: "Nobody is told that you blocked them."
+- takeScreenshot: "tmp/maestro-screenshots/compliance-06-blocked-list"

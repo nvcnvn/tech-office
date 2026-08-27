@@ -140,6 +140,17 @@ const (
 	// IAMServiceListOrgAccountsProcedure is the fully-qualified name of the IAMService's
 	// ListOrgAccounts RPC.
 	IAMServiceListOrgAccountsProcedure = "/rpc.v1.IAMService/ListOrgAccounts"
+	// IAMServiceGetAccountDeletionPreviewProcedure is the fully-qualified name of the IAMService's
+	// GetAccountDeletionPreview RPC.
+	IAMServiceGetAccountDeletionPreviewProcedure = "/rpc.v1.IAMService/GetAccountDeletionPreview"
+	// IAMServiceDeleteMyAccountProcedure is the fully-qualified name of the IAMService's
+	// DeleteMyAccount RPC.
+	IAMServiceDeleteMyAccountProcedure = "/rpc.v1.IAMService/DeleteMyAccount"
+	// IAMServiceAcceptTermsProcedure is the fully-qualified name of the IAMService's AcceptTerms RPC.
+	IAMServiceAcceptTermsProcedure = "/rpc.v1.IAMService/AcceptTerms"
+	// IAMServiceGetTermsStatusProcedure is the fully-qualified name of the IAMService's GetTermsStatus
+	// RPC.
+	IAMServiceGetTermsStatusProcedure = "/rpc.v1.IAMService/GetTermsStatus"
 )
 
 // IAMServiceClient is a client for the rpc.v1.IAMService service.
@@ -301,6 +312,33 @@ type IAMServiceClient interface {
 	ResetOrgAccountCredential(context.Context, *connect.Request[v1.ResetOrgAccountCredentialRequest]) (*connect.Response[v1.ResetOrgAccountCredentialResponse], error)
 	// ListOrgAccounts lists org-managed worker accounts with status info.
 	ListOrgAccounts(context.Context, *connect.Request[v1.ListOrgAccountsRequest]) (*connect.Response[v1.ListOrgAccountsResponse], error)
+	// GetAccountDeletionPreview: what the confirmation screen must state — which
+	// data is erased, which is retained and why, and the organizations affected.
+	// The copy is assembled server-side so mobile and web cannot drift into
+	// describing different behaviour.
+	// Authenticated, no additional permission.
+	GetAccountDeletionPreview(context.Context, *connect.Request[v1.GetAccountDeletionPreviewRequest]) (*connect.Response[v1.GetAccountDeletionPreviewResponse], error)
+	// DeleteMyAccount: erase this person's account.
+	//   - Refuses when iam.user.is_org_managed is true; that person's path is
+	//     ComplianceService.RequestAccountRemoval.
+	//   - Refuses with the SoleOwnerBlocksDeletion detail when the caller is the sole
+	//     owner of an organization that still has other members.
+	//   - Otherwise invalidates every session synchronously and enqueues the erase.
+	//
+	// Deleting an account never deletes an organization.
+	// Authenticated, no additional permission.
+	DeleteMyAccount(context.Context, *connect.Request[v1.DeleteMyAccountRequest]) (*connect.Response[v1.DeleteMyAccountResponse], error)
+	// AcceptTerms: record acceptance of the current terms version.
+	// Rejects a version that is not current, so a stale client cannot record
+	// acceptance of terms nobody is serving.
+	// Authenticated, no additional permission.
+	AcceptTerms(context.Context, *connect.Request[v1.AcceptTermsRequest]) (*connect.Response[v1.AcceptTermsResponse], error)
+	// GetTermsStatus: the current version and whether this person has accepted it.
+	// Admin-provisioned workers never saw a signup screen and are gated on this at
+	// first use, which is the only way acceptance can hold for accounts an
+	// administrator created.
+	// Authenticated, no additional permission.
+	GetTermsStatus(context.Context, *connect.Request[v1.GetTermsStatusRequest]) (*connect.Response[v1.GetTermsStatusResponse], error)
 }
 
 // NewIAMServiceClient constructs a client for the rpc.v1.IAMService service. By default, it uses
@@ -554,6 +592,30 @@ func NewIAMServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(iAMServiceMethods.ByName("ListOrgAccounts")),
 			connect.WithClientOptions(opts...),
 		),
+		getAccountDeletionPreview: connect.NewClient[v1.GetAccountDeletionPreviewRequest, v1.GetAccountDeletionPreviewResponse](
+			httpClient,
+			baseURL+IAMServiceGetAccountDeletionPreviewProcedure,
+			connect.WithSchema(iAMServiceMethods.ByName("GetAccountDeletionPreview")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteMyAccount: connect.NewClient[v1.DeleteMyAccountRequest, v1.DeleteMyAccountResponse](
+			httpClient,
+			baseURL+IAMServiceDeleteMyAccountProcedure,
+			connect.WithSchema(iAMServiceMethods.ByName("DeleteMyAccount")),
+			connect.WithClientOptions(opts...),
+		),
+		acceptTerms: connect.NewClient[v1.AcceptTermsRequest, v1.AcceptTermsResponse](
+			httpClient,
+			baseURL+IAMServiceAcceptTermsProcedure,
+			connect.WithSchema(iAMServiceMethods.ByName("AcceptTerms")),
+			connect.WithClientOptions(opts...),
+		),
+		getTermsStatus: connect.NewClient[v1.GetTermsStatusRequest, v1.GetTermsStatusResponse](
+			httpClient,
+			baseURL+IAMServiceGetTermsStatusProcedure,
+			connect.WithSchema(iAMServiceMethods.ByName("GetTermsStatus")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -599,6 +661,10 @@ type iAMServiceClient struct {
 	unlockOrgAccount          *connect.Client[v1.UnlockOrgAccountRequest, v1.UnlockOrgAccountResponse]
 	resetOrgAccountCredential *connect.Client[v1.ResetOrgAccountCredentialRequest, v1.ResetOrgAccountCredentialResponse]
 	listOrgAccounts           *connect.Client[v1.ListOrgAccountsRequest, v1.ListOrgAccountsResponse]
+	getAccountDeletionPreview *connect.Client[v1.GetAccountDeletionPreviewRequest, v1.GetAccountDeletionPreviewResponse]
+	deleteMyAccount           *connect.Client[v1.DeleteMyAccountRequest, v1.DeleteMyAccountResponse]
+	acceptTerms               *connect.Client[v1.AcceptTermsRequest, v1.AcceptTermsResponse]
+	getTermsStatus            *connect.Client[v1.GetTermsStatusRequest, v1.GetTermsStatusResponse]
 }
 
 // ExchangeToken calls rpc.v1.IAMService.ExchangeToken.
@@ -801,6 +867,26 @@ func (c *iAMServiceClient) ListOrgAccounts(ctx context.Context, req *connect.Req
 	return c.listOrgAccounts.CallUnary(ctx, req)
 }
 
+// GetAccountDeletionPreview calls rpc.v1.IAMService.GetAccountDeletionPreview.
+func (c *iAMServiceClient) GetAccountDeletionPreview(ctx context.Context, req *connect.Request[v1.GetAccountDeletionPreviewRequest]) (*connect.Response[v1.GetAccountDeletionPreviewResponse], error) {
+	return c.getAccountDeletionPreview.CallUnary(ctx, req)
+}
+
+// DeleteMyAccount calls rpc.v1.IAMService.DeleteMyAccount.
+func (c *iAMServiceClient) DeleteMyAccount(ctx context.Context, req *connect.Request[v1.DeleteMyAccountRequest]) (*connect.Response[v1.DeleteMyAccountResponse], error) {
+	return c.deleteMyAccount.CallUnary(ctx, req)
+}
+
+// AcceptTerms calls rpc.v1.IAMService.AcceptTerms.
+func (c *iAMServiceClient) AcceptTerms(ctx context.Context, req *connect.Request[v1.AcceptTermsRequest]) (*connect.Response[v1.AcceptTermsResponse], error) {
+	return c.acceptTerms.CallUnary(ctx, req)
+}
+
+// GetTermsStatus calls rpc.v1.IAMService.GetTermsStatus.
+func (c *iAMServiceClient) GetTermsStatus(ctx context.Context, req *connect.Request[v1.GetTermsStatusRequest]) (*connect.Response[v1.GetTermsStatusResponse], error) {
+	return c.getTermsStatus.CallUnary(ctx, req)
+}
+
 // IAMServiceHandler is an implementation of the rpc.v1.IAMService service.
 type IAMServiceHandler interface {
 	// ExchangeToken: Exchange SSO provider token for internal JWT
@@ -960,6 +1046,33 @@ type IAMServiceHandler interface {
 	ResetOrgAccountCredential(context.Context, *connect.Request[v1.ResetOrgAccountCredentialRequest]) (*connect.Response[v1.ResetOrgAccountCredentialResponse], error)
 	// ListOrgAccounts lists org-managed worker accounts with status info.
 	ListOrgAccounts(context.Context, *connect.Request[v1.ListOrgAccountsRequest]) (*connect.Response[v1.ListOrgAccountsResponse], error)
+	// GetAccountDeletionPreview: what the confirmation screen must state — which
+	// data is erased, which is retained and why, and the organizations affected.
+	// The copy is assembled server-side so mobile and web cannot drift into
+	// describing different behaviour.
+	// Authenticated, no additional permission.
+	GetAccountDeletionPreview(context.Context, *connect.Request[v1.GetAccountDeletionPreviewRequest]) (*connect.Response[v1.GetAccountDeletionPreviewResponse], error)
+	// DeleteMyAccount: erase this person's account.
+	//   - Refuses when iam.user.is_org_managed is true; that person's path is
+	//     ComplianceService.RequestAccountRemoval.
+	//   - Refuses with the SoleOwnerBlocksDeletion detail when the caller is the sole
+	//     owner of an organization that still has other members.
+	//   - Otherwise invalidates every session synchronously and enqueues the erase.
+	//
+	// Deleting an account never deletes an organization.
+	// Authenticated, no additional permission.
+	DeleteMyAccount(context.Context, *connect.Request[v1.DeleteMyAccountRequest]) (*connect.Response[v1.DeleteMyAccountResponse], error)
+	// AcceptTerms: record acceptance of the current terms version.
+	// Rejects a version that is not current, so a stale client cannot record
+	// acceptance of terms nobody is serving.
+	// Authenticated, no additional permission.
+	AcceptTerms(context.Context, *connect.Request[v1.AcceptTermsRequest]) (*connect.Response[v1.AcceptTermsResponse], error)
+	// GetTermsStatus: the current version and whether this person has accepted it.
+	// Admin-provisioned workers never saw a signup screen and are gated on this at
+	// first use, which is the only way acceptance can hold for accounts an
+	// administrator created.
+	// Authenticated, no additional permission.
+	GetTermsStatus(context.Context, *connect.Request[v1.GetTermsStatusRequest]) (*connect.Response[v1.GetTermsStatusResponse], error)
 }
 
 // NewIAMServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -1209,6 +1322,30 @@ func NewIAMServiceHandler(svc IAMServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(iAMServiceMethods.ByName("ListOrgAccounts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	iAMServiceGetAccountDeletionPreviewHandler := connect.NewUnaryHandler(
+		IAMServiceGetAccountDeletionPreviewProcedure,
+		svc.GetAccountDeletionPreview,
+		connect.WithSchema(iAMServiceMethods.ByName("GetAccountDeletionPreview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	iAMServiceDeleteMyAccountHandler := connect.NewUnaryHandler(
+		IAMServiceDeleteMyAccountProcedure,
+		svc.DeleteMyAccount,
+		connect.WithSchema(iAMServiceMethods.ByName("DeleteMyAccount")),
+		connect.WithHandlerOptions(opts...),
+	)
+	iAMServiceAcceptTermsHandler := connect.NewUnaryHandler(
+		IAMServiceAcceptTermsProcedure,
+		svc.AcceptTerms,
+		connect.WithSchema(iAMServiceMethods.ByName("AcceptTerms")),
+		connect.WithHandlerOptions(opts...),
+	)
+	iAMServiceGetTermsStatusHandler := connect.NewUnaryHandler(
+		IAMServiceGetTermsStatusProcedure,
+		svc.GetTermsStatus,
+		connect.WithSchema(iAMServiceMethods.ByName("GetTermsStatus")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/rpc.v1.IAMService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case IAMServiceExchangeTokenProcedure:
@@ -1291,6 +1428,14 @@ func NewIAMServiceHandler(svc IAMServiceHandler, opts ...connect.HandlerOption) 
 			iAMServiceResetOrgAccountCredentialHandler.ServeHTTP(w, r)
 		case IAMServiceListOrgAccountsProcedure:
 			iAMServiceListOrgAccountsHandler.ServeHTTP(w, r)
+		case IAMServiceGetAccountDeletionPreviewProcedure:
+			iAMServiceGetAccountDeletionPreviewHandler.ServeHTTP(w, r)
+		case IAMServiceDeleteMyAccountProcedure:
+			iAMServiceDeleteMyAccountHandler.ServeHTTP(w, r)
+		case IAMServiceAcceptTermsProcedure:
+			iAMServiceAcceptTermsHandler.ServeHTTP(w, r)
+		case IAMServiceGetTermsStatusProcedure:
+			iAMServiceGetTermsStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -1458,4 +1603,20 @@ func (UnimplementedIAMServiceHandler) ResetOrgAccountCredential(context.Context,
 
 func (UnimplementedIAMServiceHandler) ListOrgAccounts(context.Context, *connect.Request[v1.ListOrgAccountsRequest]) (*connect.Response[v1.ListOrgAccountsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.IAMService.ListOrgAccounts is not implemented"))
+}
+
+func (UnimplementedIAMServiceHandler) GetAccountDeletionPreview(context.Context, *connect.Request[v1.GetAccountDeletionPreviewRequest]) (*connect.Response[v1.GetAccountDeletionPreviewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.IAMService.GetAccountDeletionPreview is not implemented"))
+}
+
+func (UnimplementedIAMServiceHandler) DeleteMyAccount(context.Context, *connect.Request[v1.DeleteMyAccountRequest]) (*connect.Response[v1.DeleteMyAccountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.IAMService.DeleteMyAccount is not implemented"))
+}
+
+func (UnimplementedIAMServiceHandler) AcceptTerms(context.Context, *connect.Request[v1.AcceptTermsRequest]) (*connect.Response[v1.AcceptTermsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.IAMService.AcceptTerms is not implemented"))
+}
+
+func (UnimplementedIAMServiceHandler) GetTermsStatus(context.Context, *connect.Request[v1.GetTermsStatusRequest]) (*connect.Response[v1.GetTermsStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.IAMService.GetTermsStatus is not implemented"))
 }

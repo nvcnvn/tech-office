@@ -4,7 +4,7 @@ A Notion/Confluence-style document system: nested pages, full version history, t
 comments, cross-document section embeds, and live collaborative editing presence. Owned by
 `internal/docs`; contract in `rpc/v1/document.proto`, split across **eight** services.
 
-**Status date: 2026-08-22.** Supersedes spec 016.
+**Status date: 2026-08-27.** Supersedes spec 016.
 
 ## Services
 
@@ -65,6 +65,12 @@ fail.
 
 `docs.comment` with `docs.comment_reply` — one level of threading, resolvable.
 `docs.document_reaction` with `GetReactionStats` for aggregate counts.
+
+`GetCommentAuthorAndText` on `DocumentLogic` returns one comment's author and text. It has
+no RPC and exists for the compliance domain's report snapshot: going through this method
+rather than letting compliance read `docs.comment` directly is what keeps content
+reporting free of cross-schema access (Constitution IV). See
+[compliance-safety.md](compliance-safety.md).
 
 ## Section embeds
 

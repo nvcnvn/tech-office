@@ -1,0 +1,46 @@
+appId: com.devguards.TechOffice
+name: "Compliance — A provisioned worker sees their removal path"
+# FR-007b, FR-007c. An account an employer created gets "Remove my account" rather
+# than "Delete", and the request is made in the app rather than by being told to
+# contact somebody — which is the off-app dead end both stores reject.
+#
+# Only runs when the signed-in account is admin-provisioned; a self-registered
+# account gets the deletion path instead, which delete-account.yaml covers.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible:
+      id: "setting-blocked-people"
+    timeout: 10000
+- scrollUntilVisible:
+    element:
+      text: "Sign Out"
+    direction: DOWN
+    timeout: 10000
+- runFlow:
+    when:
+      visible:
+        id: "setting-request-removal"
+    commands:
+      - tapOn:
+          id: "setting-request-removal"
+      - extendedWaitUntil:
+          visible: "manages this account"
+          timeout: 10000
+      - assertVisible: "What happens if they agree"
+      - takeScreenshot: "tmp/maestro-screenshots/compliance-10-removal-request"

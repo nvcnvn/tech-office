@@ -21,6 +21,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/internal/calendar"
 	"github.com/nvcnvn/tech-office/backend/internal/chat"
 	"github.com/nvcnvn/tech-office/backend/internal/collaboration"
+	"github.com/nvcnvn/tech-office/backend/internal/compliance"
 	"github.com/nvcnvn/tech-office/backend/internal/config"
 	"github.com/nvcnvn/tech-office/backend/internal/department"
 	"github.com/nvcnvn/tech-office/backend/internal/docs"
@@ -493,6 +494,42 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 	slog.InfoContext(ctx, "calendar reminder workflow registered and scheduled", "cadence", "1m")
+
+	// Register Compliance Service (Feature 036: App Store & Google Play compliance sweep)
+	//
+	// It is wired last because it composes four other domains: a report can target a
+	// chat message, an uploaded file, a document comment or a call record, and it
+	// reaches each through that domain's service rather than a cross-schema join
+	// (Constitution Principle IV).
+	slog.InfoContext(ctx, "initializing compliance service")
+	complianceLogic := compliance.NewLogic(queries)
+	complianceLogic.RegisterResolvers(chatLogic, fileLogic, docsLogic, voiceLogic)
+	complianceLogic.Notifier = notificationService
+	complianceLogic.Owners = iam.NewOwnerLookup(queries)
+
+	accountDeleter := iam.NewAccountDeleter(queries, adminPool)
+	complianceLogic.Eraser = accountDeleter
+
+	complianceDeletionWorkflows := compliance.NewDeletionWorkflows(complianceLogic, adminPool)
+	complianceLogic.FlowsClient = flowsClient
+	complianceLogic.DeletionWorkflow = complianceDeletionWorkflows.AccountDeletion
+	flows.Register(flowsRegistry, complianceDeletionWorkflows.AccountDeletion)
+
+	// The block guard lives in compliance but is enforced at exactly two
+	// chokepoints, in the domains that own them (research.md R8).
+	chatLogic.SetContactGuard(complianceLogic)
+	voiceLogic.ContactGuard = complianceLogic
+
+	// Deletion acts on the global iam.user record, so its RPCs live on IAMService;
+	// the resumable erase record and its background job live in compliance. These
+	// two setters are the seam between them.
+	iamConnect.SetAccountDeleter(accountDeleter)
+	iamConnect.SetEraseEnqueuer(complianceLogic)
+	iamConnect.SetRemovalRequestResolver(complianceLogic)
+
+	complianceConnect := compliance.NewServiceConnect(complianceLogic, tenantPool)
+	mux.Handle(rpcv1connect.NewComplianceServiceHandler(complianceConnect, interceptors))
+	slog.InfoContext(ctx, "compliance service registered")
 
 	listener, err := net.Listen("tcp", "0.0.0.0:"+port)
 	if err != nil {

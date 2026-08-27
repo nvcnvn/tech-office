@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-08-22.**
+**Status date: 2026-08-27.**
 
 ## Shape
 
@@ -43,6 +43,10 @@ Tenant isolation is **application-enforced, not RLS-enforced**.
   worker instead of sharded.
 - Global, non-distributed tables: `iam.user`, `iam.sso_identity`, `iam.password_credential`,
   `iam.session`, `iam.password_reset_token`. A user is global; membership is per-org.
+- `iam.user.id`, `iam.identity.id` and `organization.employee.id` are **the same UUID** for
+  a person. There is no user↔organization mapping table; enumerating somebody's
+  memberships is `SELECT organization_id FROM iam.identity WHERE id = $1`, which has no
+  `organization_id` predicate and so must run on `AdminPool`.
 - Every foreign key across schemas is composite and leads with `organization_id`.
 
 Two pools, both in `backend/database/pool.go`:
@@ -108,10 +112,18 @@ row rather than multiplying schedules.
 | `CalendarReminderWorkflow` | every 1 min | polls due `calendar.event_reminder` rows and publishes reminders |
 | `FileValidation` | on demand, concurrency 9 | MIME sniffing + ClamAV scan after upload |
 | `FilePostProcessing` | on demand | PDF conversion / content indexing (partly skeleton) |
+| `compliance-account-deletion/v1` | on demand | resumable account erase, one run per organization the deleted person belongs to |
 
 Non-flows goroutines started by `notificationService.Start()` and the server: the SSE
 LISTEN consumer, the stale-connection janitor (30 s), the push-token cleanup (24 h), the
 rescue push worker (1 s), and the presence pong batcher.
+
+**Pickup latency.** The worker polls one shard per workflow per tick, round-robin across
+`FLOW_SHARD_COUNT` (32 by default) at one second. A freshly enqueued run therefore waits
+up to ~32 seconds before anyone looks at its shard. That is fine for work with no
+interactive latency target — the account erase is the clearest case, because the person is
+signed out synchronously before it is queued — and it is why tests that wait on background
+work budget for the whole rotation rather than the lucky case.
 
 ## Configuration
 

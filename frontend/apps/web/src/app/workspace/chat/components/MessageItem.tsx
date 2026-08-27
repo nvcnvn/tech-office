@@ -19,6 +19,7 @@ import { Avatar, IconButton, Typography, Menu, MenuItem, Tooltip, Button, Box, a
 import { type Theme, useTheme } from '@mui/material/styles';
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import ReactionPicker from './ReactionPicker';
+import { ReportContentDialog } from '../../components/ReportContentDialog';
 import { codeToEmoji, QUICK_REACTION_EMOJIS } from '../utils/emoji';
 import MentionPreview from './MentionPreview';
 import FileAttachment from './FileAttachment';
@@ -223,6 +224,12 @@ interface MessageItemProps {
 	onReact?: (emoji: string, shouldRemove: boolean) => void; // Pass emoji and whether to add/remove
 	onEdit?: () => void;
 	onDelete?: () => void;
+	/**
+	 * Whether this message is in a direct conversation. Only used to record the
+	 * right target kind on a report, so a reviewer can see at a glance whether it
+	 * was said in the open or in private (Feature 036).
+	 */
+	isDirectMessage?: boolean;
 }
 
 export default function MessageItem({
@@ -250,12 +257,14 @@ export default function MessageItem({
 	onReact,
 	onEdit,
 	onDelete,
+	isDirectMessage = false,
 }: MessageItemProps) {
 	const { user } = useAuthState();
 	const [isHovered, setIsHovered] = useState(false);
 	const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
 	const [copyLinkSuccess, setCopyLinkSuccess] = useState(false);
 	const [reactionPickerAnchor, setReactionPickerAnchor] = useState<null | HTMLElement>(null);
+	const [reportOpen, setReportOpen] = useState(false);
 	// Local state to control the visual pulse animation so it self-expires
 	// instead of relying solely on the parent prop. This prevents a stuck
 	// blinking state when navigating between threads/pages.
@@ -1031,7 +1040,25 @@ export default function MessageItem({
 							<MenuItem onClick={onDelete} sx={{ color: theme.palette.error.main }}>
 								Delete message
 							</MenuItem>
+							<MenuItem
+								onClick={() => {
+									setMoreMenuAnchor(null);
+									setReportOpen(true);
+								}}
+								sx={{ color: theme.palette.error.main }}
+								data-testid="message-menu-report"
+							>
+								Report message
+							</MenuItem>
 						</Menu>
+
+						<ReportContentDialog
+							open={reportOpen}
+							targetKind={isDirectMessage ? 'direct_message' : 'chat_message'}
+							targetId={id}
+							subjectLabel="this message"
+							onClose={() => setReportOpen(false)}
+						/>
 
 						<ReactionPicker
 							open={Boolean(reactionPickerAnchor)}

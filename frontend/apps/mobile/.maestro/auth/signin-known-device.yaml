@@ -91,6 +91,13 @@ name: "Auth — Returning worker signs in with six taps"
       visible: "Not Now"
     commands:
       - tapOn: "Not Now"
+- runFlow:
+    when:
+      visible:
+        id: "terms-gate-accept"
+    commands:
+      - tapOn:
+          id: "terms-gate-accept"
 - extendedWaitUntil:
     visible: "Chat"
     timeout: 20000
@@ -148,6 +155,13 @@ name: "Auth — Returning worker signs in with six taps"
       visible: "Not Now"
     commands:
       - tapOn: "Not Now"
+- runFlow:
+    when:
+      visible:
+        id: "terms-gate-accept"
+    commands:
+      - tapOn:
+          id: "terms-gate-accept"
 - extendedWaitUntil:
     visible: "Chat"
     timeout: 20000

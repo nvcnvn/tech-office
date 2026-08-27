@@ -400,6 +400,14 @@ graph LR
 - **Workflows**: `CalendarReminderWorkflow` (`calendar_reminder_poll`) — polls pending reminders every minute and publishes notifications. Presence at event boundaries is **not** a server-side job: since the presence ping-pong protocol, `presence_status` is written only by client pongs.
 - **Why T4 Aggregation**: Calendar reads from T3 (Collaboration) and T2 (Docs) domains through thin read-only overlay interfaces. It is the first domain to compose data from the orchestrator tier, establishing T4 as the aggregation layer. Dependencies are strictly one-directional — neither Collaboration nor Docs import Calendar.
 
+#### `compliance` (Compliance & Safety)
+- **Schema**: `compliance`
+- **Tables**: `content_report`, `block`, `removal_request`, `account_deletion`
+- **Role**: Content reporting across every reportable domain, one-directional blocking of direct contact, account removal requests for admin-provisioned workers, and the resumable account-erase state machine. Terms acceptance and the two deletion RPCs live on `iam` instead, because they act on the global `iam.user` record.
+- **Code dependencies**: `chat` (`GetMessage` for message snapshots, `DirectMessageCounterpart`), `files` (`GetFileMetadata`), `docs` (`GetCommentAuthorAndText`), `voice` (`GetCallRecord`), `notification` (owner notification on a removal request), `iam` (the erase steps, through an `AccountEraser` interface)
+- **Workflows**: `compliance-account-deletion/v1` — one run per organization the deleted person belongs to, advancing a `compliance.account_deletion` row through `anonymising → purging → done`. Every step is idempotent, so a partial failure is recovered by re-running rather than by a second code path. Runs on `AdminPool`: the terminal step deletes the global `iam.user` row and there is no request context to derive a tenant from.
+- **Why T4 Aggregation**: A report can target a chat message, an uploaded file, a document comment or a call record. Compliance composes four T2/T3 domains through read-only resolver interfaces and joins none of their schemas. Dependencies are strictly one-directional — chat and voice consume the block guard through their own locally declared `ContactGuard` interfaces, so neither imports compliance.
+
 ---
 
 ## 7. Cross-Domain Integration Patterns
@@ -448,6 +456,29 @@ orgLogic.SetCollaborationLogic(collaborationLogic)
 ```
 
 This maintains the rule that **constructor dependencies flow downward only**. The setter injection is a controlled, documented exception for a specific use case.
+
+The same pattern carries the block guard and the account-erase seam. Compliance is
+constructed last, because it composes chat, files, docs, voice, notification and iam; the
+domains that *consume* it are already built by then, so they receive it through setters:
+
+```go
+// Phase N: compliance, after every domain it reads from
+complianceLogic := compliance.NewLogic(queries)
+complianceLogic.RegisterResolvers(chatLogic, fileLogic, docsLogic, voiceLogic)
+
+// The block guard, enforced at exactly two chokepoints
+chatLogic.SetContactGuard(complianceLogic)
+voiceLogic.ContactGuard = complianceLogic
+
+// Deletion RPCs live on IAMService; the resumable record and its job live in compliance
+iamConnect.SetAccountDeleter(accountDeleter)
+iamConnect.SetEraseEnqueuer(complianceLogic)
+iamConnect.SetRemovalRequestResolver(complianceLogic)
+```
+
+`chat`, `voice` and `iam` each declare the narrow interface they need locally
+(`ContactGuard`, `EraseEnqueuer`, `RemovalRequestResolver`), satisfied structurally. None
+of them imports `internal/compliance`.
 
 ### Pattern 3: Event-Driven Decoupling (Notification Hub)
 

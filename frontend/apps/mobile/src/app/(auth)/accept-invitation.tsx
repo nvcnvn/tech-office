@@ -17,7 +17,9 @@ import {
   KeyboardAvoidingView,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { acceptInvitation, AuthError } from "apis";
+import { acceptInvitation, AuthError, TERMS_VERSION } from "apis";
+
+import { TermsAcceptance } from "@/components/compliance/terms-acceptance";
 
 export default function AcceptInvitationScreen() {
   const { token } = useLocalSearchParams<{ token?: string }>();
@@ -26,6 +28,9 @@ export default function AcceptInvitationScreen() {
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [showMismatchFallback, setShowMismatchFallback] = useState(false);
+  // Feature 036 (FR-010): an invited person may be creating their account here, so
+  // the same acknowledgement is required as at signup.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
 
   const inputStyle = {
     borderWidth: 1,
@@ -49,10 +54,14 @@ export default function AcceptInvitationScreen() {
       Alert.alert("Error", "Passwords don't match");
       return;
     }
+    if (!acceptedTerms) {
+      Alert.alert("Error", "Please read and agree to the terms and privacy policy.");
+      return;
+    }
     setLoading(true);
     setShowMismatchFallback(false);
     try {
-      await acceptInvitation(token, { password });
+      await acceptInvitation(token, { password, acceptedTermsVersion: TERMS_VERSION });
       Alert.alert("Welcome!", "Your account is ready. Please sign in.", [
         { text: "Sign In", onPress: () => router.replace("/(auth)/signin") },
       ]);
@@ -143,12 +152,18 @@ export default function AcceptInvitationScreen() {
             />
         </View>
 
+        <TermsAcceptance
+          accepted={acceptedTerms}
+          onChange={setAcceptedTerms}
+          disabled={loading}
+        />
+
         <Pressable
           onPress={handleAccept}
-          disabled={loading || !password || !confirm}
+          disabled={loading || !password || !confirm || !acceptedTerms}
           style={({ pressed }) => ({
             backgroundColor:
-              !password || !confirm ? "#ccc" : pressed ? "#020617" : "#0f172a",
+              !password || !confirm || !acceptedTerms ? "#ccc" : pressed ? "#020617" : "#0f172a",
             paddingVertical: 16,
             borderRadius: 12,
             alignItems: "center",

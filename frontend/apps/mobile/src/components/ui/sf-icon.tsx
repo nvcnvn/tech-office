@@ -142,6 +142,14 @@ const SF_TO_IONICONS: Record<string, IoniconsName> = {
   "camera.fill": "camera",
   trash: "trash-outline",
   "trash.fill": "trash",
+
+  // Compliance & safety (Feature 036)
+  "hand.raised": "hand-left-outline",
+  "hand.raised.fill": "hand-left",
+  "hand.raised.slash": "hand-left-outline",
+  "lock.shield": "shield-outline",
+  "lock.shield.fill": "shield-checkmark",
+  "person.crop.circle.badge.minus": "person-remove-outline",
   "square.and.arrow.up": "share-outline",
   "arrow.down.circle": "arrow-down-circle-outline",
   "arrow.clockwise": "refresh",
@@ -159,6 +167,7 @@ const SF_TO_IONICONS: Record<string, IoniconsName> = {
   "circle.fill": "ellipse",
   circle: "ellipse-outline",
   "moon.fill": "moon",
+  "minus.circle": "remove-circle-outline",
   "minus.circle.fill": "remove-circle",
   "exclamationmark.circle": "alert-circle-outline",
   "exclamationmark.circle.fill": "alert-circle",

@@ -4,6 +4,7 @@ package rpc.v1;
 
 import "google/protobuf/timestamp.proto";
 import "rpc/v1/rbac.proto";
+import "rpc/v1/compliance.proto";
 
 option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
 
@@ -374,6 +375,48 @@ service IAMService {
       required_permissions: ["iam.manageOrgAccounts"]
     };
   }
+
+  // === Account deletion (Feature 036) ===
+
+  // GetAccountDeletionPreview: what the confirmation screen must state — which
+  // data is erased, which is retained and why, and the organizations affected.
+  // The copy is assembled server-side so mobile and web cannot drift into
+  // describing different behaviour.
+  // Authenticated, no additional permission.
+  rpc GetAccountDeletionPreview(GetAccountDeletionPreviewRequest) returns (GetAccountDeletionPreviewResponse) {
+    option (rpc.v1.access_control) = {};
+  }
+
+  // DeleteMyAccount: erase this person's account.
+  // - Refuses when iam.user.is_org_managed is true; that person's path is
+  //   ComplianceService.RequestAccountRemoval.
+  // - Refuses with the SoleOwnerBlocksDeletion detail when the caller is the sole
+  //   owner of an organization that still has other members.
+  // - Otherwise invalidates every session synchronously and enqueues the erase.
+  // Deleting an account never deletes an organization.
+  // Authenticated, no additional permission.
+  rpc DeleteMyAccount(DeleteMyAccountRequest) returns (DeleteMyAccountResponse) {
+    option (rpc.v1.access_control) = {};
+  }
+
+  // === Terms acceptance (Feature 036) ===
+
+  // AcceptTerms: record acceptance of the current terms version.
+  // Rejects a version that is not current, so a stale client cannot record
+  // acceptance of terms nobody is serving.
+  // Authenticated, no additional permission.
+  rpc AcceptTerms(AcceptTermsRequest) returns (AcceptTermsResponse) {
+    option (rpc.v1.access_control) = {};
+  }
+
+  // GetTermsStatus: the current version and whether this person has accepted it.
+  // Admin-provisioned workers never saw a signup screen and are gated on this at
+  // first use, which is the only way acceptance can hold for accounts an
+  // administrator created.
+  // Authenticated, no additional permission.
+  rpc GetTermsStatus(GetTermsStatusRequest) returns (GetTermsStatusResponse) {
+    option (rpc.v1.access_control) = {};
+  }
 }
 
 // =============================================================================
@@ -679,6 +722,10 @@ message AcceptInvitationRequest {
   optional SSOProvider sso_provider = 3;
   optional string sso_id_token = 4;
   optional string password = 5;
+
+  // Required. The terms version the person acknowledged on the acceptance screen.
+  // A request without it, or with a stale version, is rejected (FR-010).
+  string accepted_terms_version = 6;
 }
 
 message AcceptInvitationResponse {
@@ -1302,3 +1349,83 @@ message OrgAccountListItem {
 }
 
 // Access control options defined in rpc/v1/rbac.proto
+
+// =============================================================================
+// Account deletion and terms acceptance (Feature 036)
+// =============================================================================
+
+message DeletionCategory {
+  // Plain-language name of the category, e.g. "Your profile and contact details".
+  string label = 1;
+
+  // Why it is retained. Empty for erased categories.
+  string reason = 2;
+}
+
+message AffectedOrganization {
+  string organization_id = 1;
+  string organization_name = 2;
+  int32 member_count = 3;
+
+  // True when the caller is this organization's sole owner and it still has other
+  // members, which blocks deletion until they transfer ownership or close it.
+  bool blocks_deletion = 4;
+}
+
+message GetAccountDeletionPreviewRequest {}
+
+message GetAccountDeletionPreviewResponse {
+  repeated DeletionCategory erased = 1;
+
+  // Not a legal disclaimer: this describes honestly that content authored inside
+  // an organization stays with that organization, de-identified.
+  repeated DeletionCategory retained = 2;
+
+  repeated AffectedOrganization organizations = 3;
+
+  // True when any organization in the list blocks deletion.
+  bool blocked = 4;
+
+  // The exact phrase the person must type to confirm, assembled server-side so
+  // both clients ask for the same thing.
+  string confirmation_phrase = 5;
+}
+
+message DeleteMyAccountRequest {
+  // The fixed phrase from GetAccountDeletionPreview, typed by the person. Guards
+  // against an accidental irreversible tap on a small screen.
+  string confirmation_phrase = 1;
+}
+
+message DeleteMyAccountResponse {
+  // The deletion record for the person's first organization; the remaining
+  // records advance behind it on the background queue.
+  string deletion_id = 1;
+
+  // Always PENDING on return: sessions are already gone, the erase is queued.
+  AccountDeletionState state = 2;
+}
+
+message AcceptTermsRequest {
+  string terms_version = 1;
+}
+
+message AcceptTermsResponse {
+  google.protobuf.Timestamp accepted_at = 1;
+}
+
+message GetTermsStatusRequest {}
+
+message GetTermsStatusResponse {
+  // The version currently being served.
+  string current_version = 1;
+
+  // What this person last accepted; empty if they never have.
+  string accepted_version = 2;
+
+  google.protobuf.Timestamp accepted_at = 3;
+
+  // False when accepted_version differs from current_version, which is the
+  // re-prompt trigger.
+  bool is_current = 4;
+}

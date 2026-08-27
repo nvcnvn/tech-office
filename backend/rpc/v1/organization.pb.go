@@ -118,8 +118,11 @@ type RegisterOrganizationWithAdminPasswordRequest struct {
 	AdminPassword   string                 `protobuf:"bytes,4,opt,name=admin_password,json=adminPassword,proto3" json:"admin_password,omitempty"`
 	AdminGivenName  string                 `protobuf:"bytes,5,opt,name=admin_given_name,json=adminGivenName,proto3" json:"admin_given_name,omitempty"`
 	AdminFamilyName string                 `protobuf:"bytes,6,opt,name=admin_family_name,json=adminFamilyName,proto3" json:"admin_family_name,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Required. The terms version the person acknowledged on the signup screen.
+	// A request without it, or with a stale version, is rejected (FR-010).
+	AcceptedTermsVersion string `protobuf:"bytes,7,opt,name=accepted_terms_version,json=acceptedTermsVersion,proto3" json:"accepted_terms_version,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *RegisterOrganizationWithAdminPasswordRequest) Reset() {
@@ -190,6 +193,13 @@ func (x *RegisterOrganizationWithAdminPasswordRequest) GetAdminGivenName() strin
 func (x *RegisterOrganizationWithAdminPasswordRequest) GetAdminFamilyName() string {
 	if x != nil {
 		return x.AdminFamilyName
+	}
+	return ""
+}
+
+func (x *RegisterOrganizationWithAdminPasswordRequest) GetAcceptedTermsVersion() string {
+	if x != nil {
+		return x.AcceptedTermsVersion
 	}
 	return ""
 }
@@ -1174,7 +1184,7 @@ const file_rpc_v1_organization_proto_rawDesc = "" +
 	"!GetOrganizationBySubdomainRequest\x12\x1c\n" +
 	"\tsubdomain\x18\x01 \x01(\tR\tsubdomain\"^\n" +
 	"\"GetOrganizationBySubdomainResponse\x128\n" +
-	"\forganization\x18\x01 \x01(\v2\x14.rpc.v1.OrganizationR\forganization\"\x8d\x02\n" +
+	"\forganization\x18\x01 \x01(\v2\x14.rpc.v1.OrganizationR\forganization\"\xc3\x02\n" +
 	",RegisterOrganizationWithAdminPasswordRequest\x12!\n" +
 	"\fcompany_name\x18\x01 \x01(\tR\vcompanyName\x12\x1c\n" +
 	"\tsubdomain\x18\x02 \x01(\tR\tsubdomain\x12\x1f\n" +
@@ -1182,7 +1192,8 @@ const file_rpc_v1_organization_proto_rawDesc = "" +
 	"adminEmail\x12%\n" +
 	"\x0eadmin_password\x18\x04 \x01(\tR\radminPassword\x12(\n" +
 	"\x10admin_given_name\x18\x05 \x01(\tR\x0eadminGivenName\x12*\n" +
-	"\x11admin_family_name\x18\x06 \x01(\tR\x0fadminFamilyName\"i\n" +
+	"\x11admin_family_name\x18\x06 \x01(\tR\x0fadminFamilyName\x124\n" +
+	"\x16accepted_terms_version\x18\a \x01(\tR\x14acceptedTermsVersion\"i\n" +
 	"-RegisterOrganizationWithAdminPasswordResponse\x128\n" +
 	"\forganization\x18\x01 \x01(\v2\x14.rpc.v1.OrganizationR\forganization\">\n" +
 	"\x1eCheckSubdomainAvailableRequest\x12\x1c\n" +

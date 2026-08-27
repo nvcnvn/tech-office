@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file rpc/v1/iam_error_details.proto.
  */
 export const file_rpc_v1_iam_error_details: GenFile = /*@__PURE__*/
-  fileDesc("Ch5ycGMvdjEvaWFtX2Vycm9yX2RldGFpbHMucHJvdG8SBnJwYy52MSJkChJQaW5BdXRoRXJyb3JEZXRhaWwSFAoMbG9ja291dF90aWVyGAEgASgFEhoKEmxvY2tvdXRfdW50aWxfdW5peBgCIAEoAxIcChRhZG1pbl9yZXNldF9yZXF1aXJlZBgDIAEoCEKPAQoKY29tLnJwYy52MUIUSWFtRXJyb3JEZXRhaWxzUHJvdG9QAVoyZ2l0aHViLmNvbS9udmNudm4vdGVjaC1vZmZpY2UvYmFja2VuZC9ycGMvdjE7cnBjdjGiAgNSWFiqAgZScGMuVjHKAgZScGNcVjHiAhJScGNcVjFcR1BCTWV0YWRhdGHqAgdScGM6OlYxYgZwcm90bzM");
+  fileDesc("Ch5ycGMvdjEvaWFtX2Vycm9yX2RldGFpbHMucHJvdG8SBnJwYy52MSJkChJQaW5BdXRoRXJyb3JEZXRhaWwSFAoMbG9ja291dF90aWVyGAEgASgFEhoKEmxvY2tvdXRfdW50aWxfdW5peBgCIAEoAxIcChRhZG1pbl9yZXNldF9yZXF1aXJlZBgDIAEoCCJgChRCbG9ja2luZ09yZ2FuaXphdGlvbhIXCg9vcmdhbml6YXRpb25faWQYASABKAkSGQoRb3JnYW5pemF0aW9uX25hbWUYAiABKAkSFAoMbWVtYmVyX2NvdW50GAMgASgFIk4KF1NvbGVPd25lckJsb2Nrc0RlbGV0aW9uEjMKDW9yZ2FuaXphdGlvbnMYASADKAsyHC5ycGMudjEuQmxvY2tpbmdPcmdhbml6YXRpb25CjwEKCmNvbS5ycGMudjFCFElhbUVycm9yRGV0YWlsc1Byb3RvUAFaMmdpdGh1Yi5jb20vbnZjbnZuL3RlY2gtb2ZmaWNlL2JhY2tlbmQvcnBjL3YxO3JwY3YxogIDUlhYqgIGUnBjLlYxygIGUnBjXFYx4gISUnBjXFYxXEdQQk1ldGFkYXRh6gIHUnBjOjpWMWIGcHJvdG8z");
 
 /**
  * PinAuthErrorDetail — attached to RESOURCE_EXHAUSTED for lockout errors.
@@ -43,4 +43,58 @@ export type PinAuthErrorDetail = Message<"rpc.v1.PinAuthErrorDetail"> & {
  */
 export const PinAuthErrorDetailSchema: GenMessage<PinAuthErrorDetail> = /*@__PURE__*/
   messageDesc(file_rpc_v1_iam_error_details, 0);
+
+/**
+ * BlockingOrganization — one workspace that stands in the way of account deletion.
+ *
+ * @generated from message rpc.v1.BlockingOrganization
+ */
+export type BlockingOrganization = Message<"rpc.v1.BlockingOrganization"> & {
+  /**
+   * @generated from field: string organization_id = 1;
+   */
+  organizationId: string;
+
+  /**
+   * @generated from field: string organization_name = 2;
+   */
+  organizationName: string;
+
+  /**
+   * @generated from field: int32 member_count = 3;
+   */
+  memberCount: number;
+};
+
+/**
+ * Describes the message rpc.v1.BlockingOrganization.
+ * Use `create(BlockingOrganizationSchema)` to create a new message.
+ */
+export const BlockingOrganizationSchema: GenMessage<BlockingOrganization> = /*@__PURE__*/
+  messageDesc(file_rpc_v1_iam_error_details, 1);
+
+/**
+ * SoleOwnerBlocksDeletion — attached to FAILED_PRECONDITION when DeleteMyAccount
+ * is refused because the caller is the only owner of one or more workspaces that
+ * still have other members (FR-005).
+ *
+ * Without this detail a client can only show a sentence. With it, mobile and web
+ * can list exactly which workspaces are blocking and link to transfer-or-close for
+ * each, which is what "tell the person what to do instead" requires.
+ *
+ * @generated from message rpc.v1.SoleOwnerBlocksDeletion
+ */
+export type SoleOwnerBlocksDeletion = Message<"rpc.v1.SoleOwnerBlocksDeletion"> & {
+  /**
+   * @generated from field: repeated rpc.v1.BlockingOrganization organizations = 1;
+   */
+  organizations: BlockingOrganization[];
+};
+
+/**
+ * Describes the message rpc.v1.SoleOwnerBlocksDeletion.
+ * Use `create(SoleOwnerBlocksDeletionSchema)` to create a new message.
+ */
+export const SoleOwnerBlocksDeletionSchema: GenMessage<SoleOwnerBlocksDeletion> = /*@__PURE__*/
+  messageDesc(file_rpc_v1_iam_error_details, 2);
 

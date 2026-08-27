@@ -543,6 +543,61 @@ func (q *Queries) GetDocumentBySlug(ctx context.Context, db DBTX, arg *GetDocume
 	return &i, err
 }
 
+const getDocumentComment = `-- name: GetDocumentComment :one
+
+
+
+SELECT
+  c.id,
+  c.organization_id,
+  c.document_id,
+  c.comment_text,
+  c.author_employee_id,
+  c.is_resolved,
+  c.updated_at
+FROM docs.comment c
+WHERE c.organization_id = $1
+  AND c.id = $2
+`
+
+type GetDocumentCommentParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ID             dbuuid.UUID `json:"id"`
+}
+
+type GetDocumentCommentRow struct {
+	ID               dbuuid.UUID        `json:"id"`
+	OrganizationID   dbuuid.UUID        `json:"organization_id"`
+	DocumentID       dbuuid.UUID        `json:"document_id"`
+	CommentText      string             `json:"comment_text"`
+	AuthorEmployeeID dbuuid.UUID        `json:"author_employee_id"`
+	IsResolved       bool               `json:"is_resolved"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+// ============================================================================
+// Document Follower Preference-Aware Queries
+// ============================================================================
+// ============================================================================
+// Document Recipient Eligibility Queries (for notification targeting)
+// ============================================================================
+// Single comment with its author, used by the compliance domain to snapshot a
+// reported comment at report time (Feature 036).
+func (q *Queries) GetDocumentComment(ctx context.Context, db DBTX, arg *GetDocumentCommentParams) (*GetDocumentCommentRow, error) {
+	row := db.QueryRow(ctx, getDocumentComment, arg.OrganizationID, arg.ID)
+	var i GetDocumentCommentRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.DocumentID,
+		&i.CommentText,
+		&i.AuthorEmployeeID,
+		&i.IsResolved,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const getDocumentReactionStats = `-- name: GetDocumentReactionStats :one
 SELECT
     d.id,

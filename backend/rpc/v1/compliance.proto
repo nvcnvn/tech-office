@@ -1,0 +1,357 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// =============================================================================
+// Compliance Service - content reporting, blocking, and account removal requests
+// (Feature 036: App Store & Google Play compliance sweep)
+//
+// organization_id never appears in a request message; it comes from the auth
+// context via the interceptor (Constitution Principle I).
+// =============================================================================
+
+service ComplianceService {
+  // === Reporting ===
+
+  // ReportContent: file a report against a specific item.
+  // The server resolves the reported author and takes the content snapshot itself
+  // by calling the owning domain's service, so a client cannot forge authorship.
+  rpc ReportContent(ReportContentRequest) returns (ReportContentResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.reportContent"]
+    };
+  }
+
+  // ListReports: the review queue. Web-only surface (Constitution XIII).
+  rpc ListReports(ListReportsRequest) returns (ListReportsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.reviewReports"]
+    };
+  }
+
+  // GetReport: one report in full, including a deep link to the live content when
+  // it still exists.
+  rpc GetReport(GetReportRequest) returns (GetReportResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.reviewReports"]
+    };
+  }
+
+  // ResolveReport: record an outcome. Rejects an empty note and rejects resolving
+  // an already-resolved report.
+  rpc ResolveReport(ResolveReportRequest) returns (ResolveReportResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.reviewReports"]
+    };
+  }
+
+  // === Blocking ===
+
+  // BlockPerson: block direct contact. Emits no notification of any kind — the
+  // absence is the requirement (FR-022).
+  rpc BlockPerson(BlockPersonRequest) returns (BlockPersonResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.blockPerson"]
+    };
+  }
+
+  // UnblockPerson: idempotent — unblocking someone who is not blocked succeeds.
+  rpc UnblockPerson(UnblockPersonRequest) returns (UnblockPersonResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.blockPerson"]
+    };
+  }
+
+  // ListBlockedPeople: the caller's own block list only. There is deliberately no
+  // RPC that reveals who has blocked a given person, which is what keeps FR-022
+  // true at the API layer rather than only in the UI.
+  rpc ListBlockedPeople(ListBlockedPeopleRequest) returns (ListBlockedPeopleResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.blockPerson"]
+    };
+  }
+
+  // === Removal requests ===
+
+  // GetAccountRemovalPath: which path this person gets, so the client renders the
+  // right screen without inferring it. Authenticated, no additional permission:
+  // every person must reach their own removal path regardless of role.
+  rpc GetAccountRemovalPath(GetAccountRemovalPathRequest) returns (GetAccountRemovalPathResponse) {
+    option (rpc.v1.access_control) = {};
+  }
+
+  // RequestAccountRemoval: creates the request and notifies the organization's
+  // owners. Returns the existing request if one is already outstanding rather
+  // than erroring.
+  rpc RequestAccountRemoval(RequestAccountRemovalRequest) returns (RequestAccountRemovalResponse) {
+    option (rpc.v1.access_control) = {};
+  }
+
+  // ListRemovalRequests: the owner queue. Web-only surface (Constitution XIII).
+  rpc ListRemovalRequests(ListRemovalRequestsRequest) returns (ListRemovalRequestsResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.manageRemovalRequests"]
+    };
+  }
+
+  // DecideRemovalRequest: grant ends the membership and, when it was the person's
+  // last, enqueues the global purge. Decline is terminal for that request.
+  rpc DecideRemovalRequest(DecideRemovalRequestRequest) returns (DecideRemovalRequestResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["compliance.manageRemovalRequests"]
+    };
+  }
+}
+
+// =============================================================================
+// Enumerations
+//
+// Constitution Principle VIII: each of these is mirrored by a SQL CHECK in
+// backend/database/scripts/schema.sql, Go constants in
+// backend/internal/compliance/constants.go, and a TypeScript union in
+// frontend/packages/apis/src/compliance.ts. Changing one means changing all four.
+// =============================================================================
+
+// ReportTargetKind: what sort of item a report points at.
+// MUST align with the target_kind CHECK on compliance.content_report.
+enum ReportTargetKind {
+  REPORT_TARGET_KIND_UNSPECIFIED = 0;
+  REPORT_TARGET_KIND_CHAT_MESSAGE = 1;
+  REPORT_TARGET_KIND_DIRECT_MESSAGE = 2;
+  REPORT_TARGET_KIND_FILE = 3;
+  REPORT_TARGET_KIND_DOCUMENT_COMMENT = 4;
+  REPORT_TARGET_KIND_CALL_RECORD = 5;
+}
+
+// ReportReason: why the reporter says the item is abusive.
+// MUST align with the reason CHECK on compliance.content_report.
+enum ReportReason {
+  REPORT_REASON_UNSPECIFIED = 0;
+  REPORT_REASON_HARASSMENT = 1;
+  REPORT_REASON_HATE_SPEECH = 2;
+  REPORT_REASON_SEXUAL_CONTENT = 3;
+  REPORT_REASON_VIOLENCE = 4;
+  REPORT_REASON_SPAM = 5;
+  REPORT_REASON_OTHER = 6;
+}
+
+// ReportStatus: where a report stands. 'actioned' and 'dismissed' are the two
+// outcomes; both require an outcome note.
+// MUST align with the status CHECK on compliance.content_report.
+enum ReportStatus {
+  REPORT_STATUS_UNSPECIFIED = 0;
+  REPORT_STATUS_OUTSTANDING = 1;
+  REPORT_STATUS_ACTIONED = 2;
+  REPORT_STATUS_DISMISSED = 3;
+}
+
+// RemovalRequestStatus.
+// MUST align with the status CHECK on compliance.removal_request.
+enum RemovalRequestStatus {
+  REMOVAL_REQUEST_STATUS_UNSPECIFIED = 0;
+  REMOVAL_REQUEST_STATUS_OUTSTANDING = 1;
+  REMOVAL_REQUEST_STATUS_GRANTED = 2;
+  REMOVAL_REQUEST_STATUS_DECLINED = 3;
+}
+
+// AccountDeletionState: the resumable erase state machine.
+// MUST align with the state CHECK on compliance.account_deletion.
+enum AccountDeletionState {
+  ACCOUNT_DELETION_STATE_UNSPECIFIED = 0;
+  ACCOUNT_DELETION_STATE_PENDING = 1;
+  ACCOUNT_DELETION_STATE_ANONYMISING = 2;
+  ACCOUNT_DELETION_STATE_PURGING = 3;
+  ACCOUNT_DELETION_STATE_DONE = 4;
+  ACCOUNT_DELETION_STATE_FAILED = 5;
+}
+
+// AccountRemovalPath: which of the two deletion paths a person gets, decided by
+// iam.user.is_org_managed.
+enum AccountRemovalPath {
+  ACCOUNT_REMOVAL_PATH_UNSPECIFIED = 0;
+  // Self-registered: full in-app deletion.
+  ACCOUNT_REMOVAL_PATH_SELF_DELETE = 1;
+  // Admin-provisioned: an in-app request addressed to the organization's owners.
+  ACCOUNT_REMOVAL_PATH_REQUEST_REMOVAL = 2;
+}
+
+// =============================================================================
+// Reporting messages
+// =============================================================================
+
+message ContentReport {
+  string id = 1;
+  string reporter_employee_id = 2;
+  string reporter_name = 3;
+  string reported_employee_id = 4;
+  string reported_name = 5;
+  ReportTargetKind target_kind = 6;
+  string target_id = 7;
+
+  // The reported content as it stood at report time. This is what keeps a report
+  // reviewable after its subject is deleted (FR-018).
+  string content_snapshot = 8;
+
+  ReportReason reason = 9;
+  string note = 10;
+  ReportStatus status = 11;
+  string outcome_note = 12;
+  string reviewed_by_employee_id = 13;
+  google.protobuf.Timestamp reviewed_at = 14;
+  google.protobuf.Timestamp created_at = 15;
+}
+
+message ReportContentRequest {
+  ReportTargetKind target_kind = 1;
+  string target_id = 2;
+  ReportReason reason = 3;
+  string note = 4;
+}
+
+message ReportContentResponse {
+  string report_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message ListReportsRequest {
+  // Omit to list every report regardless of status.
+  ReportStatus status_filter = 1;
+
+  // UUID v7 cursor, nullable per Principle IX: empty means "start at the newest".
+  string cursor = 2;
+  int32 limit = 3;
+}
+
+message ListReportsResponse {
+  repeated ContentReport reports = 1;
+
+  // Empty when there is no further page.
+  string next_cursor = 2;
+}
+
+message GetReportRequest {
+  string report_id = 1;
+}
+
+message GetReportResponse {
+  ContentReport report = 1;
+
+  // Populated only while the reported item still exists.
+  string live_content_deep_link = 2;
+}
+
+message ResolveReportRequest {
+  string report_id = 1;
+
+  // ACTIONED or DISMISSED. OUTSTANDING is rejected.
+  ReportStatus outcome = 2;
+
+  // Required and non-empty.
+  string outcome_note = 3;
+}
+
+message ResolveReportResponse {
+  ContentReport report = 1;
+}
+
+// =============================================================================
+// Blocking messages
+// =============================================================================
+
+message BlockedPerson {
+  string block_id = 1;
+  string employee_id = 2;
+  string display_name = 3;
+  string email = 4;
+  google.protobuf.Timestamp created_at = 5;
+}
+
+message BlockPersonRequest {
+  string employee_id = 1;
+}
+
+message BlockPersonResponse {
+  string block_id = 1;
+  google.protobuf.Timestamp created_at = 2;
+}
+
+message UnblockPersonRequest {
+  string employee_id = 1;
+}
+
+message UnblockPersonResponse {}
+
+message ListBlockedPeopleRequest {}
+
+message ListBlockedPeopleResponse {
+  repeated BlockedPerson blocked = 1;
+}
+
+// =============================================================================
+// Removal request messages
+// =============================================================================
+
+message RemovalRequest {
+  string id = 1;
+  string employee_id = 2;
+  string employee_name = 3;
+  RemovalRequestStatus status = 4;
+  string note = 5;
+  string decided_by_employee_id = 6;
+  google.protobuf.Timestamp decided_at = 7;
+  google.protobuf.Timestamp created_at = 8;
+}
+
+message GetAccountRemovalPathRequest {}
+
+message GetAccountRemovalPathResponse {
+  AccountRemovalPath path = 1;
+
+  // Populated only for REQUEST_REMOVAL.
+  string managing_organization_name = 2;
+
+  // The person's most recent request, if they have made one.
+  RemovalRequest latest_request = 3;
+}
+
+message RequestAccountRemovalRequest {
+  string note = 1;
+}
+
+message RequestAccountRemovalResponse {
+  RemovalRequest request = 1;
+
+  // True when an outstanding request already existed and was returned unchanged.
+  bool already_outstanding = 2;
+}
+
+message ListRemovalRequestsRequest {
+  RemovalRequestStatus status_filter = 1;
+  string cursor = 2;
+  int32 limit = 3;
+}
+
+message ListRemovalRequestsResponse {
+  repeated RemovalRequest requests = 1;
+  string next_cursor = 2;
+}
+
+message DecideRemovalRequestRequest {
+  string request_id = 1;
+
+  // GRANTED or DECLINED. OUTSTANDING is rejected.
+  RemovalRequestStatus decision = 2;
+}
+
+message DecideRemovalRequestResponse {
+  RemovalRequest request = 1;
+
+  // True when granting this request ended the person's last membership and so
+  // enqueued the global purge of their identity data.
+  bool global_purge_enqueued = 2;
+}

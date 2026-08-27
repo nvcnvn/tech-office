@@ -2133,6 +2133,226 @@ func (s *CollaborationWorkflowRuleExecution) FieldsMap() map[string]any {
 	}
 }
 
+// Resumable record of an account erase in progress: one row per organization the person belongs to. Whichever row purges last finds no iam.identity rows remaining for the user and destroys the global iam.user record, so the terminal step needs no marker column. A failure leaves the row in its last completed state for the worker to retry.
+type ComplianceAccountDeletion struct {
+	ID             dbuuid.UUID        `json:"id"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	UserID         dbuuid.UUID        `json:"user_id"`
+	State          string             `json:"state"`
+	Trigger        string             `json:"trigger"`
+	FailureReason  pgtype.Text        `json:"failure_reason"`
+	Attempts       int32              `json:"attempts"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (s *ComplianceAccountDeletion) TableName() string {
+	return "compliance.account_deletion"
+}
+
+func (s *ComplianceAccountDeletion) Fields() ([]string, []any) {
+	return []string{
+			"id",
+			"organization_id",
+			"user_id",
+			"state",
+			"trigger",
+			"failure_reason",
+			"attempts",
+			"created_at",
+			"updated_at",
+		}, []any{
+			&s.ID,
+			&s.OrganizationID,
+			&s.UserID,
+			&s.State,
+			&s.Trigger,
+			&s.FailureReason,
+			&s.Attempts,
+			&s.CreatedAt,
+			&s.UpdatedAt,
+		}
+}
+
+func (s *ComplianceAccountDeletion) FieldsMap() map[string]any {
+	return map[string]any{
+		"id":              &s.ID,
+		"organization_id": &s.OrganizationID,
+		"user_id":         &s.UserID,
+		"state":           &s.State,
+		"trigger":         &s.Trigger,
+		"failure_reason":  &s.FailureReason,
+		"attempts":        &s.Attempts,
+		"created_at":      &s.CreatedAt,
+		"updated_at":      &s.UpdatedAt,
+	}
+}
+
+// One-directional block scoped to direct contact within an organization. Unblocking deletes the row; no history is kept. Never notifies the blocked person (FR-022) and never touches channel membership (FR-023).
+type ComplianceBlock struct {
+	ID                dbuuid.UUID        `json:"id"`
+	OrganizationID    dbuuid.UUID        `json:"organization_id"`
+	BlockerEmployeeID dbuuid.UUID        `json:"blocker_employee_id"`
+	BlockedEmployeeID dbuuid.UUID        `json:"blocked_employee_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+func (s *ComplianceBlock) TableName() string {
+	return "compliance.block"
+}
+
+func (s *ComplianceBlock) Fields() ([]string, []any) {
+	return []string{
+			"id",
+			"organization_id",
+			"blocker_employee_id",
+			"blocked_employee_id",
+			"created_at",
+		}, []any{
+			&s.ID,
+			&s.OrganizationID,
+			&s.BlockerEmployeeID,
+			&s.BlockedEmployeeID,
+			&s.CreatedAt,
+		}
+}
+
+func (s *ComplianceBlock) FieldsMap() map[string]any {
+	return map[string]any{
+		"id":                  &s.ID,
+		"organization_id":     &s.OrganizationID,
+		"blocker_employee_id": &s.BlockerEmployeeID,
+		"blocked_employee_id": &s.BlockedEmployeeID,
+		"created_at":          &s.CreatedAt,
+	}
+}
+
+// One person's assertion that a specific item is abusive. content_snapshot records the content as it stood at report time so the report outlives deletion of its subject (FR-018).
+type ComplianceContentReport struct {
+	ID                   dbuuid.UUID        `json:"id"`
+	OrganizationID       dbuuid.UUID        `json:"organization_id"`
+	ReporterEmployeeID   dbuuid.UUID        `json:"reporter_employee_id"`
+	ReportedEmployeeID   dbuuid.UUID        `json:"reported_employee_id"`
+	TargetKind           string             `json:"target_kind"`
+	TargetID             dbuuid.UUID        `json:"target_id"`
+	ContentSnapshot      string             `json:"content_snapshot"`
+	Reason               string             `json:"reason"`
+	Note                 pgtype.Text        `json:"note"`
+	Status               string             `json:"status"`
+	OutcomeNote          pgtype.Text        `json:"outcome_note"`
+	ReviewedByEmployeeID dbuuid.NullUUID    `json:"reviewed_by_employee_id"`
+	ReviewedAt           pgtype.Timestamptz `json:"reviewed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+func (s *ComplianceContentReport) TableName() string {
+	return "compliance.content_report"
+}
+
+func (s *ComplianceContentReport) Fields() ([]string, []any) {
+	return []string{
+			"id",
+			"organization_id",
+			"reporter_employee_id",
+			"reported_employee_id",
+			"target_kind",
+			"target_id",
+			"content_snapshot",
+			"reason",
+			"note",
+			"status",
+			"outcome_note",
+			"reviewed_by_employee_id",
+			"reviewed_at",
+			"created_at",
+		}, []any{
+			&s.ID,
+			&s.OrganizationID,
+			&s.ReporterEmployeeID,
+			&s.ReportedEmployeeID,
+			&s.TargetKind,
+			&s.TargetID,
+			&s.ContentSnapshot,
+			&s.Reason,
+			&s.Note,
+			&s.Status,
+			&s.OutcomeNote,
+			&s.ReviewedByEmployeeID,
+			&s.ReviewedAt,
+			&s.CreatedAt,
+		}
+}
+
+func (s *ComplianceContentReport) FieldsMap() map[string]any {
+	return map[string]any{
+		"id":                      &s.ID,
+		"organization_id":         &s.OrganizationID,
+		"reporter_employee_id":    &s.ReporterEmployeeID,
+		"reported_employee_id":    &s.ReportedEmployeeID,
+		"target_kind":             &s.TargetKind,
+		"target_id":               &s.TargetID,
+		"content_snapshot":        &s.ContentSnapshot,
+		"reason":                  &s.Reason,
+		"note":                    &s.Note,
+		"status":                  &s.Status,
+		"outcome_note":            &s.OutcomeNote,
+		"reviewed_by_employee_id": &s.ReviewedByEmployeeID,
+		"reviewed_at":             &s.ReviewedAt,
+		"created_at":              &s.CreatedAt,
+	}
+}
+
+// An admin-provisioned worker asking to be removed from an organization. Granting ends the membership and, when it was the last, enqueues the global purge.
+type ComplianceRemovalRequest struct {
+	ID                  dbuuid.UUID        `json:"id"`
+	OrganizationID      dbuuid.UUID        `json:"organization_id"`
+	EmployeeID          dbuuid.UUID        `json:"employee_id"`
+	Status              string             `json:"status"`
+	Note                pgtype.Text        `json:"note"`
+	DecidedByEmployeeID dbuuid.NullUUID    `json:"decided_by_employee_id"`
+	DecidedAt           pgtype.Timestamptz `json:"decided_at"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+}
+
+func (s *ComplianceRemovalRequest) TableName() string {
+	return "compliance.removal_request"
+}
+
+func (s *ComplianceRemovalRequest) Fields() ([]string, []any) {
+	return []string{
+			"id",
+			"organization_id",
+			"employee_id",
+			"status",
+			"note",
+			"decided_by_employee_id",
+			"decided_at",
+			"created_at",
+		}, []any{
+			&s.ID,
+			&s.OrganizationID,
+			&s.EmployeeID,
+			&s.Status,
+			&s.Note,
+			&s.DecidedByEmployeeID,
+			&s.DecidedAt,
+			&s.CreatedAt,
+		}
+}
+
+func (s *ComplianceRemovalRequest) FieldsMap() map[string]any {
+	return map[string]any{
+		"id":                     &s.ID,
+		"organization_id":        &s.OrganizationID,
+		"employee_id":            &s.EmployeeID,
+		"status":                 &s.Status,
+		"note":                   &s.Note,
+		"decided_by_employee_id": &s.DecidedByEmployeeID,
+		"decided_at":             &s.DecidedAt,
+		"created_at":             &s.CreatedAt,
+	}
+}
+
 // Template roles that get copied to iam.role when a new organization is created. is_system=true roles cannot be deleted by org admins.
 type DefaultRole struct {
 	ID          string `json:"id"`
@@ -3502,6 +3722,7 @@ func (s *IamEmployeeRole) FieldsMap() map[string]any {
 }
 
 type IamIdentity struct {
+	// Same UUID as iam.user.id and organization.employee.id for the same person. This invariant is load-bearing: GetUserRoleNamesInOrg filters iam.employee_role.employee_id with a JWT user id, and account deletion enumerates memberships with SELECT organization_id FROM iam.identity WHERE id = $1. Do not allocate a fresh id here.
 	ID             dbuuid.UUID `json:"id"`
 	OrganizationID dbuuid.UUID `json:"organization_id"`
 	Email          pgtype.Text `json:"email"`
@@ -3878,10 +4099,12 @@ type IamUser struct {
 	ProfilePictureUrl pgtype.Text `json:"profile_picture_url"`
 	Status            string      `json:"status"`
 	// TRUE for workers created by org admins (PIN-based, no email required). FALSE for self-registered users (email-based).
-	IsOrgManaged bool               `json:"is_org_managed"`
-	LastLoginAt  pgtype.Timestamptz `json:"last_login_at"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	IsOrgManaged         bool               `json:"is_org_managed"`
+	LastLoginAt          pgtype.Timestamptz `json:"last_login_at"`
+	TermsVersionAccepted pgtype.Text        `json:"terms_version_accepted"`
+	TermsAcceptedAt      pgtype.Timestamptz `json:"terms_accepted_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (s *IamUser) TableName() string {
@@ -3897,6 +4120,8 @@ func (s *IamUser) Fields() ([]string, []any) {
 			"status",
 			"is_org_managed",
 			"last_login_at",
+			"terms_version_accepted",
+			"terms_accepted_at",
 			"created_at",
 			"updated_at",
 		}, []any{
@@ -3907,6 +4132,8 @@ func (s *IamUser) Fields() ([]string, []any) {
 			&s.Status,
 			&s.IsOrgManaged,
 			&s.LastLoginAt,
+			&s.TermsVersionAccepted,
+			&s.TermsAcceptedAt,
 			&s.CreatedAt,
 			&s.UpdatedAt,
 		}
@@ -3914,15 +4141,17 @@ func (s *IamUser) Fields() ([]string, []any) {
 
 func (s *IamUser) FieldsMap() map[string]any {
 	return map[string]any{
-		"id":                  &s.ID,
-		"email":               &s.Email,
-		"display_name":        &s.DisplayName,
-		"profile_picture_url": &s.ProfilePictureUrl,
-		"status":              &s.Status,
-		"is_org_managed":      &s.IsOrgManaged,
-		"last_login_at":       &s.LastLoginAt,
-		"created_at":          &s.CreatedAt,
-		"updated_at":          &s.UpdatedAt,
+		"id":                     &s.ID,
+		"email":                  &s.Email,
+		"display_name":           &s.DisplayName,
+		"profile_picture_url":    &s.ProfilePictureUrl,
+		"status":                 &s.Status,
+		"is_org_managed":         &s.IsOrgManaged,
+		"last_login_at":          &s.LastLoginAt,
+		"terms_version_accepted": &s.TermsVersionAccepted,
+		"terms_accepted_at":      &s.TermsAcceptedAt,
+		"created_at":             &s.CreatedAt,
+		"updated_at":             &s.UpdatedAt,
 	}
 }
 

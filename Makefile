@@ -219,9 +219,18 @@ check-maestro-canonical-env: check-maestro-env
 	fi
 	@echo "✓ canonical Maestro vars loaded"
 
+.PHONY: check-store-manifest
+## Verify the mobile permission manifest is honest and complete (Feature 036).
+## Both stores treat a declared-but-unused permission, or a permission string that
+## still reads like a framework default, as a submission finding — and a one-time
+## cleanup regresses the first time somebody adds a library.
+check-store-manifest:
+	@echo "\n=== Checking mobile store manifest ==="
+	node frontend/apps/mobile/scripts/check-store-manifest.js
+
 .PHONY: test-mobile
 ## Run all Maestro flows on the connected simulator/emulator.
-test-mobile: check-backend check-maestro check-maestro-env
+test-mobile: check-store-manifest check-backend check-maestro check-maestro-env
 	@echo "\n=== Running all Maestro flows ==="
 	frontend/apps/mobile/scripts/run-maestro-suite.sh
 

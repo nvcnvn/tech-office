@@ -5,7 +5,10 @@ import {
 	ResourceInfoSchema,
 	RetryInfoSchema,
 } from "@buf/googleapis_googleapis.bufbuild_es/google/rpc/error_details_pb";
-import { PinAuthErrorDetailSchema } from "rpc/rpc/v1/iam_error_details_pb";
+import {
+	PinAuthErrorDetailSchema,
+	SoleOwnerBlocksDeletionSchema,
+} from "rpc/rpc/v1/iam_error_details_pb";
 
 // Re-export the PinAuthErrorDetail type from generated code
 export type { PinAuthErrorDetail } from "rpc/rpc/v1/iam_error_details_pb";
@@ -149,4 +152,34 @@ export function extractPinAuthErrorDetail(error: unknown): import("rpc/rpc/v1/ia
 	const details = cErr.findDetails(PinAuthErrorDetailSchema);
 	if (details.length === 0) return null;
 	return details[0];
+}
+
+/**
+ * One workspace standing in the way of account deletion because the person leaving
+ * is its only owner and other people are still in it.
+ */
+export interface BlockingOrganizationSummary {
+	organizationId: string;
+	organizationName: string;
+	memberCount: number;
+}
+
+/**
+ * Workspaces blocking `deleteMyAccount`, or an empty array when the refusal was
+ * for some other reason (Feature 036, FR-005).
+ *
+ * Without this detail a client could only print the server's sentence. With it,
+ * the screen lists exactly which workspaces are blocking and can offer
+ * transfer-or-close for each, which is what "tell the person what to do instead"
+ * requires.
+ */
+export function extractSoleOwnerBlocksDeletion(error: unknown): BlockingOrganizationSummary[] {
+	const cErr = ConnectError.from(error);
+	const details = cErr.findDetails(SoleOwnerBlocksDeletionSchema);
+	if (details.length === 0) return [];
+	return details[0].organizations.map((org) => ({
+		organizationId: org.organizationId,
+		organizationName: org.organizationName,
+		memberCount: org.memberCount,
+	}));
 }

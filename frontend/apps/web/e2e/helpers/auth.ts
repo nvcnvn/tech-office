@@ -5,6 +5,7 @@
  * used by the production frontend, but called directly via fetch (no browser).
  */
 import type { Page } from '@playwright/test';
+import { TERMS_VERSION } from 'apis';
 
 const API_BASE = process.env.E2E_API_URL || 'http://localhost:18080';
 
@@ -82,6 +83,9 @@ export async function createTestOrg(): Promise<TestUser> {
       adminPassword: password,
       adminGivenName: 'Test',
       adminFamilyName: 'Owner',
+      // Required since Feature 036: an account cannot be created without a
+      // recorded acceptance of the current terms.
+      acceptedTermsVersion: TERMS_VERSION,
     },
   );
 

@@ -26,6 +26,7 @@ const (
 	ErrorReasonIdempotencyConflict      ErrorReason = "VOICE_MESSAGE_IDEMPOTENCY_CONFLICT"
 	ErrorReasonUnsupportedMimeType      ErrorReason = "VOICE_UNSUPPORTED_MIME_TYPE"
 	ErrorReasonMediaProviderUnavailable ErrorReason = "VOICE_MEDIA_PROVIDER_UNAVAILABLE"
+	ErrorReasonDirectContactBlocked     ErrorReason = "VOICE_DIRECT_CONTACT_BLOCKED"
 )
 
 var (
@@ -43,6 +44,11 @@ var (
 	ErrVoiceMessageIdempotencyConflict = errors.New("voice message idempotency conflict")
 	ErrUnsupportedMimeType             = errors.New("unsupported voice mime type")
 	ErrMediaProviderUnavailable        = errors.New("voice media provider unavailable")
+
+	// ErrDirectContactBlocked is returned when a block refuses a call in a direct
+	// conversation. Its text names neither party and does not say a block exists:
+	// the blocked person must never learn they were blocked (Feature 036, FR-022).
+	ErrDirectContactBlocked = errors.New("this call is not available")
 )
 
 func ToConnectError(err error, metadata map[string]string) *connect.Error {
@@ -80,6 +86,8 @@ func ToConnectError(err error, metadata map[string]string) *connect.Error {
 		code, reason = connect.CodeInvalidArgument, ErrorReasonUnsupportedMimeType
 	case errors.Is(err, ErrMediaProviderUnavailable):
 		code, reason = connect.CodeUnavailable, ErrorReasonMediaProviderUnavailable
+	case errors.Is(err, ErrDirectContactBlocked):
+		code, reason = connect.CodeFailedPrecondition, ErrorReasonDirectContactBlocked
 	}
 
 	connectErr := connect.NewError(code, err)

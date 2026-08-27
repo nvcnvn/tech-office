@@ -3,7 +3,7 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { signupFormSchema, SignupFormData } from '../validations/signup';
-import { registerOrganization } from 'apis';
+import { registerOrganization, TERMS_VERSION } from 'apis';
 import { useState } from 'react';
 
 interface UseSignupFormResult {
@@ -11,6 +11,7 @@ interface UseSignupFormResult {
 	handleSubmit: ReturnType<typeof useForm<SignupFormData>>['handleSubmit'];
 	formState: ReturnType<typeof useForm<SignupFormData>>['formState'];
 	watch: ReturnType<typeof useForm<SignupFormData>>['watch'];
+	trigger: ReturnType<typeof useForm<SignupFormData>>['trigger'];
 	isSubmitting: boolean;
 	submitError: Error | null;
 	submitSuccess: boolean;
@@ -31,6 +32,7 @@ export function useSignupForm(): UseSignupFormResult {
 		handleSubmit,
 		formState,
 		watch,
+		trigger,
 	} = useForm<SignupFormData>({
 		resolver: zodResolver(signupFormSchema),
 		mode: 'onBlur', // Validate on blur for better UX
@@ -41,6 +43,7 @@ export function useSignupForm(): UseSignupFormResult {
 			adminPassword: '',
 			adminGivenName: '',
 			adminFamilyName: '',
+			acceptedTerms: undefined,
 		},
 	});
 
@@ -57,6 +60,9 @@ export function useSignupForm(): UseSignupFormResult {
 				adminPassword: data.adminPassword,
 				adminGivenName: data.adminGivenName,
 				adminFamilyName: data.adminFamilyName,
+				// The schema requires acceptedTerms to be literally true, so reaching
+				// here means the person ticked the box on this screen.
+				acceptedTermsVersion: TERMS_VERSION,
 			});
 			setSubmitSuccess(true);
 		} catch (err) {
@@ -71,6 +77,7 @@ export function useSignupForm(): UseSignupFormResult {
 		handleSubmit,
 		formState,
 		watch,
+		trigger,
 		isSubmitting,
 		submitError,
 		submitSuccess,

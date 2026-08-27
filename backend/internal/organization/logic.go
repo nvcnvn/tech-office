@@ -52,6 +52,11 @@ type RegisterOrgParams struct {
 	AdminPassword   string
 	AdminGivenName  string
 	AdminFamilyName string
+
+	// AcceptedTermsVersion is validated by the connect layer and recorded on the
+	// new iam.user row, so an account cannot exist without a stored acceptance
+	// (FR-010, FR-011).
+	AcceptedTermsVersion string
 }
 
 type organizationLogicImpl struct {
@@ -299,6 +304,16 @@ func (s *organizationLogicImpl) RegisterOrganizationWithAdmin(
 		return nil, fmt.Errorf("failed to create iam user: %w", err)
 	}
 	slog.DebugContext(ctx, "created iam.user", "userID", iamUser.ID)
+
+	// Record the terms acceptance the signup screen collected, in the same
+	// transaction that creates the account.
+	if _, err := s.Queries.AcceptTerms(ctx, tx, &database.AcceptTermsParams{
+		ID:                   iamUser.ID,
+		TermsVersionAccepted: pgtype.Text{String: req.AcceptedTermsVersion, Valid: true},
+		TermsAcceptedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}); err != nil {
+		return nil, fmt.Errorf("failed to record terms acceptance: %w", err)
+	}
 
 	// Step 5: Hash password and create iam.password_credential.
 	passwordHash, err := iam.HashPassword(req.AdminPassword)

@@ -160,6 +160,7 @@ type testWorld struct {
 	docEditor   rpcv1connect.DocumentEditorServiceClient
 	docReaction rpcv1connect.DocumentReactionServiceClient
 	cal         rpcv1connect.CalendarServiceClient
+	compliance  rpcv1connect.ComplianceServiceClient
 }
 
 func newTestWorld(t *testing.T) *testWorld {
@@ -185,6 +186,7 @@ func newTestWorld(t *testing.T) *testWorld {
 		docEditor:   rpcv1connect.NewDocumentEditorServiceClient(http.DefaultClient, serverBaseURL),
 		docReaction: rpcv1connect.NewDocumentReactionServiceClient(http.DefaultClient, serverBaseURL),
 		cal:         rpcv1connect.NewCalendarServiceClient(http.DefaultClient, serverBaseURL),
+		compliance:  rpcv1connect.NewComplianceServiceClient(http.DefaultClient, serverBaseURL),
 	}
 }
 
@@ -271,6 +273,9 @@ func (w *testWorld) mustRegisterNewOrg() (orgID dbuuid.UUID, ownerID dbuuid.UUID
 		AdminPassword:   password,
 		AdminGivenName:  "Test",
 		AdminFamilyName: "Owner",
+		// Required since Feature 036: an account cannot be created without a
+		// recorded acceptance of the current terms.
+		AcceptedTermsVersion: iam.CurrentTermsVersion,
 	}))
 	require.NoError(w.t, err, "register org")
 
@@ -333,9 +338,10 @@ func (w *testWorld) mustCreateEmployeeInOrg(orgID dbuuid.UUID, ownerToken string
 	// Employee accepts the invitation.
 	displayName := "Test Employee"
 	acceptResp, err := w.iamClient.AcceptInvitation(ctx, connect.NewRequest(&rpcv1.AcceptInvitationRequest{
-		Token:       invToken,
-		Password:    &password,
-		DisplayName: &displayName,
+		Token:                invToken,
+		Password:             &password,
+		DisplayName:          &displayName,
+		AcceptedTermsVersion: iam.CurrentTermsVersion,
 	}))
 	require.NoError(w.t, err, "accept invitation")
 
@@ -3559,6 +3565,8 @@ func (w *testWorld) registerOrganization(companyName, subdomain string) (*rpcv1.
 			AdminPassword:   "Test1234!",
 			AdminGivenName:  "Test",
 			AdminFamilyName: "Owner",
+			// Required since Feature 036.
+			AcceptedTermsVersion: iam.CurrentTermsVersion,
 		}))
 	require.NoError(w.t, err, "registerOrganization")
 	orgID, parseErr := dbuuid.Parse(resp.Msg.Organization.Id)
@@ -3577,6 +3585,9 @@ func (w *testWorld) registerOrganizationError(companyName, subdomain string) err
 			AdminPassword:   "Test1234!",
 			AdminGivenName:  "Test",
 			AdminFamilyName: "Owner",
+			// Required since Feature 036. Supplied here so this helper still tests
+			// what it is named for — a rejected subdomain, not a missing acceptance.
+			AcceptedTermsVersion: iam.CurrentTermsVersion,
 		}))
 	return err
 }

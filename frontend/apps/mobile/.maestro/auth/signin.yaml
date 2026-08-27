@@ -83,6 +83,19 @@ name: "Auth — Sign in with email"
     commands:
       - tapOn: "Not Now"
 
+# Feature 036: the terms gate stands between sign-in and the app for anyone who has
+# not accepted the current version — which includes every account the first time the
+# version is bumped. Accept it here, in the shared bootstrap, so no individual flow
+# has to know the gate exists. The gate is covered on its own terms by
+# ../compliance/legal-links.yaml.
+- runFlow:
+    when:
+      visible:
+        id: "terms-gate-accept"
+    commands:
+      - tapOn:
+          id: "terms-gate-accept"
+
 # Wait for API call to complete and navigate
 - extendedWaitUntil:
     visible: "Chat"

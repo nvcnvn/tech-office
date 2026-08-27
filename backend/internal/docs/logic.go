@@ -138,6 +138,12 @@ type DocumentLogic interface {
 	AddCommentReply(ctx context.Context, tx database.DBTX, orgID, authorID dbuuid.UUID, commentID dbuuid.UUID, replyText string) (*rpcv1.CommentReply, error)
 	ResolveComment(ctx context.Context, tx database.DBTX, orgID, resolverID, commentID dbuuid.UUID) (*rpcv1.Comment, error)
 	ListComments(ctx context.Context, tx database.DBTX, orgID, docID dbuuid.UUID, includeResolved bool) ([]*rpcv1.Comment, error)
+
+	// GetCommentAuthorAndText returns one comment's author and text. The compliance
+	// domain uses it to snapshot a reported comment at report time; going through
+	// this method rather than reading docs.comment directly is what keeps reporting
+	// free of cross-schema access (Constitution Principle IV).
+	GetCommentAuthorAndText(ctx context.Context, tx database.DBTX, orgID, commentID dbuuid.UUID) (authorEmployeeID dbuuid.UUID, documentID dbuuid.UUID, text string, err error)
 	DeleteComment(ctx context.Context, tx database.DBTX, orgID, employeeID, commentID dbuuid.UUID) error
 
 	// Reactions

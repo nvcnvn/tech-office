@@ -12,6 +12,7 @@ import (
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
 	"github.com/nvcnvn/tech-office/backend/database/txn"
 	"github.com/nvcnvn/tech-office/backend/internal/converter"
+	"github.com/nvcnvn/tech-office/backend/internal/iam"
 	"github.com/nvcnvn/tech-office/backend/internal/interceptor"
 
 	v1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
@@ -79,14 +80,22 @@ func (s *OrganizationServiceConnect) RegisterOrganizationWithAdminPassword(
 		"subdomain", req.Msg.Subdomain,
 	)
 
+	// The terms must be acknowledged to create an account (FR-010). This is a
+	// required field rather than an optional one: a request that omits it is
+	// rejected, so no account can exist without a recorded acceptance.
+	if err := iam.ValidateAcceptedTermsVersion(req.Msg.GetAcceptedTermsVersion()); err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
 	// Convert proto request to logic layer parameters
 	params := &RegisterOrgParams{
-		CompanyName:     req.Msg.CompanyName,
-		Subdomain:       req.Msg.Subdomain,
-		AdminEmail:      req.Msg.AdminEmail,
-		AdminPassword:   req.Msg.AdminPassword,
-		AdminGivenName:  req.Msg.AdminGivenName,
-		AdminFamilyName: req.Msg.AdminFamilyName,
+		CompanyName:          req.Msg.CompanyName,
+		Subdomain:            req.Msg.Subdomain,
+		AdminEmail:           req.Msg.AdminEmail,
+		AdminPassword:        req.Msg.AdminPassword,
+		AdminGivenName:       req.Msg.AdminGivenName,
+		AdminFamilyName:      req.Msg.AdminFamilyName,
+		AcceptedTermsVersion: req.Msg.GetAcceptedTermsVersion(),
 	}
 
 	// Write operation: use transaction

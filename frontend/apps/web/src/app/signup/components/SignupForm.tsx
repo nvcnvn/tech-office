@@ -8,6 +8,7 @@ import { OrganizationFields } from './OrganizationFields';
 import { AdminFields } from './AdminFields';
 import { SignupError } from './SignupError';
 import { SignupSuccess } from './SignupSuccess';
+import { TermsAcceptance } from './TermsAcceptance';
 
 /**
  * Main signup form component
@@ -20,6 +21,7 @@ export function SignupForm() {
 		handleSubmit,
 		formState,
 		watch,
+		trigger,
 		isSubmitting,
 		submitError,
 		submitSuccess,
@@ -79,6 +81,8 @@ export function SignupForm() {
 							errors={formState.errors}
 							passwordValue={passwordValue}
 						/>
+
+						<TermsAcceptance register={register} errors={formState.errors} trigger={trigger} />
 
 						<Button
 							type="submit"

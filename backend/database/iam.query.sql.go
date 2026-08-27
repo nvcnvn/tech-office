@@ -13,6 +13,38 @@ import (
 	"github.com/nvcnvn/tech-office/backend/database/dbuuid"
 )
 
+const acceptTerms = `-- name: AcceptTerms :one
+
+UPDATE iam.user
+SET terms_version_accepted = $2,
+    terms_accepted_at      = $3,
+    updated_at             = $3
+WHERE id = $1
+RETURNING id, terms_version_accepted, terms_accepted_at
+`
+
+type AcceptTermsParams struct {
+	ID                   dbuuid.UUID        `json:"id"`
+	TermsVersionAccepted pgtype.Text        `json:"terms_version_accepted"`
+	TermsAcceptedAt      pgtype.Timestamptz `json:"terms_accepted_at"`
+}
+
+type AcceptTermsRow struct {
+	ID                   dbuuid.UUID        `json:"id"`
+	TermsVersionAccepted pgtype.Text        `json:"terms_version_accepted"`
+	TermsAcceptedAt      pgtype.Timestamptz `json:"terms_accepted_at"`
+}
+
+// =============================================================================
+// Terms acceptance (Feature 036)
+// =============================================================================
+func (q *Queries) AcceptTerms(ctx context.Context, db DBTX, arg *AcceptTermsParams) (*AcceptTermsRow, error) {
+	row := db.QueryRow(ctx, acceptTerms, arg.ID, arg.TermsVersionAccepted, arg.TermsAcceptedAt)
+	var i AcceptTermsRow
+	err := row.Scan(&i.ID, &i.TermsVersionAccepted, &i.TermsAcceptedAt)
+	return &i, err
+}
+
 const activateTemporaryCredential = `-- name: ActivateTemporaryCredential :exec
 UPDATE iam.credential
 SET credential_hash = $1::text,
@@ -40,6 +72,44 @@ func (q *Queries) ActivateTemporaryCredential(ctx context.Context, db DBTX, arg 
 		arg.OrganizationID,
 		arg.ID,
 	)
+	return err
+}
+
+const anonymiseEmployee = `-- name: AnonymiseEmployee :exec
+UPDATE organization.employee
+SET given_name      = 'Deleted',
+    family_name     = 'user',
+    email           = '',
+    date_of_birth   = NULL,
+    phone_number    = NULL,
+    home_address    = NULL,
+    additional_info = NULL,
+    is_active       = FALSE,
+    updated_at      = $3
+WHERE organization_id = $1
+  AND id = $2
+`
+
+type AnonymiseEmployeeParams struct {
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	ID             dbuuid.UUID        `json:"id"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Strips personal data from the employee record and deactivates it, leaving the
+// de-identified tombstone the organization's messages, tasks, files and documents
+// still point at (FR-006, research.md R1).
+//
+// The row is NOT deleted: roughly fifty columns across a dozen schemas reference an
+// employee id, and Citus does not support ON DELETE SET NULL, so deleting it would
+// mean either breaking every one of those references or a fifty-table sweep in a
+// cross-shard transaction. Anonymising is one UPDATE and gives the erasure the
+// stores require while leaving the employer's business records intact.
+//
+// Idempotent: running it again on an already-anonymised row changes nothing, which
+// is what lets the background worker retry a failed erase from the start.
+func (q *Queries) AnonymiseEmployee(ctx context.Context, db DBTX, arg *AnonymiseEmployeeParams) error {
+	_, err := db.Exec(ctx, anonymiseEmployee, arg.OrganizationID, arg.ID, arg.UpdatedAt)
 	return err
 }
 
@@ -177,6 +247,29 @@ func (q *Queries) ClearRolePermissions(ctx context.Context, db DBTX, arg *ClearR
 	return err
 }
 
+const countActiveOrganizationMembers = `-- name: CountActiveOrganizationMembers :one
+SELECT COUNT(*)::int AS member_count
+FROM organization.employee
+WHERE organization_id = $1
+  AND id <> $2
+  AND is_active = TRUE
+`
+
+type CountActiveOrganizationMembersParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ID             dbuuid.UUID `json:"id"`
+}
+
+// How many active people are in this organization, excluding the given person.
+// Used to tell "sole owner of a populated workspace" (which blocks deletion) from
+// "sole owner of an empty workspace" (which does not).
+func (q *Queries) CountActiveOrganizationMembers(ctx context.Context, db DBTX, arg *CountActiveOrganizationMembersParams) (int32, error) {
+	row := db.QueryRow(ctx, countActiveOrganizationMembers, arg.OrganizationID, arg.ID)
+	var member_count int32
+	err := row.Scan(&member_count)
+	return member_count, err
+}
+
 const countEmployees = `-- name: CountEmployees :one
 SELECT COUNT(*) 
 FROM organization.employee e
@@ -205,6 +298,41 @@ func (q *Queries) CountEmployees(ctx context.Context, db DBTX, arg *CountEmploye
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const countOrganizationOwners = `-- name: CountOrganizationOwners :one
+SELECT COUNT(DISTINCT er.employee_id)::int AS owner_count
+FROM iam.employee_role er
+JOIN iam.role r
+  ON (er.organization_id, er.role_id) = (r.organization_id, r.id)
+JOIN organization.employee e
+  ON (er.organization_id, er.employee_id) = (e.organization_id, e.id)
+WHERE er.organization_id = $1
+  AND r.source_default_role_id = 'owner'
+  AND e.is_active = TRUE
+`
+
+// How many active people hold the owner role in this organization.
+func (q *Queries) CountOrganizationOwners(ctx context.Context, db DBTX, organizationID dbuuid.UUID) (int32, error) {
+	row := db.QueryRow(ctx, countOrganizationOwners, organizationID)
+	var owner_count int32
+	err := row.Scan(&owner_count)
+	return owner_count, err
+}
+
+const countRemainingIdentities = `-- name: CountRemainingIdentities :one
+SELECT COUNT(*)::int AS remaining
+FROM iam.identity
+WHERE id = $1
+`
+
+// Whether any organization membership remains for this person. Cross-shard for the
+// same reason as ListIdentityOrganizations; runs on AdminPool.
+func (q *Queries) CountRemainingIdentities(ctx context.Context, db DBTX, id dbuuid.UUID) (int32, error) {
+	row := db.QueryRow(ctx, countRemainingIdentities, id)
+	var remaining int32
+	err := row.Scan(&remaining)
+	return remaining, err
 }
 
 const countRoleEmployees = `-- name: CountRoleEmployees :one
@@ -331,7 +459,7 @@ INSERT INTO iam.user (
     id, email, display_name, profile_picture_url, status
 ) VALUES (
     $1, $2, $3, $4, $5
-) RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, created_at, updated_at
+) RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at
 `
 
 type CreateIAMUserParams struct {
@@ -359,6 +487,8 @@ func (q *Queries) CreateIAMUser(ctx context.Context, db DBTX, arg *CreateIAMUser
 		&i.Status,
 		&i.IsOrgManaged,
 		&i.LastLoginAt,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -443,7 +573,7 @@ func (q *Queries) CreateInvitation(ctx context.Context, db DBTX, arg *CreateInvi
 const createOrgManagedUser = `-- name: CreateOrgManagedUser :one
 INSERT INTO iam.user (id, email, display_name, status, is_org_managed, created_at, updated_at)
 VALUES ($1::uuid, NULL, $2::text, 'active', true, now(), now())
-RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, created_at, updated_at
+RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at
 `
 
 type CreateOrgManagedUserParams struct {
@@ -463,6 +593,8 @@ func (q *Queries) CreateOrgManagedUser(ctx context.Context, db DBTX, arg *Create
 		&i.Status,
 		&i.IsOrgManaged,
 		&i.LastLoginAt,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -645,6 +777,51 @@ func (q *Queries) DeleteAccountLockout(ctx context.Context, db DBTX, arg *Delete
 	return err
 }
 
+const deleteAccountLockoutsForOrganization = `-- name: DeleteAccountLockoutsForOrganization :exec
+DELETE FROM iam.account_lockout
+WHERE organization_id = $1 AND identity_id = $2
+`
+
+type DeleteAccountLockoutsForOrganizationParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	IdentityID     dbuuid.UUID `json:"identity_id"`
+}
+
+func (q *Queries) DeleteAccountLockoutsForOrganization(ctx context.Context, db DBTX, arg *DeleteAccountLockoutsForOrganizationParams) error {
+	_, err := db.Exec(ctx, deleteAccountLockoutsForOrganization, arg.OrganizationID, arg.IdentityID)
+	return err
+}
+
+const deleteCredentialsForOrganization = `-- name: DeleteCredentialsForOrganization :exec
+DELETE FROM iam.credential
+WHERE organization_id = $1 AND identity_id = $2
+`
+
+type DeleteCredentialsForOrganizationParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	IdentityID     dbuuid.UUID `json:"identity_id"`
+}
+
+func (q *Queries) DeleteCredentialsForOrganization(ctx context.Context, db DBTX, arg *DeleteCredentialsForOrganizationParams) error {
+	_, err := db.Exec(ctx, deleteCredentialsForOrganization, arg.OrganizationID, arg.IdentityID)
+	return err
+}
+
+const deleteEmployeeRolesForOrganization = `-- name: DeleteEmployeeRolesForOrganization :exec
+DELETE FROM iam.employee_role
+WHERE organization_id = $1 AND employee_id = $2
+`
+
+type DeleteEmployeeRolesForOrganizationParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	EmployeeID     dbuuid.UUID `json:"employee_id"`
+}
+
+func (q *Queries) DeleteEmployeeRolesForOrganization(ctx context.Context, db DBTX, arg *DeleteEmployeeRolesForOrganizationParams) error {
+	_, err := db.Exec(ctx, deleteEmployeeRolesForOrganization, arg.OrganizationID, arg.EmployeeID)
+	return err
+}
+
 const deleteIAMRole = `-- name: DeleteIAMRole :exec
 DELETE FROM iam.role
 WHERE organization_id = $1::uuid
@@ -662,6 +839,21 @@ func (q *Queries) DeleteIAMRole(ctx context.Context, db DBTX, arg *DeleteIAMRole
 	return err
 }
 
+const deleteIdentityForOrganization = `-- name: DeleteIdentityForOrganization :exec
+DELETE FROM iam.identity
+WHERE organization_id = $1 AND id = $2
+`
+
+type DeleteIdentityForOrganizationParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ID             dbuuid.UUID `json:"id"`
+}
+
+func (q *Queries) DeleteIdentityForOrganization(ctx context.Context, db DBTX, arg *DeleteIdentityForOrganizationParams) error {
+	_, err := db.Exec(ctx, deleteIdentityForOrganization, arg.OrganizationID, arg.ID)
+	return err
+}
+
 const deleteSSOIdentity = `-- name: DeleteSSOIdentity :exec
 DELETE FROM iam.sso_identity
 WHERE id = $1 AND user_id = $2
@@ -674,6 +866,31 @@ type DeleteSSOIdentityParams struct {
 
 func (q *Queries) DeleteSSOIdentity(ctx context.Context, db DBTX, arg *DeleteSSOIdentityParams) error {
 	_, err := db.Exec(ctx, deleteSSOIdentity, arg.ID, arg.UserID)
+	return err
+}
+
+const deleteSessionsForUser = `-- name: DeleteSessionsForUser :exec
+DELETE FROM iam.session
+WHERE user_id = $1
+`
+
+// Invalidates every session synchronously, before the background erase is queued,
+// so a backed-up queue cannot leave a deleted person still signed in (FR-003).
+func (q *Queries) DeleteSessionsForUser(ctx context.Context, db DBTX, userID dbuuid.UUID) error {
+	_, err := db.Exec(ctx, deleteSessionsForUser, userID)
+	return err
+}
+
+const deleteUser = `-- name: DeleteUser :exec
+DELETE FROM iam.user
+WHERE id = $1
+`
+
+// Destroys the global identity record. iam.sso_identity, iam.password_credential,
+// iam.password_reset_token and iam.session are removed by their existing
+// ON DELETE CASCADE foreign keys.
+func (q *Queries) DeleteUser(ctx context.Context, db DBTX, id dbuuid.UUID) error {
+	_, err := db.Exec(ctx, deleteUser, id)
 	return err
 }
 
@@ -695,6 +912,21 @@ type DeleteUserPreferenceParams struct {
 // - $2 employee_id (UUID, required): User identity
 func (q *Queries) DeleteUserPreference(ctx context.Context, db DBTX, arg *DeleteUserPreferenceParams) error {
 	_, err := db.Exec(ctx, deleteUserPreference, arg.OrganizationID, arg.EmployeeID)
+	return err
+}
+
+const deleteUserPreferencesForOrganization = `-- name: DeleteUserPreferencesForOrganization :exec
+DELETE FROM iam.user_preference
+WHERE organization_id = $1 AND employee_id = $2
+`
+
+type DeleteUserPreferencesForOrganizationParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	EmployeeID     dbuuid.UUID `json:"employee_id"`
+}
+
+func (q *Queries) DeleteUserPreferencesForOrganization(ctx context.Context, db DBTX, arg *DeleteUserPreferencesForOrganizationParams) error {
+	_, err := db.Exec(ctx, deleteUserPreferencesForOrganization, arg.OrganizationID, arg.EmployeeID)
 	return err
 }
 
@@ -1495,8 +1727,26 @@ func (q *Queries) GetSSOIdentity(ctx context.Context, db DBTX, arg *GetSSOIdenti
 	return &i, err
 }
 
+const getTermsAcceptance = `-- name: GetTermsAcceptance :one
+SELECT terms_version_accepted, terms_accepted_at
+FROM iam.user
+WHERE id = $1
+`
+
+type GetTermsAcceptanceRow struct {
+	TermsVersionAccepted pgtype.Text        `json:"terms_version_accepted"`
+	TermsAcceptedAt      pgtype.Timestamptz `json:"terms_accepted_at"`
+}
+
+func (q *Queries) GetTermsAcceptance(ctx context.Context, db DBTX, id dbuuid.UUID) (*GetTermsAcceptanceRow, error) {
+	row := db.QueryRow(ctx, getTermsAcceptance, id)
+	var i GetTermsAcceptanceRow
+	err := row.Scan(&i.TermsVersionAccepted, &i.TermsAcceptedAt)
+	return &i, err
+}
+
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, created_at, updated_at FROM iam.user WHERE email = $1
+SELECT id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at FROM iam.user WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, db DBTX, email pgtype.Text) (*IamUser, error) {
@@ -1510,6 +1760,8 @@ func (q *Queries) GetUserByEmail(ctx context.Context, db DBTX, email pgtype.Text
 		&i.Status,
 		&i.IsOrgManaged,
 		&i.LastLoginAt,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1519,7 +1771,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, db DBTX, email pgtype.Text
 const getUserByID = `-- name: GetUserByID :one
 
 
-SELECT id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, created_at, updated_at FROM iam.user WHERE id = $1
+SELECT id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at FROM iam.user WHERE id = $1
 `
 
 // ===============================================
@@ -1538,6 +1790,8 @@ func (q *Queries) GetUserByID(ctx context.Context, db DBTX, id dbuuid.UUID) (*Ia
 		&i.Status,
 		&i.IsOrgManaged,
 		&i.LastLoginAt,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1821,6 +2075,43 @@ func (q *Queries) InvalidateUserSessions(ctx context.Context, db DBTX, userID db
 	return err
 }
 
+const isEmployeeOrganizationOwner = `-- name: IsEmployeeOrganizationOwner :one
+SELECT EXISTS (
+    SELECT 1
+    FROM iam.employee_role er
+    JOIN iam.role r
+      ON (er.organization_id, er.role_id) = (r.organization_id, r.id)
+    WHERE er.organization_id = $1
+      AND er.employee_id = $2
+      AND r.source_default_role_id = 'owner'
+) AS is_owner
+`
+
+type IsEmployeeOrganizationOwnerParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	EmployeeID     dbuuid.UUID `json:"employee_id"`
+}
+
+func (q *Queries) IsEmployeeOrganizationOwner(ctx context.Context, db DBTX, arg *IsEmployeeOrganizationOwnerParams) (bool, error) {
+	row := db.QueryRow(ctx, isEmployeeOrganizationOwner, arg.OrganizationID, arg.EmployeeID)
+	var is_owner bool
+	err := row.Scan(&is_owner)
+	return is_owner, err
+}
+
+const isUserOrgManaged = `-- name: IsUserOrgManaged :one
+SELECT is_org_managed
+FROM iam.user
+WHERE id = $1
+`
+
+func (q *Queries) IsUserOrgManaged(ctx context.Context, db DBTX, id dbuuid.UUID) (bool, error) {
+	row := db.QueryRow(ctx, isUserOrgManaged, id)
+	var is_org_managed bool
+	err := row.Scan(&is_org_managed)
+	return is_org_managed, err
+}
+
 const listEmployeeRoles = `-- name: ListEmployeeRoles :many
 SELECT r.id, r.organization_id, r.name, r.description, r.is_system, r.source_default_role_id FROM iam.role r
 JOIN iam.employee_role er ON (r.organization_id, r.id) = (er.organization_id, er.role_id)
@@ -2017,6 +2308,46 @@ func (q *Queries) ListIAMRoles(ctx context.Context, db DBTX, organizationID dbuu
 	return items, nil
 }
 
+const listIdentityOrganizations = `-- name: ListIdentityOrganizations :many
+
+SELECT organization_id
+FROM iam.identity
+WHERE id = $1
+ORDER BY organization_id
+`
+
+// =============================================================================
+// Account deletion (Feature 036)
+// =============================================================================
+// Every organization a person belongs to.
+//
+// This query has no organization_id predicate and therefore fans out across every
+// Citus shard. That is unavoidable: finding all of a person's organizations is
+// precisely the question no single tenant context can answer, so TenantPool — which
+// enforces an organization_id context — cannot serve it. It MUST run on AdminPool.
+// The cost is acceptable because it runs only on the account-deletion path, an
+// operation measured in single digits per day at any plausible scale
+// (research.md R5, Constitution Principle I).
+func (q *Queries) ListIdentityOrganizations(ctx context.Context, db DBTX, id dbuuid.UUID) ([]dbuuid.UUID, error) {
+	rows, err := db.Query(ctx, listIdentityOrganizations, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []dbuuid.UUID
+	for rows.Next() {
+		var organization_id dbuuid.UUID
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOrgManagedAccounts = `-- name: ListOrgManagedAccounts :many
 SELECT
     i.id,
@@ -2069,6 +2400,38 @@ func (q *Queries) ListOrgManagedAccounts(ctx context.Context, db DBTX, arg *List
 			return nil, err
 		}
 		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationOwnerIDs = `-- name: ListOrganizationOwnerIDs :many
+SELECT DISTINCT er.employee_id
+FROM iam.employee_role er
+JOIN iam.role r
+  ON (er.organization_id, er.role_id) = (r.organization_id, r.id)
+JOIN organization.employee e
+  ON (er.organization_id, er.employee_id) = (e.organization_id, e.id)
+WHERE er.organization_id = $1
+  AND r.source_default_role_id = 'owner'
+  AND e.is_active = TRUE
+`
+
+func (q *Queries) ListOrganizationOwnerIDs(ctx context.Context, db DBTX, organizationID dbuuid.UUID) ([]dbuuid.UUID, error) {
+	rows, err := db.Query(ctx, listOrganizationOwnerIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []dbuuid.UUID
+	for rows.Next() {
+		var employee_id dbuuid.UUID
+		if err := rows.Scan(&employee_id); err != nil {
+			return nil, err
+		}
+		items = append(items, employee_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2351,7 +2714,7 @@ SET display_name = $2,
     profile_picture_url = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, created_at, updated_at
+RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at
 `
 
 type UpdateUserProfileParams struct {
@@ -2371,6 +2734,8 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, db DBTX, arg *UpdateUse
 		&i.Status,
 		&i.IsOrgManaged,
 		&i.LastLoginAt,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

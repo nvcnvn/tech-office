@@ -7,7 +7,32 @@ package database
 
 import (
 	"context"
+
+	"github.com/nvcnvn/tech-office/backend/database/dbuuid"
 )
+
+const getOrganizationByID = `-- name: GetOrganizationByID :one
+SELECT id, company_name, subdomain, project_id, app_id, client_id, status, updated_at
+FROM public.organization
+WHERE id = $1
+`
+
+// Organization row by id, used where only the display name is needed.
+func (q *Queries) GetOrganizationByID(ctx context.Context, db DBTX, id dbuuid.UUID) (*Organization, error) {
+	row := db.QueryRow(ctx, getOrganizationByID, id)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.CompanyName,
+		&i.Subdomain,
+		&i.ProjectID,
+		&i.AppID,
+		&i.ClientID,
+		&i.Status,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
 
 const getOrganizationBySubdomain = `-- name: GetOrganizationBySubdomain :one
 SELECT id, company_name, subdomain, project_id, app_id, client_id, status, updated_at

@@ -83,6 +83,118 @@ func (x *PinAuthErrorDetail) GetAdminResetRequired() bool {
 	return false
 }
 
+// BlockingOrganization — one workspace that stands in the way of account deletion.
+type BlockingOrganization struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	OrganizationId   string                 `protobuf:"bytes,1,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
+	OrganizationName string                 `protobuf:"bytes,2,opt,name=organization_name,json=organizationName,proto3" json:"organization_name,omitempty"`
+	MemberCount      int32                  `protobuf:"varint,3,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *BlockingOrganization) Reset() {
+	*x = BlockingOrganization{}
+	mi := &file_rpc_v1_iam_error_details_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BlockingOrganization) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BlockingOrganization) ProtoMessage() {}
+
+func (x *BlockingOrganization) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_error_details_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BlockingOrganization.ProtoReflect.Descriptor instead.
+func (*BlockingOrganization) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_error_details_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *BlockingOrganization) GetOrganizationId() string {
+	if x != nil {
+		return x.OrganizationId
+	}
+	return ""
+}
+
+func (x *BlockingOrganization) GetOrganizationName() string {
+	if x != nil {
+		return x.OrganizationName
+	}
+	return ""
+}
+
+func (x *BlockingOrganization) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+// SoleOwnerBlocksDeletion — attached to FAILED_PRECONDITION when DeleteMyAccount
+// is refused because the caller is the only owner of one or more workspaces that
+// still have other members (FR-005).
+//
+// Without this detail a client can only show a sentence. With it, mobile and web
+// can list exactly which workspaces are blocking and link to transfer-or-close for
+// each, which is what "tell the person what to do instead" requires.
+type SoleOwnerBlocksDeletion struct {
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Organizations []*BlockingOrganization `protobuf:"bytes,1,rep,name=organizations,proto3" json:"organizations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SoleOwnerBlocksDeletion) Reset() {
+	*x = SoleOwnerBlocksDeletion{}
+	mi := &file_rpc_v1_iam_error_details_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SoleOwnerBlocksDeletion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SoleOwnerBlocksDeletion) ProtoMessage() {}
+
+func (x *SoleOwnerBlocksDeletion) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_error_details_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SoleOwnerBlocksDeletion.ProtoReflect.Descriptor instead.
+func (*SoleOwnerBlocksDeletion) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_error_details_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SoleOwnerBlocksDeletion) GetOrganizations() []*BlockingOrganization {
+	if x != nil {
+		return x.Organizations
+	}
+	return nil
+}
+
 var File_rpc_v1_iam_error_details_proto protoreflect.FileDescriptor
 
 const file_rpc_v1_iam_error_details_proto_rawDesc = "" +
@@ -91,7 +203,13 @@ const file_rpc_v1_iam_error_details_proto_rawDesc = "" +
 	"\x12PinAuthErrorDetail\x12!\n" +
 	"\flockout_tier\x18\x01 \x01(\x05R\vlockoutTier\x12,\n" +
 	"\x12lockout_until_unix\x18\x02 \x01(\x03R\x10lockoutUntilUnix\x120\n" +
-	"\x14admin_reset_required\x18\x03 \x01(\bR\x12adminResetRequiredB\x8f\x01\n" +
+	"\x14admin_reset_required\x18\x03 \x01(\bR\x12adminResetRequired\"\x8f\x01\n" +
+	"\x14BlockingOrganization\x12'\n" +
+	"\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12+\n" +
+	"\x11organization_name\x18\x02 \x01(\tR\x10organizationName\x12!\n" +
+	"\fmember_count\x18\x03 \x01(\x05R\vmemberCount\"]\n" +
+	"\x17SoleOwnerBlocksDeletion\x12B\n" +
+	"\rorganizations\x18\x01 \x03(\v2\x1c.rpc.v1.BlockingOrganizationR\rorganizationsB\x8f\x01\n" +
 	"\n" +
 	"com.rpc.v1B\x14IamErrorDetailsProtoP\x01Z2github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1\xa2\x02\x03RXX\xaa\x02\x06Rpc.V1\xca\x02\x06Rpc\\V1\xe2\x02\x12Rpc\\V1\\GPBMetadata\xea\x02\aRpc::V1b\x06proto3"
 
@@ -107,16 +225,19 @@ func file_rpc_v1_iam_error_details_proto_rawDescGZIP() []byte {
 	return file_rpc_v1_iam_error_details_proto_rawDescData
 }
 
-var file_rpc_v1_iam_error_details_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_rpc_v1_iam_error_details_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_rpc_v1_iam_error_details_proto_goTypes = []any{
-	(*PinAuthErrorDetail)(nil), // 0: rpc.v1.PinAuthErrorDetail
+	(*PinAuthErrorDetail)(nil),      // 0: rpc.v1.PinAuthErrorDetail
+	(*BlockingOrganization)(nil),    // 1: rpc.v1.BlockingOrganization
+	(*SoleOwnerBlocksDeletion)(nil), // 2: rpc.v1.SoleOwnerBlocksDeletion
 }
 var file_rpc_v1_iam_error_details_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: rpc.v1.SoleOwnerBlocksDeletion.organizations:type_name -> rpc.v1.BlockingOrganization
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_rpc_v1_iam_error_details_proto_init() }
@@ -130,7 +251,7 @@ func file_rpc_v1_iam_error_details_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_v1_iam_error_details_proto_rawDesc), len(file_rpc_v1_iam_error_details_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -3,7 +3,7 @@
 Channel-scoped voice calls, voice messages, recordings and transcripts. Owned by
 `internal/voice`; contract in `rpc/v1/voice.proto` (`VoiceService`, 12 RPCs).
 
-**Status date: 2026-08-22.** Supersedes spec 032. Deeper reference:
+**Status date: 2026-08-27.** Supersedes spec 032. Deeper reference:
 `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`.
 
 ## Split of responsibility
@@ -45,6 +45,23 @@ Supporting tables: `voice.call_participant` (states `invited → ringing → joi
 → disconnected | left | declined | removed`), `voice.call_invitation` (`pending |
 accepted | declined | expired | revoked`, FK to the `notification.notification` row that
 rang the invitee).
+
+## The block guard on call initiation
+
+`StartVoiceCall` authorises the channel, then — since spec 036 — asks whether the call is
+being placed **into a direct conversation** and, if so, whether either person has blocked
+the other. A blocked pair is refused with `FAILED_PRECONDITION` and
+`VOICE_DIRECT_CONTACT_BLOCKED`, in wording that names neither party.
+
+Group calls in shared channels are untouched: blocking is scoped to direct contact. The
+counterpart is resolved through `ChannelAuthorizer.DirectMessageCounterpart`, implemented
+by `internal/chat`, so voice reads none of chat's tables; the block itself is checked
+through a locally declared `ContactGuard` interface satisfied by `compliance.Logic`, so
+`internal/voice` has no dependency on `internal/compliance`. Both are wired in
+`cmd/server.go`. See [compliance-safety.md](compliance-safety.md).
+
+`GetCallRecord` is also what the compliance domain calls to resolve a reported call's
+initiator and snapshot.
 
 ## Webhook reconciliation
 

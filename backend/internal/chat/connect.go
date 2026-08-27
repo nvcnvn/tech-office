@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -1213,6 +1214,12 @@ func (s *ChatServiceConnect) CreateOrGetDirectMessage(
 		return txErr
 	})
 	if err != nil {
+		// A refused conversation is an expected outcome, not a server fault, and it
+		// must not be logged at error level with both employee ids — that would turn
+		// a silent block into an operational record of who blocked whom.
+		if errors.Is(err, ErrDirectContactBlocked) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, ErrDirectContactBlocked)
+		}
 		slog.ErrorContext(ctx, "failed to create or get DM",
 			"function", "CreateOrGetDirectMessage",
 			"error", err,

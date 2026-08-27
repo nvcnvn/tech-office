@@ -51,6 +51,12 @@ const (
 	// bulk generation run. It summarises all instances created in that run, replacing the
 	// previous per-instance ritual_instance_assigned flood.
 	NotificationTypeRitualInstancesScheduled = "ritual_instances_scheduled"
+
+	// NotificationTypeAccountRemovalRequested reaches an organization's owners when
+	// an admin-provisioned worker asks in-app to be removed (Feature 036, FR-007c).
+	// The in-app request is what makes that path compliant rather than the
+	// "contact your administrator" dead end both stores reject.
+	NotificationTypeAccountRemovalRequested = "account_removal_requested"
 )
 
 // Resource subscription constants align with:

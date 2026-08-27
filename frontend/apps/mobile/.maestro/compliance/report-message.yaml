@@ -1,0 +1,72 @@
+appId: com.devguards.TechOffice
+name: "Compliance — Report a message from the chat timeline"
+# FR-014, FR-015, SC-003. Long-press the message, tap Report, tap a reason — three
+# taps from seeing the content, which is the whole point of the sheet's shape.
+#
+# The flow posts its own message and acts on that, so it does not depend on what the
+# first channel happens to contain.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-chat"
+- extendedWaitUntil:
+    visible:
+      id: "channel-row-.*"
+    timeout: 10000
+- tapOn:
+    id: "channel-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "message-bubble-.*"
+    timeout: 10000
+
+# Send a message of our own to act on. The flow is deterministic that way: it does
+# not depend on whatever the first channel happens to contain, and the previous
+# version long-pressed a voice-call system row, which has no message actions.
+- tapOn:
+    id: "message-input"
+- inputText: "Maestro compliance probe ${MAESTRO_RUN_ID}"
+- tapOn:
+    id: "send-button"
+# The keyboard stays up after sending and overlaps the timeline; dismiss it before
+# reaching for the message. longPressOn retries on its own, so there is no separate
+# wait-for-the-message step to race the optimistic-to-confirmed re-render.
+- hideKeyboard
+
+# Tap 1 — long-press the message.
+# Matched on the row's accessibility label, which is "<author>: <text>" — Maestro
+# matches the whole string, hence the wildcards.
+- longPressOn: ".*Maestro compliance probe ${MAESTRO_RUN_ID}.*"
+- extendedWaitUntil:
+    visible:
+      id: "message-action-report"
+    timeout: 5000
+- takeScreenshot: "tmp/maestro-screenshots/compliance-02-message-actions"
+
+# Tap 2 — Report.
+- tapOn:
+    id: "message-action-report"
+- extendedWaitUntil:
+    visible:
+      id: "report-sheet"
+    timeout: 5000
+- takeScreenshot: "tmp/maestro-screenshots/compliance-03-report-sheet"
+
+# Tap 3 — a reason. A reason on its own is a complete report.
+- tapOn:
+    id: "report-reason-harassment"
+- extendedWaitUntil:
+    visible:
+      id: "report-sheet-confirmation"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/compliance-04-report-confirmed"
+- tapOn:
+    id: "report-sheet-done"

@@ -4,7 +4,7 @@ Channels, messages, threads, reactions, presence-aware typing, and the per-user 
 Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RPCs) and
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
-**Status date: 2026-08-22.** Supersedes specs 009, 010, 027.
+**Status date: 2026-08-27.** Supersedes specs 009, 010, 027.
 
 ## Channels
 
@@ -53,6 +53,30 @@ its first 48 bits, so `ORDER BY id DESC` is chronological and the index
 `(organization_id, channel_id, id DESC)` serves it directly. `ListMessages` takes a
 `ListMessagesDirection` so a client can page in either direction from an anchor —
 which is what deep-linking to a specific message needs.
+
+## Direct conversations and the block guard
+
+`CreateOrGetDirectMessage` finds or creates the `direct_message` channel between two
+employees. Since spec 036 it applies a **contact guard** before doing either: if either
+person has blocked the other, it refuses with `FAILED_PRECONDITION` and a message that
+names neither party and does not say a block exists — the blocked person must never learn
+they were blocked.
+
+The guard is one of exactly two chokepoints where a block is enforced (the other is voice
+call initiation, see [voice.md](voice.md)); it is deliberately **not** a filter on message
+reads. Blocking is scoped to direct contact, so a blocked colleague's messages in a shared
+channel stay visible. Hiding them would let somebody silently conceal work instructions
+addressed to them, and would corrupt the per-member unread cursor, which advances past
+messages a filter would have removed from the page.
+
+`chat` declares its own `ContactGuard` interface, satisfied structurally by
+`compliance.Logic` and wired in `cmd/server.go`, so `internal/chat` has no dependency on
+`internal/compliance`. `DirectMessageCounterpart` exists on `ChatLogic` for the same
+reason in reverse: voice needs the other participant of a direct conversation without
+reading chat's tables.
+
+`GetMessage` is also what the compliance domain calls to resolve a reported message's
+author and snapshot — see [compliance-safety.md](compliance-safety.md).
 
 ## Reactions and typing
 

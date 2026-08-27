@@ -14,11 +14,22 @@ import {
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useRouter } from "expo-router";
+import { openBrowserAsync } from "expo-web-browser";
 import { MMKV } from "react-native-mmkv";
+import {
+  ABUSE_CONTACT_EMAIL,
+  PRIVACY_POLICY_PATH,
+  TERMS_PATH,
+  getAccountRemovalPath,
+  type AccountRemovalPath,
+} from "apis";
+import { Linking } from "react-native";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { AuthContext } from "@/hooks/use-auth";
+import { buildWebUrl } from "@/lib/constants";
 import {
   lightPalette,
   mobileLayout,
@@ -99,10 +110,30 @@ function SettingRow({
 
 export default function SettingsScreen() {
   const auth = React.use(AuthContext);
+  const router = useRouter();
   const [darkMode, setDarkMode] = React.useState(getInitialDarkMode);
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(
     getInitialNotificationsEnabled,
   );
+  // Which of the two account-ending paths this person gets. Asked of the server
+  // rather than inferred, so mobile and web cannot disagree about it (FR-007b).
+  const [removalPath, setRemovalPath] = React.useState<AccountRemovalPath | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const path = await getAccountRemovalPath();
+        if (!cancelled) setRemovalPath(path.path);
+      } catch {
+        // The row is hidden rather than guessed if this fails: offering the wrong
+        // path is worse than offering none until the next visit.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const runSelectionHaptic = () => {
     if (process.env.EXPO_OS === "ios") {
@@ -207,8 +238,67 @@ export default function SettingsScreen() {
       </View>
 
       <View style={styles.section}>
+        <SettingSectionLabel label="Safety" />
+        <Card padding={0} style={styles.groupCard}>
+          <SettingRow
+            testID="setting-blocked-people"
+            icon="hand.raised.fill"
+            title="Blocked people"
+            subtitle="See who you've blocked from messaging or calling you."
+            onPress={() => router.push("/(app)/(more)/blocked")}
+          />
+          <SettingRow
+            testID="setting-report-abuse"
+            icon="envelope.fill"
+            title="Report abuse"
+            subtitle="Reporting inside the app is faster — this is for when you can't."
+            onPress={() => void Linking.openURL(`mailto:${ABUSE_CONTACT_EMAIL}`)}
+          />
+        </Card>
+      </View>
+
+      <View style={styles.section}>
+        <SettingSectionLabel label="Legal" />
+        <Card padding={0} style={styles.groupCard}>
+          <SettingRow
+            testID="setting-privacy-policy"
+            icon="lock.shield.fill"
+            title="Privacy policy"
+            subtitle="What we collect, why, and how to have it deleted."
+            onPress={() => void openBrowserAsync(buildWebUrl(PRIVACY_POLICY_PATH))}
+          />
+          <SettingRow
+            testID="setting-terms"
+            icon="doc.text.fill"
+            title="Terms of service"
+            subtitle="The rules for using Tech Office, and what isn't allowed in it."
+            onPress={() => void openBrowserAsync(buildWebUrl(TERMS_PATH))}
+          />
+        </Card>
+      </View>
+
+      <View style={styles.section}>
         <SettingSectionLabel label="Account" />
         <Card padding={0} style={styles.groupCard}>
+          {removalPath === "self_delete" ? (
+            <SettingRow
+              testID="setting-delete-account"
+              icon="trash.fill"
+              title="Delete my account"
+              subtitle="Permanently erase your account. This can't be undone."
+              destructive
+              onPress={() => router.push("/(app)/(more)/delete-account")}
+            />
+          ) : null}
+          {removalPath === "request_removal" ? (
+            <SettingRow
+              testID="setting-request-removal"
+              icon="person.crop.circle.badge.minus"
+              title="Remove my account"
+              subtitle="Ask the people who run this workspace to remove your account."
+              onPress={() => router.push("/(app)/(more)/request-removal")}
+            />
+          ) : null}
           <SettingRow
             icon={profileIcons.signOut.name}
             title="Sign Out"

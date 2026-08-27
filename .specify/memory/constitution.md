@@ -1344,6 +1344,7 @@ Where a spec and the code disagree, **the code wins**, and the disagreement MUST
 | `docs/domain/files.md` | Upload flow, quota, validation, access rules, PDF conversion, content index |
 | `docs/domain/calendar.md` | Events, recurrence, attendees, resources, booking links, delegation, check-in |
 | `docs/domain/workspace-navigation.md` | Federated search, canonical resource links, context rail, theme, web and mobile shells |
+| `docs/domain/compliance-safety.md` | Content reporting, blocking, account deletion, removal requests, terms acceptance |
 
 **Architecture Documents (`backend/docs/`) — engineering-internal deep references**:
 - `backend/docs/SYSTEM-ARCHITECTURE.md` — Domain-driven design, tier model, dependency graphs (code-level and data-level), server initialization order, cross-domain integration patterns

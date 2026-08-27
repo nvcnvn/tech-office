@@ -6,3 +6,9 @@ SELECT *
 FROM public.organization
 WHERE subdomain = $1
 LIMIT 1;
+
+-- name: GetOrganizationByID :one
+-- Organization row by id, used where only the display name is needed.
+SELECT *
+FROM public.organization
+WHERE id = $1;

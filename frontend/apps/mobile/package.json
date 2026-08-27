@@ -12,7 +12,8 @@
     "android": "expo run:android",
     "prebuild": "expo prebuild",
     "maestro:suite": "./scripts/run-maestro-suite.sh",
-    "eas-build-pre-install": "./scripts/eas-inject-secrets.sh"
+    "eas-build-pre-install": "./scripts/eas-inject-secrets.sh",
+    "check:store-manifest": "node scripts/check-store-manifest.js"
   },
   "dependencies": {
     "@connectrpc/connect": "^2.1.0",

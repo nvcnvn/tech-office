@@ -462,3 +462,20 @@ func extractMentionDataID(tag string) string {
 	}
 	return rest[:endIdx]
 }
+
+// GetCommentAuthorAndText returns one comment's author and text, for the
+// compliance domain's report snapshot (Feature 036).
+func (l *documentLogicImpl) GetCommentAuthorAndText(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, commentID dbuuid.UUID,
+) (dbuuid.UUID, dbuuid.UUID, string, error) {
+	comment, err := l.Queries.GetDocumentComment(ctx, tx, &database.GetDocumentCommentParams{
+		OrganizationID: orgID,
+		ID:             commentID,
+	})
+	if err != nil {
+		return dbuuid.UUID{}, dbuuid.UUID{}, "", fmt.Errorf("comment not found: %w", err)
+	}
+	return comment.AuthorEmployeeID, comment.DocumentID, comment.CommentText, nil
+}

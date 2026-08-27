@@ -465,3 +465,18 @@ WHERE organization_id = @organization_id
 -- Document Recipient Eligibility Queries (for notification targeting)
 -- ============================================================================
 
+
+-- name: GetDocumentComment :one
+-- Single comment with its author, used by the compliance domain to snapshot a
+-- reported comment at report time (Feature 036).
+SELECT
+  c.id,
+  c.organization_id,
+  c.document_id,
+  c.comment_text,
+  c.author_employee_id,
+  c.is_resolved,
+  c.updated_at
+FROM docs.comment c
+WHERE c.organization_id = $1
+  AND c.id = $2;

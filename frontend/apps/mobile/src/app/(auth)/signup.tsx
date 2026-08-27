@@ -34,6 +34,7 @@ import {
   login,
   normalizeSubdomain,
   registerOrganization,
+  TERMS_VERSION,
 } from "apis";
 import {
   border,
@@ -44,6 +45,7 @@ import {
 } from "@tech-office/theme-tokens";
 import { AuthContext } from "@/hooks/use-auth";
 import { SFIcon } from "@/components/ui/sf-icon";
+import { TermsAcceptance } from "@/components/compliance/terms-acceptance";
 import {
   rememberAuthDisplayName,
   rememberAuthEmail,
@@ -80,6 +82,9 @@ export default function SignUpScreen() {
   const [checkingAddress, setCheckingAddress] = useState(false);
 
   const [loading, setLoading] = useState(false);
+  // Feature 036 (FR-010): an account cannot be created without an explicit
+  // acknowledgement, so this gates validate() as well as the request payload.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [error, setError] = useState("");
   const [fieldError, setFieldError] = useState<Record<string, string>>({});
 
@@ -141,6 +146,9 @@ export default function SignUpScreen() {
       errors.address =
         "Pick a workspace address of 3 or more letters, numbers or hyphens.";
     }
+    if (!acceptedTerms) {
+      errors.acceptedTerms = "Please read and agree to the terms and privacy policy.";
+    }
 
     setFieldError(errors);
     return Object.keys(errors).length === 0;
@@ -165,6 +173,9 @@ export default function SignUpScreen() {
         adminPassword: password,
         adminGivenName: givenName,
         adminFamilyName: familyName,
+        // validate() blocks submission unless the box is ticked, so reaching here
+        // means this person acknowledged the current terms on this screen.
+        acceptedTermsVersion: TERMS_VERSION,
       });
     } catch (err) {
       const taken = fieldViolation(err, "subdomain");
@@ -368,6 +379,21 @@ export default function SignUpScreen() {
             error={fieldError.password}
             editable={!loading}
             testID="signup-password"
+          />
+
+          <TermsAcceptance
+            accepted={acceptedTerms}
+            onChange={(next) => {
+              setAcceptedTerms(next);
+              if (next) {
+                setFieldError((prev) => {
+                  const { acceptedTerms: _removed, ...rest } = prev;
+                  return rest;
+                });
+              }
+            }}
+            disabled={loading}
+            error={fieldError.acceptedTerms}
           />
 
           {error ? (

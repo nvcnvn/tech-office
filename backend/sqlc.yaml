@@ -20,6 +20,7 @@ sql:
       - ./database/scripts/collaboration.query.sql
       - ./database/scripts/calendar.query.sql
       - ./database/scripts/voice.query.sql
+      - ./database/scripts/compliance.query.sql
     codegen:
     - plugin: golang
       out: ./database/

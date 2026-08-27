@@ -80,6 +80,10 @@ message RegisterOrganizationWithAdminPasswordRequest {
   string admin_password = 4;
   string admin_given_name = 5;
   string admin_family_name = 6;
+
+  // Required. The terms version the person acknowledged on the signup screen.
+  // A request without it, or with a stale version, is rejected (FR-010).
+  string accepted_terms_version = 7;
 }
 
 message RegisterOrganizationWithAdminPasswordResponse {

@@ -139,3 +139,9 @@ export * from './types';
 
 // Re-export RPC namespaces for convenience
 export { iam, organizations, rbac, department, notification, preference, document, collaboration } from 'rpc';
+
+// Export compliance functions (Feature 036: reporting, blocking, removal requests)
+export * from './compliance';
+
+// Export legal surface constants (Feature 036: terms version, policy URLs, abuse contact)
+export * from './legal';

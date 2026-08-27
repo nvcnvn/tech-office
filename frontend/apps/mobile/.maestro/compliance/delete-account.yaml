@@ -1,0 +1,65 @@
+appId: com.devguards.TechOffice
+name: "Compliance — The deletion path is reachable and states what it does"
+# FR-001, FR-002. The screen is walked as far as the confirmation, and deliberately
+# NOT submitted: deletion is irreversible and would destroy the account every other
+# flow in this suite signs in with.
+#
+# What matters here is that the path exists in the app, that it says what is erased
+# and what is kept, and that it will not proceed on an accidental tap.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible:
+      id: "setting-blocked-people"
+    timeout: 10000
+# Scroll to the account section by its Sign Out row, which is present whichever of
+# the two account-ending paths this person has.
+- scrollUntilVisible:
+    element:
+      text: "Sign Out"
+    direction: DOWN
+    timeout: 10000
+- takeScreenshot: "tmp/maestro-screenshots/compliance-07-account-section"
+
+# Whichever path this account has, it is offered here and nowhere else.
+- runFlow:
+    when:
+      visible:
+        id: "setting-delete-account"
+    commands:
+      - tapOn:
+          id: "setting-delete-account"
+      - extendedWaitUntil:
+          visible: "What gets deleted"
+          timeout: 10000
+      - takeScreenshot: "tmp/maestro-screenshots/compliance-08-delete-account"
+      # The confirmation is below the erased/retained lists, which is the point:
+      # a person has to pass what happens on the way to confirming it.
+      - scrollUntilVisible:
+          element:
+            text: "What stays, and why"
+          direction: DOWN
+          timeout: 10000
+      - scrollUntilVisible:
+          element:
+            id: "delete-account-phrase"
+          direction: DOWN
+          timeout: 10000
+      - assertVisible:
+          id: "delete-account-phrase"
+      - takeScreenshot: "tmp/maestro-screenshots/compliance-09-delete-account-confirm"

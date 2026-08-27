@@ -54,6 +54,11 @@ flows=(
   $APP_DIR/.maestro/onboarding/owner-signup.yaml
   $APP_DIR/.maestro/screens/*.yaml
   $APP_DIR/.maestro/presence-ping-pong.yaml
+  $APP_DIR/.maestro/compliance/legal-links.yaml
+  $APP_DIR/.maestro/compliance/report-message.yaml
+  $APP_DIR/.maestro/compliance/block-person.yaml
+  $APP_DIR/.maestro/compliance/delete-account.yaml
+  $APP_DIR/.maestro/compliance/removal-request.yaml
 )
 failures=0
 

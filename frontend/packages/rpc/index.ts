@@ -11,5 +11,6 @@ import * as document from './rpc/v1/document_pb';
 import * as collaboration from './rpc/v1/collaboration_pb';
 import * as calendar from './rpc/v1/calendar_pb';
 import * as voice from './rpc/v1/voice_pb';
+import * as compliance from './rpc/v1/compliance_pb';
 
-export { rbac, organizations, iam, department, notification, chat, preference, files, chat_files, document, collaboration, calendar, voice };
+export { rbac, organizations, iam, department, notification, chat, preference, files, chat_files, document, collaboration, calendar, voice, compliance };

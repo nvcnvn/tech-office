@@ -2,8 +2,8 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Box, Container, Typography, Paper, TextField, Button, Alert, CircularProgress, Divider, Link as MuiLink } from '@mui/material';
-import { acceptInvitation, AuthError } from 'apis';
+import { Box, Checkbox, Container, Typography, Paper, TextField, Button, Alert, CircularProgress, Divider, FormControlLabel, Link as MuiLink } from '@mui/material';
+import { acceptInvitation, AuthError, PRIVACY_POLICY_PATH, TERMS_PATH, TERMS_VERSION } from 'apis';
 import { useAuthContext } from '@/lib/auth/AuthProvider';
 
 function AcceptInvitationContent() {
@@ -18,6 +18,9 @@ function AcceptInvitationContent() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [error, setError] = useState('');
 	const [showMismatchFallback, setShowMismatchFallback] = useState(false);
+	// Feature 036 (FR-010): an invited person may be creating their account here, so
+	// the same acknowledgement is required as at signup.
+	const [acceptedTerms, setAcceptedTerms] = useState(false);
 
 	const handleSubmit = async (e: React.FormEvent) => {
 		e.preventDefault();
@@ -34,6 +37,10 @@ function AcceptInvitationContent() {
 			setError('Passwords do not match');
 			return;
 		}
+		if (!acceptedTerms) {
+			setError('You must accept the terms of service and privacy policy');
+			return;
+		}
 
 		setIsLoading(true);
 		setError('');
@@ -43,6 +50,7 @@ function AcceptInvitationContent() {
 			await acceptInvitation(token, {
 				displayName: displayName || undefined,
 				password: password || undefined,
+				acceptedTermsVersion: TERMS_VERSION,
 			});
 			await refreshProfile();
 			router.push('/workspace');
@@ -142,12 +150,38 @@ function AcceptInvitationContent() {
 							autoComplete="new-password"
 						/>
 
+						<FormControlLabel
+							control={
+								<Checkbox
+									checked={acceptedTerms}
+									onChange={(e) => setAcceptedTerms(e.target.checked)}
+									disabled={isLoading}
+									size="small"
+									sx={{ pt: 0.25 }}
+								/>
+							}
+							sx={{ alignItems: 'flex-start', m: 0, mb: 2 }}
+							label={
+								<Typography variant="body2" color="text.secondary">
+									I have read and agree to the{' '}
+									<MuiLink href={TERMS_PATH} target="_blank" rel="noopener noreferrer" underline="hover">
+										terms of service
+									</MuiLink>{' '}
+									and the{' '}
+									<MuiLink href={PRIVACY_POLICY_PATH} target="_blank" rel="noopener noreferrer" underline="hover">
+										privacy policy
+									</MuiLink>
+									.
+								</Typography>
+							}
+						/>
+
 						<Button
 							fullWidth
 							type="submit"
 							variant="contained"
 							size="large"
-							disabled={isLoading}
+							disabled={isLoading || !acceptedTerms}
 							sx={{ py: 1.5 }}
 						>
 							{isLoading ? <CircularProgress size={24} color="inherit" /> : showMismatchFallback ? 'Continue With Invited Email' : 'Accept & Join'}

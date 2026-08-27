@@ -1872,12 +1872,15 @@ type AcceptInvitationRequest struct {
 	// Invitation token from email
 	Token string `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
 	// User info for account creation (if new user)
-	DisplayName   *string      `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
-	SsoProvider   *SSOProvider `protobuf:"varint,3,opt,name=sso_provider,json=ssoProvider,proto3,enum=rpc.v1.SSOProvider,oneof" json:"sso_provider,omitempty"`
-	SsoIdToken    *string      `protobuf:"bytes,4,opt,name=sso_id_token,json=ssoIdToken,proto3,oneof" json:"sso_id_token,omitempty"`
-	Password      *string      `protobuf:"bytes,5,opt,name=password,proto3,oneof" json:"password,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	DisplayName *string      `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3,oneof" json:"display_name,omitempty"`
+	SsoProvider *SSOProvider `protobuf:"varint,3,opt,name=sso_provider,json=ssoProvider,proto3,enum=rpc.v1.SSOProvider,oneof" json:"sso_provider,omitempty"`
+	SsoIdToken  *string      `protobuf:"bytes,4,opt,name=sso_id_token,json=ssoIdToken,proto3,oneof" json:"sso_id_token,omitempty"`
+	Password    *string      `protobuf:"bytes,5,opt,name=password,proto3,oneof" json:"password,omitempty"`
+	// Required. The terms version the person acknowledged on the acceptance screen.
+	// A request without it, or with a stale version, is rejected (FR-010).
+	AcceptedTermsVersion string `protobuf:"bytes,6,opt,name=accepted_terms_version,json=acceptedTermsVersion,proto3" json:"accepted_terms_version,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *AcceptInvitationRequest) Reset() {
@@ -1941,6 +1944,13 @@ func (x *AcceptInvitationRequest) GetSsoIdToken() string {
 func (x *AcceptInvitationRequest) GetPassword() string {
 	if x != nil && x.Password != nil {
 		return *x.Password
+	}
+	return ""
+}
+
+func (x *AcceptInvitationRequest) GetAcceptedTermsVersion() string {
+	if x != nil {
+		return x.AcceptedTermsVersion
 	}
 	return ""
 }
@@ -5791,11 +5801,549 @@ func (x *OrgAccountListItem) GetLastLoginAt() string {
 	return ""
 }
 
+type DeletionCategory struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Plain-language name of the category, e.g. "Your profile and contact details".
+	Label string `protobuf:"bytes,1,opt,name=label,proto3" json:"label,omitempty"`
+	// Why it is retained. Empty for erased categories.
+	Reason        string `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeletionCategory) Reset() {
+	*x = DeletionCategory{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[96]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeletionCategory) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeletionCategory) ProtoMessage() {}
+
+func (x *DeletionCategory) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[96]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeletionCategory.ProtoReflect.Descriptor instead.
+func (*DeletionCategory) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *DeletionCategory) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *DeletionCategory) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type AffectedOrganization struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	OrganizationId   string                 `protobuf:"bytes,1,opt,name=organization_id,json=organizationId,proto3" json:"organization_id,omitempty"`
+	OrganizationName string                 `protobuf:"bytes,2,opt,name=organization_name,json=organizationName,proto3" json:"organization_name,omitempty"`
+	MemberCount      int32                  `protobuf:"varint,3,opt,name=member_count,json=memberCount,proto3" json:"member_count,omitempty"`
+	// True when the caller is this organization's sole owner and it still has other
+	// members, which blocks deletion until they transfer ownership or close it.
+	BlocksDeletion bool `protobuf:"varint,4,opt,name=blocks_deletion,json=blocksDeletion,proto3" json:"blocks_deletion,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *AffectedOrganization) Reset() {
+	*x = AffectedOrganization{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[97]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AffectedOrganization) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AffectedOrganization) ProtoMessage() {}
+
+func (x *AffectedOrganization) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[97]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AffectedOrganization.ProtoReflect.Descriptor instead.
+func (*AffectedOrganization) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{97}
+}
+
+func (x *AffectedOrganization) GetOrganizationId() string {
+	if x != nil {
+		return x.OrganizationId
+	}
+	return ""
+}
+
+func (x *AffectedOrganization) GetOrganizationName() string {
+	if x != nil {
+		return x.OrganizationName
+	}
+	return ""
+}
+
+func (x *AffectedOrganization) GetMemberCount() int32 {
+	if x != nil {
+		return x.MemberCount
+	}
+	return 0
+}
+
+func (x *AffectedOrganization) GetBlocksDeletion() bool {
+	if x != nil {
+		return x.BlocksDeletion
+	}
+	return false
+}
+
+type GetAccountDeletionPreviewRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetAccountDeletionPreviewRequest) Reset() {
+	*x = GetAccountDeletionPreviewRequest{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[98]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAccountDeletionPreviewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAccountDeletionPreviewRequest) ProtoMessage() {}
+
+func (x *GetAccountDeletionPreviewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[98]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAccountDeletionPreviewRequest.ProtoReflect.Descriptor instead.
+func (*GetAccountDeletionPreviewRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{98}
+}
+
+type GetAccountDeletionPreviewResponse struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Erased []*DeletionCategory    `protobuf:"bytes,1,rep,name=erased,proto3" json:"erased,omitempty"`
+	// Not a legal disclaimer: this describes honestly that content authored inside
+	// an organization stays with that organization, de-identified.
+	Retained      []*DeletionCategory     `protobuf:"bytes,2,rep,name=retained,proto3" json:"retained,omitempty"`
+	Organizations []*AffectedOrganization `protobuf:"bytes,3,rep,name=organizations,proto3" json:"organizations,omitempty"`
+	// True when any organization in the list blocks deletion.
+	Blocked bool `protobuf:"varint,4,opt,name=blocked,proto3" json:"blocked,omitempty"`
+	// The exact phrase the person must type to confirm, assembled server-side so
+	// both clients ask for the same thing.
+	ConfirmationPhrase string `protobuf:"bytes,5,opt,name=confirmation_phrase,json=confirmationPhrase,proto3" json:"confirmation_phrase,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *GetAccountDeletionPreviewResponse) Reset() {
+	*x = GetAccountDeletionPreviewResponse{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[99]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetAccountDeletionPreviewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetAccountDeletionPreviewResponse) ProtoMessage() {}
+
+func (x *GetAccountDeletionPreviewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[99]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetAccountDeletionPreviewResponse.ProtoReflect.Descriptor instead.
+func (*GetAccountDeletionPreviewResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{99}
+}
+
+func (x *GetAccountDeletionPreviewResponse) GetErased() []*DeletionCategory {
+	if x != nil {
+		return x.Erased
+	}
+	return nil
+}
+
+func (x *GetAccountDeletionPreviewResponse) GetRetained() []*DeletionCategory {
+	if x != nil {
+		return x.Retained
+	}
+	return nil
+}
+
+func (x *GetAccountDeletionPreviewResponse) GetOrganizations() []*AffectedOrganization {
+	if x != nil {
+		return x.Organizations
+	}
+	return nil
+}
+
+func (x *GetAccountDeletionPreviewResponse) GetBlocked() bool {
+	if x != nil {
+		return x.Blocked
+	}
+	return false
+}
+
+func (x *GetAccountDeletionPreviewResponse) GetConfirmationPhrase() string {
+	if x != nil {
+		return x.ConfirmationPhrase
+	}
+	return ""
+}
+
+type DeleteMyAccountRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The fixed phrase from GetAccountDeletionPreview, typed by the person. Guards
+	// against an accidental irreversible tap on a small screen.
+	ConfirmationPhrase string `protobuf:"bytes,1,opt,name=confirmation_phrase,json=confirmationPhrase,proto3" json:"confirmation_phrase,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *DeleteMyAccountRequest) Reset() {
+	*x = DeleteMyAccountRequest{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[100]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMyAccountRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMyAccountRequest) ProtoMessage() {}
+
+func (x *DeleteMyAccountRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[100]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMyAccountRequest.ProtoReflect.Descriptor instead.
+func (*DeleteMyAccountRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{100}
+}
+
+func (x *DeleteMyAccountRequest) GetConfirmationPhrase() string {
+	if x != nil {
+		return x.ConfirmationPhrase
+	}
+	return ""
+}
+
+type DeleteMyAccountResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The deletion record for the person's first organization; the remaining
+	// records advance behind it on the background queue.
+	DeletionId string `protobuf:"bytes,1,opt,name=deletion_id,json=deletionId,proto3" json:"deletion_id,omitempty"`
+	// Always PENDING on return: sessions are already gone, the erase is queued.
+	State         AccountDeletionState `protobuf:"varint,2,opt,name=state,proto3,enum=rpc.v1.AccountDeletionState" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteMyAccountResponse) Reset() {
+	*x = DeleteMyAccountResponse{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[101]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteMyAccountResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteMyAccountResponse) ProtoMessage() {}
+
+func (x *DeleteMyAccountResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[101]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteMyAccountResponse.ProtoReflect.Descriptor instead.
+func (*DeleteMyAccountResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{101}
+}
+
+func (x *DeleteMyAccountResponse) GetDeletionId() string {
+	if x != nil {
+		return x.DeletionId
+	}
+	return ""
+}
+
+func (x *DeleteMyAccountResponse) GetState() AccountDeletionState {
+	if x != nil {
+		return x.State
+	}
+	return AccountDeletionState_ACCOUNT_DELETION_STATE_UNSPECIFIED
+}
+
+type AcceptTermsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TermsVersion  string                 `protobuf:"bytes,1,opt,name=terms_version,json=termsVersion,proto3" json:"terms_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptTermsRequest) Reset() {
+	*x = AcceptTermsRequest{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[102]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptTermsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptTermsRequest) ProtoMessage() {}
+
+func (x *AcceptTermsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[102]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptTermsRequest.ProtoReflect.Descriptor instead.
+func (*AcceptTermsRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{102}
+}
+
+func (x *AcceptTermsRequest) GetTermsVersion() string {
+	if x != nil {
+		return x.TermsVersion
+	}
+	return ""
+}
+
+type AcceptTermsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	AcceptedAt    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=accepted_at,json=acceptedAt,proto3" json:"accepted_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AcceptTermsResponse) Reset() {
+	*x = AcceptTermsResponse{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[103]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AcceptTermsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AcceptTermsResponse) ProtoMessage() {}
+
+func (x *AcceptTermsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[103]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AcceptTermsResponse.ProtoReflect.Descriptor instead.
+func (*AcceptTermsResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{103}
+}
+
+func (x *AcceptTermsResponse) GetAcceptedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AcceptedAt
+	}
+	return nil
+}
+
+type GetTermsStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTermsStatusRequest) Reset() {
+	*x = GetTermsStatusRequest{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[104]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTermsStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTermsStatusRequest) ProtoMessage() {}
+
+func (x *GetTermsStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[104]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTermsStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetTermsStatusRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{104}
+}
+
+type GetTermsStatusResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The version currently being served.
+	CurrentVersion string `protobuf:"bytes,1,opt,name=current_version,json=currentVersion,proto3" json:"current_version,omitempty"`
+	// What this person last accepted; empty if they never have.
+	AcceptedVersion string                 `protobuf:"bytes,2,opt,name=accepted_version,json=acceptedVersion,proto3" json:"accepted_version,omitempty"`
+	AcceptedAt      *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=accepted_at,json=acceptedAt,proto3" json:"accepted_at,omitempty"`
+	// False when accepted_version differs from current_version, which is the
+	// re-prompt trigger.
+	IsCurrent     bool `protobuf:"varint,4,opt,name=is_current,json=isCurrent,proto3" json:"is_current,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTermsStatusResponse) Reset() {
+	*x = GetTermsStatusResponse{}
+	mi := &file_rpc_v1_iam_proto_msgTypes[105]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTermsStatusResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTermsStatusResponse) ProtoMessage() {}
+
+func (x *GetTermsStatusResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_iam_proto_msgTypes[105]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTermsStatusResponse.ProtoReflect.Descriptor instead.
+func (*GetTermsStatusResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_iam_proto_rawDescGZIP(), []int{105}
+}
+
+func (x *GetTermsStatusResponse) GetCurrentVersion() string {
+	if x != nil {
+		return x.CurrentVersion
+	}
+	return ""
+}
+
+func (x *GetTermsStatusResponse) GetAcceptedVersion() string {
+	if x != nil {
+		return x.AcceptedVersion
+	}
+	return ""
+}
+
+func (x *GetTermsStatusResponse) GetAcceptedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.AcceptedAt
+	}
+	return nil
+}
+
+func (x *GetTermsStatusResponse) GetIsCurrent() bool {
+	if x != nil {
+		return x.IsCurrent
+	}
+	return false
+}
+
 var File_rpc_v1_iam_proto protoreflect.FileDescriptor
 
 const file_rpc_v1_iam_proto_rawDesc = "" +
 	"\n" +
-	"\x10rpc/v1/iam.proto\x12\x06rpc.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11rpc/v1/rbac.proto\"\xa4\x01\n" +
+	"\x10rpc/v1/iam.proto\x12\x06rpc.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11rpc/v1/rbac.proto\x1a\x17rpc/v1/compliance.proto\"\xa4\x01\n" +
 	"\x14ExchangeTokenRequest\x12/\n" +
 	"\bprovider\x18\x01 \x01(\x0e2\x13.rpc.v1.SSOProviderR\bprovider\x12\x19\n" +
 	"\bid_token\x18\x02 \x01(\tR\aidToken\x12,\n" +
@@ -5891,14 +6439,15 @@ const file_rpc_v1_iam_proto_rawDesc = "" +
 	"\x06status\x18\x02 \x01(\x0e2\x18.rpc.v1.InvitationStatusH\x00R\x06status\x88\x01\x01B\t\n" +
 	"\a_status\"O\n" +
 	"\x17ListInvitationsResponse\x124\n" +
-	"\vinvitations\x18\x01 \x03(\v2\x12.rpc.v1.InvitationR\vinvitations\"\x9c\x02\n" +
+	"\vinvitations\x18\x01 \x03(\v2\x12.rpc.v1.InvitationR\vinvitations\"\xd2\x02\n" +
 	"\x17AcceptInvitationRequest\x12\x14\n" +
 	"\x05token\x18\x01 \x01(\tR\x05token\x12&\n" +
 	"\fdisplay_name\x18\x02 \x01(\tH\x00R\vdisplayName\x88\x01\x01\x12;\n" +
 	"\fsso_provider\x18\x03 \x01(\x0e2\x13.rpc.v1.SSOProviderH\x01R\vssoProvider\x88\x01\x01\x12%\n" +
 	"\fsso_id_token\x18\x04 \x01(\tH\x02R\n" +
 	"ssoIdToken\x88\x01\x01\x12\x1f\n" +
-	"\bpassword\x18\x05 \x01(\tH\x03R\bpassword\x88\x01\x01B\x0f\n" +
+	"\bpassword\x18\x05 \x01(\tH\x03R\bpassword\x88\x01\x01\x124\n" +
+	"\x16accepted_terms_version\x18\x06 \x01(\tR\x14acceptedTermsVersionB\x0f\n" +
 	"\r_display_nameB\x0f\n" +
 	"\r_sso_providerB\x0f\n" +
 	"\r_sso_id_tokenB\v\n" +
@@ -6222,7 +6771,41 @@ const file_rpc_v1_iam_proto_rawDesc = "" +
 	"\x0epin_configured\x18\a \x01(\bR\rpinConfigured\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\b \x01(\tR\tcreatedAt\x12\"\n" +
-	"\rlast_login_at\x18\t \x01(\tR\vlastLoginAt*\\\n" +
+	"\rlast_login_at\x18\t \x01(\tR\vlastLoginAt\"@\n" +
+	"\x10DeletionCategory\x12\x14\n" +
+	"\x05label\x18\x01 \x01(\tR\x05label\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\xb8\x01\n" +
+	"\x14AffectedOrganization\x12'\n" +
+	"\x0forganization_id\x18\x01 \x01(\tR\x0eorganizationId\x12+\n" +
+	"\x11organization_name\x18\x02 \x01(\tR\x10organizationName\x12!\n" +
+	"\fmember_count\x18\x03 \x01(\x05R\vmemberCount\x12'\n" +
+	"\x0fblocks_deletion\x18\x04 \x01(\bR\x0eblocksDeletion\"\"\n" +
+	" GetAccountDeletionPreviewRequest\"\x9a\x02\n" +
+	"!GetAccountDeletionPreviewResponse\x120\n" +
+	"\x06erased\x18\x01 \x03(\v2\x18.rpc.v1.DeletionCategoryR\x06erased\x124\n" +
+	"\bretained\x18\x02 \x03(\v2\x18.rpc.v1.DeletionCategoryR\bretained\x12B\n" +
+	"\rorganizations\x18\x03 \x03(\v2\x1c.rpc.v1.AffectedOrganizationR\rorganizations\x12\x18\n" +
+	"\ablocked\x18\x04 \x01(\bR\ablocked\x12/\n" +
+	"\x13confirmation_phrase\x18\x05 \x01(\tR\x12confirmationPhrase\"I\n" +
+	"\x16DeleteMyAccountRequest\x12/\n" +
+	"\x13confirmation_phrase\x18\x01 \x01(\tR\x12confirmationPhrase\"n\n" +
+	"\x17DeleteMyAccountResponse\x12\x1f\n" +
+	"\vdeletion_id\x18\x01 \x01(\tR\n" +
+	"deletionId\x122\n" +
+	"\x05state\x18\x02 \x01(\x0e2\x1c.rpc.v1.AccountDeletionStateR\x05state\"9\n" +
+	"\x12AcceptTermsRequest\x12#\n" +
+	"\rterms_version\x18\x01 \x01(\tR\ftermsVersion\"R\n" +
+	"\x13AcceptTermsResponse\x12;\n" +
+	"\vaccepted_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"acceptedAt\"\x17\n" +
+	"\x15GetTermsStatusRequest\"\xc8\x01\n" +
+	"\x16GetTermsStatusResponse\x12'\n" +
+	"\x0fcurrent_version\x18\x01 \x01(\tR\x0ecurrentVersion\x12)\n" +
+	"\x10accepted_version\x18\x02 \x01(\tR\x0facceptedVersion\x12;\n" +
+	"\vaccepted_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"acceptedAt\x12\x1d\n" +
+	"\n" +
+	"is_current\x18\x04 \x01(\bR\tisCurrent*\\\n" +
 	"\vSSOProvider\x12\x1c\n" +
 	"\x18SSO_PROVIDER_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13SSO_PROVIDER_GOOGLE\x10\x01\x12\x16\n" +
@@ -6238,7 +6821,7 @@ const file_rpc_v1_iam_proto_rawDesc = "" +
 	"\x19INVITATION_STATUS_PENDING\x10\x01\x12\x1e\n" +
 	"\x1aINVITATION_STATUS_ACCEPTED\x10\x02\x12\x1f\n" +
 	"\x1bINVITATION_STATUS_CANCELLED\x10\x03\x12\x1d\n" +
-	"\x19INVITATION_STATUS_EXPIRED\x10\x042\xdc \n" +
+	"\x19INVITATION_STATUS_EXPIRED\x10\x042\xd3#\n" +
 	"\n" +
 	"IAMService\x12T\n" +
 	"\rExchangeToken\x12\x1c.rpc.v1.ExchangeTokenRequest\x1a\x1d.rpc.v1.ExchangeTokenResponse\"\x06\x82\xf9+\x02\x10\x01\x12<\n" +
@@ -6320,7 +6903,11 @@ const file_rpc_v1_iam_proto_rawDesc = "" +
 	"\x19ResetOrgAccountCredential\x12(.rpc.v1.ResetOrgAccountCredentialRequest\x1a).rpc.v1.ResetOrgAccountCredentialResponse\"\x1b\x82\xf9+\x17\n" +
 	"\x15iam.manageOrgAccounts\x12o\n" +
 	"\x0fListOrgAccounts\x12\x1e.rpc.v1.ListOrgAccountsRequest\x1a\x1f.rpc.v1.ListOrgAccountsResponse\"\x1b\x82\xf9+\x17\n" +
-	"\x15iam.manageOrgAccountsB\x83\x01\n" +
+	"\x15iam.manageOrgAccounts\x12v\n" +
+	"\x19GetAccountDeletionPreview\x12(.rpc.v1.GetAccountDeletionPreviewRequest\x1a).rpc.v1.GetAccountDeletionPreviewResponse\"\x04\x82\xf9+\x00\x12X\n" +
+	"\x0fDeleteMyAccount\x12\x1e.rpc.v1.DeleteMyAccountRequest\x1a\x1f.rpc.v1.DeleteMyAccountResponse\"\x04\x82\xf9+\x00\x12L\n" +
+	"\vAcceptTerms\x12\x1a.rpc.v1.AcceptTermsRequest\x1a\x1b.rpc.v1.AcceptTermsResponse\"\x04\x82\xf9+\x00\x12U\n" +
+	"\x0eGetTermsStatus\x12\x1d.rpc.v1.GetTermsStatusRequest\x1a\x1e.rpc.v1.GetTermsStatusResponse\"\x04\x82\xf9+\x00B\x83\x01\n" +
 	"\n" +
 	"com.rpc.v1B\bIamProtoP\x01Z2github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1\xa2\x02\x03RXX\xaa\x02\x06Rpc.V1\xca\x02\x06Rpc\\V1\xe2\x02\x12Rpc\\V1\\GPBMetadata\xea\x02\aRpc::V1b\x06proto3"
 
@@ -6337,7 +6924,7 @@ func file_rpc_v1_iam_proto_rawDescGZIP() []byte {
 }
 
 var file_rpc_v1_iam_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_rpc_v1_iam_proto_msgTypes = make([]protoimpl.MessageInfo, 96)
+var file_rpc_v1_iam_proto_msgTypes = make([]protoimpl.MessageInfo, 106)
 var file_rpc_v1_iam_proto_goTypes = []any{
 	(SSOProvider)(0),                          // 0: rpc.v1.SSOProvider
 	(UserStatus)(0),                           // 1: rpc.v1.UserStatus
@@ -6438,143 +7025,168 @@ var file_rpc_v1_iam_proto_goTypes = []any{
 	(*ListOrgAccountsRequest)(nil),            // 96: rpc.v1.ListOrgAccountsRequest
 	(*ListOrgAccountsResponse)(nil),           // 97: rpc.v1.ListOrgAccountsResponse
 	(*OrgAccountListItem)(nil),                // 98: rpc.v1.OrgAccountListItem
-	(*timestamppb.Timestamp)(nil),             // 99: google.protobuf.Timestamp
+	(*DeletionCategory)(nil),                  // 99: rpc.v1.DeletionCategory
+	(*AffectedOrganization)(nil),              // 100: rpc.v1.AffectedOrganization
+	(*GetAccountDeletionPreviewRequest)(nil),  // 101: rpc.v1.GetAccountDeletionPreviewRequest
+	(*GetAccountDeletionPreviewResponse)(nil), // 102: rpc.v1.GetAccountDeletionPreviewResponse
+	(*DeleteMyAccountRequest)(nil),            // 103: rpc.v1.DeleteMyAccountRequest
+	(*DeleteMyAccountResponse)(nil),           // 104: rpc.v1.DeleteMyAccountResponse
+	(*AcceptTermsRequest)(nil),                // 105: rpc.v1.AcceptTermsRequest
+	(*AcceptTermsResponse)(nil),               // 106: rpc.v1.AcceptTermsResponse
+	(*GetTermsStatusRequest)(nil),             // 107: rpc.v1.GetTermsStatusRequest
+	(*GetTermsStatusResponse)(nil),            // 108: rpc.v1.GetTermsStatusResponse
+	(*timestamppb.Timestamp)(nil),             // 109: google.protobuf.Timestamp
+	(AccountDeletionState)(0),                 // 110: rpc.v1.AccountDeletionState
 }
 var file_rpc_v1_iam_proto_depIdxs = []int32{
-	0,  // 0: rpc.v1.ExchangeTokenRequest.provider:type_name -> rpc.v1.SSOProvider
-	39, // 1: rpc.v1.ExchangeTokenResponse.user:type_name -> rpc.v1.User
-	39, // 2: rpc.v1.LoginResponse.user:type_name -> rpc.v1.User
-	43, // 3: rpc.v1.GetActiveSessionsResponse.sessions:type_name -> rpc.v1.Session
-	39, // 4: rpc.v1.GetProfileResponse.user:type_name -> rpc.v1.User
-	40, // 5: rpc.v1.GetProfileResponse.sso_identities:type_name -> rpc.v1.SSOIdentity
-	41, // 6: rpc.v1.GetProfileResponse.organizations:type_name -> rpc.v1.OrganizationMembership
-	39, // 7: rpc.v1.UpdateProfileResponse.user:type_name -> rpc.v1.User
-	0,  // 8: rpc.v1.LinkSSOIdentityRequest.provider:type_name -> rpc.v1.SSOProvider
-	40, // 9: rpc.v1.LinkSSOIdentityResponse.sso_identity:type_name -> rpc.v1.SSOIdentity
-	41, // 10: rpc.v1.GetUserOrganizationsResponse.organizations:type_name -> rpc.v1.OrganizationMembership
-	42, // 11: rpc.v1.InviteUserResponse.invitation:type_name -> rpc.v1.Invitation
-	2,  // 12: rpc.v1.ListInvitationsRequest.status:type_name -> rpc.v1.InvitationStatus
-	42, // 13: rpc.v1.ListInvitationsResponse.invitations:type_name -> rpc.v1.Invitation
-	0,  // 14: rpc.v1.AcceptInvitationRequest.sso_provider:type_name -> rpc.v1.SSOProvider
-	39, // 15: rpc.v1.AcceptInvitationResponse.user:type_name -> rpc.v1.User
-	41, // 16: rpc.v1.AcceptInvitationResponse.membership:type_name -> rpc.v1.OrganizationMembership
-	1,  // 17: rpc.v1.User.status:type_name -> rpc.v1.UserStatus
-	99, // 18: rpc.v1.User.last_login_at:type_name -> google.protobuf.Timestamp
-	99, // 19: rpc.v1.User.created_at:type_name -> google.protobuf.Timestamp
-	0,  // 20: rpc.v1.SSOIdentity.provider:type_name -> rpc.v1.SSOProvider
-	99, // 21: rpc.v1.SSOIdentity.created_at:type_name -> google.protobuf.Timestamp
-	99, // 22: rpc.v1.SSOIdentity.last_used_at:type_name -> google.protobuf.Timestamp
-	99, // 23: rpc.v1.OrganizationMembership.joined_at:type_name -> google.protobuf.Timestamp
-	2,  // 24: rpc.v1.Invitation.status:type_name -> rpc.v1.InvitationStatus
-	99, // 25: rpc.v1.Invitation.expires_at:type_name -> google.protobuf.Timestamp
-	99, // 26: rpc.v1.Invitation.created_at:type_name -> google.protobuf.Timestamp
-	99, // 27: rpc.v1.Session.issued_at:type_name -> google.protobuf.Timestamp
-	99, // 28: rpc.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
-	99, // 29: rpc.v1.Session.last_activity_at:type_name -> google.protobuf.Timestamp
-	45, // 30: rpc.v1.ListEmployeesResponse.employees:type_name -> rpc.v1.EmployeeListItem
-	46, // 31: rpc.v1.ListEmployeesResponse.pagination:type_name -> rpc.v1.EmployeeListPagination
-	48, // 32: rpc.v1.EmployeeImportPreviewItem.employee:type_name -> rpc.v1.ImportEmployeeData
-	48, // 33: rpc.v1.PreviewEmployeeImportRequest.employees:type_name -> rpc.v1.ImportEmployeeData
-	49, // 34: rpc.v1.PreviewEmployeeImportResponse.items:type_name -> rpc.v1.EmployeeImportPreviewItem
-	48, // 35: rpc.v1.ExecuteEmployeeImportRequest.employees:type_name -> rpc.v1.ImportEmployeeData
-	53, // 36: rpc.v1.ExecuteEmployeeImportResponse.results:type_name -> rpc.v1.EmployeeImportResult
-	55, // 37: rpc.v1.PermissionGroup.permissions:type_name -> rpc.v1.Permission
-	56, // 38: rpc.v1.ListPermissionsResponse.groups:type_name -> rpc.v1.PermissionGroup
-	59, // 39: rpc.v1.CreateRoleResponse.role:type_name -> rpc.v1.OrgRole
-	59, // 40: rpc.v1.UpdateRoleResponse.role:type_name -> rpc.v1.OrgRole
-	59, // 41: rpc.v1.ListRolesResponse.roles:type_name -> rpc.v1.OrgRole
-	59, // 42: rpc.v1.GetRoleResponse.role:type_name -> rpc.v1.OrgRole
-	59, // 43: rpc.v1.ListEmployeeRolesResponse.roles:type_name -> rpc.v1.OrgRole
-	56, // 44: rpc.v1.GetEmployeePermissionsResponse.groups:type_name -> rpc.v1.PermissionGroup
-	79, // 45: rpc.v1.GetEmployeeCardsResponse.cards:type_name -> rpc.v1.EmployeeCard
-	85, // 46: rpc.v1.BatchCreateOrgAccountsRequest.accounts:type_name -> rpc.v1.CreateOrgAccountRequest
-	89, // 47: rpc.v1.BatchCreateOrgAccountsResponse.results:type_name -> rpc.v1.BatchCreateOrgAccountResult
-	98, // 48: rpc.v1.ListOrgAccountsResponse.accounts:type_name -> rpc.v1.OrgAccountListItem
-	3,  // 49: rpc.v1.IAMService.ExchangeToken:input_type -> rpc.v1.ExchangeTokenRequest
-	5,  // 50: rpc.v1.IAMService.Login:input_type -> rpc.v1.LoginRequest
-	7,  // 51: rpc.v1.IAMService.ChangePassword:input_type -> rpc.v1.ChangePasswordRequest
-	9,  // 52: rpc.v1.IAMService.RequestPasswordReset:input_type -> rpc.v1.RequestPasswordResetRequest
-	11, // 53: rpc.v1.IAMService.ResetPassword:input_type -> rpc.v1.ResetPasswordRequest
-	13, // 54: rpc.v1.IAMService.Logout:input_type -> rpc.v1.LogoutRequest
-	15, // 55: rpc.v1.IAMService.LogoutAllSessions:input_type -> rpc.v1.LogoutAllSessionsRequest
-	17, // 56: rpc.v1.IAMService.GetActiveSessions:input_type -> rpc.v1.GetActiveSessionsRequest
-	19, // 57: rpc.v1.IAMService.GetProfile:input_type -> rpc.v1.GetProfileRequest
-	21, // 58: rpc.v1.IAMService.UpdateProfile:input_type -> rpc.v1.UpdateProfileRequest
-	23, // 59: rpc.v1.IAMService.LinkSSOIdentity:input_type -> rpc.v1.LinkSSOIdentityRequest
-	25, // 60: rpc.v1.IAMService.UnlinkSSOIdentity:input_type -> rpc.v1.UnlinkSSOIdentityRequest
-	27, // 61: rpc.v1.IAMService.GetUserOrganizations:input_type -> rpc.v1.GetUserOrganizationsRequest
-	29, // 62: rpc.v1.IAMService.SwitchOrganization:input_type -> rpc.v1.SwitchOrganizationRequest
-	31, // 63: rpc.v1.IAMService.InviteUser:input_type -> rpc.v1.InviteUserRequest
-	33, // 64: rpc.v1.IAMService.CancelInvitation:input_type -> rpc.v1.CancelInvitationRequest
-	35, // 65: rpc.v1.IAMService.ListInvitations:input_type -> rpc.v1.ListInvitationsRequest
-	37, // 66: rpc.v1.IAMService.AcceptInvitation:input_type -> rpc.v1.AcceptInvitationRequest
-	44, // 67: rpc.v1.IAMService.ListEmployees:input_type -> rpc.v1.ListEmployeesRequest
-	78, // 68: rpc.v1.IAMService.GetEmployeeCards:input_type -> rpc.v1.GetEmployeeCardsRequest
-	50, // 69: rpc.v1.IAMService.PreviewEmployeeImport:input_type -> rpc.v1.PreviewEmployeeImportRequest
-	52, // 70: rpc.v1.IAMService.ExecuteEmployeeImport:input_type -> rpc.v1.ExecuteEmployeeImportRequest
-	57, // 71: rpc.v1.IAMService.ListPermissions:input_type -> rpc.v1.ListPermissionsRequest
-	60, // 72: rpc.v1.IAMService.CreateRole:input_type -> rpc.v1.CreateRoleRequest
-	62, // 73: rpc.v1.IAMService.UpdateRole:input_type -> rpc.v1.UpdateRoleRequest
-	64, // 74: rpc.v1.IAMService.DeleteRole:input_type -> rpc.v1.DeleteRoleRequest
-	66, // 75: rpc.v1.IAMService.ListRoles:input_type -> rpc.v1.ListRolesRequest
-	68, // 76: rpc.v1.IAMService.GetRole:input_type -> rpc.v1.GetRoleRequest
-	70, // 77: rpc.v1.IAMService.AssignRole:input_type -> rpc.v1.AssignRoleRequest
-	72, // 78: rpc.v1.IAMService.RevokeRole:input_type -> rpc.v1.RevokeRoleRequest
-	74, // 79: rpc.v1.IAMService.ListEmployeeRoles:input_type -> rpc.v1.ListEmployeeRolesRequest
-	76, // 80: rpc.v1.IAMService.GetEmployeePermissions:input_type -> rpc.v1.GetEmployeePermissionsRequest
-	81, // 81: rpc.v1.IAMService.LoginWithPIN:input_type -> rpc.v1.LoginWithPINRequest
-	83, // 82: rpc.v1.IAMService.SetPIN:input_type -> rpc.v1.SetPINRequest
-	85, // 83: rpc.v1.IAMService.CreateOrgAccount:input_type -> rpc.v1.CreateOrgAccountRequest
-	87, // 84: rpc.v1.IAMService.BatchCreateOrgAccounts:input_type -> rpc.v1.BatchCreateOrgAccountsRequest
-	90, // 85: rpc.v1.IAMService.DeactivateOrgAccount:input_type -> rpc.v1.DeactivateOrgAccountRequest
-	92, // 86: rpc.v1.IAMService.UnlockOrgAccount:input_type -> rpc.v1.UnlockOrgAccountRequest
-	94, // 87: rpc.v1.IAMService.ResetOrgAccountCredential:input_type -> rpc.v1.ResetOrgAccountCredentialRequest
-	96, // 88: rpc.v1.IAMService.ListOrgAccounts:input_type -> rpc.v1.ListOrgAccountsRequest
-	4,  // 89: rpc.v1.IAMService.ExchangeToken:output_type -> rpc.v1.ExchangeTokenResponse
-	6,  // 90: rpc.v1.IAMService.Login:output_type -> rpc.v1.LoginResponse
-	8,  // 91: rpc.v1.IAMService.ChangePassword:output_type -> rpc.v1.ChangePasswordResponse
-	10, // 92: rpc.v1.IAMService.RequestPasswordReset:output_type -> rpc.v1.RequestPasswordResetResponse
-	12, // 93: rpc.v1.IAMService.ResetPassword:output_type -> rpc.v1.ResetPasswordResponse
-	14, // 94: rpc.v1.IAMService.Logout:output_type -> rpc.v1.LogoutResponse
-	16, // 95: rpc.v1.IAMService.LogoutAllSessions:output_type -> rpc.v1.LogoutAllSessionsResponse
-	18, // 96: rpc.v1.IAMService.GetActiveSessions:output_type -> rpc.v1.GetActiveSessionsResponse
-	20, // 97: rpc.v1.IAMService.GetProfile:output_type -> rpc.v1.GetProfileResponse
-	22, // 98: rpc.v1.IAMService.UpdateProfile:output_type -> rpc.v1.UpdateProfileResponse
-	24, // 99: rpc.v1.IAMService.LinkSSOIdentity:output_type -> rpc.v1.LinkSSOIdentityResponse
-	26, // 100: rpc.v1.IAMService.UnlinkSSOIdentity:output_type -> rpc.v1.UnlinkSSOIdentityResponse
-	28, // 101: rpc.v1.IAMService.GetUserOrganizations:output_type -> rpc.v1.GetUserOrganizationsResponse
-	30, // 102: rpc.v1.IAMService.SwitchOrganization:output_type -> rpc.v1.SwitchOrganizationResponse
-	32, // 103: rpc.v1.IAMService.InviteUser:output_type -> rpc.v1.InviteUserResponse
-	34, // 104: rpc.v1.IAMService.CancelInvitation:output_type -> rpc.v1.CancelInvitationResponse
-	36, // 105: rpc.v1.IAMService.ListInvitations:output_type -> rpc.v1.ListInvitationsResponse
-	38, // 106: rpc.v1.IAMService.AcceptInvitation:output_type -> rpc.v1.AcceptInvitationResponse
-	47, // 107: rpc.v1.IAMService.ListEmployees:output_type -> rpc.v1.ListEmployeesResponse
-	80, // 108: rpc.v1.IAMService.GetEmployeeCards:output_type -> rpc.v1.GetEmployeeCardsResponse
-	51, // 109: rpc.v1.IAMService.PreviewEmployeeImport:output_type -> rpc.v1.PreviewEmployeeImportResponse
-	54, // 110: rpc.v1.IAMService.ExecuteEmployeeImport:output_type -> rpc.v1.ExecuteEmployeeImportResponse
-	58, // 111: rpc.v1.IAMService.ListPermissions:output_type -> rpc.v1.ListPermissionsResponse
-	61, // 112: rpc.v1.IAMService.CreateRole:output_type -> rpc.v1.CreateRoleResponse
-	63, // 113: rpc.v1.IAMService.UpdateRole:output_type -> rpc.v1.UpdateRoleResponse
-	65, // 114: rpc.v1.IAMService.DeleteRole:output_type -> rpc.v1.DeleteRoleResponse
-	67, // 115: rpc.v1.IAMService.ListRoles:output_type -> rpc.v1.ListRolesResponse
-	69, // 116: rpc.v1.IAMService.GetRole:output_type -> rpc.v1.GetRoleResponse
-	71, // 117: rpc.v1.IAMService.AssignRole:output_type -> rpc.v1.AssignRoleResponse
-	73, // 118: rpc.v1.IAMService.RevokeRole:output_type -> rpc.v1.RevokeRoleResponse
-	75, // 119: rpc.v1.IAMService.ListEmployeeRoles:output_type -> rpc.v1.ListEmployeeRolesResponse
-	77, // 120: rpc.v1.IAMService.GetEmployeePermissions:output_type -> rpc.v1.GetEmployeePermissionsResponse
-	82, // 121: rpc.v1.IAMService.LoginWithPIN:output_type -> rpc.v1.LoginWithPINResponse
-	84, // 122: rpc.v1.IAMService.SetPIN:output_type -> rpc.v1.SetPINResponse
-	86, // 123: rpc.v1.IAMService.CreateOrgAccount:output_type -> rpc.v1.CreateOrgAccountResponse
-	88, // 124: rpc.v1.IAMService.BatchCreateOrgAccounts:output_type -> rpc.v1.BatchCreateOrgAccountsResponse
-	91, // 125: rpc.v1.IAMService.DeactivateOrgAccount:output_type -> rpc.v1.DeactivateOrgAccountResponse
-	93, // 126: rpc.v1.IAMService.UnlockOrgAccount:output_type -> rpc.v1.UnlockOrgAccountResponse
-	95, // 127: rpc.v1.IAMService.ResetOrgAccountCredential:output_type -> rpc.v1.ResetOrgAccountCredentialResponse
-	97, // 128: rpc.v1.IAMService.ListOrgAccounts:output_type -> rpc.v1.ListOrgAccountsResponse
-	89, // [89:129] is the sub-list for method output_type
-	49, // [49:89] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	0,   // 0: rpc.v1.ExchangeTokenRequest.provider:type_name -> rpc.v1.SSOProvider
+	39,  // 1: rpc.v1.ExchangeTokenResponse.user:type_name -> rpc.v1.User
+	39,  // 2: rpc.v1.LoginResponse.user:type_name -> rpc.v1.User
+	43,  // 3: rpc.v1.GetActiveSessionsResponse.sessions:type_name -> rpc.v1.Session
+	39,  // 4: rpc.v1.GetProfileResponse.user:type_name -> rpc.v1.User
+	40,  // 5: rpc.v1.GetProfileResponse.sso_identities:type_name -> rpc.v1.SSOIdentity
+	41,  // 6: rpc.v1.GetProfileResponse.organizations:type_name -> rpc.v1.OrganizationMembership
+	39,  // 7: rpc.v1.UpdateProfileResponse.user:type_name -> rpc.v1.User
+	0,   // 8: rpc.v1.LinkSSOIdentityRequest.provider:type_name -> rpc.v1.SSOProvider
+	40,  // 9: rpc.v1.LinkSSOIdentityResponse.sso_identity:type_name -> rpc.v1.SSOIdentity
+	41,  // 10: rpc.v1.GetUserOrganizationsResponse.organizations:type_name -> rpc.v1.OrganizationMembership
+	42,  // 11: rpc.v1.InviteUserResponse.invitation:type_name -> rpc.v1.Invitation
+	2,   // 12: rpc.v1.ListInvitationsRequest.status:type_name -> rpc.v1.InvitationStatus
+	42,  // 13: rpc.v1.ListInvitationsResponse.invitations:type_name -> rpc.v1.Invitation
+	0,   // 14: rpc.v1.AcceptInvitationRequest.sso_provider:type_name -> rpc.v1.SSOProvider
+	39,  // 15: rpc.v1.AcceptInvitationResponse.user:type_name -> rpc.v1.User
+	41,  // 16: rpc.v1.AcceptInvitationResponse.membership:type_name -> rpc.v1.OrganizationMembership
+	1,   // 17: rpc.v1.User.status:type_name -> rpc.v1.UserStatus
+	109, // 18: rpc.v1.User.last_login_at:type_name -> google.protobuf.Timestamp
+	109, // 19: rpc.v1.User.created_at:type_name -> google.protobuf.Timestamp
+	0,   // 20: rpc.v1.SSOIdentity.provider:type_name -> rpc.v1.SSOProvider
+	109, // 21: rpc.v1.SSOIdentity.created_at:type_name -> google.protobuf.Timestamp
+	109, // 22: rpc.v1.SSOIdentity.last_used_at:type_name -> google.protobuf.Timestamp
+	109, // 23: rpc.v1.OrganizationMembership.joined_at:type_name -> google.protobuf.Timestamp
+	2,   // 24: rpc.v1.Invitation.status:type_name -> rpc.v1.InvitationStatus
+	109, // 25: rpc.v1.Invitation.expires_at:type_name -> google.protobuf.Timestamp
+	109, // 26: rpc.v1.Invitation.created_at:type_name -> google.protobuf.Timestamp
+	109, // 27: rpc.v1.Session.issued_at:type_name -> google.protobuf.Timestamp
+	109, // 28: rpc.v1.Session.expires_at:type_name -> google.protobuf.Timestamp
+	109, // 29: rpc.v1.Session.last_activity_at:type_name -> google.protobuf.Timestamp
+	45,  // 30: rpc.v1.ListEmployeesResponse.employees:type_name -> rpc.v1.EmployeeListItem
+	46,  // 31: rpc.v1.ListEmployeesResponse.pagination:type_name -> rpc.v1.EmployeeListPagination
+	48,  // 32: rpc.v1.EmployeeImportPreviewItem.employee:type_name -> rpc.v1.ImportEmployeeData
+	48,  // 33: rpc.v1.PreviewEmployeeImportRequest.employees:type_name -> rpc.v1.ImportEmployeeData
+	49,  // 34: rpc.v1.PreviewEmployeeImportResponse.items:type_name -> rpc.v1.EmployeeImportPreviewItem
+	48,  // 35: rpc.v1.ExecuteEmployeeImportRequest.employees:type_name -> rpc.v1.ImportEmployeeData
+	53,  // 36: rpc.v1.ExecuteEmployeeImportResponse.results:type_name -> rpc.v1.EmployeeImportResult
+	55,  // 37: rpc.v1.PermissionGroup.permissions:type_name -> rpc.v1.Permission
+	56,  // 38: rpc.v1.ListPermissionsResponse.groups:type_name -> rpc.v1.PermissionGroup
+	59,  // 39: rpc.v1.CreateRoleResponse.role:type_name -> rpc.v1.OrgRole
+	59,  // 40: rpc.v1.UpdateRoleResponse.role:type_name -> rpc.v1.OrgRole
+	59,  // 41: rpc.v1.ListRolesResponse.roles:type_name -> rpc.v1.OrgRole
+	59,  // 42: rpc.v1.GetRoleResponse.role:type_name -> rpc.v1.OrgRole
+	59,  // 43: rpc.v1.ListEmployeeRolesResponse.roles:type_name -> rpc.v1.OrgRole
+	56,  // 44: rpc.v1.GetEmployeePermissionsResponse.groups:type_name -> rpc.v1.PermissionGroup
+	79,  // 45: rpc.v1.GetEmployeeCardsResponse.cards:type_name -> rpc.v1.EmployeeCard
+	85,  // 46: rpc.v1.BatchCreateOrgAccountsRequest.accounts:type_name -> rpc.v1.CreateOrgAccountRequest
+	89,  // 47: rpc.v1.BatchCreateOrgAccountsResponse.results:type_name -> rpc.v1.BatchCreateOrgAccountResult
+	98,  // 48: rpc.v1.ListOrgAccountsResponse.accounts:type_name -> rpc.v1.OrgAccountListItem
+	99,  // 49: rpc.v1.GetAccountDeletionPreviewResponse.erased:type_name -> rpc.v1.DeletionCategory
+	99,  // 50: rpc.v1.GetAccountDeletionPreviewResponse.retained:type_name -> rpc.v1.DeletionCategory
+	100, // 51: rpc.v1.GetAccountDeletionPreviewResponse.organizations:type_name -> rpc.v1.AffectedOrganization
+	110, // 52: rpc.v1.DeleteMyAccountResponse.state:type_name -> rpc.v1.AccountDeletionState
+	109, // 53: rpc.v1.AcceptTermsResponse.accepted_at:type_name -> google.protobuf.Timestamp
+	109, // 54: rpc.v1.GetTermsStatusResponse.accepted_at:type_name -> google.protobuf.Timestamp
+	3,   // 55: rpc.v1.IAMService.ExchangeToken:input_type -> rpc.v1.ExchangeTokenRequest
+	5,   // 56: rpc.v1.IAMService.Login:input_type -> rpc.v1.LoginRequest
+	7,   // 57: rpc.v1.IAMService.ChangePassword:input_type -> rpc.v1.ChangePasswordRequest
+	9,   // 58: rpc.v1.IAMService.RequestPasswordReset:input_type -> rpc.v1.RequestPasswordResetRequest
+	11,  // 59: rpc.v1.IAMService.ResetPassword:input_type -> rpc.v1.ResetPasswordRequest
+	13,  // 60: rpc.v1.IAMService.Logout:input_type -> rpc.v1.LogoutRequest
+	15,  // 61: rpc.v1.IAMService.LogoutAllSessions:input_type -> rpc.v1.LogoutAllSessionsRequest
+	17,  // 62: rpc.v1.IAMService.GetActiveSessions:input_type -> rpc.v1.GetActiveSessionsRequest
+	19,  // 63: rpc.v1.IAMService.GetProfile:input_type -> rpc.v1.GetProfileRequest
+	21,  // 64: rpc.v1.IAMService.UpdateProfile:input_type -> rpc.v1.UpdateProfileRequest
+	23,  // 65: rpc.v1.IAMService.LinkSSOIdentity:input_type -> rpc.v1.LinkSSOIdentityRequest
+	25,  // 66: rpc.v1.IAMService.UnlinkSSOIdentity:input_type -> rpc.v1.UnlinkSSOIdentityRequest
+	27,  // 67: rpc.v1.IAMService.GetUserOrganizations:input_type -> rpc.v1.GetUserOrganizationsRequest
+	29,  // 68: rpc.v1.IAMService.SwitchOrganization:input_type -> rpc.v1.SwitchOrganizationRequest
+	31,  // 69: rpc.v1.IAMService.InviteUser:input_type -> rpc.v1.InviteUserRequest
+	33,  // 70: rpc.v1.IAMService.CancelInvitation:input_type -> rpc.v1.CancelInvitationRequest
+	35,  // 71: rpc.v1.IAMService.ListInvitations:input_type -> rpc.v1.ListInvitationsRequest
+	37,  // 72: rpc.v1.IAMService.AcceptInvitation:input_type -> rpc.v1.AcceptInvitationRequest
+	44,  // 73: rpc.v1.IAMService.ListEmployees:input_type -> rpc.v1.ListEmployeesRequest
+	78,  // 74: rpc.v1.IAMService.GetEmployeeCards:input_type -> rpc.v1.GetEmployeeCardsRequest
+	50,  // 75: rpc.v1.IAMService.PreviewEmployeeImport:input_type -> rpc.v1.PreviewEmployeeImportRequest
+	52,  // 76: rpc.v1.IAMService.ExecuteEmployeeImport:input_type -> rpc.v1.ExecuteEmployeeImportRequest
+	57,  // 77: rpc.v1.IAMService.ListPermissions:input_type -> rpc.v1.ListPermissionsRequest
+	60,  // 78: rpc.v1.IAMService.CreateRole:input_type -> rpc.v1.CreateRoleRequest
+	62,  // 79: rpc.v1.IAMService.UpdateRole:input_type -> rpc.v1.UpdateRoleRequest
+	64,  // 80: rpc.v1.IAMService.DeleteRole:input_type -> rpc.v1.DeleteRoleRequest
+	66,  // 81: rpc.v1.IAMService.ListRoles:input_type -> rpc.v1.ListRolesRequest
+	68,  // 82: rpc.v1.IAMService.GetRole:input_type -> rpc.v1.GetRoleRequest
+	70,  // 83: rpc.v1.IAMService.AssignRole:input_type -> rpc.v1.AssignRoleRequest
+	72,  // 84: rpc.v1.IAMService.RevokeRole:input_type -> rpc.v1.RevokeRoleRequest
+	74,  // 85: rpc.v1.IAMService.ListEmployeeRoles:input_type -> rpc.v1.ListEmployeeRolesRequest
+	76,  // 86: rpc.v1.IAMService.GetEmployeePermissions:input_type -> rpc.v1.GetEmployeePermissionsRequest
+	81,  // 87: rpc.v1.IAMService.LoginWithPIN:input_type -> rpc.v1.LoginWithPINRequest
+	83,  // 88: rpc.v1.IAMService.SetPIN:input_type -> rpc.v1.SetPINRequest
+	85,  // 89: rpc.v1.IAMService.CreateOrgAccount:input_type -> rpc.v1.CreateOrgAccountRequest
+	87,  // 90: rpc.v1.IAMService.BatchCreateOrgAccounts:input_type -> rpc.v1.BatchCreateOrgAccountsRequest
+	90,  // 91: rpc.v1.IAMService.DeactivateOrgAccount:input_type -> rpc.v1.DeactivateOrgAccountRequest
+	92,  // 92: rpc.v1.IAMService.UnlockOrgAccount:input_type -> rpc.v1.UnlockOrgAccountRequest
+	94,  // 93: rpc.v1.IAMService.ResetOrgAccountCredential:input_type -> rpc.v1.ResetOrgAccountCredentialRequest
+	96,  // 94: rpc.v1.IAMService.ListOrgAccounts:input_type -> rpc.v1.ListOrgAccountsRequest
+	101, // 95: rpc.v1.IAMService.GetAccountDeletionPreview:input_type -> rpc.v1.GetAccountDeletionPreviewRequest
+	103, // 96: rpc.v1.IAMService.DeleteMyAccount:input_type -> rpc.v1.DeleteMyAccountRequest
+	105, // 97: rpc.v1.IAMService.AcceptTerms:input_type -> rpc.v1.AcceptTermsRequest
+	107, // 98: rpc.v1.IAMService.GetTermsStatus:input_type -> rpc.v1.GetTermsStatusRequest
+	4,   // 99: rpc.v1.IAMService.ExchangeToken:output_type -> rpc.v1.ExchangeTokenResponse
+	6,   // 100: rpc.v1.IAMService.Login:output_type -> rpc.v1.LoginResponse
+	8,   // 101: rpc.v1.IAMService.ChangePassword:output_type -> rpc.v1.ChangePasswordResponse
+	10,  // 102: rpc.v1.IAMService.RequestPasswordReset:output_type -> rpc.v1.RequestPasswordResetResponse
+	12,  // 103: rpc.v1.IAMService.ResetPassword:output_type -> rpc.v1.ResetPasswordResponse
+	14,  // 104: rpc.v1.IAMService.Logout:output_type -> rpc.v1.LogoutResponse
+	16,  // 105: rpc.v1.IAMService.LogoutAllSessions:output_type -> rpc.v1.LogoutAllSessionsResponse
+	18,  // 106: rpc.v1.IAMService.GetActiveSessions:output_type -> rpc.v1.GetActiveSessionsResponse
+	20,  // 107: rpc.v1.IAMService.GetProfile:output_type -> rpc.v1.GetProfileResponse
+	22,  // 108: rpc.v1.IAMService.UpdateProfile:output_type -> rpc.v1.UpdateProfileResponse
+	24,  // 109: rpc.v1.IAMService.LinkSSOIdentity:output_type -> rpc.v1.LinkSSOIdentityResponse
+	26,  // 110: rpc.v1.IAMService.UnlinkSSOIdentity:output_type -> rpc.v1.UnlinkSSOIdentityResponse
+	28,  // 111: rpc.v1.IAMService.GetUserOrganizations:output_type -> rpc.v1.GetUserOrganizationsResponse
+	30,  // 112: rpc.v1.IAMService.SwitchOrganization:output_type -> rpc.v1.SwitchOrganizationResponse
+	32,  // 113: rpc.v1.IAMService.InviteUser:output_type -> rpc.v1.InviteUserResponse
+	34,  // 114: rpc.v1.IAMService.CancelInvitation:output_type -> rpc.v1.CancelInvitationResponse
+	36,  // 115: rpc.v1.IAMService.ListInvitations:output_type -> rpc.v1.ListInvitationsResponse
+	38,  // 116: rpc.v1.IAMService.AcceptInvitation:output_type -> rpc.v1.AcceptInvitationResponse
+	47,  // 117: rpc.v1.IAMService.ListEmployees:output_type -> rpc.v1.ListEmployeesResponse
+	80,  // 118: rpc.v1.IAMService.GetEmployeeCards:output_type -> rpc.v1.GetEmployeeCardsResponse
+	51,  // 119: rpc.v1.IAMService.PreviewEmployeeImport:output_type -> rpc.v1.PreviewEmployeeImportResponse
+	54,  // 120: rpc.v1.IAMService.ExecuteEmployeeImport:output_type -> rpc.v1.ExecuteEmployeeImportResponse
+	58,  // 121: rpc.v1.IAMService.ListPermissions:output_type -> rpc.v1.ListPermissionsResponse
+	61,  // 122: rpc.v1.IAMService.CreateRole:output_type -> rpc.v1.CreateRoleResponse
+	63,  // 123: rpc.v1.IAMService.UpdateRole:output_type -> rpc.v1.UpdateRoleResponse
+	65,  // 124: rpc.v1.IAMService.DeleteRole:output_type -> rpc.v1.DeleteRoleResponse
+	67,  // 125: rpc.v1.IAMService.ListRoles:output_type -> rpc.v1.ListRolesResponse
+	69,  // 126: rpc.v1.IAMService.GetRole:output_type -> rpc.v1.GetRoleResponse
+	71,  // 127: rpc.v1.IAMService.AssignRole:output_type -> rpc.v1.AssignRoleResponse
+	73,  // 128: rpc.v1.IAMService.RevokeRole:output_type -> rpc.v1.RevokeRoleResponse
+	75,  // 129: rpc.v1.IAMService.ListEmployeeRoles:output_type -> rpc.v1.ListEmployeeRolesResponse
+	77,  // 130: rpc.v1.IAMService.GetEmployeePermissions:output_type -> rpc.v1.GetEmployeePermissionsResponse
+	82,  // 131: rpc.v1.IAMService.LoginWithPIN:output_type -> rpc.v1.LoginWithPINResponse
+	84,  // 132: rpc.v1.IAMService.SetPIN:output_type -> rpc.v1.SetPINResponse
+	86,  // 133: rpc.v1.IAMService.CreateOrgAccount:output_type -> rpc.v1.CreateOrgAccountResponse
+	88,  // 134: rpc.v1.IAMService.BatchCreateOrgAccounts:output_type -> rpc.v1.BatchCreateOrgAccountsResponse
+	91,  // 135: rpc.v1.IAMService.DeactivateOrgAccount:output_type -> rpc.v1.DeactivateOrgAccountResponse
+	93,  // 136: rpc.v1.IAMService.UnlockOrgAccount:output_type -> rpc.v1.UnlockOrgAccountResponse
+	95,  // 137: rpc.v1.IAMService.ResetOrgAccountCredential:output_type -> rpc.v1.ResetOrgAccountCredentialResponse
+	97,  // 138: rpc.v1.IAMService.ListOrgAccounts:output_type -> rpc.v1.ListOrgAccountsResponse
+	102, // 139: rpc.v1.IAMService.GetAccountDeletionPreview:output_type -> rpc.v1.GetAccountDeletionPreviewResponse
+	104, // 140: rpc.v1.IAMService.DeleteMyAccount:output_type -> rpc.v1.DeleteMyAccountResponse
+	106, // 141: rpc.v1.IAMService.AcceptTerms:output_type -> rpc.v1.AcceptTermsResponse
+	108, // 142: rpc.v1.IAMService.GetTermsStatus:output_type -> rpc.v1.GetTermsStatusResponse
+	99,  // [99:143] is the sub-list for method output_type
+	55,  // [55:99] is the sub-list for method input_type
+	55,  // [55:55] is the sub-list for extension type_name
+	55,  // [55:55] is the sub-list for extension extendee
+	0,   // [0:55] is the sub-list for field type_name
 }
 
 func init() { file_rpc_v1_iam_proto_init() }
@@ -6583,6 +7195,7 @@ func file_rpc_v1_iam_proto_init() {
 		return
 	}
 	file_rpc_v1_rbac_proto_init()
+	file_rpc_v1_compliance_proto_init()
 	file_rpc_v1_iam_proto_msgTypes[0].OneofWrappers = []any{}
 	file_rpc_v1_iam_proto_msgTypes[2].OneofWrappers = []any{}
 	file_rpc_v1_iam_proto_msgTypes[18].OneofWrappers = []any{}
@@ -6605,7 +7218,7 @@ func file_rpc_v1_iam_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_v1_iam_proto_rawDesc), len(file_rpc_v1_iam_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   96,
+			NumMessages:   106,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

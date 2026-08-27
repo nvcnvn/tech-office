@@ -1,0 +1,41 @@
+appId: com.devguards.TechOffice
+name: "Compliance — Settings opens privacy, terms and abuse contact"
+# FR-013. Both stores expect a signed-in person to be able to reach the privacy
+# policy and the terms from inside the app, and to have somewhere to report abuse
+# when in-app reporting is not available to them.
+#
+# The two documents open in the system browser rather than in a native copy, so the
+# flow asserts the rows are present and tappable rather than asserting on page
+# content that lives on the web.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible: "Legal"
+    timeout: 8000
+- scrollUntilVisible:
+    element:
+      id: "setting-privacy-policy"
+    direction: DOWN
+    timeout: 8000
+- assertVisible:
+    id: "setting-privacy-policy"
+- assertVisible:
+    id: "setting-terms"
+- assertVisible:
+    id: "setting-report-abuse"
+- takeScreenshot: "tmp/maestro-screenshots/compliance-01-legal-links"

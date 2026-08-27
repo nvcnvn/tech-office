@@ -265,7 +265,7 @@ func (s *IAMServiceConnect) DeactivateOrgAccount(
 	ctx context.Context,
 	req *connect.Request[v1.DeactivateOrgAccountRequest],
 ) (*connect.Response[v1.DeactivateOrgAccountResponse], error) {
-	_, orgID, err := extractAuthContext(ctx)
+	actorID, orgID, err := extractAuthContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +278,16 @@ func (s *IAMServiceConnect) DeactivateOrgAccount(
 	slog.InfoContext(ctx, "DeactivateOrgAccount called", "org_id", orgID, "identity_id", identityID)
 
 	err = txn.WithTxn(ctx, s.tenantPool, func(ctx context.Context, tx database.DBTX) error {
-		return s.logic.DeactivateOrgAccount(ctx, tx, orgID, identityID)
+		if dErr := s.logic.DeactivateOrgAccount(ctx, tx, orgID, identityID); dErr != nil {
+			return dErr
+		}
+		// Offboarding the ordinary way does what an outstanding removal request was
+		// asking for, so the request is resolved as a side effect rather than left
+		// sitting in the owner queue (Feature 036, spec edge case).
+		if s.removalRequestResolver == nil {
+			return nil
+		}
+		return s.removalRequestResolver.ResolveOutstandingRemovalRequests(ctx, tx, orgID, identityID, actorID)
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "DeactivateOrgAccount failed", "error", err)

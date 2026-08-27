@@ -109,7 +109,8 @@ export type NotificationPolicyKey =
 	| 'calendar_event_change'
 	| 'calendar_event_reminder'
 	| 'calendar_check_in_missed'
-	| 'calendar_event_digest';
+	| 'calendar_event_digest'
+	| 'account_removal_requested';
 
 
 /**
