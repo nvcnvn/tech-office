@@ -153,6 +153,51 @@ test.describe('Voice Communication', () => {
     });
   });
 
+  test.describe('when the invitee declines a direct call', () => {
+    test('the caller sees the decline in the timeline and no error banner', async ({ page }, testInfo) => {
+      const dm = await api.createOrGetDirectMessage(alice, bob.id);
+      const dmChannelId = dm.channel.id;
+
+      await loginAs(page, alice);
+      // Point the caller's media connect at a black-holed address so it is
+      // still in flight when the decline lands. That is the ordinary race in a
+      // real call: the callee's phone rings before WebRTC negotiation finishes.
+      await page.route('**/rpc.v1.VoiceService/StartVoiceCall', async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        if (body?.joinCredentials) {
+          body.joinCredentials.livekitUrl = 'ws://10.255.255.1:7880';
+        }
+        await route.fulfill({ response, json: body });
+      });
+      await page.goto(`/workspace/chat?channel=${dmChannelId}`);
+
+      await page.getByTestId('voice-start-call-button').click();
+      await expect(page.getByTestId('voice-call-bar')).toBeVisible({ timeout: 10_000 });
+
+      const active = await api.getActiveVoiceCall(alice, dmChannelId);
+      const invite = await api.inviteToVoiceCall(alice, active.call!.id, [bob.id]);
+      await api.respondToVoiceCallInvite(
+        bob,
+        invite.invitations[0].id,
+        'VOICE_INVITE_RESPONSE_DECLINE',
+      );
+
+      // Declining ends a direct call. The caller must be told it was declined —
+      // and must never be shown the LiveKit teardown ("Client initiated
+      // disconnect") as if it were a failure.
+      await expect(page.getByTestId('voice-call-record').first()).toContainText(
+        /declined/i,
+        { timeout: 15_000 },
+      );
+      await expect(page.getByTestId('voice-call-bar')).toBeHidden();
+      await expect(page.getByTestId('voice-call-error')).toBeHidden();
+      await stepScreenshot(page, testInfo, 'voice-call-declined');
+
+      expect((await api.getActiveVoiceCall(alice, dmChannelId)).hasActiveCall).toBeFalsy();
+    });
+  });
+
   test.describe('when an incoming call arrives while the employee is already connected', () => {
     test('the alert appears quickly and supports stay then switch decisions', async ({ page }, testInfo) => {
       const currentChannel = await api.createChannel(owner, {

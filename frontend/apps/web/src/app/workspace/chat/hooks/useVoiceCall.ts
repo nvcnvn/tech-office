@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ConnectionQuality,
+  type DisconnectReason,
   Room,
   RoomEvent,
   Track,
@@ -11,6 +12,7 @@ import {
 import {
   endVoiceCall,
   getActiveVoiceCall,
+  isExpectedVoiceDisconnect,
   joinVoiceCall,
   leaveVoiceCall,
   respondToVoiceCallInvite,
@@ -290,10 +292,12 @@ export function useVoiceCall(
           // Re-attempt audio unlock after reconnect in case context was lost.
           void room.startAudio();
         })
-        .on(RoomEvent.Disconnected, () => {
+        .on(RoomEvent.Disconnected, (reason?: DisconnectReason) => {
           if (roomRef.current === room) {
-            // Unexpected disconnect (e.g. network drop, other party hung up).
-            // Clean up local state and notify the backend that we left.
+            // A disconnect we did not route through disconnectMedia: either the
+            // call ended server-side (room deleted/closed) or the transport
+            // failed. Clean up and tell the backend we left either way, but only
+            // the failure is worth showing to the user.
             roomRef.current = null;
             detachRemoteAudio();
             setJoinCredentials(null);
@@ -303,7 +307,11 @@ export function useVoiceCall(
             const callId = callIdRef.current;
             if (joinedCallIdRef.current && callId) {
               setJoinedCallId(null);
-              setError(new Error("Disconnected from call"));
+              setError(
+                isExpectedVoiceDisconnect(reason)
+                  ? null
+                  : new Error("Disconnected from call"),
+              );
               void leaveVoiceCall(callId).catch(() => undefined);
             }
           }
@@ -363,9 +371,13 @@ export function useVoiceCall(
         setConnectionQuality("good");
         setConnectedParticipantCount(1 + room.remoteParticipants.size);
       } catch (nextError) {
-        if (isCurrentAttempt()) {
-          await disconnectMedia();
+        if (!isCurrentAttempt()) {
+          // Torn down on purpose while connecting — the call ended, or a newer
+          // attempt replaced this one. LiveKit rejects the pending connect with
+          // "Client initiated disconnect"; that is bookkeeping, not an error.
+          return;
         }
+        await disconnectMedia();
         throw nextError;
       }
     },
@@ -547,8 +559,18 @@ export function useVoiceCall(
         detail.notificationType === "voice_call_ended" ||
         detail.state === "VOICE_CALL_STATE_ENDED"
       ) {
+        if (
+          detail.callId &&
+          callIdRef.current &&
+          detail.callId !== callIdRef.current
+        ) {
+          // A late "ended" for a previous call in this channel must not wipe
+          // the call that replaced it.
+          return;
+        }
         setCall(null);
         setJoinedCallId(null);
+        setError(null);
         void disconnectMedia();
         invalidateChannelVoiceState();
         return;

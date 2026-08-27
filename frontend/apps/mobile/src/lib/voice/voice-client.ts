@@ -1,3 +1,5 @@
+import { isExpectedVoiceDisconnect } from "apis";
+
 export type VoiceClientConnectionState =
   | "idle"
   | "connecting"
@@ -72,6 +74,7 @@ export class VoiceClient {
       error: null,
     });
 
+    let room: any = null;
     try {
       const liveKit = (await import("@livekit/react-native")) as any;
       const liveKitClient = (await import("livekit-client")) as any;
@@ -85,7 +88,8 @@ export class VoiceClient {
         throw new Error("LiveKit Room is unavailable in this runtime.");
       }
 
-      const room = new Room({ adaptiveStream: true, dynacast: true });
+      room = new Room({ adaptiveStream: true, dynacast: true });
+      this.room = room;
       const roomEvent = liveKit.RoomEvent ?? liveKitClient.RoomEvent ?? {};
       room.on?.(roomEvent.Reconnecting ?? "reconnecting", () => {
         this.update({ connectionState: "reconnecting" });
@@ -96,12 +100,13 @@ export class VoiceClient {
           connectionQuality: "good",
         });
       });
-      room.on?.(roomEvent.Disconnected ?? "disconnected", () => {
+      room.on?.(roomEvent.Disconnected ?? "disconnected", (reason?: unknown) => {
         if (this.deliberateDisconnect) {
           // Handled by disconnect() itself; suppress duplicate update.
           return;
         }
-        // Unexpected disconnect: network drop, server closed the room, etc.
+        // A disconnect we did not ask for. The call ending server-side closes
+        // the room too, so only a genuine transport failure is an error.
         this.room = null;
         this.update({
           connectionState: "disconnected",
@@ -109,7 +114,9 @@ export class VoiceClient {
           activeCallId: null,
           activeChannelId: null,
           connectionQuality: "unknown",
-          error: "Disconnected from call",
+          error: isExpectedVoiceDisconnect(reason)
+            ? null
+            : "Disconnected from call",
         });
       });
       room.on?.(
@@ -125,10 +132,15 @@ export class VoiceClient {
         },
       );
 
-      this.room = room;
       await room.connect(credentials.livekitUrl, credentials.livekitToken, {
         autoSubscribe: true,
       });
+      if (this.room !== room) {
+        // Superseded while connecting; drop this room instead of publishing it
+        // as the active call.
+        await room.disconnect?.();
+        return;
+      }
       await room.localParticipant?.setMicrophoneEnabled?.(
         !this.snapshot.isMuted,
       );
@@ -142,6 +154,12 @@ export class VoiceClient {
         error: null,
       });
     } catch (error) {
+      if (room && this.room !== room) {
+        // Torn down on purpose while connecting — the call ended, or a newer
+        // connect replaced this one. LiveKit rejects the pending connect with
+        // "Client initiated disconnect"; that is bookkeeping, not an error.
+        return;
+      }
       await this.disconnect();
       this.update({
         connectionState: "disconnected",

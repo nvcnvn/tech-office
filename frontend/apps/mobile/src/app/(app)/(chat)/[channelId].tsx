@@ -720,13 +720,14 @@ export default function ChannelScreen() {
 
   useEffect(() => voiceClient.subscribe(setVoiceSnapshot), []);
 
-  // React to unexpected disconnects from the VoiceClient (e.g. network drop,
-  // server closed the room). When this happens, clear the joined state and
-  // call the leave API so the backend doesn't keep a stale participant.
+  // React to unexpected disconnects from the VoiceClient (e.g. network drop).
+  // VoiceClient only records an error for disconnects that are genuine
+  // failures, so an ordinary hang-up never lands here. Clear the joined state
+  // and call the leave API so the backend doesn't keep a stale participant.
   useEffect(() => {
     if (
       voiceSnapshot.connectionState === "disconnected" &&
-      voiceSnapshot.error === "Disconnected from call" &&
+      voiceSnapshot.error &&
       joinedVoiceCallId
     ) {
       const callId = joinedVoiceCallId;
@@ -1434,9 +1435,14 @@ export default function ChannelScreen() {
               if (!event.callId || activeVoiceSnapshot.activeCallId === event.callId) {
                 void voiceClient.disconnect();
               }
-              setActiveVoiceCall(null);
+              // A late "ended" for a previous call must not wipe the call that
+              // replaced it.
+              setActiveVoiceCall((current) =>
+                event.callId && current && current.id !== event.callId ? current : null,
+              );
               setJoinedVoiceCallId((current) => current === event.callId ? null : current);
               setIncomingVoiceCall((current) => current?.callId === event.callId ? null : current);
+              setVoiceError(null);
               setDismissedCallId((current) => current === event.callId ? null : current);
               queryClient.invalidateQueries({
                 queryKey: ["messages", channelId],

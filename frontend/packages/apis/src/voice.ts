@@ -38,6 +38,26 @@ export type VoiceArtifactStatus = 'pending' | 'processing' | 'ready' | 'unavaila
 export type VoiceMessageStatus = 'requested' | 'uploading' | 'posted' | 'failed' | 'cancelled';
 export type VoiceInviteDecision = 'accept' | 'decline';
 
+// LiveKit DisconnectReason values (see @livekit/protocol) that mean the room
+// closed the way it was supposed to rather than failing: we hung up, the
+// backend deleted the room when the call ended, the server removed us, or the
+// last participant left. livekit-client is not a dependency of this package,
+// so the numeric values are inlined.
+const expectedLiveKitDisconnectReasons = new Set<number>([
+	1, // CLIENT_INITIATED
+	4, // PARTICIPANT_REMOVED
+	5, // ROOM_DELETED
+	10, // ROOM_CLOSED
+]);
+
+/**
+ * True when a LiveKit disconnect is an ordinary end of call. Callers must not
+ * surface these as errors — hanging up and being declined both land here.
+ */
+export function isExpectedVoiceDisconnect(reason: unknown): boolean {
+	return typeof reason === 'number' && expectedLiveKitDisconnectReasons.has(reason);
+}
+
 export function voiceCallErrorMessage(error: unknown, fallback: string): string {
         const message = error instanceof Error ? error.message : '';
         const normalized = message.toLowerCase();
