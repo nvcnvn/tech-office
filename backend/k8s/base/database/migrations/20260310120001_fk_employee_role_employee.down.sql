@@ -1,2 +1,0 @@
--- Rollback migration 2: No-op (constraint FK is needed for referential integrity)
--- This migration added foreign key constraint that cannot be safely rolled back without data cleanup

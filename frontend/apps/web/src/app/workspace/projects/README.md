@@ -297,9 +297,9 @@ cd backend
 ./scripts/migrate.sh
 ```
 
-Migration files location: `backend/k8s/base/database/migrations/`
+Migration files location: `backend/database/migrations/` (forward-only, `.up.sql` only)
 
-**Critical**: Always update `backend/database/scripts/schema.sql` BEFORE creating migration files.
+**Critical**: The migration is the source of truth. `backend/database/scripts/schema.sql` is generated — write the migration first, then run `backend/scripts/regen-schema.sh` and `sqlc generate`. Never hand-edit schema.sql.
 
 ### Docker Compose (Local Development)
 

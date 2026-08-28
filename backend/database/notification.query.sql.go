@@ -797,7 +797,7 @@ func (q *Queries) GetEmployeeVisiblePresence(ctx context.Context, db DBTX, arg *
 }
 
 const getFailedDeliveries = `-- name: GetFailedDeliveries :many
-SELECT nr.id, nr.notification_id, nr.employee_id, nr.organization_id, nr.read_status, nr.read_at, nr.delivery_status, nr.delivered_at, nr.delivery_attempts, nr.last_delivery_error, nr.recipient_type, nr.target_department_ids, nr.acknowledgement_status, nr.acknowledged_at, nr.acknowledgement_action, nr.fallback_status, nr.fallback_reason, nr.fallback_updated_at, nr.fallback_due_at, nr.updated_at, n.priority
+SELECT nr.id, nr.notification_id, nr.employee_id, nr.organization_id, nr.read_status, nr.read_at, nr.delivery_status, nr.delivered_at, nr.delivery_attempts, nr.last_delivery_error, nr.recipient_type, nr.target_department_ids, nr.acknowledgement_status, nr.acknowledged_at, nr.acknowledgement_action, nr.fallback_status, nr.fallback_reason, nr.fallback_updated_at, nr.updated_at, nr.fallback_due_at, n.priority
 FROM notification.notification_recipient nr
 JOIN notification.notification n ON (nr.organization_id, nr.notification_id) = (n.organization_id, n.id)
 WHERE nr.delivery_status = 'failed'
@@ -826,8 +826,8 @@ type GetFailedDeliveriesRow struct {
 	FallbackStatus        string             `json:"fallback_status"`
 	FallbackReason        pgtype.Text        `json:"fallback_reason"`
 	FallbackUpdatedAt     pgtype.Timestamptz `json:"fallback_updated_at"`
-	FallbackDueAt         pgtype.Timestamptz `json:"fallback_due_at"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	FallbackDueAt         pgtype.Timestamptz `json:"fallback_due_at"`
 	Priority              int16              `json:"priority"`
 }
 
@@ -859,8 +859,8 @@ func (q *Queries) GetFailedDeliveries(ctx context.Context, db DBTX, limit int32)
 			&i.FallbackStatus,
 			&i.FallbackReason,
 			&i.FallbackUpdatedAt,
-			&i.FallbackDueAt,
 			&i.UpdatedAt,
+			&i.FallbackDueAt,
 			&i.Priority,
 		); err != nil {
 			return nil, err

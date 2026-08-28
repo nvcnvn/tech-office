@@ -16,7 +16,7 @@ const appendTaskFileID = `-- name: AppendTaskFileID :one
 UPDATE collaboration.task
 SET file_ids = array_append(file_ids, $1::uuid), updated_at = $2
 WHERE organization_id = $3 AND id = $4
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
 `
 
 type AppendTaskFileIDParams struct {
@@ -55,13 +55,13 @@ func (q *Queries) AppendTaskFileID(ctx context.Context, db DBTX, arg *AppendTask
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -111,7 +111,7 @@ const archiveProject = `-- name: ArchiveProject :one
 UPDATE collaboration.project
 SET is_archived = $3, updated_at = $4
 WHERE organization_id = $1 AND id = $2
-RETURNING id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, collaboration_mode, updated_at
+RETURNING id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, updated_at, collaboration_mode
 `
 
 type ArchiveProjectParams struct {
@@ -141,8 +141,8 @@ func (q *Queries) ArchiveProject(ctx context.Context, db DBTX, arg *ArchiveProje
 		&i.OwnerEmployeeID,
 		&i.MemberCount,
 		&i.TaskCount,
-		&i.CollaborationMode,
 		&i.UpdatedAt,
+		&i.CollaborationMode,
 	)
 	return &i, err
 }
@@ -151,7 +151,7 @@ const archiveRitualDefinition = `-- name: ArchiveRitualDefinition :one
 UPDATE collaboration.ritual_definition
 SET is_archived = $1, updated_at = $2
 WHERE organization_id = $3 AND id = $4
-RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, schedule_version, updated_at
+RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
 `
 
 type ArchiveRitualDefinitionParams struct {
@@ -182,8 +182,8 @@ func (q *Queries) ArchiveRitualDefinition(ctx context.Context, db DBTX, arg *Arc
 		&i.CreatedByEmployeeID,
 		&i.LastGeneratedDate,
 		&i.GenerationWindowDays,
-		&i.ScheduleVersion,
 		&i.UpdatedAt,
+		&i.ScheduleVersion,
 	)
 	return &i, err
 }
@@ -472,7 +472,7 @@ INSERT INTO collaboration.project (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, COALESCE($8, 'standard')
 )
-RETURNING id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, collaboration_mode, updated_at
+RETURNING id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, updated_at, collaboration_mode
 `
 
 type CreateProjectParams struct {
@@ -516,8 +516,8 @@ func (q *Queries) CreateProject(ctx context.Context, db DBTX, arg *CreateProject
 		&i.OwnerEmployeeID,
 		&i.MemberCount,
 		&i.TaskCount,
-		&i.CollaborationMode,
 		&i.UpdatedAt,
+		&i.CollaborationMode,
 	)
 	return &i, err
 }
@@ -575,7 +575,7 @@ INSERT INTO collaboration.project_state (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, organization_id, project_id, name, color, category, position, is_initial, is_closed, state_type, updated_at
+RETURNING id, organization_id, project_id, name, color, category, position, is_initial, is_closed, updated_at, state_type
 `
 
 type CreateProjectStateParams struct {
@@ -618,8 +618,8 @@ func (q *Queries) CreateProjectState(ctx context.Context, db DBTX, arg *CreatePr
 		&i.Position,
 		&i.IsInitial,
 		&i.IsClosed,
-		&i.StateType,
 		&i.UpdatedAt,
+		&i.StateType,
 	)
 	return &i, err
 }
@@ -634,7 +634,7 @@ INSERT INTO collaboration.ritual_definition (
     $1, $2, $3, $4, $5,
     $6, $7, $8,
     $9, $10, $11
-) RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, schedule_version, updated_at
+) RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
 `
 
 type CreateRitualDefinitionParams struct {
@@ -682,8 +682,8 @@ func (q *Queries) CreateRitualDefinition(ctx context.Context, db DBTX, arg *Crea
 		&i.CreatedByEmployeeID,
 		&i.LastGeneratedDate,
 		&i.GenerationWindowDays,
-		&i.ScheduleVersion,
 		&i.UpdatedAt,
+		&i.ScheduleVersion,
 	)
 	return &i, err
 }
@@ -803,7 +803,7 @@ INSERT INTO collaboration.task (
     $19,
     $20
 )
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
 `
 
 type CreateTaskParams struct {
@@ -877,13 +877,13 @@ func (q *Queries) CreateTask(ctx context.Context, db DBTX, arg *CreateTaskParams
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -1275,7 +1275,7 @@ SET channel_id = $1
 WHERE organization_id = $2
   AND id = $3
   AND channel_id IS NULL
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
 `
 
 type EnsureTaskChannelParams struct {
@@ -1310,13 +1310,13 @@ func (q *Queries) EnsureTaskChannel(ctx context.Context, db DBTX, arg *EnsureTas
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -1327,7 +1327,7 @@ SET description_document_id = $1
 WHERE organization_id = $2
   AND id = $3
   AND description_document_id IS NULL
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
 `
 
 type EnsureTaskDocumentParams struct {
@@ -1362,13 +1362,13 @@ func (q *Queries) EnsureTaskDocument(ctx context.Context, db DBTX, arg *EnsureTa
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -1615,7 +1615,7 @@ func (q *Queries) GetEvidenceSubmission(ctx context.Context, db DBTX, arg *GetEv
 }
 
 const getInitialState = `-- name: GetInitialState :one
-SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, state_type, updated_at FROM collaboration.project_state
+SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, updated_at, state_type FROM collaboration.project_state
 WHERE organization_id = $1 AND project_id = $2 AND is_initial = TRUE
 LIMIT 1
 `
@@ -1638,8 +1638,8 @@ func (q *Queries) GetInitialState(ctx context.Context, db DBTX, arg *GetInitialS
 		&i.Position,
 		&i.IsInitial,
 		&i.IsClosed,
-		&i.StateType,
 		&i.UpdatedAt,
+		&i.StateType,
 	)
 	return &i, err
 }
@@ -1757,7 +1757,7 @@ func (q *Queries) GetNextViewPosition(ctx context.Context, db DBTX, arg *GetNext
 }
 
 const getProject = `-- name: GetProject :one
-SELECT id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, collaboration_mode, updated_at FROM collaboration.project
+SELECT id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, updated_at, collaboration_mode FROM collaboration.project
 WHERE organization_id = $1 AND id = $2
 `
 
@@ -1781,8 +1781,8 @@ func (q *Queries) GetProject(ctx context.Context, db DBTX, arg *GetProjectParams
 		&i.OwnerEmployeeID,
 		&i.MemberCount,
 		&i.TaskCount,
-		&i.CollaborationMode,
 		&i.UpdatedAt,
+		&i.CollaborationMode,
 	)
 	return &i, err
 }
@@ -1884,7 +1884,7 @@ func (q *Queries) GetProjectRitualSummary(ctx context.Context, db DBTX, arg *Get
 }
 
 const getProjectState = `-- name: GetProjectState :one
-SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, state_type, updated_at FROM collaboration.project_state
+SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, updated_at, state_type FROM collaboration.project_state
 WHERE organization_id = $1 AND id = $2
 `
 
@@ -1906,8 +1906,8 @@ func (q *Queries) GetProjectState(ctx context.Context, db DBTX, arg *GetProjectS
 		&i.Position,
 		&i.IsInitial,
 		&i.IsClosed,
-		&i.StateType,
 		&i.UpdatedAt,
+		&i.StateType,
 	)
 	return &i, err
 }
@@ -1948,7 +1948,7 @@ func (q *Queries) GetProjectTaskSummary(ctx context.Context, db DBTX, arg *GetPr
 }
 
 const getRitualDefinition = `-- name: GetRitualDefinition :one
-SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, schedule_version, updated_at FROM collaboration.ritual_definition
+SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version FROM collaboration.ritual_definition
 WHERE organization_id = $1 AND id = $2
 `
 
@@ -1973,8 +1973,8 @@ func (q *Queries) GetRitualDefinition(ctx context.Context, db DBTX, arg *GetRitu
 		&i.CreatedByEmployeeID,
 		&i.LastGeneratedDate,
 		&i.GenerationWindowDays,
-		&i.ScheduleVersion,
 		&i.UpdatedAt,
+		&i.ScheduleVersion,
 	)
 	return &i, err
 }
@@ -2134,7 +2134,7 @@ func (q *Queries) GetSavedView(ctx context.Context, db DBTX, arg *GetSavedViewPa
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at FROM collaboration.task
+SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual FROM collaboration.task
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
 `
 
@@ -2167,19 +2167,19 @@ func (q *Queries) GetTask(ctx context.Context, db DBTX, arg *GetTaskParams) (*Co
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
 
 const getTaskByIdentifier = `-- name: GetTaskByIdentifier :one
-SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at FROM collaboration.task
+SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual FROM collaboration.task
 WHERE organization_id = $1 AND project_id = $2 AND identifier = $3 AND is_deleted = FALSE
 `
 
@@ -2213,13 +2213,13 @@ func (q *Queries) GetTaskByIdentifier(ctx context.Context, db DBTX, arg *GetTask
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -2632,7 +2632,7 @@ func (q *Queries) ListActiveDepartmentMembers(ctx context.Context, db DBTX, arg 
 }
 
 const listActiveRitualDefinitionsForGeneration = `-- name: ListActiveRitualDefinitionsForGeneration :many
-SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, schedule_version, updated_at FROM collaboration.ritual_definition
+SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version FROM collaboration.ritual_definition
 WHERE organization_id = $1
   AND is_archived = FALSE
   AND (last_generated_date IS NULL OR last_generated_date < $2::date + generation_window_days)
@@ -2666,8 +2666,8 @@ func (q *Queries) ListActiveRitualDefinitionsForGeneration(ctx context.Context, 
 			&i.CreatedByEmployeeID,
 			&i.LastGeneratedDate,
 			&i.GenerationWindowDays,
-			&i.ScheduleVersion,
 			&i.UpdatedAt,
+			&i.ScheduleVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -3120,7 +3120,7 @@ func (q *Queries) ListProjectMembers(ctx context.Context, db DBTX, arg *ListProj
 }
 
 const listProjectStates = `-- name: ListProjectStates :many
-SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, state_type, updated_at FROM collaboration.project_state
+SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, updated_at, state_type FROM collaboration.project_state
 WHERE organization_id = $1 AND project_id = $2
 ORDER BY position ASC
 `
@@ -3149,8 +3149,8 @@ func (q *Queries) ListProjectStates(ctx context.Context, db DBTX, arg *ListProje
 			&i.Position,
 			&i.IsInitial,
 			&i.IsClosed,
-			&i.StateType,
 			&i.UpdatedAt,
+			&i.StateType,
 		); err != nil {
 			return nil, err
 		}
@@ -3163,7 +3163,7 @@ func (q *Queries) ListProjectStates(ctx context.Context, db DBTX, arg *ListProje
 }
 
 const listProjects = `-- name: ListProjects :many
-SELECT p.id, p.organization_id, p.name, p.key, p.description, p.next_task_number, p.visibility, p.is_archived, p.owner_employee_id, p.member_count, p.task_count, p.collaboration_mode, p.updated_at FROM collaboration.project p
+SELECT p.id, p.organization_id, p.name, p.key, p.description, p.next_task_number, p.visibility, p.is_archived, p.owner_employee_id, p.member_count, p.task_count, p.updated_at, p.collaboration_mode FROM collaboration.project p
 WHERE p.organization_id = $1
   AND ($3::boolean IS TRUE OR p.is_archived = FALSE)
   AND ($4::uuid IS NULL OR p.id < $4)
@@ -3204,8 +3204,8 @@ func (q *Queries) ListProjects(ctx context.Context, db DBTX, arg *ListProjectsPa
 			&i.OwnerEmployeeID,
 			&i.MemberCount,
 			&i.TaskCount,
-			&i.CollaborationMode,
 			&i.UpdatedAt,
+			&i.CollaborationMode,
 		); err != nil {
 			return nil, err
 		}
@@ -3218,7 +3218,7 @@ func (q *Queries) ListProjects(ctx context.Context, db DBTX, arg *ListProjectsPa
 }
 
 const listProjectsForMember = `-- name: ListProjectsForMember :many
-SELECT p.id, p.organization_id, p.name, p.key, p.description, p.next_task_number, p.visibility, p.is_archived, p.owner_employee_id, p.member_count, p.task_count, p.collaboration_mode, p.updated_at FROM collaboration.project p
+SELECT p.id, p.organization_id, p.name, p.key, p.description, p.next_task_number, p.visibility, p.is_archived, p.owner_employee_id, p.member_count, p.task_count, p.updated_at, p.collaboration_mode FROM collaboration.project p
 JOIN collaboration.project_membership pm ON pm.organization_id = p.organization_id AND pm.project_id = p.id
 WHERE p.organization_id = $1
   AND pm.employee_id = $2
@@ -3263,8 +3263,8 @@ func (q *Queries) ListProjectsForMember(ctx context.Context, db DBTX, arg *ListP
 			&i.OwnerEmployeeID,
 			&i.MemberCount,
 			&i.TaskCount,
-			&i.CollaborationMode,
 			&i.UpdatedAt,
+			&i.CollaborationMode,
 		); err != nil {
 			return nil, err
 		}
@@ -3373,7 +3373,7 @@ func (q *Queries) ListRitualDefinitionDepartmentPools(ctx context.Context, db DB
 }
 
 const listRitualDefinitions = `-- name: ListRitualDefinitions :many
-SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, schedule_version, updated_at FROM collaboration.ritual_definition
+SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version FROM collaboration.ritual_definition
 WHERE organization_id = $1
   AND project_id = $2
   AND ($3::boolean = TRUE OR is_archived = FALSE)
@@ -3408,8 +3408,8 @@ func (q *Queries) ListRitualDefinitions(ctx context.Context, db DBTX, arg *ListR
 			&i.CreatedByEmployeeID,
 			&i.LastGeneratedDate,
 			&i.GenerationWindowDays,
-			&i.ScheduleVersion,
 			&i.UpdatedAt,
+			&i.ScheduleVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -3545,7 +3545,7 @@ func (q *Queries) ListTaskLevels(ctx context.Context, db DBTX, arg *ListTaskLeve
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual, t.updated_at FROM collaboration.task t
+SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.updated_at, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual FROM collaboration.task t
 WHERE t.organization_id = $1 
   AND t.project_id = $2
   AND t.is_deleted = FALSE
@@ -3614,13 +3614,13 @@ func (q *Queries) ListTasks(ctx context.Context, db DBTX, arg *ListTasksParams) 
 			&i.ChildCount,
 			&i.CommentCount,
 			&i.IsDeleted,
+			&i.UpdatedAt,
 			&i.TaskKind,
 			&i.RitualDefinitionID,
 			&i.ScheduledDate,
 			&i.CompletionDeadline,
 			&i.SkipReason,
 			&i.DetachedFromRitual,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -3633,7 +3633,7 @@ func (q *Queries) ListTasks(ctx context.Context, db DBTX, arg *ListTasksParams) 
 }
 
 const listTasksByAssignee = `-- name: ListTasksByAssignee :many
-SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual, t.updated_at FROM collaboration.task t
+SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.updated_at, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual FROM collaboration.task t
 JOIN collaboration.task_assignee ta ON ta.organization_id = t.organization_id AND ta.task_id = t.id
 WHERE t.organization_id = $1 
   AND t.project_id = $2
@@ -3688,13 +3688,13 @@ func (q *Queries) ListTasksByAssignee(ctx context.Context, db DBTX, arg *ListTas
 			&i.ChildCount,
 			&i.CommentCount,
 			&i.IsDeleted,
+			&i.UpdatedAt,
 			&i.TaskKind,
 			&i.RitualDefinitionID,
 			&i.ScheduledDate,
 			&i.CompletionDeadline,
 			&i.SkipReason,
 			&i.DetachedFromRitual,
-			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -4089,7 +4089,7 @@ SET
     visibility = COALESCE($6, visibility),
     updated_at = $3
 WHERE organization_id = $1 AND id = $2
-RETURNING id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, collaboration_mode, updated_at
+RETURNING id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, updated_at, collaboration_mode
 `
 
 type UpdateProjectParams struct {
@@ -4123,8 +4123,8 @@ func (q *Queries) UpdateProject(ctx context.Context, db DBTX, arg *UpdateProject
 		&i.OwnerEmployeeID,
 		&i.MemberCount,
 		&i.TaskCount,
-		&i.CollaborationMode,
 		&i.UpdatedAt,
+		&i.CollaborationMode,
 	)
 	return &i, err
 }
@@ -4216,7 +4216,7 @@ SET
     state_type = COALESCE($9, state_type),
     updated_at = $3
 WHERE organization_id = $1 AND id = $2
-RETURNING id, organization_id, project_id, name, color, category, position, is_initial, is_closed, state_type, updated_at
+RETURNING id, organization_id, project_id, name, color, category, position, is_initial, is_closed, updated_at, state_type
 `
 
 type UpdateProjectStateParams struct {
@@ -4254,8 +4254,8 @@ func (q *Queries) UpdateProjectState(ctx context.Context, db DBTX, arg *UpdatePr
 		&i.Position,
 		&i.IsInitial,
 		&i.IsClosed,
-		&i.StateType,
 		&i.UpdatedAt,
+		&i.StateType,
 	)
 	return &i, err
 }
@@ -4293,7 +4293,7 @@ SET name = COALESCE($1, name),
     generation_window_days = COALESCE($6, generation_window_days),
     updated_at = $7
 WHERE organization_id = $8 AND id = $9
-RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, schedule_version, updated_at
+RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
 `
 
 type UpdateRitualDefinitionParams struct {
@@ -4334,8 +4334,8 @@ func (q *Queries) UpdateRitualDefinition(ctx context.Context, db DBTX, arg *Upda
 		&i.CreatedByEmployeeID,
 		&i.LastGeneratedDate,
 		&i.GenerationWindowDays,
-		&i.ScheduleVersion,
 		&i.UpdatedAt,
+		&i.ScheduleVersion,
 	)
 	return &i, err
 }
@@ -4373,7 +4373,7 @@ SET
   updated_at = NOW()
 WHERE organization_id = $3
   AND id = $4
-RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, schedule_version, updated_at
+RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
 `
 
 type UpdateRitualDefinitionScheduleParams struct {
@@ -4409,8 +4409,8 @@ func (q *Queries) UpdateRitualDefinitionSchedule(ctx context.Context, db DBTX, a
 		&i.CreatedByEmployeeID,
 		&i.LastGeneratedDate,
 		&i.GenerationWindowDays,
-		&i.ScheduleVersion,
 		&i.UpdatedAt,
+		&i.ScheduleVersion,
 	)
 	return &i, err
 }
@@ -4476,7 +4476,7 @@ SET
     skip_reason = COALESCE($11, skip_reason),
     updated_at = $3
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
 `
 
 type UpdateTaskParams struct {
@@ -4529,13 +4529,13 @@ func (q *Queries) UpdateTask(ctx context.Context, db DBTX, arg *UpdateTaskParams
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -4587,7 +4587,7 @@ const updateTaskState = `-- name: UpdateTaskState :one
 UPDATE collaboration.task
 SET state_id = $3, updated_at = $4
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, updated_at
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
 `
 
 type UpdateTaskStateParams struct {
@@ -4626,13 +4626,13 @@ func (q *Queries) UpdateTaskState(ctx context.Context, db DBTX, arg *UpdateTaskS
 		&i.ChildCount,
 		&i.CommentCount,
 		&i.IsDeleted,
+		&i.UpdatedAt,
 		&i.TaskKind,
 		&i.RitualDefinitionID,
 		&i.ScheduledDate,
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }

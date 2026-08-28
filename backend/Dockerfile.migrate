@@ -7,9 +7,9 @@ FROM alpine:3.21
 RUN apk add --no-cache bash postgresql17-client
 
 COPY scripts/migrate.sh /migrate/migrate.sh
-COPY k8s/base/database/migrations /migrate/migrations
+COPY database/migrations /migrate/migrations
 
-# The script uses SCRIPT_DIR to find MIGRATIONS_DIR as ${SCRIPT_DIR}/../k8s/base/database/migrations
+# The script uses SCRIPT_DIR to find MIGRATIONS_DIR as ${SCRIPT_DIR}/../database/migrations
 # Since we're placing files differently, we set the env vars to point to our paths
 ENV MIGRATIONS_OVERRIDE_DIR=/migrate/migrations
 

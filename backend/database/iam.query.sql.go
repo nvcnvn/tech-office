@@ -459,7 +459,7 @@ INSERT INTO iam.user (
     id, email, display_name, profile_picture_url, status
 ) VALUES (
     $1, $2, $3, $4, $5
-) RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at
+) RETURNING id, email, display_name, profile_picture_url, status, last_login_at, created_at, updated_at, is_org_managed, terms_version_accepted, terms_accepted_at
 `
 
 type CreateIAMUserParams struct {
@@ -485,12 +485,12 @@ func (q *Queries) CreateIAMUser(ctx context.Context, db DBTX, arg *CreateIAMUser
 		&i.DisplayName,
 		&i.ProfilePictureUrl,
 		&i.Status,
-		&i.IsOrgManaged,
 		&i.LastLoginAt,
-		&i.TermsVersionAccepted,
-		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsOrgManaged,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 	)
 	return &i, err
 }
@@ -499,7 +499,7 @@ const createIdentityWithLoginIdentifier = `-- name: CreateIdentityWithLoginIdent
 
 INSERT INTO iam.identity (id, organization_id, login_identifier, identity_type, updated_at)
 VALUES ($1::uuid, $2::uuid, $3::text, 'human', now())
-RETURNING id, organization_id, email, login_identifier, identity_type, updated_at
+RETURNING id, organization_id, email, identity_type, updated_at, login_identifier
 `
 
 type CreateIdentityWithLoginIdentifierParams struct {
@@ -519,9 +519,9 @@ func (q *Queries) CreateIdentityWithLoginIdentifier(ctx context.Context, db DBTX
 		&i.ID,
 		&i.OrganizationID,
 		&i.Email,
-		&i.LoginIdentifier,
 		&i.IdentityType,
 		&i.UpdatedAt,
+		&i.LoginIdentifier,
 	)
 	return &i, err
 }
@@ -573,7 +573,7 @@ func (q *Queries) CreateInvitation(ctx context.Context, db DBTX, arg *CreateInvi
 const createOrgManagedUser = `-- name: CreateOrgManagedUser :one
 INSERT INTO iam.user (id, email, display_name, status, is_org_managed, created_at, updated_at)
 VALUES ($1::uuid, NULL, $2::text, 'active', true, now(), now())
-RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at
+RETURNING id, email, display_name, profile_picture_url, status, last_login_at, created_at, updated_at, is_org_managed, terms_version_accepted, terms_accepted_at
 `
 
 type CreateOrgManagedUserParams struct {
@@ -591,12 +591,12 @@ func (q *Queries) CreateOrgManagedUser(ctx context.Context, db DBTX, arg *Create
 		&i.DisplayName,
 		&i.ProfilePictureUrl,
 		&i.Status,
-		&i.IsOrgManaged,
 		&i.LastLoginAt,
-		&i.TermsVersionAccepted,
-		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsOrgManaged,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 	)
 	return &i, err
 }
@@ -1256,6 +1256,15 @@ type GetIdentityByOrgAndLoginIdentifierParams struct {
 	Identifier     string      `json:"identifier"`
 }
 
+type GetIdentityByOrgAndLoginIdentifierRow struct {
+	ID              dbuuid.UUID        `json:"id"`
+	OrganizationID  dbuuid.UUID        `json:"organization_id"`
+	Email           pgtype.Text        `json:"email"`
+	LoginIdentifier pgtype.Text        `json:"login_identifier"`
+	IdentityType    string             `json:"identity_type"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
 // =============================================================================
 // Org-Managed Accounts: Identity Lookup for PIN Login
 // =============================================================================
@@ -1267,9 +1276,9 @@ type GetIdentityByOrgAndLoginIdentifierParams struct {
 // CreateOrgAccount rejects '@' in login_identifier, which keeps the namespaces disjoint.
 // NULLS LAST matters: an owner's login_identifier is NULL, and Postgres orders NULLs
 // first under DESC, which would rank a non-matching owner above an exact worker match.
-func (q *Queries) GetIdentityByOrgAndLoginIdentifier(ctx context.Context, db DBTX, arg *GetIdentityByOrgAndLoginIdentifierParams) (*IamIdentity, error) {
+func (q *Queries) GetIdentityByOrgAndLoginIdentifier(ctx context.Context, db DBTX, arg *GetIdentityByOrgAndLoginIdentifierParams) (*GetIdentityByOrgAndLoginIdentifierRow, error) {
 	row := db.QueryRow(ctx, getIdentityByOrgAndLoginIdentifier, arg.OrganizationID, arg.Identifier)
-	var i IamIdentity
+	var i GetIdentityByOrgAndLoginIdentifierRow
 	err := row.Scan(
 		&i.ID,
 		&i.OrganizationID,
@@ -1746,7 +1755,7 @@ func (q *Queries) GetTermsAcceptance(ctx context.Context, db DBTX, id dbuuid.UUI
 }
 
 const getUserByEmail = `-- name: GetUserByEmail :one
-SELECT id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at FROM iam.user WHERE email = $1
+SELECT id, email, display_name, profile_picture_url, status, last_login_at, created_at, updated_at, is_org_managed, terms_version_accepted, terms_accepted_at FROM iam.user WHERE email = $1
 `
 
 func (q *Queries) GetUserByEmail(ctx context.Context, db DBTX, email pgtype.Text) (*IamUser, error) {
@@ -1758,12 +1767,12 @@ func (q *Queries) GetUserByEmail(ctx context.Context, db DBTX, email pgtype.Text
 		&i.DisplayName,
 		&i.ProfilePictureUrl,
 		&i.Status,
-		&i.IsOrgManaged,
 		&i.LastLoginAt,
-		&i.TermsVersionAccepted,
-		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsOrgManaged,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 	)
 	return &i, err
 }
@@ -1771,7 +1780,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, db DBTX, email pgtype.Text
 const getUserByID = `-- name: GetUserByID :one
 
 
-SELECT id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at FROM iam.user WHERE id = $1
+SELECT id, email, display_name, profile_picture_url, status, last_login_at, created_at, updated_at, is_org_managed, terms_version_accepted, terms_accepted_at FROM iam.user WHERE id = $1
 `
 
 // ===============================================
@@ -1788,12 +1797,12 @@ func (q *Queries) GetUserByID(ctx context.Context, db DBTX, id dbuuid.UUID) (*Ia
 		&i.DisplayName,
 		&i.ProfilePictureUrl,
 		&i.Status,
-		&i.IsOrgManaged,
 		&i.LastLoginAt,
-		&i.TermsVersionAccepted,
-		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsOrgManaged,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 	)
 	return &i, err
 }
@@ -2714,7 +2723,7 @@ SET display_name = $2,
     profile_picture_url = $3,
     updated_at = now()
 WHERE id = $1
-RETURNING id, email, display_name, profile_picture_url, status, is_org_managed, last_login_at, terms_version_accepted, terms_accepted_at, created_at, updated_at
+RETURNING id, email, display_name, profile_picture_url, status, last_login_at, created_at, updated_at, is_org_managed, terms_version_accepted, terms_accepted_at
 `
 
 type UpdateUserProfileParams struct {
@@ -2732,12 +2741,12 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, db DBTX, arg *UpdateUse
 		&i.DisplayName,
 		&i.ProfilePictureUrl,
 		&i.Status,
-		&i.IsOrgManaged,
 		&i.LastLoginAt,
-		&i.TermsVersionAccepted,
-		&i.TermsAcceptedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.IsOrgManaged,
+		&i.TermsVersionAccepted,
+		&i.TermsAcceptedAt,
 	)
 	return &i, err
 }

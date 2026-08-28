@@ -7,7 +7,7 @@ plugins:
 sql:
   - engine: "postgresql"
     schema:
-      - ./database/scripts/schema.sql
+      - ./database/migrations
     queries:
       - ./database/scripts/public.query.sql
       - ./database/scripts/iam.query.sql

@@ -1,1 +1,0 @@
-DROP TABLE IF EXISTS collaboration.ritual_definition_department_pool;

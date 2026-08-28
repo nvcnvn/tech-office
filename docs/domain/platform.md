@@ -147,11 +147,16 @@ Operational endpoints outside the RPC surface: `/healthz` (k8s probes),
 
 ## Schema and migrations
 
-- `backend/database/scripts/schema.sql` (~4.4k lines) is the canonical schema, written to
-  apply cleanly top-to-bottom. Consult it first when debugging.
-- `backend/k8s/base/database/migrations/` holds the ordered migrations that are actually
-  deployed.
-- Go types come from sqlc (`backend/sqlc.yaml` → `backend/database/*.query.sql.go`).
+- `backend/database/migrations/` holds the ordered, forward-only migrations. They are the
+  single source of truth for the schema: they build every database, and sqlc reads them.
+  The runner (`backend/scripts/migrate.sh`) does not support `down`, so migrations are
+  `.up.sql` only.
+- `backend/database/scripts/schema.sql` is a **generated** read-only snapshot — the whole
+  schema as one file, for reading. Consult it first when debugging; never hand-edit it.
+  Regenerate with `backend/scripts/regen-schema.sh`, which applies the migrations to a
+  throwaway database and dumps the result, so it cannot disagree with them.
+- Go types come from sqlc (`backend/sqlc.yaml` → `backend/database/*.query.sql.go`),
+  generated from `database/migrations/`.
 
 Schemas reserved but unused so far: `timekeeping`, `learning`, `compliance`, `payroll`,
 `inventory`, `hiring`, `retention`, `communication`, `finance`, `procurement`, `assets`,
@@ -174,12 +179,16 @@ principle II.
 
 ## Known drift
 
-**D8 — schema.sql leads migrations.** Permission rows were added to `schema.sql` before a
-migration existed for them, so live databases were missing seven `collab.*` / `calendar.*`
-permissions until `20260403000001_add_missing_collab_ritual_calendar_permissions.up.sql`
-backfilled both the reference tables and every existing org's `iam.role_permission`. The
-lesson holds generally: `schema.sql` describes intended state, migrations describe deployed
-state, and they can disagree. Diff them before trusting either for a live-data question.
+**D8 — schema.sql leads migrations. Resolved.** `schema.sql` used to be hand-written
+alongside the migrations, so the two could disagree: permission rows were added to it
+before a migration existed for them, and live databases were missing seven `collab.*` /
+`calendar.*` permissions until
+`20260403000001_add_missing_collab_ritual_calendar_permissions.up.sql` backfilled the
+reference tables and every existing org's `iam.role_permission`. `schema.sql` is now
+generated from the migrations, so the class of drift is gone by construction rather than by
+discipline. The reconciling migration stays — it is what makes deployed databases correct.
+`20260828000001_backfill_schema_comments.up.sql` closed the residue of the same split: 18
+table and column comments that only ever existed in the hand-written file.
 
 **No RLS backstop.** Worth restating as a standing risk rather than a defect: because
 isolation is purely the `organization_id` predicate, a single query missing it leaks across

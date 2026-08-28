@@ -481,7 +481,7 @@ INSERT INTO chat.message(id, organization_id, channel_id, message_text, author_e
     $7 -- file_ids (JSONB array of file UUIDs)
 )
 RETURNING
-  id, organization_id, channel_id, message_text, author_employee_id, parent_message_id, is_deleted, is_edited, edit_history, mentions, file_ids, message_kind, system_event_type, metadata, updated_at
+  id, organization_id, channel_id, message_text, author_employee_id, parent_message_id, is_deleted, is_edited, edit_history, mentions, file_ids, updated_at, message_kind, system_event_type, metadata
 `
 
 type CreateMessageParams struct {
@@ -521,10 +521,10 @@ func (q *Queries) CreateMessage(ctx context.Context, db DBTX, arg *CreateMessage
 		&i.EditHistory,
 		&i.Mentions,
 		&i.FileIds,
+		&i.UpdatedAt,
 		&i.MessageKind,
 		&i.SystemEventType,
 		&i.Metadata,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -950,7 +950,7 @@ func (q *Queries) GetMessageByID(ctx context.Context, db DBTX, arg *GetMessageBy
 
 const getMessageByIdWithChannel = `-- name: GetMessageByIdWithChannel :one
 SELECT
-  m.id, m.organization_id, m.channel_id, m.message_text, m.author_employee_id, m.parent_message_id, m.is_deleted, m.is_edited, m.edit_history, m.mentions, m.file_ids, m.message_kind, m.system_event_type, m.metadata, m.updated_at,
+  m.id, m.organization_id, m.channel_id, m.message_text, m.author_employee_id, m.parent_message_id, m.is_deleted, m.is_edited, m.edit_history, m.mentions, m.file_ids, m.updated_at, m.message_kind, m.system_event_type, m.metadata,
   e.email AS author_email,
   CONCAT(e.given_name, ' ', e.family_name) AS author_name,
   c.title_slug AS channel_slug,
@@ -1020,10 +1020,10 @@ func (q *Queries) GetMessageByIdWithChannel(ctx context.Context, db DBTX, arg *G
 		&i.ChatMessage.EditHistory,
 		&i.ChatMessage.Mentions,
 		&i.ChatMessage.FileIds,
+		&i.ChatMessage.UpdatedAt,
 		&i.ChatMessage.MessageKind,
 		&i.ChatMessage.SystemEventType,
 		&i.ChatMessage.Metadata,
-		&i.ChatMessage.UpdatedAt,
 		&i.AuthorEmail,
 		&i.AuthorName,
 		&i.ChannelSlug,
@@ -2398,7 +2398,7 @@ WHERE
   id = $1
   AND organization_id = $2
 RETURNING
-  id, organization_id, channel_id, message_text, author_employee_id, parent_message_id, is_deleted, is_edited, edit_history, mentions, file_ids, message_kind, system_event_type, metadata, updated_at
+  id, organization_id, channel_id, message_text, author_employee_id, parent_message_id, is_deleted, is_edited, edit_history, mentions, file_ids, updated_at, message_kind, system_event_type, metadata
 `
 
 type SoftDeleteMessageParams struct {
@@ -2422,10 +2422,10 @@ func (q *Queries) SoftDeleteMessage(ctx context.Context, db DBTX, arg *SoftDelet
 		&i.EditHistory,
 		&i.Mentions,
 		&i.FileIds,
+		&i.UpdatedAt,
 		&i.MessageKind,
 		&i.SystemEventType,
 		&i.Metadata,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }
@@ -2698,7 +2698,7 @@ WHERE
   id = $1
   AND organization_id = $2
 RETURNING
-  id, organization_id, channel_id, message_text, author_employee_id, parent_message_id, is_deleted, is_edited, edit_history, mentions, file_ids, message_kind, system_event_type, metadata, updated_at
+  id, organization_id, channel_id, message_text, author_employee_id, parent_message_id, is_deleted, is_edited, edit_history, mentions, file_ids, updated_at, message_kind, system_event_type, metadata
 `
 
 type UpdateMessageParams struct {
@@ -2724,10 +2724,10 @@ func (q *Queries) UpdateMessage(ctx context.Context, db DBTX, arg *UpdateMessage
 		&i.EditHistory,
 		&i.Mentions,
 		&i.FileIds,
+		&i.UpdatedAt,
 		&i.MessageKind,
 		&i.SystemEventType,
 		&i.Metadata,
-		&i.UpdatedAt,
 	)
 	return &i, err
 }

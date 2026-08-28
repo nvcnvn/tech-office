@@ -852,21 +852,21 @@ type ChatMessage struct {
 	OrganizationID dbuuid.UUID `json:"organization_id"`
 	ChannelID      dbuuid.UUID `json:"channel_id"`
 	// Message content as server-sanitized HTML. Allowed tags: <b>, <strong>, <i>, <em>, <u>, <code>, <pre>, <a href="">, <ul>, <ol>, <li>, <p>, <br>. Plaintext messages (no HTML tags) are valid HTML and render correctly. PGroonga automatically strips HTML tags during indexing for full-text search.
-	MessageText      string          `json:"message_text"`
-	AuthorEmployeeID dbuuid.UUID     `json:"author_employee_id"`
-	ParentMessageID  dbuuid.NullUUID `json:"parent_message_id"`
-	IsDeleted        bool            `json:"is_deleted"`
-	IsEdited         bool            `json:"is_edited"`
-	EditHistory      []byte          `json:"edit_history"`
-	Mentions         []byte          `json:"mentions"`
-	FileIds          []dbuuid.UUID   `json:"file_ids"`
+	MessageText      string             `json:"message_text"`
+	AuthorEmployeeID dbuuid.UUID        `json:"author_employee_id"`
+	ParentMessageID  dbuuid.NullUUID    `json:"parent_message_id"`
+	IsDeleted        bool               `json:"is_deleted"`
+	IsEdited         bool               `json:"is_edited"`
+	EditHistory      []byte             `json:"edit_history"`
+	Mentions         []byte             `json:"mentions"`
+	FileIds          []dbuuid.UUID      `json:"file_ids"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	// Timeline message kind: text, voice, system. MUST align with backend constants in internal/chat/constants.go and frontend TypeScript types in packages/apis/src/chat.ts
 	MessageKind string `json:"message_kind"`
 	// System event discriminator for system messages. Voice values MUST align with backend constants and frontend TypeScript types.
 	SystemEventType pgtype.Text `json:"system_event_type"`
 	// Structured timeline metadata for voice messages, call records, and other system-rendered events.
-	Metadata  []byte             `json:"metadata"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	Metadata []byte `json:"metadata"`
 }
 
 func (s *ChatMessage) TableName() string {
@@ -886,10 +886,10 @@ func (s *ChatMessage) Fields() ([]string, []any) {
 			"edit_history",
 			"mentions",
 			"file_ids",
+			"updated_at",
 			"message_kind",
 			"system_event_type",
 			"metadata",
-			"updated_at",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -902,10 +902,10 @@ func (s *ChatMessage) Fields() ([]string, []any) {
 			&s.EditHistory,
 			&s.Mentions,
 			&s.FileIds,
+			&s.UpdatedAt,
 			&s.MessageKind,
 			&s.SystemEventType,
 			&s.Metadata,
-			&s.UpdatedAt,
 		}
 }
 
@@ -922,10 +922,10 @@ func (s *ChatMessage) FieldsMap() map[string]any {
 		"edit_history":       &s.EditHistory,
 		"mentions":           &s.Mentions,
 		"file_ids":           &s.FileIds,
+		"updated_at":         &s.UpdatedAt,
 		"message_kind":       &s.MessageKind,
 		"system_event_type":  &s.SystemEventType,
 		"metadata":           &s.Metadata,
-		"updated_at":         &s.UpdatedAt,
 	}
 }
 
@@ -1363,8 +1363,8 @@ type CollaborationProject struct {
 	OwnerEmployeeID   dbuuid.UUID        `json:"owner_employee_id"`
 	MemberCount       int32              `json:"member_count"`
 	TaskCount         int32              `json:"task_count"`
-	CollaborationMode string             `json:"collaboration_mode"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	CollaborationMode string             `json:"collaboration_mode"`
 }
 
 func (s *CollaborationProject) TableName() string {
@@ -1384,8 +1384,8 @@ func (s *CollaborationProject) Fields() ([]string, []any) {
 			"owner_employee_id",
 			"member_count",
 			"task_count",
-			"collaboration_mode",
 			"updated_at",
+			"collaboration_mode",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -1398,8 +1398,8 @@ func (s *CollaborationProject) Fields() ([]string, []any) {
 			&s.OwnerEmployeeID,
 			&s.MemberCount,
 			&s.TaskCount,
-			&s.CollaborationMode,
 			&s.UpdatedAt,
+			&s.CollaborationMode,
 		}
 }
 
@@ -1416,8 +1416,8 @@ func (s *CollaborationProject) FieldsMap() map[string]any {
 		"owner_employee_id":  &s.OwnerEmployeeID,
 		"member_count":       &s.MemberCount,
 		"task_count":         &s.TaskCount,
-		"collaboration_mode": &s.CollaborationMode,
 		"updated_at":         &s.UpdatedAt,
+		"collaboration_mode": &s.CollaborationMode,
 	}
 }
 
@@ -1492,8 +1492,8 @@ type CollaborationProjectState struct {
 	IsInitial bool `json:"is_initial"`
 	// If true, tasks in this state are considered closed/resolved. Used for metrics and analytics.
 	IsClosed  bool               `json:"is_closed"`
-	StateType string             `json:"state_type"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+	StateType string             `json:"state_type"`
 }
 
 func (s *CollaborationProjectState) TableName() string {
@@ -1511,8 +1511,8 @@ func (s *CollaborationProjectState) Fields() ([]string, []any) {
 			"position",
 			"is_initial",
 			"is_closed",
-			"state_type",
 			"updated_at",
+			"state_type",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -1523,8 +1523,8 @@ func (s *CollaborationProjectState) Fields() ([]string, []any) {
 			&s.Position,
 			&s.IsInitial,
 			&s.IsClosed,
-			&s.StateType,
 			&s.UpdatedAt,
+			&s.StateType,
 		}
 }
 
@@ -1539,8 +1539,8 @@ func (s *CollaborationProjectState) FieldsMap() map[string]any {
 		"position":        &s.Position,
 		"is_initial":      &s.IsInitial,
 		"is_closed":       &s.IsClosed,
-		"state_type":      &s.StateType,
 		"updated_at":      &s.UpdatedAt,
+		"state_type":      &s.StateType,
 	}
 }
 
@@ -1557,8 +1557,8 @@ type CollaborationRitualDefinition struct {
 	CreatedByEmployeeID   dbuuid.UUID        `json:"created_by_employee_id"`
 	LastGeneratedDate     pgtype.Date        `json:"last_generated_date"`
 	GenerationWindowDays  int32              `json:"generation_window_days"`
-	ScheduleVersion       int32              `json:"schedule_version"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ScheduleVersion       int32              `json:"schedule_version"`
 }
 
 func (s *CollaborationRitualDefinition) TableName() string {
@@ -1579,8 +1579,8 @@ func (s *CollaborationRitualDefinition) Fields() ([]string, []any) {
 			"created_by_employee_id",
 			"last_generated_date",
 			"generation_window_days",
-			"schedule_version",
 			"updated_at",
+			"schedule_version",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -1594,8 +1594,8 @@ func (s *CollaborationRitualDefinition) Fields() ([]string, []any) {
 			&s.CreatedByEmployeeID,
 			&s.LastGeneratedDate,
 			&s.GenerationWindowDays,
-			&s.ScheduleVersion,
 			&s.UpdatedAt,
+			&s.ScheduleVersion,
 		}
 }
 
@@ -1613,8 +1613,8 @@ func (s *CollaborationRitualDefinition) FieldsMap() map[string]any {
 		"created_by_employee_id":  &s.CreatedByEmployeeID,
 		"last_generated_date":     &s.LastGeneratedDate,
 		"generation_window_days":  &s.GenerationWindowDays,
-		"schedule_version":        &s.ScheduleVersion,
 		"updated_at":              &s.UpdatedAt,
+		"schedule_version":        &s.ScheduleVersion,
 	}
 }
 
@@ -1791,13 +1791,13 @@ type CollaborationTask struct {
 	ChildCount         int32              `json:"child_count"`
 	CommentCount       int32              `json:"comment_count"`
 	IsDeleted          bool               `json:"is_deleted"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	TaskKind           string             `json:"task_kind"`
 	RitualDefinitionID dbuuid.NullUUID    `json:"ritual_definition_id"`
 	ScheduledDate      pgtype.Date        `json:"scheduled_date"`
 	CompletionDeadline pgtype.Timestamptz `json:"completion_deadline"`
 	SkipReason         pgtype.Text        `json:"skip_reason"`
 	DetachedFromRitual bool               `json:"detached_from_ritual"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (s *CollaborationTask) TableName() string {
@@ -1826,13 +1826,13 @@ func (s *CollaborationTask) Fields() ([]string, []any) {
 			"child_count",
 			"comment_count",
 			"is_deleted",
+			"updated_at",
 			"task_kind",
 			"ritual_definition_id",
 			"scheduled_date",
 			"completion_deadline",
 			"skip_reason",
 			"detached_from_ritual",
-			"updated_at",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -1854,13 +1854,13 @@ func (s *CollaborationTask) Fields() ([]string, []any) {
 			&s.ChildCount,
 			&s.CommentCount,
 			&s.IsDeleted,
+			&s.UpdatedAt,
 			&s.TaskKind,
 			&s.RitualDefinitionID,
 			&s.ScheduledDate,
 			&s.CompletionDeadline,
 			&s.SkipReason,
 			&s.DetachedFromRitual,
-			&s.UpdatedAt,
 		}
 }
 
@@ -1886,13 +1886,13 @@ func (s *CollaborationTask) FieldsMap() map[string]any {
 		"child_count":             &s.ChildCount,
 		"comment_count":           &s.CommentCount,
 		"is_deleted":              &s.IsDeleted,
+		"updated_at":              &s.UpdatedAt,
 		"task_kind":               &s.TaskKind,
 		"ritual_definition_id":    &s.RitualDefinitionID,
 		"scheduled_date":          &s.ScheduledDate,
 		"completion_deadline":     &s.CompletionDeadline,
 		"skip_reason":             &s.SkipReason,
 		"detached_from_ritual":    &s.DetachedFromRitual,
-		"updated_at":              &s.UpdatedAt,
 	}
 }
 
@@ -3625,7 +3625,7 @@ func (s *IamAccountLockout) FieldsMap() map[string]any {
 	}
 }
 
-// Org-scoped credentials for PIN and biometric authentication. Supports temporary (admin-generated) and active (user-set) states. One active credential per type per identity. Temporary PINs default to 3-day expiry. credential_type and state MUST align with backend constants.
+// Org-scoped credentials for PIN and biometric authentication. Supports temporary (admin-generated) and active (user-set) states. One active credential per type per identity. Temporary PINs default to 3-day expiry (configurable via column default). credential_type and state MUST align with backend constants.
 type IamCredential struct {
 	ID             dbuuid.UUID `json:"id"`
 	OrganizationID dbuuid.UUID `json:"organization_id"`
@@ -3634,7 +3634,7 @@ type IamCredential struct {
 	// Bcrypt hash of the credential value (PIN digits, biometric key). Never stored in plaintext after initial generation.
 	CredentialHash string `json:"credential_hash"`
 	State          string `json:"state"`
-	// Expiry timestamp for temporary credentials. Default 3 days from creation. NULL or past = expired. Only meaningful for state=temporary.
+	// Expiry timestamp for temporary credentials. Default 3 days from creation (configurable by updating column default). NULL or past = expired. Only meaningful for state=temporary.
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
@@ -3723,13 +3723,13 @@ func (s *IamEmployeeRole) FieldsMap() map[string]any {
 
 type IamIdentity struct {
 	// Same UUID as iam.user.id and organization.employee.id for the same person. This invariant is load-bearing: GetUserRoleNamesInOrg filters iam.employee_role.employee_id with a JWT user id, and account deletion enumerates memberships with SELECT organization_id FROM iam.identity WHERE id = $1. Do not allocate a fresh id here.
-	ID             dbuuid.UUID `json:"id"`
-	OrganizationID dbuuid.UUID `json:"organization_id"`
-	Email          pgtype.Text `json:"email"`
+	ID             dbuuid.UUID        `json:"id"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	Email          pgtype.Text        `json:"email"`
+	IdentityType   string             `json:"identity_type"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	// Organization-scoped login handle for workers without email (e.g., badge number, username). Unique within org. NULL for email-based users.
-	LoginIdentifier pgtype.Text        `json:"login_identifier"`
-	IdentityType    string             `json:"identity_type"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	LoginIdentifier pgtype.Text `json:"login_identifier"`
 }
 
 func (s *IamIdentity) TableName() string {
@@ -3741,16 +3741,16 @@ func (s *IamIdentity) Fields() ([]string, []any) {
 			"id",
 			"organization_id",
 			"email",
-			"login_identifier",
 			"identity_type",
 			"updated_at",
+			"login_identifier",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
 			&s.Email,
-			&s.LoginIdentifier,
 			&s.IdentityType,
 			&s.UpdatedAt,
+			&s.LoginIdentifier,
 		}
 }
 
@@ -3759,9 +3759,9 @@ func (s *IamIdentity) FieldsMap() map[string]any {
 		"id":               &s.ID,
 		"organization_id":  &s.OrganizationID,
 		"email":            &s.Email,
-		"login_identifier": &s.LoginIdentifier,
 		"identity_type":    &s.IdentityType,
 		"updated_at":       &s.UpdatedAt,
+		"login_identifier": &s.LoginIdentifier,
 	}
 }
 
@@ -4093,18 +4093,19 @@ func (s *IamSsoIdentity) FieldsMap() map[string]any {
 
 // Global user accounts. NOT organization-scoped - users can belong to multiple organizations with different roles. Status MUST align with backend constants in internal/iam/constants.go and proto enum rpc.v1.UserStatus.
 type IamUser struct {
-	ID                dbuuid.UUID `json:"id"`
-	Email             pgtype.Text `json:"email"`
-	DisplayName       pgtype.Text `json:"display_name"`
-	ProfilePictureUrl pgtype.Text `json:"profile_picture_url"`
-	Status            string      `json:"status"`
+	ID                dbuuid.UUID        `json:"id"`
+	Email             pgtype.Text        `json:"email"`
+	DisplayName       pgtype.Text        `json:"display_name"`
+	ProfilePictureUrl pgtype.Text        `json:"profile_picture_url"`
+	Status            string             `json:"status"`
+	LastLoginAt       pgtype.Timestamptz `json:"last_login_at"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	// TRUE for workers created by org admins (PIN-based, no email required). FALSE for self-registered users (email-based).
-	IsOrgManaged         bool               `json:"is_org_managed"`
-	LastLoginAt          pgtype.Timestamptz `json:"last_login_at"`
+	IsOrgManaged bool `json:"is_org_managed"`
+	// Version string of the terms this person last accepted. Compared against the current version constant to decide whether to re-prompt. NULL until first acceptance.
 	TermsVersionAccepted pgtype.Text        `json:"terms_version_accepted"`
 	TermsAcceptedAt      pgtype.Timestamptz `json:"terms_accepted_at"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (s *IamUser) TableName() string {
@@ -4118,24 +4119,24 @@ func (s *IamUser) Fields() ([]string, []any) {
 			"display_name",
 			"profile_picture_url",
 			"status",
-			"is_org_managed",
 			"last_login_at",
-			"terms_version_accepted",
-			"terms_accepted_at",
 			"created_at",
 			"updated_at",
+			"is_org_managed",
+			"terms_version_accepted",
+			"terms_accepted_at",
 		}, []any{
 			&s.ID,
 			&s.Email,
 			&s.DisplayName,
 			&s.ProfilePictureUrl,
 			&s.Status,
-			&s.IsOrgManaged,
 			&s.LastLoginAt,
-			&s.TermsVersionAccepted,
-			&s.TermsAcceptedAt,
 			&s.CreatedAt,
 			&s.UpdatedAt,
+			&s.IsOrgManaged,
+			&s.TermsVersionAccepted,
+			&s.TermsAcceptedAt,
 		}
 }
 
@@ -4146,12 +4147,12 @@ func (s *IamUser) FieldsMap() map[string]any {
 		"display_name":           &s.DisplayName,
 		"profile_picture_url":    &s.ProfilePictureUrl,
 		"status":                 &s.Status,
-		"is_org_managed":         &s.IsOrgManaged,
 		"last_login_at":          &s.LastLoginAt,
-		"terms_version_accepted": &s.TermsVersionAccepted,
-		"terms_accepted_at":      &s.TermsAcceptedAt,
 		"created_at":             &s.CreatedAt,
 		"updated_at":             &s.UpdatedAt,
+		"is_org_managed":         &s.IsOrgManaged,
+		"terms_version_accepted": &s.TermsVersionAccepted,
+		"terms_accepted_at":      &s.TermsAcceptedAt,
 	}
 }
 
@@ -4796,9 +4797,9 @@ type NotificationNotificationRecipient struct {
 	// Why fallback was queued, skipped, sent, or failed. Values: live_only_policy, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, delivery_error.
 	FallbackReason    pgtype.Text        `json:"fallback_reason"`
 	FallbackUpdatedAt pgtype.Timestamptz `json:"fallback_updated_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 	// Deadline for delayed rescue push when SSE delivery is ambiguous. NULL when no rescue job is queued.
 	FallbackDueAt pgtype.Timestamptz `json:"fallback_due_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (s *NotificationNotificationRecipient) TableName() string {
@@ -4825,8 +4826,8 @@ func (s *NotificationNotificationRecipient) Fields() ([]string, []any) {
 			"fallback_status",
 			"fallback_reason",
 			"fallback_updated_at",
-			"fallback_due_at",
 			"updated_at",
+			"fallback_due_at",
 		}, []any{
 			&s.ID,
 			&s.NotificationID,
@@ -4846,8 +4847,8 @@ func (s *NotificationNotificationRecipient) Fields() ([]string, []any) {
 			&s.FallbackStatus,
 			&s.FallbackReason,
 			&s.FallbackUpdatedAt,
-			&s.FallbackDueAt,
 			&s.UpdatedAt,
+			&s.FallbackDueAt,
 		}
 }
 
@@ -4871,8 +4872,8 @@ func (s *NotificationNotificationRecipient) FieldsMap() map[string]any {
 		"fallback_status":        &s.FallbackStatus,
 		"fallback_reason":        &s.FallbackReason,
 		"fallback_updated_at":    &s.FallbackUpdatedAt,
-		"fallback_due_at":        &s.FallbackDueAt,
 		"updated_at":             &s.UpdatedAt,
+		"fallback_due_at":        &s.FallbackDueAt,
 	}
 }
 

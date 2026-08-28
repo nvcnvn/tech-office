@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -n "${MIGRATIONS_OVERRIDE_DIR:-}" ]; then
 	MIGRATIONS_DIR="$MIGRATIONS_OVERRIDE_DIR"
 else
-	MIGRATIONS_DIR="${SCRIPT_DIR}/../k8s/base/database/migrations"
+	MIGRATIONS_DIR="${SCRIPT_DIR}/../database/migrations"
 fi
 LOCK_KEY="684905214274285376"
 
