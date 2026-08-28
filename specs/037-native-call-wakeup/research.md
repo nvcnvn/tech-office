@@ -103,6 +103,23 @@ to spec FR-021, which is already a MAY. Adopt opportunistically; do not gate the
 
 **Decision**: adopt **`expo-callkit-telecom`** (0.4.0, MIT, published 2026-06-16).
 
+**Correction found during implementation — the iOS floor is not 15.1.** The library's
+README and npm page state iOS 15.1, and this document originally recorded that. Its
+**podspec actually declares `:ios => '16.0'`**. That is not a warning: CocoaPods silently
+*skips* a pod whose platform requirement exceeds the project's deployment target, so the
+module linked into nothing and the app built cleanly without it. The symptom is a build
+that succeeds and a phone that never rings.
+
+The app now sets `ios.deploymentTarget: "16.4"` via `expo-build-properties` — 16.4 rather
+than 16.0 because Expo SDK 55 refuses an explicit target below it. Same device set either
+way (iOS 16 needs iPhone 8 or later), so the practical cost is iPhone 6s/7/SE-1st-gen.
+
+Worth knowing if this is ever revisited: the library's *only* iOS 16 API use is behind an
+`if #available(iOS 16.0, *)` guard, for camera multitasking that an audio-only call never
+reaches. The 16.0 floor is therefore conservative rather than load-bearing, and could be
+patched down if the old devices ever mattered — at the cost of a patch to re-verify on
+every upgrade.
+
 **Rationale**: It wraps CallKit and `androidx.core:core-telecom` behind one TypeScript API,
 is built on the **Expo Modules API with a config plugin**, and is documented against
 **Expo SDK 55 / React Native 0.83 with the New Architecture** — which is exactly this repo
@@ -144,13 +161,14 @@ point in the epic and gets its own work package and its own quickstart scenario.
 
 ## R5 — Device coverage and where the 80% target actually binds
 
-**Decision**: target **iOS 15.1+ and Android API 26+** for the native tier (tier A), and keep
-today's shipped alert-notification ring as tier B. Measure the 80% goal as *"≥80% of ring
+**Decision**: target **iOS 16.4+ and Android API 26+** for the native tier (tier A), and
+keep today's shipped alert-notification ring as tier B. (The iOS floor was 15.1 when this
+was written; see the correction under R3.) Measure the 80% goal as *"≥80% of ring
 attempts are served by tier A"*, not as an OS-version percentage.
 
 **Rationale**: OS version is not the binding constraint. Android API 26+ is roughly 96% of
 devices (April 2026 distribution puts API 30 at ~87% and API 33 at ~69%, so API 26 is well
-above both), and iOS 15.1+ is close to universal. The library's own floors (iOS 15.1 /
+above both), and iOS 16.4+ covers iPhone 8 and later. The library's own floors (iOS 15.1 /
 API 26) therefore cost us almost nothing.
 
 What actually costs the remaining share is behavioural, not versional:

@@ -65,6 +65,10 @@ type NotificationService struct {
 	// Used to check DND / domain-mute suppression before sending push
 	RoutingLogic RoutingLogic
 
+	// CallWakeDispatcher: per-device fan-out for live call events (Feature 037).
+	// May be nil, in which case incoming calls degrade to the tier-B alert ring.
+	CallWakeDispatcher CallWakeDispatcher
+
 	// activeConnections: In-memory map of active SSE connections
 	// Key: connectionID, Value: SSEConnection with event channel
 	activeConnections map[dbuuid.UUID]*SSEConnection

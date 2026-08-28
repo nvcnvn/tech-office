@@ -27,6 +27,8 @@ const (
 	ErrorReasonUnsupportedMimeType      ErrorReason = "VOICE_UNSUPPORTED_MIME_TYPE"
 	ErrorReasonMediaProviderUnavailable ErrorReason = "VOICE_MEDIA_PROVIDER_UNAVAILABLE"
 	ErrorReasonDirectContactBlocked     ErrorReason = "VOICE_DIRECT_CONTACT_BLOCKED"
+	ErrorReasonCalleeBusy               ErrorReason = "VOICE_CALLEE_BUSY"
+	ErrorReasonCalleeUnreachable        ErrorReason = "VOICE_CALLEE_UNREACHABLE"
 )
 
 var (
@@ -49,6 +51,17 @@ var (
 	// conversation. Its text names neither party and does not say a block exists:
 	// the blocked person must never learn they were blocked (Feature 036, FR-022).
 	ErrDirectContactBlocked = errors.New("this call is not available")
+
+	// ErrCalleeBusy and ErrCalleeUnreachable are outcomes the caller has to be able to
+	// tell apart — one means try again later, the other means this person cannot be
+	// reached at all — so they are structured error details rather than message text
+	// the caller's UI would have to match on (Constitution X).
+	ErrCalleeBusy = errors.New("the person you are calling is already on a call")
+
+	// ErrCalleeUnreachable ends the call immediately instead of ringing out for the
+	// full timeout, so the caller stops re-dialling a phone that cannot be woken
+	// (FR-006, SC-006).
+	ErrCalleeUnreachable = errors.New("the person you are calling cannot be reached")
 )
 
 func ToConnectError(err error, metadata map[string]string) *connect.Error {
@@ -88,6 +101,10 @@ func ToConnectError(err error, metadata map[string]string) *connect.Error {
 		code, reason = connect.CodeUnavailable, ErrorReasonMediaProviderUnavailable
 	case errors.Is(err, ErrDirectContactBlocked):
 		code, reason = connect.CodeFailedPrecondition, ErrorReasonDirectContactBlocked
+	case errors.Is(err, ErrCalleeBusy):
+		code, reason = connect.CodeFailedPrecondition, ErrorReasonCalleeBusy
+	case errors.Is(err, ErrCalleeUnreachable):
+		code, reason = connect.CodeFailedPrecondition, ErrorReasonCalleeUnreachable
 	}
 
 	connectErr := connect.NewError(code, err)

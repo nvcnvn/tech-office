@@ -1,0 +1,46 @@
+appId: com.devguards.TechOffice
+name: "Native call — tier-B fallback ring"
+tags:
+  - voice
+  - native-call
+  - fallback
+---
+# The ~20% of devices that cannot run the native call tier keep the ring this app
+# already shipped: an in-app prompt with accept and decline. It is not as good — no lock
+# screen, no answering without unlocking — and the spec requires the app to say so
+# plainly rather than let the difference look like a bug (FR-014).
+#
+# This flow covers that fallback prompt, which is ordinary React Native and therefore the
+# one incoming-call surface Maestro can actually see.
+
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 15000
+
+- runFlow:
+    when:
+      visible:
+        id: "incoming-voice-call-prompt"
+    commands:
+      - takeScreenshot: "tmp/maestro-screenshots/native-call-fallback-prompt"
+      # Both actions must be reachable. A prompt that can only be accepted traps the
+      # user in a call they did not want.
+      - assertVisible:
+          id: "global-incoming-voice-accept-button"
+      - assertVisible:
+          id: "global-incoming-voice-decline-button"
+      - tapOn:
+          id: "global-incoming-voice-decline-button"
+      - extendedWaitUntil:
+          notVisible:
+            id: "incoming-voice-call-prompt"
+          timeout: 8000

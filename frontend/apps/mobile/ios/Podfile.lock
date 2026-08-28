@@ -187,6 +187,11 @@ PODS:
     - ExpoModulesCore
   - ExpoAudio (55.0.14):
     - ExpoModulesCore
+  - ExpoCallKitTelecom (0.4.0):
+    - ExpoModulesCore
+    - livekit-react-native-webrtc
+    - swift-collections
+    - WebRTC-SDK
   - ExpoClipboard (55.0.13):
     - ExpoModulesCore
   - ExpoCrypto (55.0.12):
@@ -373,6 +378,7 @@ PODS:
   - hermes-engine (0.14.1):
     - hermes-engine/Pre-built (= 0.14.1)
   - hermes-engine/Pre-built (0.14.1)
+  - InternalCollectionsUtilities (1.1.1)
   - libavif/core (1.0.0)
   - libavif/libdav1d (1.0.0):
     - libavif/core
@@ -2566,6 +2572,22 @@ PODS:
   - SDWebImageWebPCoder (0.14.6):
     - libwebp (~> 1.0)
     - SDWebImage/Core (~> 5.17)
+  - swift-collections (1.1.1):
+    - swift-collections/BitCollections (= 1.1.1)
+    - swift-collections/DequeModule (= 1.1.1)
+    - swift-collections/HashTreeCollections (= 1.1.1)
+    - swift-collections/HeapModule (= 1.1.1)
+    - swift-collections/OrderedCollections (= 1.1.1)
+  - swift-collections/BitCollections (1.1.1):
+    - InternalCollectionsUtilities (= 1.1.1)
+  - swift-collections/DequeModule (1.1.1):
+    - InternalCollectionsUtilities (= 1.1.1)
+  - swift-collections/HashTreeCollections (1.1.1):
+    - InternalCollectionsUtilities (= 1.1.1)
+  - swift-collections/HeapModule (1.1.1):
+    - InternalCollectionsUtilities (= 1.1.1)
+  - swift-collections/OrderedCollections (1.1.1):
+    - InternalCollectionsUtilities (= 1.1.1)
   - WebRTC-SDK (144.7559.01)
   - Yoga (0.0.0)
 
@@ -2583,6 +2605,7 @@ DEPENDENCIES:
   - "ExpoAppleAuthentication (from `../../../node_modules/.pnpm/expo-apple-authentication@55.0.11_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@_b8d7b70d9dc336a12012a3234d45dfa5/node_modules/expo-apple-authentication/ios`)"
   - "ExpoAsset (from `../../../node_modules/.pnpm/expo-asset@55.0.12_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@react-native+me_0a9dbfb3166e5619180c372657232fe3/node_modules/expo-asset/ios`)"
   - "ExpoAudio (from `../../../node_modules/.pnpm/expo-audio@55.0.14_expo-asset@55.0.12_expo@55.0.11_react-native@0.83.4_@babel+core@7.29_32266e8c4482a30d2730e3fda8516122/node_modules/expo-audio/ios`)"
+  - "ExpoCallKitTelecom (from `../../../node_modules/.pnpm/expo-callkit-telecom@0.4.0_@livekit+react-native-webrtc@144.0.0_react-native@0.83.4_@ba_0b02a5b4da6bc295702d49dccfe2fa08/node_modules/expo-callkit-telecom/ios`)"
   - "ExpoClipboard (from `../../../node_modules/.pnpm/expo-clipboard@55.0.13_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@react-nativ_d98891f3e5f6b1a6a12db58c563adf4b/node_modules/expo-clipboard/ios`)"
   - "ExpoCrypto (from `../../../node_modules/.pnpm/expo-crypto@55.0.12_expo@55.0.11/node_modules/expo-crypto/ios`)"
   - "ExpoDomWebView (from `../../../node_modules/.pnpm/@expo+dom-webview@55.0.5_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@react-nat_85bcf6c51dfcf91d3f5292f4aa089288/node_modules/@expo/dom-webview/ios`)"
@@ -2708,6 +2731,7 @@ SPEC REPOS:
     - FirebaseMessaging
     - GoogleDataTransport
     - GoogleUtilities
+    - InternalCollectionsUtilities
     - libavif
     - libdav1d
     - libwebp
@@ -2718,6 +2742,7 @@ SPEC REPOS:
     - SDWebImageAVIFCoder
     - SDWebImageSVGCoder
     - SDWebImageWebPCoder
+    - swift-collections
     - WebRTC-SDK
 
 EXTERNAL SOURCES:
@@ -2747,6 +2772,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-asset@55.0.12_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@react-native+me_0a9dbfb3166e5619180c372657232fe3/node_modules/expo-asset/ios"
   ExpoAudio:
     :path: "../../../node_modules/.pnpm/expo-audio@55.0.14_expo-asset@55.0.12_expo@55.0.11_react-native@0.83.4_@babel+core@7.29_32266e8c4482a30d2730e3fda8516122/node_modules/expo-audio/ios"
+  ExpoCallKitTelecom:
+    :path: "../../../node_modules/.pnpm/expo-callkit-telecom@0.4.0_@livekit+react-native-webrtc@144.0.0_react-native@0.83.4_@ba_0b02a5b4da6bc295702d49dccfe2fa08/node_modules/expo-callkit-telecom/ios"
   ExpoClipboard:
     :path: "../../../node_modules/.pnpm/expo-clipboard@55.0.13_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@react-nativ_d98891f3e5f6b1a6a12db58c563adf4b/node_modules/expo-clipboard/ios"
   ExpoCrypto:
@@ -2985,6 +3012,7 @@ SPEC CHECKSUMS:
   ExpoAppleAuthentication: 4d1611362b8f42c3ac09ecefedee4c372c0f2ce7
   ExpoAsset: 63f22b029eb9aa68d5048f77ff9430f42c770d2c
   ExpoAudio: a826903abdeba843cde8602bd1c077d808b31f1d
+  ExpoCallKitTelecom: f02eab44563375046778a6692f3088e04d72f021
   ExpoClipboard: 5d1b0cd2686406f21e616f2d9b3431259dee2e6a
   ExpoCrypto: 0367cba7af2bdf0a01550b48bd20e9537f20b980
   ExpoDomWebView: 2b2fbd9a07de8790569257cbf9dfdaa31cf95c70
@@ -3022,6 +3050,7 @@ SPEC CHECKSUMS:
   GoogleDataTransport: aae35b7ea0c09004c3797d53c8c41f66f219d6a7
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   hermes-engine: fe1cae165cc159ddb77b717dc00b12bf29a2796c
+  InternalCollectionsUtilities: af3f471602c4a67cbcb0bee0a80f6f55a33ae453
   libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
@@ -3113,6 +3142,7 @@ SPEC CHECKSUMS:
   SDWebImageAVIFCoder: afe194a084e851f70228e4be35ef651df0fc5c57
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
+  swift-collections: ba248ecaf44ef500b27d5cf94d304218c89892ff
   WebRTC-SDK: ab9b5319e458c2bfebdc92b3600740da35d5630d
   Yoga: acd565934addf7423687593ec490bd4491b2a802
 

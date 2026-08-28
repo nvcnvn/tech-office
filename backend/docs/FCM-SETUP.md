@@ -1,5 +1,11 @@
 # Native Mobile Push Setup
 
+> **Calls to iPhones do not use Firebase.** Waking a locked iPhone for an incoming call
+> needs an APNs VoIP push, which Firebase will not send. That is a separate credential
+> with its own environment variables — see [APNS-VOIP-SETUP.md](APNS-VOIP-SETUP.md).
+> Everything else on this page still applies to every other notification, including the
+> Android half of calls.
+
 This document describes the preferred open-source setup for mobile push notifications in Tech Office when the project uses direct native provider delivery instead of Expo Push Service.
 
 ## Status

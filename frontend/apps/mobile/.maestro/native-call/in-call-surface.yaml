@@ -1,0 +1,64 @@
+appId: com.devguards.TechOffice
+name: "Native call — in-app in-call surface"
+tags:
+  - voice
+  - native-call
+---
+# What this can and cannot cover.
+#
+# The incoming-call screen and the lock-screen controls are drawn by the operating
+# system, and Maestro cannot see them — no flow here can prove the headline behaviour.
+# That is the manual device matrix in specs/037-native-call-wakeup/quickstart.md.
+#
+# What Maestro *can* prove is the half that stays inside the app: that the in-call
+# surface agrees with the call the OS is showing, and that it goes away when the call
+# ends. A surface that disagrees with the system UI is the second-worst failure this
+# feature has, after an orphaned call screen — the user mutes in one place and is still
+# heard in the other.
+
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+- extendedWaitUntil:
+    visible: "Chat"
+    timeout: 15000
+- tapOn:
+    text: "Chat"
+- extendedWaitUntil:
+    visible:
+      id: "channel-row-.*"
+    timeout: 15000
+- tapOn:
+    id: "channel-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "channel-header-title"
+    timeout: 8000
+
+# The in-call bar only exists while a call is live, so everything below is conditional.
+# A run with no call in progress passes vacuously rather than failing on a state it was
+# never given.
+- runFlow:
+    when:
+      visible:
+        id: "active-voice-call-bar"
+    commands:
+      - takeScreenshot: "tmp/maestro-screenshots/native-call-in-call-surface"
+      # The bar must offer a way out. A call the user can hear but cannot leave from the
+      # app is the in-app half of the orphan problem.
+      - assertVisible:
+          id: "active-voice-call-leave-button"
+      - tapOn:
+          id: "active-voice-call-leave-button"
+      # Ending the call must remove the surface, not leave a stale bar behind.
+      - extendedWaitUntil:
+          notVisible:
+            id: "active-voice-call-bar"
+          timeout: 8000

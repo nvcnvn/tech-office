@@ -25,6 +25,9 @@ func TestVoiceLiveKitConnectivity(t *testing.T) {
 	alice := w.withOwner()
 	bob := w.withEmployee()
 	channelID := w.createOrGetDM(alice, bob.ID)
+	// A direct call to an unreachable callee is refused before the media plane is
+	// touched (Feature 037), so give the callee a device before testing LiveKit.
+	w.registerCallWakeDevice(bob, "device-bob-livekit", "ios", true)
 
 	cfg, err := voice.LoadConfigFromEnv()
 	require.NoError(t, err, "voice config must load without error")

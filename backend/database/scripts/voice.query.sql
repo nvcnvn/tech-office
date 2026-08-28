@@ -5,10 +5,11 @@
 -- name: CreateVoiceCallSession :one
 INSERT INTO voice.call_session (
     organization_id, channel_id, initiator_employee_id, livekit_room_name,
-    state, recording_policy, recording_status, transcript_status
+    state, recording_policy, recording_status, transcript_status, ring_deadline_at
 ) VALUES (
     @organization_id, @channel_id, @initiator_employee_id, @livekit_room_name,
-    @state, @recording_policy, @recording_status, @transcript_status
+    @state, @recording_policy, @recording_status, @transcript_status,
+    sqlc.narg('ring_deadline_at')::timestamptz
 )
 RETURNING *;
 
@@ -66,10 +67,13 @@ WHERE organization_id = @organization_id AND id = @call_session_id
 RETURNING *;
 
 -- name: MarkVoiceCallAnswered :one
+-- ring_deadline_at is NULL in every state but 'ringing', so answering clears it and
+-- the ring timeout sweep stops considering the call.
 UPDATE voice.call_session
 SET state = CASE WHEN state = 'ringing' THEN 'active' ELSE state END,
     outcome = COALESCE(outcome, 'answered'),
     answered_at = COALESCE(answered_at, @answered_at),
+    ring_deadline_at = NULL,
     updated_at = @answered_at
 WHERE organization_id = @organization_id AND id = @call_session_id
 RETURNING *;
@@ -81,9 +85,46 @@ SET state = 'ended',
     ended_at = @ended_at,
     ended_by_employee_id = sqlc.narg('ended_by_employee_id')::uuid,
     ended_reason = sqlc.narg('ended_reason')::text,
+    ring_deadline_at = NULL,
     updated_at = @ended_at
 WHERE organization_id = @organization_id AND id = @call_session_id
 RETURNING *;
+
+-- name: ListOrganizationsWithExpiredRingingCalls :many
+SELECT DISTINCT organization_id
+FROM voice.call_session
+WHERE state = 'ringing'
+  AND ring_deadline_at IS NOT NULL
+  AND ring_deadline_at <= @now_at;
+
+-- name: ClaimExpiredRingingCalls :many
+-- The ring timeout sweep, as one atomic claim-and-end.
+--
+-- Ending the call inside the claiming UPDATE is what makes the sweep safe to run on
+-- every instance (Constitution XI): the row lock serialises the two writers, and the
+-- second one's WHERE no longer matches because the state is already 'ended'. Only the
+-- instance whose UPDATE matched receives the row, so the terminal wake and the
+-- voice_call_missed chat message are published exactly once.
+UPDATE voice.call_session AS target
+SET state = 'ended',
+    outcome = 'missed',
+    ended_at = @now_at,
+    ended_reason = 'ring_timeout',
+    ring_deadline_at = NULL,
+    updated_at = @now_at
+WHERE target.organization_id = @organization_id
+  AND target.id IN (
+      SELECT expired.id
+      FROM voice.call_session AS expired
+      WHERE expired.organization_id = @organization_id
+        AND expired.state = 'ringing'
+        AND expired.ring_deadline_at IS NOT NULL
+        AND expired.ring_deadline_at <= @now_at
+      ORDER BY expired.ring_deadline_at ASC, expired.id ASC
+      LIMIT @batch_limit
+      FOR UPDATE SKIP LOCKED
+  )
+RETURNING target.*;
 
 -- name: UpsertVoiceCallParticipant :one
 INSERT INTO voice.call_participant (

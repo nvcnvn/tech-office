@@ -36,7 +36,7 @@
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.googleusercontent.apps.751712281610-7o8j91k1b6kqpnp6a6mt1g95sfk6h9fv</string>
+				<string>com.googleusercontent.apps.751712281610-hf054as817qu28edsh3vq5i1s0drqra1</string>
 			</array>
 		</dict>
 		<dict>
@@ -48,6 +48,16 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>ExpoCallKitTelecomDefaultRingtone</key>
+	<string>default</string>
+	<key>ExpoCallKitTelecomFulfillAnswerCallTimeout</key>
+	<integer>30</integer>
+	<key>ExpoCallKitTelecomIncomingCallTimeout</key>
+	<integer>45</integer>
+	<key>ExpoCallKitTelecomOutgoingCallTimeout</key>
+	<integer>60</integer>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>LSMinimumSystemVersion</key>
 	<string>12.0</string>
 	<key>LSRequiresIPhoneOS</key>
@@ -59,8 +69,6 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
-	<key>ITSAppUsesNonExemptEncryption</key>
-	<false/>
 	<key>NSCameraUsageDescription</key>
 	<string>Tech Office uses your camera to take photos to attach to messages, tasks and job records.</string>
 	<key>NSFaceIDUsageDescription</key>
@@ -74,9 +82,17 @@
 	<key>NSUserActivityTypes</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).expo.index_route</string>
+		<string>INStartCallIntent</string>
+		<string>INStartAudioCallIntent</string>
+		<string>INStartVideoCallIntent</string>
 	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>voip</string>
+		<string>audio</string>
+	</array>
 	<key>UILaunchStoryboardName</key>
 	<string>SplashScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>

@@ -334,6 +334,91 @@ flowchart TD
     end
 ```
 
+### Call wake dispatch (feature 037)
+
+A live call event leaves this pipeline at the rescue worker and takes a privileged path
+of its own. The worker recognises a queued `voice_call_incoming` row and hands it to the
+call wake dispatcher instead of sending an alert push; every other terminal event for the
+call is dispatched straight from `internal/voice` against the same recipient row.
+
+```mermaid
+flowchart TD
+    Ring["internal/voice: call enters ringing<br/>ring_deadline_at = now + 45s"]
+    Notif["PublishNotification(voice_call_incoming)<br/>priority 0 => zero rescue window"]
+    Worker["Rescue push worker, 1s tick<br/>processDueRescuePushesForOrg()"]
+    IsCall{"call wake row?"}
+    Ordinary["Ordinary path<br/>receipt check, DND check, FCM alert"]
+    Dispatch["DispatchCallWake()<br/>resolve devices, one attempt row per device"]
+    PerDevice{"device capable of<br/>the native tier?"}
+    VoIP["tier A / iOS<br/>direct APNs VoIP push<br/>apns-push-type: voip, priority 10"]
+    Data["tier A / Android<br/>high-priority FCM data-only message"]
+    Fallback["tier B<br/>existing alert ring<br/>reason: native_tier_unavailable"]
+    Sender["Background sender<br/>confirms the call is still live,<br/>then sends and records sent/failed"]
+
+    Ring --> Notif --> Worker --> IsCall
+    IsCall -- No --> Ordinary
+    IsCall -- Yes --> Dispatch --> PerDevice
+    PerDevice -- "iOS + VoIP token" --> VoIP --> Sender
+    PerDevice -- "Android" --> Data --> Sender
+    PerDevice -- "No" --> Fallback --> Sender
+```
+
+The receipt check and the DND check are deliberately *not* on this path: an SSE receipt
+must not cancel a ring, and a call rings through do-not-disturb. A device is served
+exactly one tier per event, never both.
+
+### Reading the call wake measurements
+
+These numbers are meant to be read from the audit, not estimated. All of them join
+`notification.delivery_attempt` to `voice.call_session`.
+
+```sql
+-- Tier-A share: the feature's ~80% target.
+SELECT metadata->>'tier' AS tier, count(*)
+  FROM notification.delivery_attempt
+ WHERE channel = 'call_wake' AND attempt_status = 'sent'
+   AND metadata->>'event' = 'incoming'
+ GROUP BY 1;
+
+-- SC-001, ring within 5s: time from the call starting to the wake being sent, p95.
+SELECT percentile_disc(0.95) WITHIN GROUP (
+         ORDER BY extract(epoch FROM da.attempted_at - cs.started_at))
+  FROM notification.delivery_attempt da
+  JOIN notification.notification_recipient nr
+    ON (da.organization_id, da.notification_recipient_id) = (nr.organization_id, nr.id)
+  JOIN notification.notification n
+    ON (nr.organization_id, nr.notification_id) = (n.organization_id, n.id)
+  JOIN voice.call_session cs
+    ON cs.organization_id = n.organization_id
+   AND cs.id = (n.action_data->>'callId')::uuid
+ WHERE da.channel = 'call_wake' AND da.attempt_status = 'sent'
+   AND da.metadata->>'event' = 'incoming';
+
+-- SC-004, calls that were never presented on any device.
+SELECT count(*) FILTER (WHERE sent_rows = 0)::numeric / nullif(count(*), 0)
+  FROM (
+    SELECT cs.id,
+           count(*) FILTER (WHERE da.attempt_status = 'sent') AS sent_rows
+      FROM voice.call_session cs
+      LEFT JOIN notification.notification n
+        ON n.organization_id = cs.organization_id
+       AND n.notification_type = 'voice_call_incoming'
+       AND n.action_data->>'callId' = cs.id::text
+      LEFT JOIN notification.notification_recipient nr
+        ON (nr.organization_id, nr.notification_id) = (n.organization_id, n.id)
+      LEFT JOIN notification.delivery_attempt da
+        ON (da.organization_id, da.notification_recipient_id) = (nr.organization_id, nr.id)
+       AND da.channel = 'call_wake'
+     GROUP BY cs.id
+  ) per_call;
+
+-- SC-006, unreachable verdict within 10s. An unreachable callee is refused before the
+-- call row exists, so this reads the refusal rate rather than a duration: any
+-- no_call_wake_target row means a device was resolved but could not be reached.
+SELECT count(*) FROM notification.delivery_attempt
+ WHERE channel = 'call_wake' AND reason = 'no_call_wake_target';
+```
+
 ---
 
 ## Subscription Lifecycle
@@ -515,7 +600,10 @@ deleted in feature 034 rather than scheduled.
 | RPC layer | `internal/notification/connect.go` | `ListNotifications`, `MarkAsRead`, `StreamNotifications` |
 | Presence | `internal/notification/presence_logic.go` | `RecordPongs()`, `RemoveDepartedConnections()`, `DeleteExpiredConnections()`, `GetEmployeePresence()`, `GetBatchEmployeePresence()` |
 | Pong batcher | `internal/notification/pong_batcher.go` | `Submit()`, per-organization flush |
-| Push | `internal/notification/push_logic.go` | FCM push fallback |
+| Push | `internal/notification/push_logic.go` | FCM push fallback, token registration |
+| Call wake | `internal/notification/call_wake.go` | `DispatchCallWake()`, per-device tier choice, background sender |
+| APNs VoIP | `internal/notification/apns_voip.go` | Direct APNs HTTP/2 VoIP provider (feature 037) |
+| Ring timeout | `internal/voice/ring_timeout.go` | `StartRingTimeoutWorker()`, exactly-once claim-and-end sweep |
 | Chat bridge | `internal/chat/logic.go` | `broadcastNewMessage()`, `bridgeTaskChannelMessage()` |
 | Task surfaces | `internal/collaboration/task_logic.go` | `registerTaskResourceSurfaces()`, `createTaskWatcher()`, `notifyTaskWatchers()` |
 | Task assign | `internal/collaboration/assignment_logic.go` | `AssignTask()`, `WatchTask()`, `ListTaskWatchers()` |

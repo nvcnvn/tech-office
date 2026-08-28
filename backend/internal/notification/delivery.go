@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
@@ -122,6 +123,19 @@ func (s *NotificationService) processDueRescuePushesForOrg(ctx context.Context, 
 	}
 
 	for _, row := range rows {
+		// A call wake is not a rescue push and does not go through this path's rules.
+		// It is dispatched with no window, it is never cancelled by an SSE receipt —
+		// the phone must ring natively even when a tab is open (FR-002) — and it never
+		// consults do-not-disturb or muted domains, because a call rings through them
+		// (FR-016). Routing it here rather than to the FCM alert below is also what
+		// keeps a device from being served both tiers for one call.
+		if isCallWakeNotification(row.NotificationType) {
+			if err := s.dispatchCallWakeForRow(ctx, tx, orgID, row, now); err != nil {
+				return err
+			}
+			continue
+		}
+
 		if row.AcknowledgementStatus == AcknowledgementStatusAcknowledged {
 			if err := s.Queries.SetFallbackSkippedForRecipient(ctx, tx, &database.SetFallbackSkippedForRecipientParams{
 				FallbackReason:          pgtype.Text{String: FallbackReasonAcknowledgedBeforePush, Valid: true},
@@ -263,4 +277,107 @@ func (s *NotificationService) retryFailedDeliveries(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// isCallWakeNotification reports whether a queued recipient row is a call ring rather
+// than an ordinary notification. Only the incoming-call notification qualifies: the
+// terminal events do not create notifications of their own, they are dispatched
+// straight from internal/voice against the incoming call's recipient row.
+func isCallWakeNotification(notificationType string) bool {
+	return notificationType == NotificationTypeVoiceCallIncoming
+}
+
+// dispatchCallWakeForRow turns a queued incoming-call row into per-device wakes.
+//
+// Everything the payload needs already sits in the notification's action_data, which is
+// what lets the wake be built here without a second round of queries — and, on the
+// device, lets the phone ring without calling back to the server first.
+func (s *NotificationService) dispatchCallWakeForRow(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	row *database.ClaimDueFallbackRecipientsRow,
+	now pgtype.Timestamptz,
+) error {
+	if s.CallWakeDispatcher == nil {
+		slog.WarnContext(ctx, "call wake dispatcher is not configured - falling back to the alert ring",
+			"employee_id", row.EmployeeID.String())
+		return s.sendPushAndRecord(ctx, tx, row.EmployeeID, orgID, row.RecipientID, rescuePushPayloadFromRow(row), FallbackReasonNativeTierUnavailable)
+	}
+
+	actionData := decodeActionData(row.ActionData)
+	callID, err := dbuuid.Parse(actionData["callId"])
+	if err != nil {
+		slog.ErrorContext(ctx, "incoming call notification carries no usable callId - cannot wake a device",
+			"error", err,
+			"notification_id", row.NotificationID.String(),
+		)
+		return s.markCallWakeSkipped(ctx, tx, orgID, row.RecipientID, now, FallbackReasonDeliveryError)
+	}
+
+	req := &CallWakeRequest{
+		OrganizationID:    orgID,
+		EmployeeID:        row.EmployeeID,
+		RecipientID:       row.RecipientID,
+		Event:             CallWakeEventIncoming,
+		CallID:            callID,
+		CallerDisplayName: actionData["senderName"],
+		WorkspaceName:     actionData["workspaceName"],
+	}
+	if channelID, parseErr := dbuuid.Parse(actionData["channelId"]); parseErr == nil {
+		req.ChannelID = channelID
+	}
+	if callerID, parseErr := dbuuid.Parse(actionData["senderEmployeeId"]); parseErr == nil {
+		req.CallerEmployeeID = callerID
+	}
+	if startedAt, parseErr := time.Parse(time.RFC3339, actionData["callStartedAt"]); parseErr == nil {
+		req.CallStartedAt = startedAt
+	}
+	if ringExpiresAt, parseErr := time.Parse(time.RFC3339, actionData["ringExpiresAt"]); parseErr == nil {
+		req.RingExpiresAt = ringExpiresAt
+	}
+
+	if _, err := s.CallWakeDispatcher.DispatchCallWake(ctx, tx, req); err != nil {
+		return err
+	}
+
+	// The recipient's own fallback bookkeeping still has to close out, or the row stays
+	// queued and the worker picks it up again on the next tick.
+	return s.Queries.SetFallbackSentForRecipient(ctx, tx, &database.SetFallbackSentForRecipientParams{
+		FallbackReason:          pgtype.Text{Valid: false},
+		UpdatedAt:               now,
+		OrganizationID:          orgID,
+		NotificationRecipientID: row.RecipientID,
+	})
+}
+
+func (s *NotificationService) markCallWakeSkipped(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	recipientID dbuuid.UUID,
+	now pgtype.Timestamptz,
+	reason string,
+) error {
+	if err := s.Queries.SetFallbackSkippedForRecipient(ctx, tx, &database.SetFallbackSkippedForRecipientParams{
+		FallbackReason:          pgtype.Text{String: reason, Valid: true},
+		UpdatedAt:               now,
+		OrganizationID:          orgID,
+		NotificationRecipientID: recipientID,
+	}); err != nil {
+		return err
+	}
+	return s.recordDeliveryAttempt(ctx, tx, orgID, recipientID, DeliveryChannelCallWake, "skipped", reason, now, nil)
+}
+
+// decodeActionData reads a notification's action_data back into a flat string map.
+func decodeActionData(raw []byte) map[string]string {
+	if len(raw) == 0 {
+		return map[string]string{}
+	}
+	decoded := map[string]string{}
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		return map[string]string{}
+	}
+	return decoded
 }

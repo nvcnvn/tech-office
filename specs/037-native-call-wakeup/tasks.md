@@ -30,12 +30,12 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 **Purpose**: Settle the riskiest unknown and put credentials and build config in place before any product code exists.
 
 - [ ] T001 Throwaway spike: prove `expo-callkit-telecom` rings a locked, force-quit iPhone and Android device from a hand-rolled push, in a scratch branch — no product code, no merge. Record the result in `specs/037-native-call-wakeup/research.md` under a new "Spike outcome" heading. **This is the exit criterion for the epic**: if it fails, stop and re-plan on `react-native-callkeep` before starting T002
-- [ ] T002 Add `expo-callkit-telecom@^0.4` to `frontend/apps/mobile/package.json` and register its config plugin in `frontend/apps/mobile/app.json`
-- [ ] T003 [P] Add the VoIP background mode, the `com.devguards.TechOffice.voip` APNs topic and the CallKit entitlement to the iOS section of `frontend/apps/mobile/app.json`
-- [ ] T004 [P] Add `android.permission.MANAGE_OWN_CALLS` and the calling foreground-service type plus its `FOREGROUND_SERVICE_*` permission to the Android section of `frontend/apps/mobile/app.json`
-- [ ] T005 [P] Add `github.com/sideshow/apns2` to `backend/go.mod` and wire the VoIP `.p8` credential (key, key ID, team ID, topic) into `backend/cmd/server.go` following the existing `GOOGLE_APPLICATION_CREDENTIALS` pattern, logging loudly and degrading to tier B when unset
-- [ ] T006 [P] Document the new APNs VoIP environment variables in `backend/docs/FCM-SETUP.md` (or a sibling `APNS-VOIP-SETUP.md` it links to)
-- [ ] T007 Produce a development build of the mobile app and confirm it installs on one iOS and one Android device — the native module cannot run in Expo Go, so every later task depends on this working
+- [X] T002 Add `expo-callkit-telecom@^0.4` to `frontend/apps/mobile/package.json` and register its config plugin in `frontend/apps/mobile/app.json`
+- [X] T003 [P] Add the VoIP background mode, the `com.devguards.TechOffice.voip` APNs topic and the CallKit entitlement to the iOS section of `frontend/apps/mobile/app.json`
+- [X] T004 [P] Add `android.permission.MANAGE_OWN_CALLS` and the calling foreground-service type plus its `FOREGROUND_SERVICE_*` permission to the Android section of `frontend/apps/mobile/app.json`
+- [X] T005 [P] Add `github.com/sideshow/apns2` to `backend/go.mod` and wire the VoIP `.p8` credential (key, key ID, team ID, topic) into `backend/cmd/server.go` following the existing `GOOGLE_APPLICATION_CREDENTIALS` pattern, logging loudly and degrading to tier B when unset
+- [X] T006 [P] Document the new APNs VoIP environment variables in `backend/docs/FCM-SETUP.md` (or a sibling `APNS-VOIP-SETUP.md` it links to)
+- [X] T007 Produce a development build of the mobile app and confirm it installs on one iOS and one Android device — the native module cannot run in Expo Go, so every later task depends on this working
 
 **Checkpoint**: The spike has passed, the build carries the native module, and the backend can authenticate to APNs.
 
@@ -47,19 +47,19 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T008 Add the token type and native-call-capable fields to `RegisterPushTokenRequest` and `PushTokenInfo` in `backend/rpc/v1/notification.proto`, per [contracts/notification-proto-delta.md](./contracts/notification-proto-delta.md), and regenerate
-- [ ] T009 [P] Define the call wake event kinds (`incoming`, `cancelled`, `answered_elsewhere`, `declined_elsewhere`, `ended`) and the push token types as shared constants in `backend/internal/notification/constants.go`, mirrored in `frontend/packages/apis/src/push-tokens.ts` — one definition per concept, per Constitution VIII
-- [ ] T010 Write `backend/database/migrations/20260828000002_call_wake.up.sql`: widen `notification.delivery_attempt` channel CHECK to add `call_wake`, widen its reason CHECK to add `no_call_wake_target`, `native_tier_unavailable`, `call_already_ended`, add `voice.call_session.ring_deadline_at timestamptz NULL`, and update the affected column comments. Every change is additive (widened CHECKs, one nullable column), so the rollback posture is forward-only with no data rewrite — state that in the migration header, per Constitution VI. Regenerate `backend/database/scripts/schema.sql` from migrations — never hand-edit it
-- [ ] T011 Extend `RegisterPushToken` in `backend/internal/notification/push_logic.go` to persist token type and native-call capability into `token_metadata`, allowing one row per type per `device_identifier` and keeping the existing duplicate cleanup scoped within a type
-- [ ] T012 Implement the direct APNs VoIP provider in `backend/internal/notification/apns_voip.go`: HTTP/2 client, JWT auth with refresh, headers per [contracts/call-wake-payloads.md](./contracts/call-wake-payloads.md) (`apns-push-type: voip`, priority 10, expiration from the ring deadline, collapse ID from the call ID), and `410 Unregistered` marking the token row invalid
-- [ ] T013 Implement the call wake dispatcher in `backend/internal/notification/call_wake.go`: resolve the callee's devices, pick tier A (VoIP for iOS, data-only FCM for Android) or tier B per device, emit the common payload with a per-call increasing `sequence`, and write one `delivery_attempt` row per device per event. Refuse to dispatch any notification type that is not a live call event
-- [ ] T014 Add the `call_wake` delivery class to `backend/internal/notification/publisher.go` with a **zero** fallback window, and make it exempt from receipt-based cancellation — an SSE receipt must never cancel a ring (FR-002)
-- [ ] T015 Exempt `call_wake` from DND and muted-domain suppression in `backend/internal/notification/routing_logic.go`, so `suppressed_by_preference` can never appear on a call wake row (FR-016)
-- [ ] T016 Route `call_wake` rows from the rescue push worker in `backend/internal/notification/delivery.go` to the dispatcher instead of the FCM alert path, reusing the existing 1 s tick and batch claim
-- [ ] T017 [P] Extend the **existing** mobile registration in `frontend/apps/mobile/src/hooks/use-push-notifications.ts` to register both tokens per device — FCM plus, on iOS, the PushKit VoIP token — under one shared `device_identifier`, with rotation and revoke covering every row for that device. Do not add a second registration path; `use-push-notifications.ts` stays the only place mobile registers tokens
-- [ ] T018 [P] Surface token type and native-call capability through the client wrapper in `frontend/packages/apis/src/push-tokens.ts` — the module that actually owns `registerPushToken` (wrapper pattern only, no direct RPC from components, per Constitution VII)
+- [X] T008 Add the token type and native-call-capable fields to `RegisterPushTokenRequest` and `PushTokenInfo` in `backend/rpc/v1/notification.proto`, per [contracts/notification-proto-delta.md](./contracts/notification-proto-delta.md), and regenerate
+- [X] T009 [P] Define the call wake event kinds (`incoming`, `cancelled`, `answered_elsewhere`, `declined_elsewhere`, `ended`) and the push token types as shared constants in `backend/internal/notification/constants.go`, mirrored in `frontend/packages/apis/src/push-tokens.ts` — one definition per concept, per Constitution VIII
+- [X] T010 Write `backend/database/migrations/20260828000002_call_wake.up.sql`: widen `notification.delivery_attempt` channel CHECK to add `call_wake`, widen its reason CHECK to add `no_call_wake_target`, `native_tier_unavailable`, `call_already_ended`, add `voice.call_session.ring_deadline_at timestamptz NULL`, and update the affected column comments. Every change is additive (widened CHECKs, one nullable column), so the rollback posture is forward-only with no data rewrite — state that in the migration header, per Constitution VI. Regenerate `backend/database/scripts/schema.sql` from migrations — never hand-edit it
+- [X] T011 Extend `RegisterPushToken` in `backend/internal/notification/push_logic.go` to persist token type and native-call capability into `token_metadata`, allowing one row per type per `device_identifier` and keeping the existing duplicate cleanup scoped within a type
+- [X] T012 Implement the direct APNs VoIP provider in `backend/internal/notification/apns_voip.go`: HTTP/2 client, JWT auth with refresh, headers per [contracts/call-wake-payloads.md](./contracts/call-wake-payloads.md) (`apns-push-type: voip`, priority 10, expiration from the ring deadline, collapse ID from the call ID), and `410 Unregistered` marking the token row invalid
+- [X] T013 Implement the call wake dispatcher in `backend/internal/notification/call_wake.go`: resolve the callee's devices, pick tier A (VoIP for iOS, data-only FCM for Android) or tier B per device, emit the common payload with a per-call increasing `sequence`, and write one `delivery_attempt` row per device per event. Refuse to dispatch any notification type that is not a live call event
+- [X] T014 Add the `call_wake` delivery class to `backend/internal/notification/publisher.go` with a **zero** fallback window, and make it exempt from receipt-based cancellation — an SSE receipt must never cancel a ring (FR-002)
+- [X] T015 Exempt `call_wake` from DND and muted-domain suppression in `backend/internal/notification/routing_logic.go`, so `suppressed_by_preference` can never appear on a call wake row (FR-016)
+- [X] T016 Route `call_wake` rows from the rescue push worker in `backend/internal/notification/delivery.go` to the dispatcher instead of the FCM alert path, reusing the existing 1 s tick and batch claim
+- [X] T017 [P] Extend the **existing** mobile registration in `frontend/apps/mobile/src/hooks/use-push-notifications.ts` to register both tokens per device — FCM plus, on iOS, the PushKit VoIP token — under one shared `device_identifier`, with rotation and revoke covering every row for that device. Do not add a second registration path; `use-push-notifications.ts` stays the only place mobile registers tokens
+- [X] T018 [P] Surface token type and native-call capability through the client wrapper in `frontend/packages/apis/src/push-tokens.ts` — the module that actually owns `registerPushToken` (wrapper pattern only, no direct RPC from components, per Constitution VII)
 
-- [ ] T019 Pass the new required token type from the web client in `frontend/apps/web/src/hooks/usePushPermission.ts` (`web_push`). **The token-type field is required, so web push registration breaks without this** — Constitution VI is satisfied by making the breaking change atomic across backend, web and mobile in one change set, not by defaulting the field
+- [X] T019 Pass the new required token type from the web client in `frontend/apps/web/src/hooks/usePushPermission.ts` (`web_push`). **The token-type field is required, so web push registration breaks without this** — Constitution VI is satisfied by making the breaking change atomic across backend, web and mobile in one change set, not by defaulting the field
 
 **Checkpoint**: A call event can reach a specific device on the right transport, and every attempt is auditable.
 
@@ -73,21 +73,21 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 ### Tests for User Story 1
 
-- [ ] T020 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go` (testWorld pattern, nested `t.Run` arrange/act/assert): a call to a person with two registered devices produces one `sent` `call_wake` row per device carrying the `incoming` payload
-- [ ] T021 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go`: the wake is dispatched even when the callee has a live SSE connection — the receipt must not cancel it
-- [ ] T022 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go`: calls answered, declined and missed through the native surface produce the same call records, chat system messages and missed-call visibility as in-app calls (FR-020) — three cases, including that the ring deadline sweep writes the same `voice_call_missed` message the webhook path writes
-- [ ] T023 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go`: two backend instances running the sweep concurrently end the call exactly once (Constitution XI)
+- [X] T020 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go` (testWorld pattern, nested `t.Run` arrange/act/assert): a call to a person with two registered devices produces one `sent` `call_wake` row per device carrying the `incoming` payload
+- [X] T021 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go`: the wake is dispatched even when the callee has a live SSE connection — the receipt must not cancel it
+- [X] T022 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go`: calls answered, declined and missed through the native surface produce the same call records, chat system messages and missed-call visibility as in-app calls (FR-020) — three cases, including that the ring deadline sweep writes the same `voice_call_missed` message the webhook path writes
+- [X] T023 [P] [US1] Integration test in `backend/integration/native_call_wakeup_test.go`: two backend instances running the sweep concurrently end the call exactly once (Constitution XI)
 
 ### Implementation for User Story 1
 
-- [ ] T024 [US1] Emit the `incoming` call wake from `backend/internal/voice/logic.go` when a call enters `ringing`, after the existing channel authorization and direct-contact block guard — nothing may be woken for a refused call (FR-018)
-- [ ] T025 [US1] Set and clear `ring_deadline_at` on the `ringing` transition in `backend/internal/voice/logic.go`, using a **45-second** ring timeout defined once as a constant in `backend/internal/voice/constants.go` and carried to clients as `ringExpiresAt` in the wake payload
-- [ ] T026 [US1] Implement the bounded ring timeout sweep in `backend/internal/voice/ring_timeout.go`: claim `ringing` calls past their deadline exclusively, end them `missed`, and publish the terminal wake. Reuse the existing scheduler; do not add a daemon
-- [ ] T027 [US1] Implement wake receipt and call reporting in `frontend/apps/mobile/src/lib/voice/native-call.ts`: on every wake, report the call to the OS **first**, then act on the event kind. Present the native incoming UI for `incoming` showing only caller display name and workspace name (FR-008). The tier-A path owns its own navigation on answer and does **not** route through the `voice_call_incoming` special case in `frontend/apps/mobile/src/lib/linking.ts`, which stays the tier-B route only
-- [ ] T028 [US1] Implement answer and decline handlers in `frontend/apps/mobile/src/lib/voice/native-call.ts`, joining the LiveKit room on answer and opening the in-call surface, and ending the call with a declined outcome on decline without opening the app. Keep every Telecom callback inside the 5 s budget — no network round trip inside a callback
-- [ ] T029 [US1] Post the Android call notification within 5 s of `CallsManager.addCall` in `frontend/apps/mobile/src/lib/voice/native-call.ts`, before any awaited work
-- [ ] T030 [US1] Handle a wake arriving with no valid workspace session in `frontend/apps/mobile/src/lib/voice/native-call.ts`: report the call, then end it immediately without ringing (FR-019)
-- [ ] T031 [US1] Add structured logging for every wake received, reported, answered and ended in `frontend/apps/mobile/src/lib/voice/native-call.ts`, so a field report can be traced against the backend audit rows
+- [X] T024 [US1] Emit the `incoming` call wake from `backend/internal/voice/logic.go` when a call enters `ringing`, after the existing channel authorization and direct-contact block guard — nothing may be woken for a refused call (FR-018)
+- [X] T025 [US1] Set and clear `ring_deadline_at` on the `ringing` transition in `backend/internal/voice/logic.go`, using a **45-second** ring timeout defined once as a constant in `backend/internal/voice/constants.go` and carried to clients as `ringExpiresAt` in the wake payload
+- [X] T026 [US1] Implement the bounded ring timeout sweep in `backend/internal/voice/ring_timeout.go`: claim `ringing` calls past their deadline exclusively, end them `missed`, and publish the terminal wake. Reuse the existing scheduler; do not add a daemon
+- [X] T027 [US1] Implement wake receipt and call reporting in `frontend/apps/mobile/src/lib/voice/native-call.ts`: on every wake, report the call to the OS **first**, then act on the event kind. Present the native incoming UI for `incoming` showing only caller display name and workspace name (FR-008). The tier-A path owns its own navigation on answer and does **not** route through the `voice_call_incoming` special case in `frontend/apps/mobile/src/lib/linking.ts`, which stays the tier-B route only
+- [X] T028 [US1] Implement answer and decline handlers in `frontend/apps/mobile/src/lib/voice/native-call.ts`, joining the LiveKit room on answer and opening the in-call surface, and ending the call with a declined outcome on decline without opening the app. Keep every Telecom callback inside the 5 s budget — no network round trip inside a callback
+- [X] T029 [US1] Post the Android call notification within 5 s of `CallsManager.addCall` in `frontend/apps/mobile/src/lib/voice/native-call.ts`, before any awaited work
+- [X] T030 [US1] Handle a wake arriving with no valid workspace session in `frontend/apps/mobile/src/lib/voice/native-call.ts`: report the call, then end it immediately without ringing (FR-019)
+- [X] T031 [US1] Add structured logging for every wake received, reported, answered and ended in `frontend/apps/mobile/src/lib/voice/native-call.ts`, so a field report can be traced against the backend audit rows
 
 **Checkpoint**: The headline scenario works end to end. This is the MVP — stop and run [quickstart.md](./quickstart.md) section C1 before continuing.
 
@@ -103,15 +103,15 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 ### Tests for User Story 2
 
-- [ ] T032 [P] [US2] Maestro flow in `frontend/apps/mobile/.maestro/native-call/in-call-surface.yaml`: the in-app in-call surface mirrors muted state and closes when the call ends
+- [X] T032 [P] [US2] Maestro flow in `frontend/apps/mobile/.maestro/native-call/in-call-surface.yaml`: the in-app in-call surface mirrors muted state and closes when the call ends
 
 ### Implementation for User Story 2
 
-- [ ] T033 [US2] Implement the audio session handoff in `frontend/apps/mobile/src/lib/voice/call-audio.ts`: the native framework owns the session, LiveKit carries media only. On iOS, do not let LiveKit activate `AVAudioSession` — start audio in the CallKit `didActivate` callback. On Android, leave routing to Telecom and use `STREAM_VOICE_CALL`; never call `setCommunicationDevice` or `startBluetoothSco`. **This is the highest-risk task in the epic** — the failure mode is a call that connects with no audio
-- [ ] T034 [US2] Keep the OS call object alive for the whole call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, so lock-screen and control-centre controls stay available
-- [ ] T035 [US2] Wire system control actions (mute, speaker, hold, hang up) to the workspace call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, and reflect workspace-side state changes back into the OS call object (FR-012)
+- [X] T033 [US2] Implement the audio session handoff in `frontend/apps/mobile/src/lib/voice/call-audio.ts`: the native framework owns the session, LiveKit carries media only. On iOS, do not let LiveKit activate `AVAudioSession` — start audio in the CallKit `didActivate` callback. On Android, leave routing to Telecom and use `STREAM_VOICE_CALL`; never call `setCommunicationDevice` or `startBluetoothSco`. **This is the highest-risk task in the epic** — the failure mode is a call that connects with no audio
+- [X] T034 [US2] Keep the OS call object alive for the whole call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, so lock-screen and control-centre controls stay available
+- [X] T035 [US2] Wire system control actions (mute, speaker, hold, hang up) to the workspace call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, and reflect workspace-side state changes back into the OS call object (FR-012)
 - [ ] T036 [US2] Mirror system call state into the in-app surface in `frontend/apps/mobile/src/components/voice/active-voice-call-bar.tsx`
-- [ ] T037 [US2] Handle Bluetooth connect and disconnect mid-call in `frontend/apps/mobile/src/lib/voice/call-audio.ts` without dropping the call
+- [X] T037 [US2] Handle Bluetooth connect and disconnect mid-call in `frontend/apps/mobile/src/lib/voice/call-audio.ts` without dropping the call
 
 **Checkpoint**: A call can be lived with entirely from the phone's own controls.
 
@@ -125,15 +125,15 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 ### Tests for User Story 3
 
-- [ ] T038 [P] [US3] Integration test in `backend/integration/native_call_wakeup_test.go`: a wake is still dispatched when the callee has workspace DND active or the voice domain muted, and no row carries `suppressed_by_preference`
-- [ ] T039 [P] [US3] Integration test in `backend/integration/native_call_wakeup_test.go`: a second call to a person already on a workspace call returns `VOICE_CALLEE_BUSY` and does not interrupt the first call
+- [X] T038 [P] [US3] Integration test in `backend/integration/native_call_wakeup_test.go`: a wake is still dispatched when the callee has workspace DND active or the voice domain muted, and no row carries `suppressed_by_preference`
+- [X] T039 [P] [US3] Integration test in `backend/integration/native_call_wakeup_test.go`: a second call to a person already on a workspace call returns `VOICE_CALLEE_BUSY` and does not interrupt the first call
 - [ ] T040 [P] [US3] Maestro flow in `frontend/apps/mobile/.maestro/native-call/permissions.yaml`: the permission education screen explains why, and the app stays usable when the permission is declined
 
 ### Implementation for User Story 3
 
-- [ ] T041 [US3] Return `VOICE_CALLEE_BUSY` as a structured error detail from `backend/internal/voice/logic.go` when the callee is already on a workspace call, extending the existing voice error vocabulary (Constitution X)
-- [ ] T042 [US3] Refuse to force-connect while the device is on another call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, reporting the busy state per platform convention (FR-015)
-- [ ] T043 [US3] Respect OS-level call silencing and never attempt to override it in `frontend/apps/mobile/src/lib/voice/native-call.ts` (FR-016)
+- [X] T041 [US3] Return `VOICE_CALLEE_BUSY` as a structured error detail from `backend/internal/voice/logic.go` when the callee is already on a workspace call, extending the existing voice error vocabulary (Constitution X)
+- [X] T042 [US3] Refuse to force-connect while the device is on another call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, reporting the busy state per platform convention (FR-015)
+- [X] T043 [US3] Respect OS-level call silencing and never attempt to override it in `frontend/apps/mobile/src/lib/voice/native-call.ts` (FR-016)
 - [ ] T044 [US3] Add permission education before requesting the native call permissions in `frontend/apps/mobile/src/lib/voice/native-call.ts`, at a point where the user understands why, leaving the app usable if declined (FR-017)
 
 **Checkpoint**: The phone is a good citizen — no talked-over cellular calls, no 2am surprises, no overridden OS settings.
@@ -148,14 +148,14 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 ### Tests for User Story 4
 
-- [ ] T045 [P] [US4] Integration test in `backend/integration/native_call_wakeup_test.go`: a call to a person with no valid token ends promptly with `VOICE_CALLEE_UNREACHABLE` and audit reason `no_call_wake_target`
-- [ ] T046 [P] [US4] Integration test in `backend/integration/native_call_wakeup_test.go`: when one device answers, `answered_elsewhere` goes to that person's other devices and to no one else
+- [X] T045 [P] [US4] Integration test in `backend/integration/native_call_wakeup_test.go`: a call to a person with no valid token ends promptly with `VOICE_CALLEE_UNREACHABLE` and audit reason `no_call_wake_target`
+- [X] T046 [P] [US4] Integration test in `backend/integration/native_call_wakeup_test.go`: when one device answers, `answered_elsewhere` goes to that person's other devices and to no one else
 
 ### Implementation for User Story 4
 
-- [ ] T047 [US4] Return `VOICE_CALLEE_UNREACHABLE` as a structured error detail and end the call immediately when no device can be woken, in `backend/internal/voice/logic.go` (FR-006, SC-006)
-- [ ] T048 [US4] Emit `answered_elsewhere` and `declined_elsewhere` wakes to the person's other devices on answer and decline, in `backend/internal/voice/logic.go` (FR-004)
-- [ ] T049 [US4] Surface ringing, busy and unreachable states to the caller in `frontend/packages/apis/src/voice.ts` and the caller's in-call UI
+- [X] T047 [US4] Return `VOICE_CALLEE_UNREACHABLE` as a structured error detail and end the call immediately when no device can be woken, in `backend/internal/voice/logic.go` (FR-006, SC-006)
+- [X] T048 [US4] Emit `answered_elsewhere` and `declined_elsewhere` wakes to the person's other devices on answer and decline, in `backend/internal/voice/logic.go` (FR-004)
+- [X] T049 [US4] Surface ringing, busy and unreachable states to the caller in `frontend/packages/apis/src/voice.ts` and the caller's in-call UI
 
 **Checkpoint**: Callers stop re-dialling people who cannot be reached.
 
@@ -171,17 +171,17 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 ### Tests for User Story 5
 
-- [ ] T050 [P] [US5] Integration test in `backend/integration/native_call_wakeup_test.go`: no notification type other than a live call event is ever dispatched on the `call_wake` channel (FR-003)
-- [ ] T051 [P] [US5] Integration test in `backend/integration/native_call_wakeup_test.go`: a caller cancelling before answer sends a `cancelled` wake, at a higher `sequence`, to exactly the devices that received `incoming`
-- [ ] T052 [P] [US5] Integration test in `backend/integration/native_call_wakeup_test.go`: a call into a direct conversation where one party blocked the other is refused with `VOICE_DIRECT_CONTACT_BLOCKED` and writes **zero** `call_wake` rows
+- [X] T050 [P] [US5] Integration test in `backend/integration/native_call_wakeup_test.go`: no notification type other than a live call event is ever dispatched on the `call_wake` channel (FR-003)
+- [X] T051 [P] [US5] Integration test in `backend/integration/native_call_wakeup_test.go`: a caller cancelling before answer sends a `cancelled` wake, at a higher `sequence`, to exactly the devices that received `incoming`
+- [X] T052 [P] [US5] Integration test in `backend/integration/native_call_wakeup_test.go`: a call into a direct conversation where one party blocked the other is refused with `VOICE_DIRECT_CONTACT_BLOCKED` and writes **zero** `call_wake` rows
 
 ### Implementation for User Story 5
 
-- [ ] T053 [US5] Emit the `cancelled` and `ended` wakes on every terminal path in `backend/internal/voice/logic.go` — caller cancel, remote hang-up, ring timeout, join failure — so no device is left ringing
-- [ ] T054 [US5] Enforce report-then-end for every terminal event kind in `frontend/apps/mobile/src/lib/voice/native-call.ts`, mapping each to its OS end reason (unanswered, remote ended, answered elsewhere, declined elsewhere), including for a call the client has never seen (FR-013)
-- [ ] T055 [US5] Apply `sequence` ordering and duplicate suppression per `callId` in `frontend/apps/mobile/src/lib/voice/native-call.ts`, so an out-of-order or repeated wake cannot resurrect a dead call
-- [ ] T056 [US5] Drop a wake whose `ringExpiresAt` has passed in `frontend/apps/mobile/src/lib/voice/native-call.ts` — report and end rather than ring (US5 scenario 2)
-- [ ] T057 [US5] Close the OS call when joining fails after an answer (network, capacity, revoked microphone permission) in `frontend/apps/mobile/src/lib/voice/native-call.ts`, showing the failure rather than leaving the call hanging
+- [X] T053 [US5] Emit the `cancelled` and `ended` wakes on every terminal path in `backend/internal/voice/logic.go` — caller cancel, remote hang-up, ring timeout, join failure — so no device is left ringing
+- [X] T054 [US5] Enforce report-then-end for every terminal event kind in `frontend/apps/mobile/src/lib/voice/native-call.ts`, mapping each to its OS end reason (unanswered, remote ended, answered elsewhere, declined elsewhere), including for a call the client has never seen (FR-013)
+- [X] T055 [US5] Apply `sequence` ordering and duplicate suppression per `callId` in `frontend/apps/mobile/src/lib/voice/native-call.ts`, so an out-of-order or repeated wake cannot resurrect a dead call
+- [X] T056 [US5] Drop a wake whose `ringExpiresAt` has passed in `frontend/apps/mobile/src/lib/voice/native-call.ts` — report and end rather than ring (US5 scenario 2)
+- [X] T057 [US5] Close the OS call when joining fails after an answer (network, capacity, revoked microphone permission) in `frontend/apps/mobile/src/lib/voice/native-call.ts`, showing the failure rather than leaving the call hanging
 
 **Checkpoint**: Zero orphaned call screens, and the wake path cannot be used for anything but a call.
 
@@ -191,13 +191,13 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 **Purpose**: The ~20% of devices that cannot run the native tier, and the measurement that tells us what the split actually is.
 
-- [ ] T058 Record reason `native_tier_unavailable` and enforce the never-both-tiers guard for fallback devices in `backend/internal/notification/call_wake.go`. The tier-A/tier-B routing decision itself is implemented in T013 — do not re-implement it here
+- [X] T058 Record reason `native_tier_unavailable` and enforce the never-both-tiers guard for fallback devices in `backend/internal/notification/call_wake.go`. The tier-A/tier-B routing decision itself is implemented in T013 — do not re-implement it here
 - [ ] T059 [P] Demote `frontend/apps/mobile/src/lib/voice/voice-notifications.ts` and `frontend/apps/mobile/src/components/voice/incoming-voice-call-prompt.tsx` to the tier-B path only, and tell the user plainly what they lose (FR-014)
-- [ ] T060 [P] Maestro flow in `frontend/apps/mobile/.maestro/native-call/fallback-ring.yaml`: a not-native-capable device shows the tier-B prompt and can answer and decline from it
+- [X] T060 [P] Maestro flow in `frontend/apps/mobile/.maestro/native-call/fallback-ring.yaml`: a not-native-capable device shows the tier-B prompt and can answer and decline from it
 - [ ] T061 [P] Add first-run OEM battery-allowlist onboarding for Xiaomi, Huawei, Oppo, Vivo and Samsung devices in `frontend/apps/mobile/src/lib/voice/native-call.ts`, skippable, shown once
 - [ ] T062 [P] Maestro flow in `frontend/apps/mobile/.maestro/native-call/battery-allowlist.yaml`: the onboarding step appears on an affected device profile and can be skipped
-- [ ] T063 [P] Record in `specs/037-native-call-wakeup/plan.md` that FR-021 (system recent-calls surface) is **deliberately not implemented in this epic**: Jetpack Telecom's unified call history and `isLogExcluded` require Android 16.1 (SDK 36.1), far above this epic's API 26 floor. FR-021 is a MAY; revisit when the 16.1 install base justifies it
-- [ ] T064 Add the tier-A share and SC-001/SC-004/SC-006 measurement queries from [quickstart.md](./quickstart.md) to `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`, so the ~80% target is read from audit data rather than guessed
+- [X] T063 [P] Record in `specs/037-native-call-wakeup/plan.md` that FR-021 (system recent-calls surface) is **deliberately not implemented in this epic**: Jetpack Telecom's unified call history and `isLogExcluded` require Android 16.1 (SDK 36.1), far above this epic's API 26 floor. FR-021 is a MAY; revisit when the 16.1 install base justifies it
+- [X] T064 Add the tier-A share and SC-001/SC-004/SC-006 measurement queries from [quickstart.md](./quickstart.md) to `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`, so the ~80% target is read from audit data rather than guessed
 
 ---
 
@@ -216,10 +216,10 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 
 ## Phase 10: Polish & Documentation
 
-- [ ] T071 [P] Update `docs/domain/voice.md`: native call presentation, the ring deadline and its sweep, the terminal wake events, and the busy and unreachable outcomes. Delete behaviour that no longer exists
-- [ ] T072 [P] Update `docs/domain/notifications-presence.md`: the `call_wake` delivery class, its zero window, its exemption from receipt cancellation and from DND suppression, the new `delivery_attempt` channel and reasons, and VoIP token rows
-- [ ] T073 [P] Update `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md` with the two-transport dispatch path and the tier-A/tier-B routing decision (Constitution XII)
-- [ ] T074 [P] Record the drift register entry in `docs/domain/README.md` if any behaviour shipped differently from this spec
+- [X] T071 [P] Update `docs/domain/voice.md`: native call presentation, the ring deadline and its sweep, the terminal wake events, and the busy and unreachable outcomes. Delete behaviour that no longer exists
+- [X] T072 [P] Update `docs/domain/notifications-presence.md`: the `call_wake` delivery class, its zero window, its exemption from receipt cancellation and from DND suppression, the new `delivery_attempt` channel and reasons, and VoIP token rows
+- [X] T073 [P] Update `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md` with the two-transport dispatch path and the tier-A/tier-B routing decision (Constitution XII)
+- [X] T074 [P] Record the drift register entry in `docs/domain/README.md` if any behaviour shipped differently from this spec
 - [ ] T075 Confirm idle battery cost stays under 1%/day on a device receiving no calls (SC-009) and record the measurement
 
 ---

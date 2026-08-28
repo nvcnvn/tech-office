@@ -58,20 +58,74 @@ export function isExpectedVoiceDisconnect(reason: unknown): boolean {
 	return typeof reason === 'number' && expectedLiveKitDisconnectReasons.has(reason);
 }
 
-export function voiceCallErrorMessage(error: unknown, fallback: string): string {
-        const message = error instanceof Error ? error.message : '';
-        const normalized = message.toLowerCase();
+/**
+ * Why a call could not be placed, when the reason is one the caller should act on
+ * differently.
+ *
+ * These are distinct outcomes, not shades of failure: "busy" means try again shortly,
+ * "unreachable" means this person cannot be reached at all right now, and "blocked"
+ * must never be named as such to the caller. Collapsing them into one error message is
+ * what makes people re-dial a phone that was never going to ring.
+ *
+ * MUST align with the ErrorReason* constants in backend/internal/voice/errors.go.
+ */
+export type VoiceCallFailure = 'busy' | 'unreachable' | 'unavailable' | 'other';
 
+const VOICE_ERROR_REASONS: ReadonlyArray<readonly [string, VoiceCallFailure]> = [
+        ['VOICE_CALLEE_BUSY', 'busy'],
+        ['VOICE_CALLEE_UNREACHABLE', 'unreachable'],
+        ['VOICE_MEDIA_PROVIDER_UNAVAILABLE', 'unavailable'],
+];
+
+/**
+ * Classifies a failed call attempt.
+ *
+ * Reads the structured error reason rather than matching on message text, so the
+ * wording can change without silently reclassifying an outcome.
+ */
+export function voiceCallFailureKind(error: unknown): VoiceCallFailure {
+        const message = error instanceof Error ? error.message : '';
+        const details = (error as { details?: unknown[] } | null)?.details;
+        const haystack = [message, JSON.stringify(details ?? '')].join(' ');
+
+        for (const [reason, kind] of VOICE_ERROR_REASONS) {
+                if (haystack.includes(reason)) {
+                        return kind;
+                }
+        }
+
+        const normalized = message.toLowerCase();
+        if (normalized.includes('already on a call')) return 'busy';
+        if (normalized.includes('cannot be reached')) return 'unreachable';
         if (
                 normalized.includes('voice media provider unavailable') ||
                 normalized.includes('livekit') ||
                 normalized.includes('twirp') ||
                 normalized.includes('connect: connection refused')
         ) {
-                return 'Voice calling is temporarily unavailable. Please try again in a moment.';
+                return 'unavailable';
         }
+        return 'other';
+}
 
-        return message || fallback;
+export function voiceCallErrorMessage(error: unknown, fallback: string): string {
+        const message = error instanceof Error ? error.message : '';
+
+        switch (voiceCallFailureKind(error)) {
+                case 'busy':
+                        // Named as a state of the other person, not a failure of the caller's
+                        // action, because "try again shortly" is the useful next step.
+                        return 'They are already on another call. Try again in a moment.';
+                case 'unreachable':
+                        // Deliberately says nothing about why. The callee may have no device
+                        // registered, may have revoked notifications, or may simply be
+                        // powered off, and none of that is the caller's business.
+                        return 'They cannot be reached right now.';
+                case 'unavailable':
+                        return 'Voice calling is temporarily unavailable. Please try again in a moment.';
+                default:
+                        return message || fallback;
+        }
 }
 
 export interface StartVoiceCallParams {

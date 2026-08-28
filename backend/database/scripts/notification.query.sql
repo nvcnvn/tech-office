@@ -400,6 +400,22 @@ WHERE nr.organization_id = n.organization_id
   AND n.notification_type = 'voice_call_incoming'
   AND n.navigation_target->>'secondaryId' = sqlc.arg('invitation_id')::text;
 
+-- name: ListCallWakeTargetsForCall :many
+-- The people who were rung for a call, with the notification_recipient row that
+-- anchors their delivery audit.
+--
+-- Terminal call wakes (cancelled, ended, answered elsewhere, declined elsewhere) are
+-- not notifications of their own: they reuse the incoming call's recipient row, so
+-- every attempt made for one call reads back as one trail. That is also what makes
+-- "exactly the devices that received incoming" a query rather than a guess.
+SELECT nr.id AS recipient_id,
+       nr.employee_id
+FROM notification.notification_recipient nr
+JOIN notification.notification n ON (nr.organization_id, nr.notification_id) = (n.organization_id, n.id)
+WHERE nr.organization_id = sqlc.arg('organization_id')::uuid
+  AND n.notification_type = 'voice_call_incoming'
+  AND n.action_data->>'callId' = sqlc.arg('call_id')::text;
+
 -- name: AcknowledgeVoiceCallNotificationsForCall :exec
 -- Acknowledges all pending incoming-call notifications for a call after the call reaches
 -- a terminal lifecycle state, preventing stale global ringing popups on reconnect.
@@ -565,6 +581,10 @@ WHERE fallback_status = 'queued'
 -- ============================================================================
 
 -- name: UpsertPushToken :one
+-- token_type is part of the conflict key: a device that can be woken natively holds
+-- one row per type under a single device_identifier (its FCM token for routine
+-- notifications, its APNs VoIP token for calls), so registering one must not clobber
+-- the other.
 INSERT INTO notification.push_token (
     token_id,
     organization_id,
@@ -579,12 +599,13 @@ INSERT INTO notification.push_token (
     last_used_at,
     updated_at,
   is_valid,
-  token_metadata
+  token_metadata,
+  token_type
 )
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
-ON CONFLICT (organization_id, employee_id, device_identifier) DO UPDATE
+ON CONFLICT (organization_id, employee_id, device_identifier, token_type) DO UPDATE
 SET fcm_token = EXCLUDED.fcm_token,
     permission_state = EXCLUDED.permission_state,
     endpoint = EXCLUDED.endpoint,
@@ -608,7 +629,8 @@ SELECT token_id,
        last_used_at,
        updated_at,
        is_valid,
-       token_metadata
+       token_metadata,
+       token_type
 FROM notification.push_token
 WHERE organization_id = $1
   AND employee_id = $2
@@ -640,6 +662,24 @@ WHERE organization_id = $1
       AND device_identifier = $4
     )
    );
+
+-- name: GetEmployeeCallWakeTokens :many
+-- Every device that could be woken for a call, one row per token type. The dispatcher
+-- groups these by device_identifier and picks one transport per device: tier A over
+-- the VoIP row on iOS or the FCM row on Android, tier B over the FCM row otherwise.
+-- A device must never be served both tiers for the same call event.
+SELECT token_id,
+       device_identifier,
+       fcm_token,
+       token_type,
+       token_metadata,
+       last_used_at
+FROM notification.push_token
+WHERE organization_id = $1
+  AND employee_id = $2
+  AND is_valid = true
+  AND permission_state <> 'denied'
+ORDER BY device_identifier, token_type;
 
 -- name: CleanupStalePushTokens :execrows
 DELETE FROM notification.push_token

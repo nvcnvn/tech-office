@@ -46,8 +46,9 @@ the ring deadline. No new tables.
 Maestro flows for the mobile app; manual device matrix for the parts no emulator can prove
 (locked screen, cold start, Bluetooth routing, OEM battery killers)
 
-**Target Platform**: iOS 15.1+, Android API 26+ for the native tier; every other device on
-the existing fallback ring
+**Target Platform**: iOS 16.4+, Android API 26+ for the native tier; every other device on
+the existing fallback ring. (Planned as iOS 15.1; corrected during implementation — see
+Deviations, item 6.)
 
 **Project Type**: Mobile + API — Go backend, Expo mobile app, existing web client unchanged
 
@@ -178,6 +179,66 @@ unified call history and `isLogExcluded` require **Android 16.1 (SDK 36.1)**, fa
 epic's API 26 floor, and the iOS equivalent carries its own privacy surface. FR-021 is a MAY
 in the spec; revisit when the 16.1 install base justifies the work. Recorded here rather than
 left as a silently uncovered requirement.
+
+## Deviations recorded during implementation
+
+Design decisions that differ from what this plan, `data-model.md` or `contracts/` said
+before the code existed. Recorded here rather than left to be rediscovered from a diff.
+
+**1. `push_token.token_type` is a real column, not a `token_metadata` key.**
+`data-model.md` put the token type in the existing JSONB. That is not possible: the type
+is part of the row's identity, because `push_token_unique` had to widen from
+`(organization_id, employee_id, device_identifier)` to include it so a device can hold its
+FCM *and* its VoIP token at once. A uniqueness key cannot live in JSONB under Citus. The
+column is CHECK-constrained and `token_metadata.tokenType` is retired, so a token's type
+has one definition rather than two.
+
+**2. The call wake payload uses the client module's envelope, not the flat shape in
+`contracts/call-wake-payloads.md`.** `expo-callkit-telecom` parses the push and reports
+the call to the OS *before JavaScript runs* — that native parsing is the entire reason a
+locked, force-quit phone rings — and it only recognises an event nested under an
+`incomingCall` key with its own field names. Every wake, terminal ones included, is
+therefore shaped as an incoming-call event; our fields ride in the module's opaque
+`metadata` pass-through and the client decides from `metadata.event` whether to ring or to
+end. Field *meanings* are unchanged; only nesting differs. On iOS this also matters for
+survival: a VoIP push the module cannot parse is reported as a *failed* call, which the
+user sees as a phantom missed call on every cancel.
+
+**3. `answered_elsewhere` fans out to all of a person's devices, including the one that
+answered.** The contract says "that person's other devices". The backend knows which
+*person* answered, not which handset — an answer arrives over an RPC that carries no
+device identifier. Adding one would mean a proto change on `JoinVoiceCall` for a problem
+the client already solves: the answering device recognises the call it is in and ignores
+the wake. Device-level exclusion is the client's job (`native-call.ts`), person-level
+fan-out is the server's.
+
+**4. An unreachable callee is refused before the call session exists.** FR-006 asks for an
+immediate unreachable verdict rather than a 45-second ring, and `StartVoiceCall` returns
+`VOICE_CALLEE_UNREACHABLE` before creating the row. The consequence, stated plainly: no
+call record and no missed-call system message is written, so the callee never learns
+anyone tried. Creating the call and ending it inside the same transaction would not help —
+returning an error rolls the transaction back. Changing this needs a deliberate decision
+about whether an unreachable callee should still see a missed call.
+
+**5. "Unreachable" counts live connections, not only push tokens.** A person sitting in
+front of an open browser with no registered device is reachable over SSE, and refusing
+that call would be wrong to both parties. The check is: no valid push token **and** no
+responsive live connection.
+
+**6. The iOS floor is 16.4, not the 15.1 this plan assumed.** `expo-callkit-telecom`'s
+README says iOS 15.1; its **podspec says `:ios => '16.0'`**. CocoaPods silently *skips* a
+pod whose platform requirement exceeds the project's deployment target, so the module
+linked into nothing, the app built cleanly, and the only symptom would have been a phone
+that never rings. The app now sets `ios.deploymentTarget: "16.4"` through
+`expo-build-properties` — 16.4 because Expo SDK 55 refuses an explicit target below it.
+Same device set as 16.0 (iPhone 8 and later), so the cost is iPhone 6s/7/SE-1st-gen.
+Details and the escape hatch are in `research.md` under R3.
+
+**FR-021 (system recent-calls surface) is deliberately not implemented in this epic.**
+Jetpack Telecom's unified call history and `isLogExcluded` require **Android 16.1
+(SDK 36.1)**, far above this epic's API 26 floor. FR-021 is a MAY; revisit when the 16.1
+install base justifies the work. This restates the "Deferred from this epic" section
+above as an implementation-time confirmation, not a new decision.
 
 ## Risks
 

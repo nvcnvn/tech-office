@@ -4406,11 +4406,11 @@ type NotificationDeliveryAttempt struct {
 	OrganizationID          dbuuid.UUID `json:"organization_id"`
 	ID                      dbuuid.UUID `json:"id"`
 	NotificationRecipientID dbuuid.UUID `json:"notification_recipient_id"`
-	// Delivery channel: sse (realtime), push (FCM offline), replay (reconnect replay).
+	// Delivery channel: sse (realtime), push (FCM offline), replay (reconnect replay), call_wake (native call wake, one row per device per call event).
 	Channel string `json:"channel"`
 	// Outcome of this delivery attempt: queued, sent, skipped, failed.
 	AttemptStatus string `json:"attempt_status"`
-	// Why delivery was skipped or failed. NULL when attempt_status is sent or queued.
+	// Why this attempt was queued, sent, skipped, or failed. Values: live_only_policy, no_active_context_match, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, provider_error, delivery_error, no_call_wake_target, native_tier_unavailable, call_already_ended.
 	Reason      pgtype.Text        `json:"reason"`
 	AttemptedAt pgtype.Timestamptz `json:"attempted_at"`
 	// Backend instance that recorded this attempt. Supports multi-instance debugging.
@@ -4993,8 +4993,10 @@ type NotificationPushToken struct {
 	LastUsedAt   pgtype.Timestamptz `json:"last_used_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	IsValid      bool               `json:"is_valid"`
-	// Additional device metadata (browser, OS) stored as JSONB for debugging and analytics.
+	// Device facts that do not key a row: platform (ios/android/web), deliveryProvider, and nativeCallCapable (whether this device build and its permissions support the native call tier, driving tier-A vs tier-B routing).
 	TokenMetadata []byte `json:"token_metadata"`
+	// Which provider token this row carries: fcm (Firebase, routine notifications and the Android call transport), apns_voip (direct APNs VoIP push, the iOS call transport), web_push (browser). One row per type per device_identifier.
+	TokenType string `json:"token_type"`
 }
 
 func (s *NotificationPushToken) TableName() string {
@@ -5017,6 +5019,7 @@ func (s *NotificationPushToken) Fields() ([]string, []any) {
 			"updated_at",
 			"is_valid",
 			"token_metadata",
+			"token_type",
 		}, []any{
 			&s.TokenID,
 			&s.OrganizationID,
@@ -5032,6 +5035,7 @@ func (s *NotificationPushToken) Fields() ([]string, []any) {
 			&s.UpdatedAt,
 			&s.IsValid,
 			&s.TokenMetadata,
+			&s.TokenType,
 		}
 }
 
@@ -5051,6 +5055,7 @@ func (s *NotificationPushToken) FieldsMap() map[string]any {
 		"updated_at":        &s.UpdatedAt,
 		"is_valid":          &s.IsValid,
 		"token_metadata":    &s.TokenMetadata,
+		"token_type":        &s.TokenType,
 	}
 }
 
@@ -5693,6 +5698,8 @@ type VoiceCallSession struct {
 	EndedReason         pgtype.Text        `json:"ended_reason"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	// When an unanswered ringing call expires. Set on the transition into ringing (started_at + the 45s ring timeout), NULL in every other state. The ring timeout sweep claims rows past this deadline and ends the call missed.
+	RingDeadlineAt pgtype.Timestamptz `json:"ring_deadline_at"`
 }
 
 func (s *VoiceCallSession) TableName() string {
@@ -5718,6 +5725,7 @@ func (s *VoiceCallSession) Fields() ([]string, []any) {
 			"ended_reason",
 			"created_at",
 			"updated_at",
+			"ring_deadline_at",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -5736,6 +5744,7 @@ func (s *VoiceCallSession) Fields() ([]string, []any) {
 			&s.EndedReason,
 			&s.CreatedAt,
 			&s.UpdatedAt,
+			&s.RingDeadlineAt,
 		}
 }
 
@@ -5758,6 +5767,7 @@ func (s *VoiceCallSession) FieldsMap() map[string]any {
 		"ended_reason":          &s.EndedReason,
 		"created_at":            &s.CreatedAt,
 		"updated_at":            &s.UpdatedAt,
+		"ring_deadline_at":      &s.RingDeadlineAt,
 	}
 }
 

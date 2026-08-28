@@ -4,7 +4,7 @@ The delivery backbone every other domain publishes into, plus the presence signa
 decides how something gets delivered. Owned by `internal/notification`; contract in
 `rpc/v1/notification.proto` (`NotificationService`, 19 RPCs + one server-streaming RPC).
 
-**Status date: 2026-08-27.** Supersedes specs 007, 008, 012, 019, 021, 033. Deeper
+**Status date: 2026-08-28.** Supersedes specs 007, 008, 012, 019, 021, 033, 037. Deeper
 references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 `NOTIFICATION-RESCUE-PUSH-DESIGN.md`, `NOTIFICATION-RULES.md`, `FCM-SETUP.md`.
 
@@ -20,8 +20,8 @@ references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 | `notification.active_context` | UNLOGGED, what each connection is currently viewing (channel / document / task) |
 | `notification.active_listener` | reference table; which backend instance owns which `LISTEN` topic |
 | `notification.live_receipt` | client transport receipts — "I received and parsed this event" |
-| `notification.delivery_attempt` | per-channel audit: `sse | push | replay` × `queued | sent | skipped | failed` + reason |
-| `notification.push_token` | FCM tokens per device |
+| `notification.delivery_attempt` | per-channel audit: `sse | push | replay | call_wake` × `queued | sent | skipped | failed` + reason |
+| `notification.push_token` | provider tokens, one row per `token_type` per device |
 | `notification.presence_visibility` | privacy: `everyone | departments | offline` + custom status |
 | `notification.personal_preference` | DND window + muted domains |
 | `notification.ephemeral_signal`, `notification_batch`, `notification_delivery_log` | supporting |
@@ -100,7 +100,55 @@ worker tick (1 s) later than the commit.
 `live_only_policy`, `no_active_context_match`, `no_push_target`, `recipient_ineligible`,
 `recipient_online`, `suppressed_by_preference`, `sse_receipt_confirmed`,
 `acknowledged_before_fallback`, `connection_unresponsive`, `provider_error`,
-`delivery_error`.
+`delivery_error`, and — for call wakes only — `no_call_wake_target`,
+`native_tier_unavailable`, `call_already_ended`.
+
+### Call wakes
+
+A live call event does not follow the rules above, and the differences are the point.
+Since spec 037 the rescue worker, on reaching a queued `voice_call_incoming` row, hands it
+to the **call wake dispatcher** (`internal/notification/call_wake.go`) instead of sending
+an alert push. Three rules are inverted for this class:
+
+| Ordinary push | Call wake |
+|---|---|
+| a `sse_receipt_confirmed` cancels it | **never cancelled by a receipt** — the phone must ring natively even with a tab open |
+| DND and muted domains suppress it | **rings through both**; `suppressed_by_preference` must never appear on a `call_wake` row |
+| one attempt per recipient | **one attempt per device per event** |
+
+The window is already zero without special handling: the incoming-call notification is
+priority 0, and `rescuePushWindowForRequest` returns 0 for priority 0.
+
+**Two transports, because no single one wakes a locked, force-quit phone on both
+platforms:**
+
+- **iOS** — an APNs VoIP push sent **directly to Apple** (`internal/notification/apns_voip.go`,
+  `github.com/sideshow/apns2`). Firebase will not carry `apns-push-type: voip`, and that
+  header is what routes the push to PushKit. The push is priority 10, its collapse ID is
+  the call id so a superseded wake replaces its predecessor, and its expiration is the
+  call's ring deadline so a stale wake is dropped by Apple rather than by the app. A `410
+  Unregistered` marks the token row invalid, exactly as an FCM `UNREGISTERED` does.
+- **Android** — a high-priority **data-only** FCM message. A `notification` message lets
+  the system draw a tray notification and may not run the app's handler on a killed app;
+  data-only always dispatches to the messaging service, which is what earns the temporary
+  Doze allowlist and the background foreground-service-start exemption.
+
+**Tiers.** The dispatcher chooses exactly one transport per device and never both:
+*tier A* is the native path above; *tier B* is the high-priority alert ring this app
+already shipped, recorded with reason `native_tier_unavailable`. Because tier B is
+existing behaviour, covering the devices that cannot run tier A costs a routing decision
+rather than a second implementation. The share of tier-A rows is the measurement behind
+the feature's ~80% target — read it from the audit, do not estimate it.
+
+**Only live call events may use this transport.** On iOS that is not hygiene: a VoIP push
+that does not result in a call reported to CallKit terminates the app. The dispatcher
+refuses any event kind outside `incoming | cancelled | answered_elsewhere |
+declined_elsewhere | ended`.
+
+Provider I/O happens on a background sender, not on the caller's goroutine, so it never
+sits inside a request transaction. Before sending an `incoming` wake the sender confirms
+the call is still live, which closes the window where a rolled-back transaction would
+otherwise leave a phone ringing for a call that never existed.
 
 ### Suppression
 
@@ -111,6 +159,10 @@ reason:
 - `ShouldSuppressPush` — `notification.personal_preference`: DND window and
   `muted_domains`. **Suppression applies to push only; SSE is still delivered**, so the UI
   stays live while the phone stays quiet.
+
+Call wakes never reach this code at all: the dispatcher is their sender and it does not
+consult routing. That structural exemption, rather than a flag, is what makes a call ring
+through do-not-disturb.
 
 ### Ephemeral signals
 
@@ -188,12 +240,34 @@ resolved against the denormalised `active_connection.department_ids`.
 ## Push notifications
 
 FCM via `firebase.google.com/go/messaging`. `notification.push_token` holds one row per
-(employee, device) with `permission_state`, endpoint, keys, user agent. Registration
-upserts on `(organization_id, employee_id, device_identifier)`, so both clients must send
-a *stable* identifier — mobile persists a UUID in `SecureStore`, web in `localStorage`. A 24-hour cleanup
-worker prunes stale tokens. **When `GOOGLE_APPLICATION_CREDENTIALS` is unset the FCM client
-is not created and push is silently disabled** — the server logs a warning at startup and
-otherwise behaves normally.
+(employee, device, **token type**) with `permission_state`, endpoint, keys, user agent.
+Registration upserts on `(organization_id, employee_id, device_identifier, token_type)`,
+so both clients must send a *stable* identifier — mobile persists a UUID in `SecureStore`,
+web in `localStorage`. A 24-hour cleanup worker prunes stale tokens. **When
+`GOOGLE_APPLICATION_CREDENTIALS` is unset the FCM client is not created and push is
+silently disabled** — the server logs a warning at startup and otherwise behaves normally.
+
+`token_type` is a required field on `RegisterPushToken`, not a defaulted one: the call
+wake dispatcher picks a transport from it, and a guessed type routes calls to a transport
+that cannot reach the device — a phone that silently never rings.
+
+| `token_type` | Carried by | Used for |
+|---|---|---|
+| `fcm` | every mobile device | routine notifications, and the Android call transport |
+| `apns_voip` | iOS only | call wakes only, over the direct APNs connection |
+| `web_push` | browsers | routine notifications |
+
+An iOS device therefore holds **two rows under one `device_identifier`**, which is what
+lets the dispatcher fan out per device rather than per token. `token_metadata` carries
+`platform`, `deliveryProvider` and `nativeCallCapable`; a row with no recorded capability
+is treated as not capable, because routing a device to a tier it cannot run means a phone
+that never rings, while the reverse only costs the older ring.
+
+The APNs VoIP credential (`APNS_VOIP_KEY_PATH`, `APNS_VOIP_KEY_ID`, `APNS_VOIP_TEAM_ID`,
+`APNS_VOIP_TOPIC`, optional `APNS_VOIP_USE_SANDBOX`) follows the same posture as the
+Firebase one: when it is unset the server starts, logs loudly, and every iOS device falls
+to tier B. A *partially* configured credential is treated as a misconfiguration and fails
+at startup rather than silently degrading.
 
 Delivery only reads tokens with `is_valid = true`. A send rejected with
 `registration-token-not-registered` (app uninstalled, token rotated) flips that token to

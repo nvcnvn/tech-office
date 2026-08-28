@@ -27,6 +27,10 @@ func TestVoiceCommunicationLifecycle(t *testing.T) {
 
 	t.Run("when employees start and join a voice call in a direct message", func(t *testing.T) {
 		channelID := w.createOrGetDM(alice, bob.ID)
+		// Since Feature 037 a direct call to someone no device and no live connection
+		// can reach is refused as unreachable rather than left ringing, so the callee
+		// needs a registered device for the lifecycle to be exercised at all.
+		w.registerCallWakeDevice(bob, "device-bob", "ios", true)
 
 		call, credentials := w.startVoiceCall(alice, channelID)
 

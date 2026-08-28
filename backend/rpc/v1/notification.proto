@@ -474,7 +474,29 @@ message EmployeePresence {
   PresenceVisibility visibility = 6;
 }
 
+// PushTokenType names which provider token a registration carries. A device that can
+// be woken natively registers twice under one device_identifier: PUSH_TOKEN_TYPE_FCM
+// for routine notifications and, on iOS, PUSH_TOKEN_TYPE_APNS_VOIP for calls.
+//
+// MUST align with the push_token_token_type_valid CHECK constraint on
+// notification.push_token, the PushTokenType* constants in
+// backend/internal/notification/constants.go, and the PushTokenType union in
+// frontend/packages/apis/src/push-tokens.ts.
+enum PushTokenType {
+  PUSH_TOKEN_TYPE_UNSPECIFIED = 0;
+  // Firebase token: routine notifications on every platform, and the Android call
+  // transport, which distinguishes itself by payload shape rather than by a token.
+  PUSH_TOKEN_TYPE_FCM = 1;
+  // PushKit VoIP token, reached over a direct APNs connection because Firebase
+  // cannot carry apns-push-type: voip. Used for call wake traffic only.
+  PUSH_TOKEN_TYPE_APNS_VOIP = 2;
+  // Browser Web Push subscription.
+  PUSH_TOKEN_TYPE_WEB_PUSH = 3;
+}
+
 message RegisterPushTokenRequest {
+  // The provider token for token_type. Named fcm_token for history; it carries an
+  // APNs VoIP token when token_type is PUSH_TOKEN_TYPE_APNS_VOIP.
   string fcm_token = 1;
   string device_identifier = 2;
   PermissionState permission_state = 3;
@@ -482,6 +504,12 @@ message RegisterPushTokenRequest {
   string keys_json = 5; // Raw Web Push subscription keys (JSON payload)
   string user_agent = 6;
   map<string, string> token_metadata = 7;
+  // Required. PUSH_TOKEN_TYPE_UNSPECIFIED is rejected: the dispatcher picks a
+  // transport from this field, and guessing it would silently route calls wrong.
+  PushTokenType token_type = 8;
+  // Whether this device's build and permissions support the native call tier.
+  // Drives tier-A vs tier-B routing (FR-014).
+  bool native_call_capable = 9;
 }
 
 message RegisterPushTokenResponse {
@@ -512,6 +540,10 @@ message PushTokenInfo {
   google.protobuf.Timestamp last_used_at = 6;
   string user_agent = 7;
   map<string, string> token_metadata = 8;
+  // Returned so a support engineer listing a person's devices can see why one rang
+  // natively and another did not.
+  PushTokenType token_type = 9;
+  bool native_call_capable = 10;
 }
 
 message ListPushTokensResponse {

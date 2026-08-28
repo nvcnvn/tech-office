@@ -18,6 +18,8 @@ import (
 
 // RegisterPushTokenParams groups push token registration inputs.
 type RegisterPushTokenParams struct {
+	// FCMToken carries the provider token for TokenType. Named for history; it holds
+	// an APNs VoIP token when TokenType is PushTokenTypeAPNSVoIP.
 	FCMToken         string
 	DeviceIdentifier string
 	Endpoint         *string
@@ -25,6 +27,13 @@ type RegisterPushTokenParams struct {
 	UserAgent        *string
 	TokenMetadata    *string
 	PermissionState  string
+	// TokenType is required. It keys the row alongside DeviceIdentifier, so a device
+	// can hold its FCM and its VoIP token at once, and it decides which transport the
+	// call wake dispatcher reaches this row on.
+	TokenType string
+	// NativeCallCapable records whether this device's build and permissions support
+	// the native call tier, driving tier-A vs tier-B routing (FR-014).
+	NativeCallCapable bool
 }
 
 // PushLogic encapsulates push notification and token management business rules.
@@ -66,18 +75,24 @@ type pushLogicImpl struct {
 
 type pushTokenMetadata struct {
 	DeliveryProvider string `json:"deliveryProvider"`
-	TokenType        string `json:"tokenType"`
 	Platform         string `json:"platform"`
+	// NativeCallCapable is a device fact rather than part of the row's identity, so it
+	// stays in token_metadata. The token's type is the push_token.token_type column.
+	NativeCallCapable bool `json:"nativeCallCapable"`
 }
 
 // fcmBatchTimeout bounds a single employee's push fan-out.
 const fcmBatchTimeout = 10 * time.Second
 
+// deleteDuplicatePushTokensByFCM is scoped to one token type: a device's FCM row and
+// its APNs VoIP row are different types and must both survive, and a provider token
+// reused across devices only ever collides within its own type.
 const deleteDuplicatePushTokensByFCM = `
 DELETE FROM notification.push_token
 WHERE organization_id = $1
   AND fcm_token = $2
-  AND token_id <> $3
+  AND token_type = $3
+  AND token_id <> $4
 `
 
 // NewPushLogic constructs a PushLogic implementation.
@@ -100,12 +115,18 @@ func (l *pushLogicImpl) RegisterPushToken(ctx context.Context, tx database.DBTX,
 	if params.DeviceIdentifier == "" {
 		return nil, fmt.Errorf("device_identifier is required")
 	}
+	// Required rather than defaulted: the dispatcher picks a transport from this, and
+	// a guessed type routes calls to the wrong one silently.
+	if !IsValidPushTokenType(params.TokenType) {
+		return nil, fmt.Errorf("token_type is required and must be one of fcm, apns_voip, web_push")
+	}
 
 	slog.DebugContext(ctx, "registering push token",
 		"function", "PushLogic.RegisterPushToken",
 		"employee_id", employeeID.String(),
 		"organization_id", orgID.String(),
 		"device_identifier", params.DeviceIdentifier,
+		"token_type", params.TokenType,
 	)
 
 	// Generate token ID
@@ -137,7 +158,8 @@ func (l *pushLogicImpl) RegisterPushToken(ctx context.Context, tx database.DBTX,
 		LastUsedAt:       now,
 		UpdatedAt:        now,
 		IsValid:          isValid,
-		TokenMetadata:    bytesToPG(params.TokenMetadata),
+		TokenMetadata:    mergeNativeCallCapable(bytesToPG(params.TokenMetadata), params.NativeCallCapable),
+		TokenType:        params.TokenType,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to upsert push token",
@@ -147,7 +169,7 @@ func (l *pushLogicImpl) RegisterPushToken(ctx context.Context, tx database.DBTX,
 		return nil, fmt.Errorf("failed to upsert push token: %w", err)
 	}
 
-	removedDuplicates, err := l.deleteDuplicatePushTokensByFCM(ctx, tx, orgID, params.FCMToken, token.TokenID)
+	removedDuplicates, err := l.deleteDuplicatePushTokensByFCM(ctx, tx, orgID, params.FCMToken, params.TokenType, token.TokenID)
 	if err != nil {
 		slog.WarnContext(ctx, "failed to cleanup duplicate push tokens with same fcm token",
 			"function", "PushLogic.RegisterPushToken",
@@ -167,6 +189,8 @@ func (l *pushLogicImpl) RegisterPushToken(ctx context.Context, tx database.DBTX,
 	slog.InfoContext(ctx, "push token registered successfully",
 		"token_id", token.TokenID.String(),
 		"employee_id", employeeID.String(),
+		"token_type", params.TokenType,
+		"native_call_capable", params.NativeCallCapable,
 		"is_valid", isValid,
 	)
 
@@ -178,9 +202,10 @@ func (l *pushLogicImpl) deleteDuplicatePushTokensByFCM(
 	tx database.DBTX,
 	orgID dbuuid.UUID,
 	fcmToken string,
+	tokenType string,
 	keepTokenID dbuuid.UUID,
 ) (int64, error) {
-	result, err := tx.Exec(ctx, deleteDuplicatePushTokensByFCM, orgID, fcmToken, keepTokenID)
+	result, err := tx.Exec(ctx, deleteDuplicatePushTokensByFCM, orgID, fcmToken, tokenType, keepTokenID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to delete duplicate push tokens by fcm token: %w", err)
 	}
@@ -368,7 +393,7 @@ func (l *pushLogicImpl) SendPushNotification(ctx context.Context, employeeID, or
 		}
 		seenFCMTokens[token.FcmToken] = struct{}{}
 
-		if !isFirebaseSendableToken(token.TokenMetadata) {
+		if !isFirebaseSendableToken(token.TokenType, token.TokenMetadata) {
 			unsupportedCount++
 			slog.WarnContext(ctx, "skipping unsupported push token for Firebase delivery",
 				"token_id", token.TokenID.String(),
@@ -537,7 +562,14 @@ func bytesToPG(value *string) []byte {
 	return []byte(*value)
 }
 
-func isFirebaseSendableToken(rawMetadata []byte) bool {
+// isFirebaseSendableToken keeps tokens Firebase cannot deliver out of the FCM path.
+// An APNs VoIP token is reached over the direct APNs connection by the call wake
+// dispatcher and is never a target for a routine notification.
+func isFirebaseSendableToken(tokenType string, rawMetadata []byte) bool {
+	if tokenType == PushTokenTypeAPNSVoIP {
+		return false
+	}
+
 	if len(rawMetadata) == 0 {
 		return true
 	}
@@ -548,15 +580,36 @@ func isFirebaseSendableToken(rawMetadata []byte) bool {
 	}
 
 	deliveryProvider := strings.ToLower(strings.TrimSpace(metadata.DeliveryProvider))
-	tokenType := strings.ToLower(strings.TrimSpace(metadata.TokenType))
+	return deliveryProvider != "expo" && deliveryProvider != "apns"
+}
 
-	if deliveryProvider == "expo" || deliveryProvider == "apns" {
+// mergeNativeCallCapable writes the device's native-call capability into the caller's
+// token_metadata without discarding the other keys the client sent.
+func mergeNativeCallCapable(rawMetadata []byte, nativeCallCapable bool) []byte {
+	merged := map[string]any{}
+	if len(rawMetadata) > 0 {
+		if err := json.Unmarshal(rawMetadata, &merged); err != nil {
+			merged = map[string]any{}
+		}
+	}
+	merged["nativeCallCapable"] = nativeCallCapable
+	encoded, err := json.Marshal(merged)
+	if err != nil {
+		return rawMetadata
+	}
+	return encoded
+}
+
+// nativeCallCapableFromMetadata reads the capability back. A row with no recorded
+// capability is treated as not capable: routing a device to the native tier it cannot
+// run means a phone that never rings, while the reverse only costs the older ring.
+func nativeCallCapableFromMetadata(rawMetadata []byte) bool {
+	if len(rawMetadata) == 0 {
 		return false
 	}
-
-	if tokenType == "expo" {
+	var metadata pushTokenMetadata
+	if err := json.Unmarshal(rawMetadata, &metadata); err != nil {
 		return false
 	}
-
-	return true
+	return metadata.NativeCallCapable
 }

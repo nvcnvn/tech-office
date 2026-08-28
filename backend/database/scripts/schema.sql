@@ -2761,8 +2761,8 @@ CREATE TABLE notification.delivery_attempt (
     attempted_at timestamp with time zone NOT NULL,
     instance_id text,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT delivery_attempt_channel_valid CHECK ((channel = ANY (ARRAY['sse'::text, 'push'::text, 'replay'::text]))),
-    CONSTRAINT delivery_attempt_reason_valid CHECK (((reason IS NULL) OR (reason = ANY (ARRAY['live_only_policy'::text, 'no_active_context_match'::text, 'no_push_target'::text, 'recipient_ineligible'::text, 'recipient_online'::text, 'suppressed_by_preference'::text, 'sse_receipt_confirmed'::text, 'acknowledged_before_fallback'::text, 'connection_unresponsive'::text, 'provider_error'::text, 'delivery_error'::text])))),
+    CONSTRAINT delivery_attempt_channel_valid CHECK ((channel = ANY (ARRAY['sse'::text, 'push'::text, 'replay'::text, 'call_wake'::text]))),
+    CONSTRAINT delivery_attempt_reason_valid CHECK (((reason IS NULL) OR (reason = ANY (ARRAY['live_only_policy'::text, 'no_active_context_match'::text, 'no_push_target'::text, 'recipient_ineligible'::text, 'recipient_online'::text, 'suppressed_by_preference'::text, 'sse_receipt_confirmed'::text, 'acknowledged_before_fallback'::text, 'connection_unresponsive'::text, 'provider_error'::text, 'delivery_error'::text, 'no_call_wake_target'::text, 'native_tier_unavailable'::text, 'call_already_ended'::text])))),
     CONSTRAINT delivery_attempt_status_valid CHECK ((attempt_status = ANY (ARRAY['queued'::text, 'sent'::text, 'skipped'::text, 'failed'::text])))
 );
 
@@ -2778,7 +2778,7 @@ COMMENT ON TABLE notification.delivery_attempt IS 'Auditable per-channel deliver
 -- Name: COLUMN delivery_attempt.channel; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.delivery_attempt.channel IS 'Delivery channel: sse (realtime), push (FCM offline), replay (reconnect replay).';
+COMMENT ON COLUMN notification.delivery_attempt.channel IS 'Delivery channel: sse (realtime), push (FCM offline), replay (reconnect replay), call_wake (native call wake, one row per device per call event).';
 
 
 --
@@ -2792,7 +2792,7 @@ COMMENT ON COLUMN notification.delivery_attempt.attempt_status IS 'Outcome of th
 -- Name: COLUMN delivery_attempt.reason; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.delivery_attempt.reason IS 'Why delivery was skipped or failed. NULL when attempt_status is sent or queued.';
+COMMENT ON COLUMN notification.delivery_attempt.reason IS 'Why this attempt was queued, sent, skipped, or failed. Values: live_only_policy, no_active_context_match, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, provider_error, delivery_error, no_call_wake_target, native_tier_unavailable, call_already_ended.';
 
 
 --
@@ -3246,7 +3246,9 @@ CREATE TABLE notification.push_token (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     is_valid boolean DEFAULT true NOT NULL,
     token_metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT permission_state_valid CHECK ((permission_state = ANY (ARRAY['granted'::text, 'denied'::text, 'prompt'::text])))
+    token_type text DEFAULT 'fcm'::text NOT NULL,
+    CONSTRAINT permission_state_valid CHECK ((permission_state = ANY (ARRAY['granted'::text, 'denied'::text, 'prompt'::text]))),
+    CONSTRAINT push_token_token_type_valid CHECK ((token_type = ANY (ARRAY['fcm'::text, 'apns_voip'::text, 'web_push'::text])))
 );
 
 
@@ -3275,7 +3277,14 @@ COMMENT ON COLUMN notification.push_token.keys IS 'Web push subscription keys (p
 -- Name: COLUMN push_token.token_metadata; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.push_token.token_metadata IS 'Additional device metadata (browser, OS) stored as JSONB for debugging and analytics.';
+COMMENT ON COLUMN notification.push_token.token_metadata IS 'Device facts that do not key a row: platform (ios/android/web), deliveryProvider, and nativeCallCapable (whether this device build and its permissions support the native call tier, driving tier-A vs tier-B routing).';
+
+
+--
+-- Name: COLUMN push_token.token_type; Type: COMMENT; Schema: notification; Owner: -
+--
+
+COMMENT ON COLUMN notification.push_token.token_type IS 'Which provider token this row carries: fcm (Firebase, routine notifications and the Android call transport), apns_voip (direct APNs VoIP push, the iOS call transport), web_push (browser). One row per type per device_identifier.';
 
 
 --
@@ -3648,6 +3657,7 @@ CREATE TABLE voice.call_session (
     ended_reason text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    ring_deadline_at timestamp with time zone,
     CONSTRAINT voice_call_ended_requires_outcome CHECK (((state <> 'ended'::text) OR ((outcome IS NOT NULL) AND (ended_at IS NOT NULL)))),
     CONSTRAINT voice_call_outcome_valid CHECK (((outcome IS NULL) OR (outcome = ANY (ARRAY['answered'::text, 'missed'::text, 'declined'::text, 'cancelled'::text, 'completed'::text])))),
     CONSTRAINT voice_call_recording_policy_valid CHECK ((recording_policy = ANY (ARRAY['not_allowed'::text, 'allowed'::text, 'required'::text]))),
@@ -3662,6 +3672,13 @@ CREATE TABLE voice.call_session (
 --
 
 COMMENT ON TABLE voice.call_session IS 'Voice call lifecycle records attached to chat channels. LiveKit tokens are generated on demand and never stored.';
+
+
+--
+-- Name: COLUMN call_session.ring_deadline_at; Type: COMMENT; Schema: voice; Owner: -
+--
+
+COMMENT ON COLUMN voice.call_session.ring_deadline_at IS 'When an unanswered ringing call expires. Set on the transition into ringing (started_at + the 45s ring timeout), NULL in every other state. The ring timeout sweep claims rows past this deadline and ends the call missed.';
 
 
 --
@@ -4715,7 +4732,7 @@ ALTER TABLE ONLY notification.push_token
 --
 
 ALTER TABLE ONLY notification.push_token
-    ADD CONSTRAINT push_token_unique UNIQUE (organization_id, employee_id, device_identifier);
+    ADD CONSTRAINT push_token_unique UNIQUE (organization_id, employee_id, device_identifier, token_type);
 
 
 --
@@ -6311,6 +6328,13 @@ COMMENT ON INDEX organization.idx_employee_given_name_trgm IS 'Trigram index for
 --
 
 CREATE UNIQUE INDEX idx_one_department_per_employee ON organization.department_member USING btree (organization_id, employee_id);
+
+
+--
+-- Name: idx_call_session_ring_deadline; Type: INDEX; Schema: voice; Owner: -
+--
+
+CREATE INDEX idx_call_session_ring_deadline ON voice.call_session USING btree (organization_id, ring_deadline_at) WHERE ((state = 'ringing'::text) AND (ring_deadline_at IS NOT NULL));
 
 
 --

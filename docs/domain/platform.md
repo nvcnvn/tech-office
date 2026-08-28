@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-08-27.**
+**Status date: 2026-08-28.**
 
 ## Shape
 
@@ -116,7 +116,20 @@ row rather than multiplying schedules.
 
 Non-flows goroutines started by `notificationService.Start()` and the server: the SSE
 LISTEN consumer, the stale-connection janitor (30 s), the push-token cleanup (24 h), the
-rescue push worker (1 s), and the presence pong batcher.
+rescue push worker (1 s), the presence pong batcher, the voice **ring timeout sweep**
+(1 s), and the **call wake sender**.
+
+Two of those are worth knowing about individually:
+
+- **Ring timeout sweep** (`internal/voice/ring_timeout.go`) ends calls nobody answered.
+  It runs on every instance, and its claim and its end are a *single* UPDATE, so two
+  instances sweeping the same call serialise on the row and only one of them sees it — a
+  call is ended exactly once without a lock table or a leader.
+- **Call wake sender** (`internal/notification/call_wake.go`) drains a bounded in-process
+  queue of per-device call wakes. It exists so APNs and Firebase I/O never happens on a
+  request goroutine, which would put it inside the caller's transaction. A saturated queue
+  drops wakes with an audit row rather than blocking, because a call wake delivered after
+  its ring deadline is worse than none.
 
 **Pickup latency.** The worker polls one shard per workflow per tick, round-robin across
 `FLOW_SHARD_COUNT` (32 by default) at one second. A freshly enqueued run therefore waits
@@ -135,6 +148,7 @@ than just endpoints:
 | `JWT_PRIVATE_KEY_PATH` | ephemeral signing key — all tokens die on restart |
 | `GOOGLE_CLIENT_IDS` / `APPLE_CLIENT_IDS` | SSO token **audience validation is disabled** (logged as dev-only) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | FCM client not built — **push notifications silently disabled** |
+| `APNS_VOIP_*` | APNs VoIP client not built — iOS calls fall back to the alert ring instead of presenting as system calls. A *partially* set credential fails startup rather than degrading, because that is a deployment mistake and not an opt-out. See `backend/docs/APNS-VOIP-SETUP.md`. |
 | `R2_*` | file storage unavailable |
 | `LIVEKIT_*` | voice falls back to dev defaults (`ws://localhost:7880`, `devkey`) |
 | `SES_*` | email sender logs instead of sending |

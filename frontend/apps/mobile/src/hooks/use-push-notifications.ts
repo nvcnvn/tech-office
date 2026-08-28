@@ -26,10 +26,47 @@ import {
   withNavigationContext,
 } from "@/lib/mobile-navigation";
 import { ensureVoiceCallNotificationChannel } from "@/lib/voice/voice-notifications";
+import { getVoIPPushToken, registerVoIPPush } from "expo-callkit-telecom";
 
 interface NativePushRegistration {
   token: string;
   metadata: Record<string, string>;
+}
+
+/**
+ * How long to wait for the VoIP push token after asking for it.
+ *
+ * PushKit hands the token to the app asynchronously, and on a cold start the request
+ * usually lands before the token exists. Registering without it would leave the device
+ * on the fallback ring until the next launch, so a short poll is worth it — and a
+ * failure only costs the native tier for this session, never the call itself.
+ */
+const VOIP_TOKEN_WAIT_MS = 5_000;
+const VOIP_TOKEN_POLL_MS = 250;
+
+/**
+ * Waits for the platform's VoIP push token.
+ *
+ * On iOS this is the PushKit token the backend addresses over its direct APNs
+ * connection — Firebase cannot carry a VoIP push, which is the whole reason iOS needs a
+ * second token at all. On Android the module reports the FCM token, which the device is
+ * already registering separately, so there is nothing extra to store.
+ */
+async function waitForVoIPToken(): Promise<string | null> {
+  registerVoIPPush();
+  const deadline = Date.now() + VOIP_TOKEN_WAIT_MS;
+  while (Date.now() < deadline) {
+    const voip = getVoIPPushToken();
+    if (voip?.type === "APNS_VOIP" && voip.token) {
+      return voip.token;
+    }
+    if (voip?.type === "FCM") {
+      // Android's call transport is the FCM token already registered below.
+      return null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, VOIP_TOKEN_POLL_MS));
+  }
+  return null;
 }
 
 const PUSH_INSTALLATION_ID_KEY = "push.installation-id";
@@ -284,6 +321,13 @@ export function usePushNotifications() {
         const pushToken = registration.token;
         const deviceId = await getStablePushDeviceIdentifier();
 
+        // The VoIP token is fetched before either registration so both rows agree about
+        // whether this device can run the native call tier. A device that claims the
+        // native tier but has no VoIP token would be routed to a transport that cannot
+        // reach it — a phone that silently never rings.
+        const voipToken = Platform.OS === "ios" ? await waitForVoIPToken() : null;
+        const nativeCallCapable = Platform.OS === "android" || Boolean(voipToken);
+
         await registerPushToken({
           fcmToken: pushToken,
           deviceIdentifier: deviceId,
@@ -292,7 +336,30 @@ export function usePushNotifications() {
           keysJson: "",
           userAgent: `TechOffice-Mobile/${Platform.OS}`,
           tokenMetadata: registration.metadata,
+          tokenType: "fcm",
+          nativeCallCapable,
         });
+
+        // A second row under the same device identifier, not a second device: the
+        // backend fans calls out per device and needs both of this one's tokens to know
+        // it has a choice of transport.
+        if (voipToken) {
+          await registerPushToken({
+            fcmToken: voipToken,
+            deviceIdentifier: deviceId,
+            permissionState: "granted",
+            endpoint: "",
+            keysJson: "",
+            userAgent: `TechOffice-Mobile/${Platform.OS}`,
+            tokenMetadata: {
+              platform: "ios",
+              deliveryProvider: "apns",
+              registrationLibrary: "expo-callkit-telecom",
+            },
+            tokenType: "apns_voip",
+            nativeCallCapable: true,
+          });
+        }
 
         registeredEmployeeIdRef.current = auth.employeeId;
       } catch (err) {

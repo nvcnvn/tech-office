@@ -20,6 +20,7 @@ actually gets verified.
 | Apple developer account with a **VoIP services `.p8` key** and the `com.devguards.TechOffice.voip` APNs topic | VoIP pushes are a separate credential from the existing FCM/APNs setup |
 | Firebase project already configured (`GOOGLE_APPLICATION_CREDENTIALS`) | routine notifications and the Android call transport |
 | A **development build** of the mobile app — not Expo Go | the native call module requires custom native code |
+| An iPhone running **iOS 16.4 or later** | the call module's podspec requires it; below that CocoaPods silently drops the module and the app builds fine but never rings |
 | Two physical devices per platform, on the same organization, plus a second account to call from | answered-elsewhere and multi-device ring-stop cannot be tested with one device |
 | Local LiveKit via `make voice-dev-infra-up` | media plane |
 

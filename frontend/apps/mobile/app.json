@@ -96,7 +96,22 @@
         }
       ],
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "deploymentTarget": "16.4"
+          }
+        }
+      ],
+      [
+        "expo-callkit-telecom",
+        {
+          "incomingCallTimeout": 45,
+          "microphonePermission": "Tech Office uses your microphone for voice calls and voice messages with your colleagues."
+        }
+      ]
     ],
     "extra": {
       "router": {},

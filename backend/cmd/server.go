@@ -199,6 +199,19 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 		slog.WarnContext(ctx, "GOOGLE_APPLICATION_CREDENTIALS not set, push notifications disabled")
 	}
 
+	// APNs VoIP is a second push provider, needed because Firebase cannot carry
+	// apns-push-type: voip — the header that makes iOS deliver a call to PushKit on a
+	// locked, force-quit phone. It follows the FCM client's posture exactly: when the
+	// credential is absent the server still starts, says so loudly, and every iOS
+	// device rings on the tier-B path this app already shipped.
+	apnsVoIPSender, err := notification.NewAPNsVoIPClientFromEnv()
+	if err != nil {
+		slog.WarnContext(ctx, "APNs VoIP client initialization failed, iOS calls will use the fallback ring",
+			"error", err,
+		)
+		apnsVoIPSender = nil
+	}
+
 	// Initialize Presence, Push, and Visibility logic layers (before service creation)
 	visibilityLogic := notification.NewVisibilityLogic(queries)
 	presenceLogic := notification.NewPresenceLogic(queries, visibilityLogic)
@@ -378,12 +391,34 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	voiceLogic.FileLogic = fileLogic
 	voiceLogic.ChatAnnouncer = chatLogic
 	voiceLogic.NotificationPublisher = notificationService
+	voiceLogic.AdminPool = adminPool
 	voiceLogic.TranscriptionWorker = &voice.TranscriptionWorker{
 		AdminPool: adminPool,
 		MainR2:    r2Client,
 		Logic:     voiceLogic,
 		Config:    voiceConfig,
 	}
+	// The call wake dispatcher is the seam between the two domains: internal/voice
+	// decides that a call event happened, internal/notification decides how a device
+	// learns about it. Wiring it here, after both exist, is what keeps neither package
+	// importing the other's implementation (Constitution IV).
+	//
+	// voiceLogic doubles as the dispatcher's liveness check: before waking a phone the
+	// sender confirms the call is still live, so a transaction that rolled back after
+	// queueing a wake cannot leave a device ringing for a call that never existed.
+	callWakeDispatcher := notification.NewCallWakeDispatcher(
+		ctx,
+		queries,
+		adminPool,
+		apnsVoIPSender,
+		fcmClient,
+		pushLogic,
+		voiceLogic,
+		cfg.InstanceID,
+	)
+	notificationService.CallWakeDispatcher = callWakeDispatcher
+	voiceLogic.CallWakeDispatcher = callWakeDispatcher
+
 	voiceConnect := voice.NewServiceConnect(voiceLogic, tenantPool)
 	mux.Handle(rpcv1connect.NewVoiceServiceHandler(voiceConnect, interceptors))
 	mux.Handle("/api/livekit/webhook", voice.NewLiveKitWebhookHandler(voiceLogic, adminPool, voiceConfig))
@@ -554,6 +589,11 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	// in-flight pong RPC is left waiting.
 	notificationConnect.StartPongBatcher(serverCtx)
 	defer notificationConnect.StopPongBatcher()
+
+	// Ring timeout sweep: ends calls nobody answered. Runs on every instance; the
+	// claim and the end are one UPDATE, so a call is ended exactly once no matter how
+	// many instances are sweeping (Constitution XI).
+	go voiceLogic.StartRingTimeoutWorker(serverCtx, adminPool)
 
 	flowWorker := flows.Worker{
 		Pool:         flowPool,

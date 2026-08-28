@@ -120,6 +120,11 @@ export function usePushPermission(options: UsePushPermissionOptions = {}): UsePu
 						navigator.userAgent.includes('Firefox') ? 'firefox' :
 							navigator.userAgent.includes('Safari') ? 'safari' : 'other',
 				},
+				// Required since the native call feature: the server picks a call
+				// transport from the token type. A browser has no native call surface,
+				// so it never carries the native tier.
+				tokenType: 'web_push',
+				nativeCallCapable: false,
 			});
 
 			console.log('[usePushPermission] FCM token registered successfully');

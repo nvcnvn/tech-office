@@ -13,6 +13,19 @@ const (
 )
 const DefaultInvitationTTL = 2 * time.Minute
 
+// RingTimeout bounds how long an unanswered call rings.
+//
+// Before Feature 037 nothing bounded it: a ringing call ended only when LiveKit
+// reported the room finished, and with no participant ever joining, that never came.
+// The spec requires a bounded ring but names no value; 45 seconds is the conventional
+// VoIP ring length — long enough to reach a phone in a pocket, short enough that a
+// caller is not left listening to a ring nobody will answer.
+//
+// Defined once and used in three places that must agree: the ring_deadline_at written
+// on the transition into 'ringing', the sweep that ends calls past that deadline, and
+// the ringExpiresAt carried to devices in the call wake payload.
+const RingTimeout = 45 * time.Second
+
 const (
 	CallStateRinging = "ringing"
 	CallStateActive  = "active"

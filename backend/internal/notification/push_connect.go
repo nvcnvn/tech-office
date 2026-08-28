@@ -23,6 +23,7 @@ func (s *NotificationServiceConnect) RegisterPushToken(
 	slog.DebugContext(ctx, "RegisterPushToken RPC called",
 		"function", "RegisterPushToken",
 		"device_identifier", req.Msg.DeviceIdentifier,
+		"token_type", req.Msg.TokenType.String(),
 	)
 
 	// Extract auth context
@@ -38,12 +39,18 @@ func (s *NotificationServiceConnect) RegisterPushToken(
 	if req.Msg.DeviceIdentifier == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("device_identifier is required"))
 	}
+	tokenType := pushTokenTypeProtoToString(req.Msg.TokenType)
+	if tokenType == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token_type is required"))
+	}
 
 	// Build registration params
 	params := &RegisterPushTokenParams{
-		FCMToken:         req.Msg.FcmToken,
-		DeviceIdentifier: req.Msg.DeviceIdentifier,
-		PermissionState:  permissionStateProtoToString(req.Msg.PermissionState),
+		FCMToken:          req.Msg.FcmToken,
+		DeviceIdentifier:  req.Msg.DeviceIdentifier,
+		PermissionState:   permissionStateProtoToString(req.Msg.PermissionState),
+		TokenType:         tokenType,
+		NativeCallCapable: req.Msg.NativeCallCapable,
 	}
 
 	if req.Msg.Endpoint != "" {
@@ -175,10 +182,12 @@ func (s *NotificationServiceConnect) ListPushTokens(
 	protoTokens := make([]*rpcv1.PushTokenInfo, 0, len(tokens))
 	for _, t := range tokens {
 		info := &rpcv1.PushTokenInfo{
-			TokenId:          t.TokenID.String(),
-			DeviceIdentifier: t.DeviceIdentifier,
-			PermissionState:  permissionStateStringToProto(t.PermissionState),
-			IsValid:          t.IsValid,
+			TokenId:           t.TokenID.String(),
+			DeviceIdentifier:  t.DeviceIdentifier,
+			PermissionState:   permissionStateStringToProto(t.PermissionState),
+			IsValid:           t.IsValid,
+			TokenType:         pushTokenTypeStringToProto(t.TokenType),
+			NativeCallCapable: nativeCallCapableFromMetadata(t.TokenMetadata),
 		}
 
 		if t.RegisteredAt.Valid {
@@ -258,4 +267,34 @@ func jsonToMap(s string) map[string]string {
 		return make(map[string]string)
 	}
 	return out
+}
+
+// pushTokenTypeProtoToString converts the proto enum to the database-ready value.
+// PUSH_TOKEN_TYPE_UNSPECIFIED maps to the empty string, which the caller rejects:
+// the field is required precisely so a transport is never guessed.
+func pushTokenTypeProtoToString(tokenType rpcv1.PushTokenType) string {
+	switch tokenType {
+	case rpcv1.PushTokenType_PUSH_TOKEN_TYPE_FCM:
+		return PushTokenTypeFCM
+	case rpcv1.PushTokenType_PUSH_TOKEN_TYPE_APNS_VOIP:
+		return PushTokenTypeAPNSVoIP
+	case rpcv1.PushTokenType_PUSH_TOKEN_TYPE_WEB_PUSH:
+		return PushTokenTypeWebPush
+	default:
+		return ""
+	}
+}
+
+// pushTokenTypeStringToProto converts the database value back to the proto enum.
+func pushTokenTypeStringToProto(tokenType string) rpcv1.PushTokenType {
+	switch tokenType {
+	case PushTokenTypeFCM:
+		return rpcv1.PushTokenType_PUSH_TOKEN_TYPE_FCM
+	case PushTokenTypeAPNSVoIP:
+		return rpcv1.PushTokenType_PUSH_TOKEN_TYPE_APNS_VOIP
+	case PushTokenTypeWebPush:
+		return rpcv1.PushTokenType_PUSH_TOKEN_TYPE_WEB_PUSH
+	default:
+		return rpcv1.PushTokenType_PUSH_TOKEN_TYPE_UNSPECIFIED
+	}
 }

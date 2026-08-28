@@ -292,6 +292,9 @@ func (l *Logic) finishCallFromWebhook(ctx context.Context, tx database.DBTX, cal
 	if err != nil {
 		return nil, fmt.Errorf("finish voice call from webhook: %w", err)
 	}
+	// A room finishing is a terminal path like any other, so the phones have to be told
+	// here too — this is the path that ends a call nobody answered from the app.
+	l.emitTerminalCallWake(ctx, tx, call.OrganizationID, endedCall, terminalWakeEventForOutcome(outcome))
 	if err := l.acknowledgeVoiceCallNotificationsForCall(ctx, tx, call.OrganizationID, call.ID); err != nil {
 		return nil, err
 	}

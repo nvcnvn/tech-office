@@ -94,6 +94,81 @@ func (q *Queries) CancelVoiceMessageUpload(ctx context.Context, db DBTX, arg *Ca
 	return &i, err
 }
 
+const claimExpiredRingingCalls = `-- name: ClaimExpiredRingingCalls :many
+UPDATE voice.call_session AS target
+SET state = 'ended',
+    outcome = 'missed',
+    ended_at = $1,
+    ended_reason = 'ring_timeout',
+    ring_deadline_at = NULL,
+    updated_at = $1
+WHERE target.organization_id = $2
+  AND target.id IN (
+      SELECT expired.id
+      FROM voice.call_session AS expired
+      WHERE expired.organization_id = $2
+        AND expired.state = 'ringing'
+        AND expired.ring_deadline_at IS NOT NULL
+        AND expired.ring_deadline_at <= $1
+      ORDER BY expired.ring_deadline_at ASC, expired.id ASC
+      LIMIT $3
+      FOR UPDATE SKIP LOCKED
+  )
+RETURNING target.id, target.organization_id, target.channel_id, target.initiator_employee_id, target.livekit_room_name, target.state, target.outcome, target.recording_policy, target.recording_status, target.transcript_status, target.started_at, target.answered_at, target.ended_at, target.ended_by_employee_id, target.ended_reason, target.created_at, target.updated_at, target.ring_deadline_at
+`
+
+type ClaimExpiredRingingCallsParams struct {
+	NowAt          pgtype.Timestamptz `json:"now_at"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	BatchLimit     int32              `json:"batch_limit"`
+}
+
+// The ring timeout sweep, as one atomic claim-and-end.
+//
+// Ending the call inside the claiming UPDATE is what makes the sweep safe to run on
+// every instance (Constitution XI): the row lock serialises the two writers, and the
+// second one's WHERE no longer matches because the state is already 'ended'. Only the
+// instance whose UPDATE matched receives the row, so the terminal wake and the
+// voice_call_missed chat message are published exactly once.
+func (q *Queries) ClaimExpiredRingingCalls(ctx context.Context, db DBTX, arg *ClaimExpiredRingingCallsParams) ([]*VoiceCallSession, error) {
+	rows, err := db.Query(ctx, claimExpiredRingingCalls, arg.NowAt, arg.OrganizationID, arg.BatchLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*VoiceCallSession
+	for rows.Next() {
+		var i VoiceCallSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ChannelID,
+			&i.InitiatorEmployeeID,
+			&i.LivekitRoomName,
+			&i.State,
+			&i.Outcome,
+			&i.RecordingPolicy,
+			&i.RecordingStatus,
+			&i.TranscriptStatus,
+			&i.StartedAt,
+			&i.AnsweredAt,
+			&i.EndedAt,
+			&i.EndedByEmployeeID,
+			&i.EndedReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RingDeadlineAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const confirmVoiceMessage = `-- name: ConfirmVoiceMessage :one
 UPDATE voice.voice_message
 SET status = 'posted',
@@ -244,23 +319,25 @@ const createVoiceCallSession = `-- name: CreateVoiceCallSession :one
 
 INSERT INTO voice.call_session (
     organization_id, channel_id, initiator_employee_id, livekit_room_name,
-    state, recording_policy, recording_status, transcript_status
+    state, recording_policy, recording_status, transcript_status, ring_deadline_at
 ) VALUES (
     $1, $2, $3, $4,
-    $5, $6, $7, $8
+    $5, $6, $7, $8,
+    $9::timestamptz
 )
-RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at
+RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at
 `
 
 type CreateVoiceCallSessionParams struct {
-	OrganizationID      dbuuid.UUID `json:"organization_id"`
-	ChannelID           dbuuid.UUID `json:"channel_id"`
-	InitiatorEmployeeID dbuuid.UUID `json:"initiator_employee_id"`
-	LivekitRoomName     string      `json:"livekit_room_name"`
-	State               string      `json:"state"`
-	RecordingPolicy     string      `json:"recording_policy"`
-	RecordingStatus     string      `json:"recording_status"`
-	TranscriptStatus    string      `json:"transcript_status"`
+	OrganizationID      dbuuid.UUID        `json:"organization_id"`
+	ChannelID           dbuuid.UUID        `json:"channel_id"`
+	InitiatorEmployeeID dbuuid.UUID        `json:"initiator_employee_id"`
+	LivekitRoomName     string             `json:"livekit_room_name"`
+	State               string             `json:"state"`
+	RecordingPolicy     string             `json:"recording_policy"`
+	RecordingStatus     string             `json:"recording_status"`
+	TranscriptStatus    string             `json:"transcript_status"`
+	RingDeadlineAt      pgtype.Timestamptz `json:"ring_deadline_at"`
 }
 
 // Voice Communication sqlc Queries
@@ -276,6 +353,7 @@ func (q *Queries) CreateVoiceCallSession(ctx context.Context, db DBTX, arg *Crea
 		arg.RecordingPolicy,
 		arg.RecordingStatus,
 		arg.TranscriptStatus,
+		arg.RingDeadlineAt,
 	)
 	var i VoiceCallSession
 	err := row.Scan(
@@ -296,6 +374,7 @@ func (q *Queries) CreateVoiceCallSession(ctx context.Context, db DBTX, arg *Crea
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }
@@ -364,9 +443,10 @@ SET state = 'ended',
     ended_at = $2,
     ended_by_employee_id = $3::uuid,
     ended_reason = $4::text,
+    ring_deadline_at = NULL,
     updated_at = $2
 WHERE organization_id = $5 AND id = $6
-RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at
+RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at
 `
 
 type EndVoiceCallSessionParams struct {
@@ -406,12 +486,13 @@ func (q *Queries) EndVoiceCallSession(ctx context.Context, db DBTX, arg *EndVoic
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }
 
 const getActiveVoiceCallForChannel = `-- name: GetActiveVoiceCallForChannel :one
-SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at FROM voice.call_session
+SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at FROM voice.call_session
 WHERE organization_id = $1
   AND channel_id = $2
   AND state IN ('ringing', 'active', 'ending')
@@ -445,6 +526,7 @@ func (q *Queries) GetActiveVoiceCallForChannel(ctx context.Context, db DBTX, arg
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }
@@ -545,7 +627,7 @@ func (q *Queries) GetVoiceCallParticipantByIdentity(ctx context.Context, db DBTX
 }
 
 const getVoiceCallSession = `-- name: GetVoiceCallSession :one
-SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at FROM voice.call_session
+SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at FROM voice.call_session
 WHERE organization_id = $1 AND id = $2
 `
 
@@ -575,12 +657,13 @@ func (q *Queries) GetVoiceCallSession(ctx context.Context, db DBTX, arg *GetVoic
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }
 
 const getVoiceCallSessionByLiveKitRoom = `-- name: GetVoiceCallSessionByLiveKitRoom :one
-SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at FROM voice.call_session
+SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at FROM voice.call_session
 WHERE organization_id = $1 AND livekit_room_name = $2
 `
 
@@ -610,6 +693,7 @@ func (q *Queries) GetVoiceCallSessionByLiveKitRoom(ctx context.Context, db DBTX,
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }
@@ -693,7 +777,7 @@ func (q *Queries) GetVoiceMessageByDedupKey(ctx context.Context, db DBTX, arg *G
 }
 
 const listCompletedVoiceCallSessionsForChannel = `-- name: ListCompletedVoiceCallSessionsForChannel :many
-SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at FROM voice.call_session
+SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at FROM voice.call_session
 WHERE organization_id = $1
   AND channel_id = $2
   AND state = 'ended'
@@ -741,10 +825,39 @@ func (q *Queries) ListCompletedVoiceCallSessionsForChannel(ctx context.Context, 
 			&i.EndedReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RingDeadlineAt,
 		); err != nil {
 			return nil, err
 		}
 		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationsWithExpiredRingingCalls = `-- name: ListOrganizationsWithExpiredRingingCalls :many
+SELECT DISTINCT organization_id
+FROM voice.call_session
+WHERE state = 'ringing'
+  AND ring_deadline_at IS NOT NULL
+  AND ring_deadline_at <= $1
+`
+
+func (q *Queries) ListOrganizationsWithExpiredRingingCalls(ctx context.Context, db DBTX, nowAt pgtype.Timestamptz) ([]dbuuid.UUID, error) {
+	rows, err := db.Query(ctx, listOrganizationsWithExpiredRingingCalls, nowAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []dbuuid.UUID
+	for rows.Next() {
+		var organization_id dbuuid.UUID
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -892,7 +1005,7 @@ func (q *Queries) ListVoiceCallParticipants(ctx context.Context, db DBTX, arg *L
 }
 
 const listVoiceCallSessionsForChannel = `-- name: ListVoiceCallSessionsForChannel :many
-SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at FROM voice.call_session
+SELECT id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at FROM voice.call_session
 WHERE organization_id = $1
   AND channel_id = $2
   AND ($3::timestamptz IS NULL OR started_at < $3::timestamptz)
@@ -939,6 +1052,7 @@ func (q *Queries) ListVoiceCallSessionsForChannel(ctx context.Context, db DBTX, 
 			&i.EndedReason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.RingDeadlineAt,
 		); err != nil {
 			return nil, err
 		}
@@ -1014,9 +1128,10 @@ UPDATE voice.call_session
 SET state = CASE WHEN state = 'ringing' THEN 'active' ELSE state END,
     outcome = COALESCE(outcome, 'answered'),
     answered_at = COALESCE(answered_at, $1),
+    ring_deadline_at = NULL,
     updated_at = $1
 WHERE organization_id = $2 AND id = $3
-RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at
+RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at
 `
 
 type MarkVoiceCallAnsweredParams struct {
@@ -1025,6 +1140,8 @@ type MarkVoiceCallAnsweredParams struct {
 	CallSessionID  dbuuid.UUID        `json:"call_session_id"`
 }
 
+// ring_deadline_at is NULL in every state but 'ringing', so answering clears it and
+// the ring timeout sweep stops considering the call.
 func (q *Queries) MarkVoiceCallAnswered(ctx context.Context, db DBTX, arg *MarkVoiceCallAnsweredParams) (*VoiceCallSession, error) {
 	row := db.QueryRow(ctx, markVoiceCallAnswered, arg.AnsweredAt, arg.OrganizationID, arg.CallSessionID)
 	var i VoiceCallSession
@@ -1046,6 +1163,7 @@ func (q *Queries) MarkVoiceCallAnswered(ctx context.Context, db DBTX, arg *MarkV
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }
@@ -1056,7 +1174,7 @@ SET recording_status = CASE WHEN $1 = 'recording' THEN $2 ELSE recording_status 
     transcript_status = CASE WHEN $1 = 'transcript' THEN $2 ELSE transcript_status END,
     updated_at = $3
 WHERE organization_id = $4 AND id = $5
-RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at
+RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at
 `
 
 type UpdateVoiceCallArtifactRollupStatusParams struct {
@@ -1094,6 +1212,7 @@ func (q *Queries) UpdateVoiceCallArtifactRollupStatus(ctx context.Context, db DB
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }
@@ -1260,7 +1379,7 @@ SET state = $1,
     ended_reason = COALESCE($6::text, ended_reason),
     updated_at = $7
 WHERE organization_id = $8 AND id = $9
-RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at
+RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at
 `
 
 type UpdateVoiceCallSessionStateParams struct {
@@ -1306,6 +1425,7 @@ func (q *Queries) UpdateVoiceCallSessionState(ctx context.Context, db DBTX, arg 
 		&i.EndedReason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.RingDeadlineAt,
 	)
 	return &i, err
 }

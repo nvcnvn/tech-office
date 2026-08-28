@@ -71,6 +71,15 @@ type Logic struct {
 	// ContactGuard may be nil where the compliance domain is not wired; a nil
 	// guard means no block is enforced, never a panic.
 	ContactGuard ContactGuard
+
+	// CallWakeDispatcher may be nil, in which case calls still ring through the
+	// notification path this feature demoted to tier B — never a panic.
+	CallWakeDispatcher CallWakeDispatcher
+
+	// AdminPool backs reads that happen outside any request transaction: the ring
+	// timeout sweep, and the liveness check the call wake sender makes before waking a
+	// device.
+	AdminPool database.AdminDatabaseConnector
 }
 
 func NewLogic(queries *database.Queries, channelAuthorizer ChannelAuthorizer, mediaClient MediaClient, config Config) *Logic {
@@ -95,11 +104,23 @@ func (l *Logic) StartVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 		return nil, nil, fmt.Errorf("check active voice call: %w", err)
 	}
 
+	// In a direct conversation the callee is known before the call exists, so busy and
+	// unreachable are decided here rather than after 45 seconds of ringing. Both are
+	// evaluated after the authorization and block guards above: a refused call must
+	// never reach a device, and must not leak whether that device could be reached.
+	if err := l.ensureDirectCalleeAvailable(ctx, tx, orgID, employeeID, channelID); err != nil {
+		return nil, nil, err
+	}
+
 	roomName := makeLiveKitRoomName(orgID, channelID)
 	recordingPolicy := "not_allowed"
 	if requestRecording {
 		recordingPolicy = "allowed"
 	}
+	// The deadline is written with the row rather than in a second statement: a ringing
+	// call with no deadline is a call that rings forever, which is the bug this column
+	// exists to prevent.
+	ringDeadlineAt := pgtype.Timestamptz{Time: ringDeadline(time.Now().UTC()), Valid: true}
 	call, err := l.Queries.CreateVoiceCallSession(ctx, tx, &database.CreateVoiceCallSessionParams{
 		OrganizationID:      orgID,
 		ChannelID:           channelID,
@@ -109,6 +130,7 @@ func (l *Logic) StartVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 		RecordingPolicy:     recordingPolicy,
 		RecordingStatus:     ArtifactStatusUnavailable,
 		TranscriptStatus:    ArtifactStatusUnavailable,
+		RingDeadlineAt:      ringDeadlineAt,
 	})
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -220,6 +242,10 @@ func (l *Logic) JoinVoiceCall(ctx context.Context, tx database.DBTX, orgID, empl
 		if err != nil {
 			return nil, nil, fmt.Errorf("mark voice call answered: %w", err)
 		}
+		// Stop the ring on this person's other phones. The device that answered is in
+		// the fan-out too — the backend knows which person answered, not which handset
+		// — and ignores a terminal wake for the call it is currently in (FR-004).
+		l.emitTerminalCallWake(ctx, tx, orgID, call, notification.CallWakeEventAnsweredElsewhere)
 	}
 
 	credentials, err := l.credentials(ctx, call, participant)
@@ -887,9 +913,11 @@ func (l *Logic) acceptVoiceInvite(ctx context.Context, tx database.DBTX, orgID, 
 		return nil, nil, err
 	}
 	if call.State == CallStateRinging && employeeID != call.InitiatorEmployeeID {
-		if _, err := l.Queries.MarkVoiceCallAnswered(ctx, tx, &database.MarkVoiceCallAnsweredParams{AnsweredAt: now, OrganizationID: orgID, CallSessionID: call.ID}); err != nil {
+		answered, err := l.Queries.MarkVoiceCallAnswered(ctx, tx, &database.MarkVoiceCallAnsweredParams{AnsweredAt: now, OrganizationID: orgID, CallSessionID: call.ID})
+		if err != nil {
 			return nil, nil, fmt.Errorf("mark voice call answered: %w", err)
 		}
+		l.emitTerminalCallWake(ctx, tx, orgID, answered, notification.CallWakeEventAnsweredElsewhere)
 	}
 	credentials, err := l.credentials(ctx, call, participant)
 	if err != nil {
@@ -1001,6 +1029,10 @@ func (l *Logic) endCall(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID
 	if err != nil {
 		return nil, fmt.Errorf("end voice call: %w", err)
 	}
+	// Every path that ends a call routes through here, which is exactly why the
+	// terminal wake lives here and not at each caller: a new way to end a call cannot
+	// forget to stop the phones (FR-013, SC-005).
+	l.emitTerminalCallWake(ctx, tx, orgID, endedCall, terminalWakeEventForOutcome(outcome))
 	return endedCall, nil
 }
 
@@ -1374,6 +1406,10 @@ func (l *Logic) publishInviteNotification(ctx context.Context, tx database.DBTX,
 		slog.WarnContext(ctx, "failed to resolve voice invite channel metadata", "error", err, "channel_id", call.ChannelID.String())
 	}
 	callerName := l.voiceNotificationEmployeeName(ctx, tx, orgID, invitation.InviterEmployeeID)
+	// The workspace name is the second and last human-readable string a lock screen is
+	// allowed to show (FR-008): who is calling, and from which workspace. Nothing about
+	// the conversation goes into a call wake.
+	workspaceName := l.voiceNotificationWorkspaceName(ctx, tx, orgID)
 	alreadyInAnotherCall := "false"
 	if count, err := l.Queries.CountOtherActiveVoiceCallsForEmployee(ctx, tx, &database.CountOtherActiveVoiceCallsForEmployeeParams{
 		OrganizationID: orgID,
@@ -1402,6 +1438,13 @@ func (l *Logic) publishInviteNotification(ctx context.Context, tx database.DBTX,
 			"senderEmployeeId":     invitation.InviterEmployeeID.String(),
 			"senderName":           callerName,
 			"alreadyInAnotherCall": alreadyInAnotherCall,
+			// The call wake payload is built from action_data alone, so the device can
+			// ring without a round trip to the server first — which is what keeps the
+			// ring inside Android's 5-second budget on a cold start.
+			"workspaceName": workspaceName,
+			"callStartedAt": call.StartedAt.Time.UTC().Format(time.RFC3339),
+			"ringExpiresAt": ringDeadlineText(call),
+			"callWakeEvent": notification.CallWakeEventIncoming,
 		},
 		Title:          fmt.Sprintf("%s is calling", callerName),
 		Message:        fmt.Sprintf("In %s", channelName),
@@ -1510,4 +1553,89 @@ func (l *Logic) ensureDirectCallAllowed(ctx context.Context, tx database.DBTX, o
 		return ErrDirectContactBlocked
 	}
 	return nil
+}
+
+// ensureDirectCalleeAvailable refuses a direct call the callee cannot take, before the
+// call session exists.
+//
+// Two outcomes, both of which the caller has to be able to tell apart from a call that
+// simply went unanswered:
+//
+//   - busy: the callee is already on a workspace call. Ringing them would either
+//     interrupt that call or ring a phone nobody can pick up (FR-015).
+//   - unreachable: no device of theirs can be woken at all. Ending here rather than
+//     ringing out for the full 45 seconds is what keeps a caller from re-dialling a
+//     phone that was never going to ring (FR-006, SC-006).
+//
+// It applies to direct conversations only. In a shared channel there is no single
+// callee to be busy or unreachable, and a call there is an open invitation rather than
+// a ring at one person.
+func (l *Logic) ensureDirectCalleeAvailable(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID) error {
+	if l.ChannelAuthorizer == nil {
+		return nil
+	}
+	counterpart, isDirect, err := l.ChannelAuthorizer.DirectMessageCounterpart(ctx, tx, orgID, employeeID, channelID)
+	if err != nil {
+		return fmt.Errorf("resolve direct conversation counterpart: %w", err)
+	}
+	if !isDirect {
+		return nil
+	}
+
+	activeCalls, err := l.Queries.CountOtherActiveVoiceCallsForEmployee(ctx, tx, &database.CountOtherActiveVoiceCallsForEmployeeParams{
+		OrganizationID: orgID,
+		EmployeeID:     counterpart,
+		// No call to exclude: the one being placed does not exist yet.
+		CallSessionID: dbuuid.UUID{},
+	})
+	if err != nil {
+		return fmt.Errorf("count callee active voice calls: %w", err)
+	}
+	if activeCalls > 0 {
+		return ErrCalleeBusy
+	}
+
+	// A missing dispatcher means the native tier is not wired at all; every device
+	// still receives the tier-B ring, so refusing the call here would be wrong.
+	if l.CallWakeDispatcher == nil {
+		return nil
+	}
+	reachable, err := l.CallWakeDispatcher.HasCallWakeTarget(ctx, tx, orgID, counterpart)
+	if err != nil {
+		// Fail open. A reachability check that errors must not stop a call from being
+		// placed: ringing a phone that turns out to be unreachable costs 45 seconds,
+		// while refusing a call that would have connected costs the conversation.
+		slog.WarnContext(ctx, "failed to check whether the callee can be woken - placing the call anyway",
+			"error", err, "callee_employee_id", counterpart.String())
+		return nil
+	}
+	if !reachable {
+		return ErrCalleeUnreachable
+	}
+	return nil
+}
+
+// voiceNotificationWorkspaceName resolves the organization's display name for a call
+// wake. It falls back to a neutral word rather than an identifier: a lock screen that
+// shows a UUID is worse than one that says "Workspace".
+func (l *Logic) voiceNotificationWorkspaceName(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID) string {
+	org, err := l.Queries.GetOrganizationByID(ctx, tx, orgID)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to resolve workspace name for call wake", "error", err, "organization_id", orgID.String())
+		return "Workspace"
+	}
+	if name := strings.TrimSpace(org.CompanyName); name != "" {
+		return name
+	}
+	return "Workspace"
+}
+
+// ringDeadlineText renders the call's ring deadline for the wake payload. A call row
+// written before this feature has none; the empty string tells the device to rely on
+// the terminal wake instead of a local expiry.
+func ringDeadlineText(call *database.VoiceCallSession) string {
+	if call == nil || !call.RingDeadlineAt.Valid {
+		return ""
+	}
+	return call.RingDeadlineAt.Time.UTC().Format(time.RFC3339)
 }

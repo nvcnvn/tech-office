@@ -621,6 +621,66 @@ func (q *Queries) GetEmployeeActiveConnections(ctx context.Context, db DBTX, arg
 	return items, nil
 }
 
+const getEmployeeCallWakeTokens = `-- name: GetEmployeeCallWakeTokens :many
+SELECT token_id,
+       device_identifier,
+       fcm_token,
+       token_type,
+       token_metadata,
+       last_used_at
+FROM notification.push_token
+WHERE organization_id = $1
+  AND employee_id = $2
+  AND is_valid = true
+  AND permission_state <> 'denied'
+ORDER BY device_identifier, token_type
+`
+
+type GetEmployeeCallWakeTokensParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	EmployeeID     dbuuid.UUID `json:"employee_id"`
+}
+
+type GetEmployeeCallWakeTokensRow struct {
+	TokenID          dbuuid.UUID        `json:"token_id"`
+	DeviceIdentifier string             `json:"device_identifier"`
+	FcmToken         string             `json:"fcm_token"`
+	TokenType        string             `json:"token_type"`
+	TokenMetadata    []byte             `json:"token_metadata"`
+	LastUsedAt       pgtype.Timestamptz `json:"last_used_at"`
+}
+
+// Every device that could be woken for a call, one row per token type. The dispatcher
+// groups these by device_identifier and picks one transport per device: tier A over
+// the VoIP row on iOS or the FCM row on Android, tier B over the FCM row otherwise.
+// A device must never be served both tiers for the same call event.
+func (q *Queries) GetEmployeeCallWakeTokens(ctx context.Context, db DBTX, arg *GetEmployeeCallWakeTokensParams) ([]*GetEmployeeCallWakeTokensRow, error) {
+	rows, err := db.Query(ctx, getEmployeeCallWakeTokens, arg.OrganizationID, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*GetEmployeeCallWakeTokensRow
+	for rows.Next() {
+		var i GetEmployeeCallWakeTokensRow
+		if err := rows.Scan(
+			&i.TokenID,
+			&i.DeviceIdentifier,
+			&i.FcmToken,
+			&i.TokenType,
+			&i.TokenMetadata,
+			&i.LastUsedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getEmployeeDepartments = `-- name: GetEmployeeDepartments :many
 SELECT department_id
 FROM organization.department_member
@@ -665,7 +725,8 @@ SELECT token_id,
        last_used_at,
        updated_at,
        is_valid,
-       token_metadata
+       token_metadata,
+       token_type
 FROM notification.push_token
 WHERE organization_id = $1
   AND employee_id = $2
@@ -691,6 +752,7 @@ type GetEmployeePushTokensRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	IsValid          bool               `json:"is_valid"`
 	TokenMetadata    []byte             `json:"token_metadata"`
+	TokenType        string             `json:"token_type"`
 }
 
 func (q *Queries) GetEmployeePushTokens(ctx context.Context, db DBTX, arg *GetEmployeePushTokensParams) ([]*GetEmployeePushTokensRow, error) {
@@ -715,6 +777,7 @@ func (q *Queries) GetEmployeePushTokens(ctx context.Context, db DBTX, arg *GetEm
 			&i.UpdatedAt,
 			&i.IsValid,
 			&i.TokenMetadata,
+			&i.TokenType,
 		); err != nil {
 			return nil, err
 		}
@@ -1085,7 +1148,7 @@ func (q *Queries) GetPresenceVisibility(ctx context.Context, db DBTX, arg *GetPr
 }
 
 const getPushTokenByID = `-- name: GetPushTokenByID :one
-SELECT token_id, organization_id, employee_id, device_identifier, fcm_token, permission_state, endpoint, keys, user_agent, registered_at, last_used_at, updated_at, is_valid, token_metadata
+SELECT token_id, organization_id, employee_id, device_identifier, fcm_token, permission_state, endpoint, keys, user_agent, registered_at, last_used_at, updated_at, is_valid, token_metadata, token_type
 FROM notification.push_token
 WHERE organization_id = $1
   AND token_id = $2
@@ -1114,6 +1177,7 @@ func (q *Queries) GetPushTokenByID(ctx context.Context, db DBTX, arg *GetPushTok
 		&i.UpdatedAt,
 		&i.IsValid,
 		&i.TokenMetadata,
+		&i.TokenType,
 	)
 	return &i, err
 }
@@ -1404,6 +1468,53 @@ func (q *Queries) ListActiveResourceSubscriptionsByResource(ctx context.Context,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCallWakeTargetsForCall = `-- name: ListCallWakeTargetsForCall :many
+SELECT nr.id AS recipient_id,
+       nr.employee_id
+FROM notification.notification_recipient nr
+JOIN notification.notification n ON (nr.organization_id, nr.notification_id) = (n.organization_id, n.id)
+WHERE nr.organization_id = $1::uuid
+  AND n.notification_type = 'voice_call_incoming'
+  AND n.action_data->>'callId' = $2::text
+`
+
+type ListCallWakeTargetsForCallParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	CallID         string      `json:"call_id"`
+}
+
+type ListCallWakeTargetsForCallRow struct {
+	RecipientID dbuuid.UUID `json:"recipient_id"`
+	EmployeeID  dbuuid.UUID `json:"employee_id"`
+}
+
+// The people who were rung for a call, with the notification_recipient row that
+// anchors their delivery audit.
+//
+// Terminal call wakes (cancelled, ended, answered elsewhere, declined elsewhere) are
+// not notifications of their own: they reuse the incoming call's recipient row, so
+// every attempt made for one call reads back as one trail. That is also what makes
+// "exactly the devices that received incoming" a query rather than a guess.
+func (q *Queries) ListCallWakeTargetsForCall(ctx context.Context, db DBTX, arg *ListCallWakeTargetsForCallParams) ([]*ListCallWakeTargetsForCallRow, error) {
+	rows, err := db.Query(ctx, listCallWakeTargetsForCall, arg.OrganizationID, arg.CallID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListCallWakeTargetsForCallRow
+	for rows.Next() {
+		var i ListCallWakeTargetsForCallRow
+		if err := rows.Scan(&i.RecipientID, &i.EmployeeID); err != nil {
 			return nil, err
 		}
 		items = append(items, &i)
@@ -2535,12 +2646,13 @@ INSERT INTO notification.push_token (
     last_used_at,
     updated_at,
   is_valid,
-  token_metadata
+  token_metadata,
+  token_type
 )
 VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
 )
-ON CONFLICT (organization_id, employee_id, device_identifier) DO UPDATE
+ON CONFLICT (organization_id, employee_id, device_identifier, token_type) DO UPDATE
 SET fcm_token = EXCLUDED.fcm_token,
     permission_state = EXCLUDED.permission_state,
     endpoint = EXCLUDED.endpoint,
@@ -2550,7 +2662,7 @@ SET fcm_token = EXCLUDED.fcm_token,
     updated_at = EXCLUDED.updated_at,
   is_valid = true,
   token_metadata = EXCLUDED.token_metadata
-RETURNING token_id, organization_id, employee_id, device_identifier, fcm_token, permission_state, endpoint, keys, user_agent, registered_at, last_used_at, updated_at, is_valid, token_metadata
+RETURNING token_id, organization_id, employee_id, device_identifier, fcm_token, permission_state, endpoint, keys, user_agent, registered_at, last_used_at, updated_at, is_valid, token_metadata, token_type
 `
 
 type UpsertPushTokenParams struct {
@@ -2568,11 +2680,16 @@ type UpsertPushTokenParams struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	IsValid          bool               `json:"is_valid"`
 	TokenMetadata    []byte             `json:"token_metadata"`
+	TokenType        string             `json:"token_type"`
 }
 
 // ============================================================================
 // Delivery Attempt Operations (per-channel delivery audit trail)
 // ============================================================================
+// token_type is part of the conflict key: a device that can be woken natively holds
+// one row per type under a single device_identifier (its FCM token for routine
+// notifications, its APNs VoIP token for calls), so registering one must not clobber
+// the other.
 func (q *Queries) UpsertPushToken(ctx context.Context, db DBTX, arg *UpsertPushTokenParams) (*NotificationPushToken, error) {
 	row := db.QueryRow(ctx, upsertPushToken,
 		arg.TokenID,
@@ -2589,6 +2706,7 @@ func (q *Queries) UpsertPushToken(ctx context.Context, db DBTX, arg *UpsertPushT
 		arg.UpdatedAt,
 		arg.IsValid,
 		arg.TokenMetadata,
+		arg.TokenType,
 	)
 	var i NotificationPushToken
 	err := row.Scan(
@@ -2606,6 +2724,7 @@ func (q *Queries) UpsertPushToken(ctx context.Context, db DBTX, arg *UpsertPushT
 		&i.UpdatedAt,
 		&i.IsValid,
 		&i.TokenMetadata,
+		&i.TokenType,
 	)
 	return &i, err
 }

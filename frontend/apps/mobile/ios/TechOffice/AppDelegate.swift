@@ -23,10 +23,10 @@ class AppDelegate: ExpoAppDelegate {
 
 #if os(iOS) || os(tvOS)
     window = UIWindow(frame: UIScreen.main.bounds)
-    let didFinish = super.application(application, didFinishLaunchingWithOptions: launchOptions)
     // @react-native-firebase/app-didFinishLaunchingWithOptions
 FirebaseApp.configure()
-factory.startReactNative(
+    let didFinish = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    factory.startReactNative(
       withModuleName: "main",
       in: window,
       launchOptions: launchOptions)

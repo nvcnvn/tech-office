@@ -664,6 +664,20 @@ const (
 	// stopped answering presence pings, so live delivery could not reach them.
 	FallbackReasonConnectionUnresponsive = "connection_unresponsive"
 	FallbackReasonDeliveryError          = "delivery_error" // FCM/APNS/email returned an error
+
+	// Call wake reasons (Feature 037). These appear on call_wake rows only.
+	//
+	// FallbackReasonNoCallWakeTarget records that the callee had no device that could
+	// be woken at all. It is what turns a call into VOICE_CALLEE_UNREACHABLE instead
+	// of ringing out for 45 seconds (FR-006, SC-006).
+	FallbackReasonNoCallWakeTarget = "no_call_wake_target"
+	// FallbackReasonNativeTierUnavailable records that a device exists but cannot run
+	// the native call tier, so it was served the tier-B ring instead. The share of
+	// these rows is the measurement behind the epic's ~80% target.
+	FallbackReasonNativeTierUnavailable = "native_tier_unavailable"
+	// FallbackReasonCallAlreadyEnded records a wake that was not sent because the call
+	// was already over by the time the dispatcher reached the device.
+	FallbackReasonCallAlreadyEnded = "call_already_ended"
 )
 
 var fallbackReasons = map[string]struct{}{
@@ -676,6 +690,9 @@ var fallbackReasons = map[string]struct{}{
 	FallbackReasonAcknowledgedBeforePush: {},
 	FallbackReasonConnectionUnresponsive: {},
 	FallbackReasonDeliveryError:          {},
+	FallbackReasonNoCallWakeTarget:       {},
+	FallbackReasonNativeTierUnavailable:  {},
+	FallbackReasonCallAlreadyEnded:       {},
 }
 
 // IsValidFallbackReason returns true when the reason matches an allowed value.
@@ -787,4 +804,109 @@ func PreferenceLevelToProto(level string) rpcv1.SubscriptionPreferenceLevel {
 	default:
 		return rpcv1.SubscriptionPreferenceLevel_SUBSCRIPTION_PREFERENCE_LEVEL_UNSPECIFIED
 	}
+}
+
+// DeliveryChannel names the transport an attempt was made on.
+// MUST align with database CHECK constraint on notification.delivery_attempt.channel.
+const (
+	DeliveryChannelSSE = "sse" // Realtime SSE stream
+	// DeliveryChannelPush is the Firebase path used for every routine notification
+	// and for the tier-B fallback ring.
+	DeliveryChannelPush   = "push"
+	DeliveryChannelReplay = "replay" // Replayed to a client on reconnect
+	// DeliveryChannelCallWake is the privileged native call wake path (Feature 037).
+	// One row per device per call event. It is exempt from receipt-based cancellation
+	// and from do-not-disturb suppression, so it carries live call events and nothing
+	// else — on iOS a VoIP push that does not result in a reported call terminates the
+	// app, which makes that restriction a survival requirement rather than hygiene.
+	DeliveryChannelCallWake = "call_wake"
+)
+
+var deliveryChannels = map[string]struct{}{
+	DeliveryChannelSSE:      {},
+	DeliveryChannelPush:     {},
+	DeliveryChannelReplay:   {},
+	DeliveryChannelCallWake: {},
+}
+
+// IsValidDeliveryChannel returns true when the channel matches an allowed value.
+func IsValidDeliveryChannel(channel string) bool {
+	_, ok := deliveryChannels[channel]
+	return ok
+}
+
+// CallWakeEvent is the kind of call event a wake carries. Every wake carries exactly
+// one, and each has a defined client action that ends in a call reported to the OS.
+//
+// MUST align with the CallWakeEvent union in frontend/packages/apis/src/push-tokens.ts
+// and with the event kinds in specs/037-native-call-wakeup/contracts/call-wake-payloads.md.
+const (
+	// CallWakeEventIncoming asks the device to present the native incoming-call UI.
+	CallWakeEventIncoming = "incoming"
+	// CallWakeEventCancelled means the caller hung up before anyone answered.
+	CallWakeEventCancelled = "cancelled"
+	// CallWakeEventAnsweredElsewhere means the same person answered on another device.
+	CallWakeEventAnsweredElsewhere = "answered_elsewhere"
+	// CallWakeEventDeclinedElsewhere means the same person declined on another device.
+	CallWakeEventDeclinedElsewhere = "declined_elsewhere"
+	// CallWakeEventEnded covers every other terminal path: remote hang-up, ring
+	// timeout, join failure.
+	CallWakeEventEnded = "ended"
+)
+
+var callWakeEvents = map[string]struct{}{
+	CallWakeEventIncoming:          {},
+	CallWakeEventCancelled:         {},
+	CallWakeEventAnsweredElsewhere: {},
+	CallWakeEventDeclinedElsewhere: {},
+	CallWakeEventEnded:             {},
+}
+
+// IsValidCallWakeEvent returns true when the kind matches an allowed value. The call
+// wake dispatcher refuses anything else, which is what keeps the privileged transport
+// carrying live call events only (FR-003).
+func IsValidCallWakeEvent(event string) bool {
+	_, ok := callWakeEvents[event]
+	return ok
+}
+
+// IsTerminalCallWakeEvent returns true for every kind that ends the device's call.
+// The client reports the call to the OS and then immediately ends it with the
+// matching end reason, rather than dropping the wake (FR-013).
+func IsTerminalCallWakeEvent(event string) bool {
+	switch event {
+	case CallWakeEventCancelled, CallWakeEventAnsweredElsewhere, CallWakeEventDeclinedElsewhere, CallWakeEventEnded:
+		return true
+	default:
+		return false
+	}
+}
+
+// PushTokenType names which provider token a push_token row carries.
+// MUST align with the push_token_token_type_valid CHECK constraint on
+// notification.push_token and the PushTokenType union in
+// frontend/packages/apis/src/push-tokens.ts.
+const (
+	// PushTokenTypeFCM is a Firebase token. It serves routine notifications on every
+	// platform and is also the Android call transport, which distinguishes itself by
+	// payload shape (data-only, high priority) rather than by a separate token.
+	PushTokenTypeFCM = "fcm"
+	// PushTokenTypeAPNSVoIP is a PushKit VoIP token, reached over a direct APNs HTTP/2
+	// connection because Firebase cannot carry apns-push-type: voip. Used for
+	// call_wake traffic only.
+	PushTokenTypeAPNSVoIP = "apns_voip"
+	// PushTokenTypeWebPush is a browser Web Push subscription.
+	PushTokenTypeWebPush = "web_push"
+)
+
+var pushTokenTypes = map[string]struct{}{
+	PushTokenTypeFCM:      {},
+	PushTokenTypeAPNSVoIP: {},
+	PushTokenTypeWebPush:  {},
+}
+
+// IsValidPushTokenType returns true when the type matches an allowed value.
+func IsValidPushTokenType(tokenType string) bool {
+	_, ok := pushTokenTypes[tokenType]
+	return ok
 }

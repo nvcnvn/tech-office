@@ -1436,6 +1436,7 @@ func (w *testWorld) registerPushToken(actor testUser, deviceID string) string {
 		Endpoint:         "https://fcm.googleapis.com/fcm/send/test",
 		KeysJson:         `{"p256dh":"test_key","auth":"test_auth"}`,
 		UserAgent:        "Mozilla/5.0 (Test)",
+		TokenType:        rpcv1.PushTokenType_PUSH_TOKEN_TYPE_FCM,
 	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	resp, err := w.notif.RegisterPushToken(context.Background(), req)
@@ -1454,6 +1455,7 @@ func (w *testWorld) registerPushTokenFull(actor testUser, fcmToken, deviceID str
 		KeysJson:         `{"p256dh":"test_key","auth":"test_auth"}`,
 		UserAgent:        "Mozilla/5.0 (Test)",
 		TokenMetadata:    map[string]string{"test": "integration"},
+		TokenType:        rpcv1.PushTokenType_PUSH_TOKEN_TYPE_FCM,
 	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	resp, err := w.notif.RegisterPushToken(context.Background(), req)
@@ -3729,4 +3731,149 @@ func (w *testWorld) forceLockout(orgID, identityID dbuuid.UUID, tier int, remain
 		     updated_at      = EXCLUDED.updated_at`,
 		orgID, identityID, tier, lockoutUntil)
 	require.NoError(w.t, err, "force lockout tier %d", tier)
+}
+
+// ---------------------------------------------------------------------------
+// Arrange / Assert: native call wakeup (Feature 037)
+// ---------------------------------------------------------------------------
+
+// registerCallWakeDevice registers one device that can be woken natively for a call.
+//
+// On iOS that means two rows under one device identifier — the FCM token for routine
+// notifications and the APNs VoIP token for calls — which is the arrangement the
+// dispatcher fans out over. Passing "android" registers the single FCM row that platform
+// uses for both.
+func (w *testWorld) registerCallWakeDevice(actor testUser, deviceID, platform string, nativeCallCapable bool) {
+	w.t.Helper()
+
+	register := func(token string, tokenType rpcv1.PushTokenType, provider string) {
+		req := connect.NewRequest(&rpcv1.RegisterPushTokenRequest{
+			FcmToken:         token,
+			DeviceIdentifier: deviceID,
+			PermissionState:  rpcv1.PermissionState_PERMISSION_STATE_GRANTED,
+			Endpoint:         "https://fcm.googleapis.com/fcm/send/test",
+			KeysJson:         `{"p256dh":"test_key","auth":"test_auth"}`,
+			UserAgent:        "TechOffice-Mobile/" + platform,
+			TokenMetadata: map[string]string{
+				"platform":         platform,
+				"deliveryProvider": provider,
+			},
+			TokenType:         tokenType,
+			NativeCallCapable: nativeCallCapable,
+		})
+		req.Header().Set("Authorization", "Bearer "+actor.Token)
+		_, err := w.notif.RegisterPushToken(context.Background(), req)
+		require.NoError(w.t, err)
+	}
+
+	register("test_fcm_"+uuid.New().String(), rpcv1.PushTokenType_PUSH_TOKEN_TYPE_FCM, "fcm")
+	if platform == "ios" && nativeCallCapable {
+		register("test_voip_"+uuid.New().String(), rpcv1.PushTokenType_PUSH_TOKEN_TYPE_APNS_VOIP, "apns")
+	}
+}
+
+// callWakeAttempt is one row of the per-device call wake audit.
+type callWakeAttempt struct {
+	Status           string
+	Reason           string
+	Event            string
+	DeviceIdentifier string
+	Tier             string
+}
+
+// callWakeAttempts reads the call wake audit for one call, oldest first.
+//
+// It joins through the call's incoming-call notification because every wake for a call —
+// terminal ones included — is recorded against that notification's recipient row, which
+// is what makes one call read back as one trail.
+func (w *testWorld) callWakeAttempts(callID string) []callWakeAttempt {
+	w.t.Helper()
+	rows, err := globalDB.Query(context.Background(),
+		`SELECT da.attempt_status,
+		        COALESCE(da.reason, ''),
+		        COALESCE(da.metadata->>'event', ''),
+		        COALESCE(da.metadata->>'deviceIdentifier', ''),
+		        COALESCE(da.metadata->>'tier', '')
+		   FROM notification.delivery_attempt da
+		   JOIN notification.notification_recipient nr
+		     ON (da.organization_id, da.notification_recipient_id) = (nr.organization_id, nr.id)
+		   JOIN notification.notification n
+		     ON (nr.organization_id, nr.notification_id) = (n.organization_id, n.id)
+		  WHERE da.organization_id = $1
+		    AND da.channel = 'call_wake'
+		    AND n.action_data->>'callId' = $2
+		  ORDER BY da.attempted_at ASC`,
+		w.OrgID, callID)
+	require.NoError(w.t, err)
+	defer rows.Close()
+
+	attempts := make([]callWakeAttempt, 0, 4)
+	for rows.Next() {
+		var a callWakeAttempt
+		require.NoError(w.t, rows.Scan(&a.Status, &a.Reason, &a.Event, &a.DeviceIdentifier, &a.Tier))
+		attempts = append(attempts, a)
+	}
+	require.NoError(w.t, rows.Err())
+	return attempts
+}
+
+// waitForCallWakeAttempts polls until the audit holds at least min rows for the call, or
+// gives up. The dispatch runs on a background worker tick, so an assertion made the
+// instant after an RPC returns would be racing it rather than testing it.
+func (w *testWorld) waitForCallWakeAttempts(callID string, min int) []callWakeAttempt {
+	w.t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	var attempts []callWakeAttempt
+	for time.Now().Before(deadline) {
+		attempts = w.callWakeAttempts(callID)
+		if len(attempts) >= min {
+			return attempts
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	return attempts
+}
+
+// callSessionRow reads the state a call ended in, and its ring deadline.
+func (w *testWorld) callSessionRow(callID string) (state, outcome string, ringDeadlineAt *time.Time) {
+	w.t.Helper()
+	callUUID, err := dbuuid.Parse(callID)
+	require.NoError(w.t, err)
+	var outcomeText, stateText string
+	var deadline *time.Time
+	err = globalDB.QueryRow(context.Background(),
+		`SELECT state, COALESCE(outcome, ''), ring_deadline_at
+		   FROM voice.call_session
+		  WHERE organization_id = $1 AND id = $2`,
+		w.OrgID, callUUID).Scan(&stateText, &outcomeText, &deadline)
+	require.NoError(w.t, err)
+	return stateText, outcomeText, deadline
+}
+
+// expireCallRingDeadline moves a ringing call's deadline into the past so the ring
+// timeout sweep claims it on its next tick, instead of the test waiting 45 seconds.
+func (w *testWorld) expireCallRingDeadline(callID string) {
+	w.t.Helper()
+	callUUID, err := dbuuid.Parse(callID)
+	require.NoError(w.t, err)
+	_, err = globalDB.Exec(context.Background(),
+		`UPDATE voice.call_session
+		    SET ring_deadline_at = now() - interval '1 second'
+		  WHERE organization_id = $1 AND id = $2 AND state = 'ringing'`,
+		w.OrgID, callUUID)
+	require.NoError(w.t, err)
+}
+
+// callWakeAttemptCount counts every call wake attempt in the organisation. Used where
+// the assertion is that nothing was woken at all and there is no call id to key on,
+// because the call was refused before it could be created.
+func (w *testWorld) callWakeAttemptCount() int {
+	w.t.Helper()
+	var count int
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT count(*) FROM notification.delivery_attempt
+		  WHERE organization_id = $1 AND channel = 'call_wake'`,
+		w.OrgID).Scan(&count)
+	require.NoError(w.t, err)
+	return count
 }

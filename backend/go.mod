@@ -80,6 +80,7 @@ require (
 	github.com/gammazero/deque v1.2.1 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.5 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
+	github.com/golang-jwt/jwt/v4 v4.4.1 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/cel-go v0.27.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
@@ -135,6 +136,7 @@ require (
 	github.com/redis/go-redis/v9 v9.17.2 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/shopspring/decimal v1.3.1 // indirect
+	github.com/sideshow/apns2 v0.25.0 // indirect
 	github.com/spiffe/go-spiffe/v2 v2.6.0 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
 	github.com/valyala/fastjson v1.6.4 // indirect
