@@ -336,7 +336,7 @@ to do here. OpenObserve does not scrape, so a single OpenTelemetry collector doe
 
 ```
 otel-collector ──scrape──▶ node-exporter (per node), cadvisor (per node),
-       │                   postgres-exporter, traefik
+       │                   postgres-exporter, traefik, backend :18090
        └──OTLP/http──▶ openobserve  :5080   storage + PromQL + dashboards + alerts
 ```
 
@@ -370,8 +370,29 @@ Metrics are kept for `OBSERVE_RETENTION_DAYS` on the obs node's local disk. Open
 can also write to S3 (`ZO_LOCAL_MODE_STORAGE=s3` plus the `ZO_S3_*` variables) — worth
 doing if you want long retention, though not to the same bucket as the backups.
 
-The application itself exposes no metrics yet, so these alerts are infrastructure-level.
-Application error rates come from Traefik's per-service 5xx.
+**Connection pools.** The backend serves `pgxpool` statistics on `:18090/metrics`, one
+series per replica per pool, scraped through `tasks.backend` so every replica is covered
+— plain `backend` is the load-balanced VIP and would report whichever task answered.
+The port is separate from the request port because Traefik routes all of `API_DOMAIN` to
+`:18080`; nothing on that mux is private.
+
+`pgxpool_empty_acquire_count_total` is the number worth watching. It counts acquisitions
+that had to wait for a connection to come back, which is the only honest answer to "are
+the pools too small" — the ceiling itself tells you nothing.
+
+```promql
+sum by (pool) (rate(pgxpool_empty_acquire_count_total[5m]))
+  / sum by (pool) (rate(pgxpool_acquire_count_total[5m]))
+```
+
+Flat at zero means the pools are not the constraint at any size. `ConnectionPoolSaturated`
+fires when it holds above 5% for ten minutes. When it does, check whether Postgres is
+actually busy first (`pg_stat_activity` by state): a pool that is empty because queries
+are slow is not fixed by making the pool bigger — that just moves the queue into Postgres,
+where each waiting connection costs a process.
+
+Beyond the pools the application exposes no metrics, so the remaining alerts are
+infrastructure-level. Application error rates come from Traefik's per-service 5xx.
 
 ## Operating notes
 

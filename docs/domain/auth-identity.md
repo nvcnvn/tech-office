@@ -3,7 +3,7 @@
 Who a person is, how they prove it, which organizations they belong to, and what they are
 allowed to do. Owned by `internal/iam` and `rpc/v1/iam.proto` (`IAMService`, 40 RPCs).
 
-**Status date: 2026-08-27.** Supersedes specs 001, 002, 018, 020, 024, 035.
+**Status date: 2026-08-28.** Supersedes specs 001, 002, 018, 020, 024, 035.
 
 ## The identity model
 
@@ -112,6 +112,18 @@ stores the JWT `jti`, issue/expiry, last activity, IP and user agent. Expiry is 
 `GetActiveSessions` lists them; `Logout` invalidates one, `LogoutAllSessions` invalidates
 all. Invalidation is a timestamp (`invalidated_at`), not a delete, so the audit trail
 survives.
+
+**On mobile the token lives in the Keychain at `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY`**, set
+in `apps/mobile/src/lib/secure-store.ts` and used by every secure-storage caller in the app
+— the auth hook, the platform adapter the `apis` package writes through, and the stable
+push installation id. `expo-secure-store` defaults to `WHEN_UNLOCKED`, which cannot be read
+by an app woken on a locked screen, so a VoIP call push booted the app unauthenticated and
+it could neither ring nor join; see
+[voice.md](voice.md#native-call-presentation). The level is deliberately the weakest one
+that survives a locked screen: nothing is readable until the phone has been unlocked once
+since boot. Writes replace the entry rather than update it, because the Keychain leaves
+`kSecAttrAccessible` alone on an update — which is also what migrates a phone signed in
+before this, on its next launch.
 
 ## Joining an organization
 

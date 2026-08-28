@@ -10,7 +10,7 @@ import { useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import * as Notifications from "expo-notifications";
 import * as Crypto from "expo-crypto";
-import * as SecureStore from "expo-secure-store";
+import { getSecureItem, setSecureItem } from "@/lib/secure-store";
 import { useRouter } from "expo-router";
 import { getMessaging, getToken } from "@react-native-firebase/messaging";
 import { registerPushToken } from "apis";
@@ -130,13 +130,13 @@ async function getNativePushRegistration(): Promise<NativePushRegistration | nul
 }
 
 async function getStablePushDeviceIdentifier(): Promise<string> {
-  const existingId = await SecureStore.getItemAsync(PUSH_INSTALLATION_ID_KEY);
+  const existingId = await getSecureItem(PUSH_INSTALLATION_ID_KEY);
   if (existingId && existingId.trim().length > 0) {
     return `${Platform.OS}-${existingId.trim()}`;
   }
 
   const installationId = Crypto.randomUUID();
-  await SecureStore.setItemAsync(PUSH_INSTALLATION_ID_KEY, installationId);
+  await setSecureItem(PUSH_INSTALLATION_ID_KEY, installationId);
   return `${Platform.OS}-${installationId}`;
 }
 

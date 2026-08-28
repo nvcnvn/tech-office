@@ -613,6 +613,16 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 		}
 	}()
 
+	// Metrics live on their own port because Traefik routes the whole of
+	// API_DOMAIN to the request port — anything on that mux is public. This one is
+	// only reachable on the overlay network, which is where the collector scrapes
+	// it from (tasks.backend, so every replica is scraped, not just the VIP).
+	startMetricsServer(serverCtx, cfg.MetricsPort, map[string]database.Statter{
+		"admin":  adminPool,
+		"tenant": tenantPool,
+		"flow":   flowPool,
+	})
+
 	p := new(http.Protocols)
 	p.SetHTTP1(true)
 	// Use h2c so we can serve HTTP/2 without TLS.
@@ -620,6 +630,11 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	s := http.Server{
 		Handler:   withCORS(mux),
 		Protocols: p,
+		// A request that never finishes its headers must not hold a slot forever.
+		// ReadTimeout and WriteTimeout stay unset on purpose: streaming RPCs and SSE
+		// hold a response open for as long as the client is connected.
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 	if err := s.Serve(listener); err != nil {
 		if errors.Is(err, http.ErrServerClosed) {
@@ -632,6 +647,31 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	return nil
+}
+
+// startMetricsServer serves the pool metrics until ctx ends. A failure here is
+// logged and dropped: losing the scrape target is not a reason to refuse traffic.
+func startMetricsServer(ctx context.Context, port string, pools map[string]database.Statter) {
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", database.MetricsHandler(pools))
+
+	s := &http.Server{
+		Addr:              "0.0.0.0:" + port,
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		<-ctx.Done()
+		_ = s.Close()
+	}()
+
+	go func() {
+		slog.InfoContext(ctx, "serving pool metrics", "addr", s.Addr, "path", "/metrics")
+		if err := s.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			slog.ErrorContext(ctx, "metrics server exited", "error", err)
+		}
+	}()
 }
 
 func withCORS(connectHandler http.Handler) http.Handler {

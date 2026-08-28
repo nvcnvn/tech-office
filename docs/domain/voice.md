@@ -227,6 +227,18 @@ devices are still stopped, which is why the exclusion is per device rather than 
 person. Clients that do not present calls natively send an empty identifier and are
 unaffected.
 
+**Exactly one OS call survives per workspace call, and it is the one already on screen.**
+The client module mints a fresh OS call id for every push and never dedups on the
+workspace call id, so a terminal wake for a call the phone is already ringing puts a
+*second* system call up before JavaScript runs — one labelled with the call id rather than
+a name, because a terminal wake carries no caller. `handleWake` in `native-call.ts` ends
+that stray first, with end reason `answeredElsewhere` so it leaves no entry in the phone's
+call history, and every later branch then acts on the OS call that was already presented.
+Without it, a caller who cancelled before pickup left the callee's phone showing a
+lingering call named after a UUID. When module state names no such call — it does not
+survive a JavaScript reload — the OS session store is asked instead, so the survivor is
+found even for a call this module has forgotten.
+
 **Answering and declining from the system UI go through the invitation, not the call.**
 The `incoming` wake carries the pending `invitationId`, so the lock screen's answer calls
 `RespondToVoiceCallInvite(accept)` and its decline calls `RespondToVoiceCallInvite(decline)`
@@ -248,6 +260,18 @@ the push-registration effect does, before the VoIP token poll, the permission pr
 any network call, and independently of whether those succeed. It needs only local storage,
 and a call answered before it was set named no device — so the terminal wake meant for the
 person's other phones came back to this one and rang it again.
+
+**Everything the wake path needs is readable on a locked screen.** The mobile Keychain
+values — access token, expiry, org and employee id, and the stable push installation id —
+are stored at `AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY` rather than `expo-secure-store`'s
+`WHEN_UNLOCKED` default; see [auth-identity.md](auth-identity.md#sessions). It reads like a
+storage detail and is not: an app woken by a VoIP push that cannot read its own token
+boots unauthenticated, and a call cannot be joined without a session. Before the
+integration moved to the root layout that state had no listener at all — CallKit failed
+the answer action on its own 30-second timeout, the user watched "Connecting…" and the
+call dropped, the backend was never told anyone answered, and the call rang out to the
+45-second timeout as missed. Now the wake is reported and ended at once instead, but a
+phone that cannot read its token still cannot take the call.
 
 The client tracks each presented call in module state, which does not survive a JavaScript
 reload while the OS call does. Answering or hanging up a call the module has forgotten
@@ -299,8 +323,9 @@ with a real title and body, and it is handled by the call surfaces too.
 - Web: `/workspace/voice`.
 - Mobile: `src/components/voice/` and `src/lib/voice/`:
   - `native-call.ts` — wake → report → join → end, both platforms (tier A). Started from
-    the authenticated tab layout, because a call cannot be joined without a workspace
-    session. It also mirrors the client's mute state into the OS call object from the
+    the root layout, so the OS always has a listener even on a device that cannot
+    authenticate; whether a call can be joined is answered by `getSession`, not by
+    whether the integration is running. It also mirrors the client's mute state into the OS call object from the
     `voiceClient` snapshot, so the lock screen and the app cannot disagree, and closes
     the OS call when that snapshot shows the app has left it. `useNativeCallPresented`
     exposes the presented-call set to in-app surfaces so they can stand aside.

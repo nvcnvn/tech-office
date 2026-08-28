@@ -206,6 +206,16 @@ function endedReasonFor(event: CallWakeEvent): Calls.CallEndedReason {
   }
 }
 
+/** Tells the OS one of its calls is over, tolerating a call it has already forgotten —
+ *  which matters, because a terminal wake and the user's own hang-up race each other. */
+async function reportNativeCallEnded(nativeId: string, reason: Calls.CallEndedReason): Promise<void> {
+  try {
+    await Calls.reportCallEnded(nativeId, reason);
+  } catch (error) {
+    log("failed to report call ended to the OS", { nativeId, reason, error: String(error) });
+  }
+}
+
 /**
  * Ends the OS call and forgets it. Safe to call for a call that is already gone — which
  * matters, because the terminal wake and the user's own hang-up race each other.
@@ -216,11 +226,7 @@ async function closeNativeCall(
   reason: Calls.CallEndedReason,
 ): Promise<void> {
   untrackCall(serverCallId);
-  try {
-    await Calls.reportCallEnded(nativeId, reason);
-  } catch (error) {
-    log("failed to report call ended to the OS", { serverCallId, nativeId, reason, error: String(error) });
-  }
+  await reportNativeCallEnded(nativeId, reason);
   // A call ended remotely while this device was in it leaves LiveKit connected and the
   // microphone open unless it is torn down here.
   if (voiceClient.getSnapshot().activeCallId === serverCallId) {
@@ -228,6 +234,23 @@ async function closeNativeCall(
   }
   voiceClient.setAudioSessionOwnedExternally(false);
   releaseCallAudioSession();
+}
+
+/**
+ * The OS call already on screen for a workspace call, when it is not the one this wake
+ * just created.
+ *
+ * Asked only when module state names none, which is the case after a JavaScript reload:
+ * the OS call survives one and this module's map does not. The store hands back its
+ * oldest session, which is the call an earlier wake put on screen.
+ */
+async function presentedNativeIdFor(
+  serverCallId: string,
+  wakeNativeId: string,
+): Promise<string | undefined> {
+  const active = await Calls.getActiveCallSession();
+  if (!active || active.id === wakeNativeId) return undefined;
+  return active.incomingCallEvent?.serverCallId === serverCallId ? active.id : undefined;
 }
 
 /**
@@ -252,10 +275,33 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
     sequence: metadata.sequence,
   });
 
+  // Exactly one OS call may survive per workspace call, and it is the one already on
+  // screen. The native module mints a fresh OS call id for every push and never dedups
+  // on the workspace call id, so a second wake for a call this device is already showing
+  // has *already* put a second system call up before this code ran. On a terminal wake
+  // that stray is the one the user complains about: it is labelled with the call id
+  // rather than a name, because a terminal wake carries no caller. Ending it first means
+  // every branch below can work with the OS call that was already presented.
+  //
+  // "answeredElsewhere" is the end reason precisely because it leaves no entry in the
+  // phone's call history: the surviving call records the real outcome, and the stray
+  // must not add a phantom missed call beside it.
+  const presented = existing?.nativeId ?? (await presentedNativeIdFor(serverCallId, session.id));
+  if (presented && presented !== session.id) {
+    log("ending a duplicate system call reported by a later wake", {
+      serverCallId,
+      strayNativeId: session.id,
+      keptNativeId: presented,
+      event: metadata.event,
+    });
+    await reportNativeCallEnded(session.id, "answeredElsewhere");
+  }
+  const nativeId = presented ?? session.id;
+
   // A wake that is older than one already applied says nothing new. Dropping it is what
   // makes "cancelled during the same second as incoming" deterministic instead of a
   // race between two pushes.
-  if (existing && metadata.sequence <= existing.sequence && existing.nativeId === session.id) {
+  if (existing && metadata.sequence <= existing.sequence) {
     log("dropping out-of-order or duplicate wake", { serverCallId, sequence: metadata.sequence });
     return;
   }
@@ -266,7 +312,6 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
       log("ignoring answered_elsewhere on the device that answered", { serverCallId });
       return;
     }
-    const nativeId = existing?.nativeId ?? session.id;
     await closeNativeCall(serverCallId, nativeId, endedReasonFor(metadata.event));
     log("call closed by terminal wake", { serverCallId, event: metadata.event });
     return;
@@ -276,7 +321,7 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
   // credentials this device does not have. Report-then-end rather than ringing a phone
   // the user could not answer anyway (FR-019).
   if (!resolveSession()?.isAuthenticated) {
-    await closeNativeCall(serverCallId, session.id, "failed");
+    await closeNativeCall(serverCallId, nativeId, "failed");
     log("ended a wake that arrived with no valid session", { serverCallId });
     return;
   }
@@ -284,7 +329,7 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
   // A wake delivered after the caller has already given up. Ending it now is better
   // than ringing a phone for a call that is about to be swept anyway.
   if (metadata.ringExpiresAt !== undefined && metadata.ringExpiresAt <= Date.now()) {
-    await closeNativeCall(serverCallId, session.id, "unanswered");
+    await closeNativeCall(serverCallId, nativeId, "unanswered");
     log("ended an expired wake rather than ringing", { serverCallId, ringExpiresAt: metadata.ringExpiresAt });
     return;
   }
@@ -293,21 +338,21 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
   // second call in most cases; saying so explicitly means the caller is told "busy"
   // rather than being left listening to a ring nobody will pick up (FR-015).
   const active = await Calls.getActiveCallSession();
-  if (active && active.id !== session.id && active.status === "connected") {
-    await closeNativeCall(serverCallId, session.id, "failed");
+  if (active && active.id !== nativeId && active.status === "connected") {
+    await closeNativeCall(serverCallId, nativeId, "failed");
     log("declined a wake while already on a call", { serverCallId, activeCallId: active.id });
     return;
   }
 
   trackCall(serverCallId, {
-    nativeId: session.id,
+    nativeId,
     sequence: metadata.sequence,
     answeredHere: false,
     channelId: metadata.channelId,
     invitationId: metadata.invitationId,
     ringExpiresAt: metadata.ringExpiresAt,
   });
-  log("ringing", { serverCallId, nativeId: session.id, channelId: metadata.channelId });
+  log("ringing", { serverCallId, nativeId, channelId: metadata.channelId });
 }
 
 /**

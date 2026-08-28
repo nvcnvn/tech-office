@@ -179,6 +179,8 @@ services:
     command: ["server"]
     environment:
       SERVER_PORT: "18080"
+      # Pool metrics. Not routed by Traefik — overlay network only.
+      METRICS_PORT: "18090"
       # Soft heap ceiling under the 1500M hard limit: the GC works harder instead
       # of the container being OOM-killed mid-request.
       GOMEMLIMIT: 1200MiB

@@ -68,6 +68,7 @@ func (t poolTuning) apply(config *pgxpool.Config) {
 
 type AdminDatabaseConnector interface {
 	DBTX
+	Statter
 	Begin(ctx context.Context) (pgx.Tx, error)
 	Ping(ctx context.Context) error
 	Close()
@@ -82,6 +83,7 @@ func (p *AdminPool) isAdminPooler() {}
 
 type TenantDatabaseConnector interface {
 	DBTX
+	Statter
 	Begin(ctx context.Context) (pgx.Tx, error)
 	Ping(ctx context.Context) error
 	Close()

@@ -31,6 +31,17 @@ receivers:
           static_configs:
             - targets: ["postgres-exporter:9187"]
 
+        # Connection-pool health, one series per backend replica per pool. Served on
+        # its own port: Traefik routes the whole of API_DOMAIN to 18080, so anything
+        # on the request port would be public. Watch
+        # pgxpool_empty_acquire_count_total — while it stays flat the pools are not
+        # the constraint, whatever their size.
+        - job_name: backend
+          dns_sd_configs:
+            - names: ["tasks.backend"]
+              type: A
+              port: 18090
+
         - job_name: traefik
           static_configs:
             - targets: ["traefik:8082"]

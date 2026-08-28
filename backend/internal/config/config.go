@@ -13,6 +13,7 @@ import (
 
 type Config struct {
 	ServerPort           string
+	MetricsPort          string
 	DatabaseURL          string
 	FlowShardCount       int
 	PostgresDB           string
@@ -71,6 +72,7 @@ func load() *Config {
 
 	return &Config{
 		ServerPort:           getEnv("SERVER_PORT", "18080"),
+		MetricsPort:          getEnv("METRICS_PORT", "18090"),
 		DatabaseURL:          getEnv("DATABASE_URL", ""),
 		FlowShardCount:       getEnvInt("FLOW_SHARD_COUNT", 32),
 		PostgresDB:           getEnv("POSTGRES_DB", "office"),

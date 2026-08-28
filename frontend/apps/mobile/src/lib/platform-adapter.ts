@@ -11,7 +11,7 @@
 
 import { AppState, type AppStateStatus, Appearance } from "react-native";
 import { MMKV } from "react-native-mmkv";
-import * as SecureStore from "expo-secure-store";
+import { getSecureItem, setSecureItem, deleteSecureItem } from "@/lib/secure-store";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import type {
   PlatformAdapter,
@@ -35,9 +35,9 @@ const storage: StorageAdapter = {
 
 // ── Secure Storage (Keychain / Keystore) ──
 const secureStorage: SecureStorageAdapter = {
-  getItemAsync: (key) => SecureStore.getItemAsync(key),
-  setItemAsync: (key, value) => SecureStore.setItemAsync(key, value),
-  deleteItemAsync: (key) => SecureStore.deleteItemAsync(key),
+  getItemAsync: (key) => getSecureItem(key),
+  setItemAsync: (key, value) => setSecureItem(key, value),
+  deleteItemAsync: (key) => deleteSecureItem(key),
 };
 
 // ── Visibility via AppState ──

@@ -44,7 +44,6 @@ import {
   toVoiceJoinCredentials,
   type VoiceClientSnapshot,
 } from "@/lib/voice/voice-client";
-import { startNativeCallIntegration } from "@/lib/voice/native-call";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   lightPalette,
@@ -143,23 +142,6 @@ export default function AppLayout() {
       }) as never,
     );
   }, [router]);
-
-  // The OS-drawn call screen only works if something is listening for the wake. Started
-  // here rather than at module load because a call cannot be joined without a workspace
-  // session, and this is the first place one is guaranteed to exist.
-  React.useEffect(() => {
-    if (!auth?.isAuthenticated) return;
-    return startNativeCallIntegration({
-      getSession: () => ({ isAuthenticated: true }),
-      // A call answered from the lock screen leaves the app on whatever screen it was
-      // last on. Opening the conversation behind the system call UI is what makes the
-      // in-app call bar, the participants and the transcript reachable once the user
-      // unlocks.
-      onAnswered: (_serverCallId, channelId) => {
-        if (channelId) navigateToVoiceCallChannel(channelId);
-      },
-    });
-  }, [auth?.isAuthenticated, navigateToVoiceCallChannel]);
 
   const handleAcceptIncomingCall = React.useCallback(async () => {
     if (!incomingVoiceCall || voicePromptAction) return;
