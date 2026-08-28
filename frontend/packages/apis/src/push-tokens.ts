@@ -118,6 +118,12 @@ export interface CallWakePayload {
 	 */
 	sequence: number;
 	channelId?: string;
+	/**
+	 * The pending invitation this wake rings for. A device declining from the lock
+	 * screen declines the invitation rather than ending the call, so the record reads
+	 * "declined" and not "cancelled" (FR-020). Incoming wakes only.
+	 */
+	invitationId?: string;
 	callerDisplayName?: string;
 	callerEmployeeId?: string;
 	workspaceName?: string;

@@ -35,6 +35,7 @@ import { notificationStreamBehavior } from "@/lib/notification-stream-behavior";
 import { invalidateTaskQueries } from "@/lib/task-query-invalidation";
 import { voiceClient } from "@/lib/voice/voice-client";
 import { scheduleIncomingVoiceCallNotification } from "@/lib/voice/voice-notifications";
+import { isNativeCallTierCapable } from "@/lib/voice/native-call";
 
 interface LiveNotificationBanner {
   id: string;
@@ -1199,7 +1200,16 @@ export function NotificationStreamProvider({
                 }
               }
 
-              if (isIncomingVoiceCall) {
+              // On a device the OS rings for, this same call is already on screen as a
+              // system incoming call. The in-app prompt and the local notification are
+              // the fallback tier only: drawing them here gives the user two unrelated
+              // call UIs for one call, one of which cannot answer it (FR-014).
+              if (isIncomingVoiceCall && isNativeCallTierCapable()) {
+                debugNotificationStream("suppressing the fallback call prompt - the OS is presenting this call", {
+                  callId: actionData.callId,
+                  channelId: actionData.channelId,
+                });
+              } else if (isIncomingVoiceCall) {
                 if (appStateRef.current === "active" && actionData.callId) {
                   setIncomingVoiceCall({
                     id: actionData.invitationId ?? actionData.callId,

@@ -327,6 +327,11 @@ func (s *NotificationService) dispatchCallWakeForRow(
 	if channelID, parseErr := dbuuid.Parse(actionData["channelId"]); parseErr == nil {
 		req.ChannelID = channelID
 	}
+	// Carried so a lock-screen decline can decline the invitation rather than end the
+	// call — the difference between a "declined" and a "cancelled" call record.
+	if invitationID, parseErr := dbuuid.Parse(actionData["invitationId"]); parseErr == nil {
+		req.InvitationID = invitationID
+	}
 	if callerID, parseErr := dbuuid.Parse(actionData["senderEmployeeId"]); parseErr == nil {
 		req.CallerEmployeeID = callerID
 	}

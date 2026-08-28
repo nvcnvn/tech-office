@@ -110,7 +110,7 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 - [X] T033 [US2] Implement the audio session handoff in `frontend/apps/mobile/src/lib/voice/call-audio.ts`: the native framework owns the session, LiveKit carries media only. On iOS, do not let LiveKit activate `AVAudioSession` — start audio in the CallKit `didActivate` callback. On Android, leave routing to Telecom and use `STREAM_VOICE_CALL`; never call `setCommunicationDevice` or `startBluetoothSco`. **This is the highest-risk task in the epic** — the failure mode is a call that connects with no audio
 - [X] T034 [US2] Keep the OS call object alive for the whole call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, so lock-screen and control-centre controls stay available
 - [X] T035 [US2] Wire system control actions (mute, speaker, hold, hang up) to the workspace call in `frontend/apps/mobile/src/lib/voice/native-call.ts`, and reflect workspace-side state changes back into the OS call object (FR-012)
-- [ ] T036 [US2] Mirror system call state into the in-app surface in `frontend/apps/mobile/src/components/voice/active-voice-call-bar.tsx`
+- [X] T036 [US2] Mirror system call state into the in-app surface in `frontend/apps/mobile/src/components/voice/active-voice-call-bar.tsx` — the bar already renders `voiceClient` state, and the system mute action now flows into it; the reverse direction is mirrored centrally from the client snapshot in `native-call.ts` rather than per caller
 - [X] T037 [US2] Handle Bluetooth connect and disconnect mid-call in `frontend/apps/mobile/src/lib/voice/call-audio.ts` without dropping the call
 
 **Checkpoint**: A call can be lived with entirely from the phone's own controls.
@@ -192,7 +192,7 @@ Mobile + API, per plan.md: Go backend under `backend/`, Expo app under `frontend
 **Purpose**: The ~20% of devices that cannot run the native tier, and the measurement that tells us what the split actually is.
 
 - [X] T058 Record reason `native_tier_unavailable` and enforce the never-both-tiers guard for fallback devices in `backend/internal/notification/call_wake.go`. The tier-A/tier-B routing decision itself is implemented in T013 — do not re-implement it here
-- [ ] T059 [P] Demote `frontend/apps/mobile/src/lib/voice/voice-notifications.ts` and `frontend/apps/mobile/src/components/voice/incoming-voice-call-prompt.tsx` to the tier-B path only, and tell the user plainly what they lose (FR-014)
+- [ ] T059 [P] Demote `frontend/apps/mobile/src/lib/voice/voice-notifications.ts` and `frontend/apps/mobile/src/components/voice/incoming-voice-call-prompt.tsx` to the tier-B path only, and tell the user plainly what they lose (FR-014). **Demotion landed** — `notification-stream-provider.tsx` suppresses both on a device the OS rings for. The remaining half is the fallback-tier copy telling the user their calls only ring while the app is reachable
 - [X] T060 [P] Maestro flow in `frontend/apps/mobile/.maestro/native-call/fallback-ring.yaml`: a not-native-capable device shows the tier-B prompt and can answer and decline from it
 - [ ] T061 [P] Add first-run OEM battery-allowlist onboarding for Xiaomi, Huawei, Oppo, Vivo and Samsung devices in `frontend/apps/mobile/src/lib/voice/native-call.ts`, skippable, shown once
 - [ ] T062 [P] Maestro flow in `frontend/apps/mobile/.maestro/native-call/battery-allowlist.yaml`: the onboarding step appears on an affected device profile and can be skipped

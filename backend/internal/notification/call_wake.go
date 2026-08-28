@@ -50,6 +50,10 @@ type CallWakePayload struct {
 	OrganizationID    string `json:"organizationId"`
 	Sequence          int64  `json:"sequence"`
 	ChannelID         string `json:"channelId,omitempty"`
+	// InvitationID lets a device decline through the invitation path rather than
+	// ending the call, so a native decline produces the same records a in-app decline
+	// does (FR-020). Incoming wakes only.
+	InvitationID      string `json:"invitationId,omitempty"`
 	CallerDisplayName string `json:"callerDisplayName,omitempty"`
 	CallerEmployeeID  string `json:"callerEmployeeId,omitempty"`
 	WorkspaceName     string `json:"workspaceName,omitempty"`
@@ -112,6 +116,9 @@ func (p *CallWakePayload) toEnvelope(eventID string) callWakeEnvelope {
 	if p.ChannelID != "" {
 		metadata["channelId"] = p.ChannelID
 	}
+	if p.InvitationID != "" {
+		metadata["invitationId"] = p.InvitationID
+	}
 	if p.WorkspaceName != "" {
 		metadata["workspaceName"] = p.WorkspaceName
 	}
@@ -161,6 +168,10 @@ type CallWakeRequest struct {
 	CallerDisplayName string
 	CallerEmployeeID  dbuuid.UUID
 	WorkspaceName     string
+	// InvitationID is the pending invite this wake rings for. Carried so a device that
+	// declines from the lock screen can answer the invitation instead of ending the
+	// call, which is what makes a native decline record a decline rather than a cancel.
+	InvitationID dbuuid.UUID
 }
 
 // CallWakeResult reports what the dispatcher decided, so a caller can turn "nobody
@@ -339,6 +350,9 @@ func (d *callWakeDispatcher) DispatchCallWake(ctx context.Context, tx database.D
 	// to which call, and nothing a lock screen could render.
 	if req.Event == CallWakeEventIncoming {
 		payload.ChannelID = req.ChannelID.String()
+		if req.InvitationID != (dbuuid.UUID{}) {
+			payload.InvitationID = req.InvitationID.String()
+		}
 		payload.CallerDisplayName = req.CallerDisplayName
 		payload.CallerEmployeeID = req.CallerEmployeeID.String()
 		payload.WorkspaceName = req.WorkspaceName

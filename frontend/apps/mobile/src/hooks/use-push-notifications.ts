@@ -27,6 +27,7 @@ import {
 } from "@/lib/mobile-navigation";
 import { ensureVoiceCallNotificationChannel } from "@/lib/voice/voice-notifications";
 import { getVoIPPushToken, registerVoIPPush } from "expo-callkit-telecom";
+import { setNativeCallTierCapable } from "@/lib/voice/native-call";
 
 interface NativePushRegistration {
   token: string;
@@ -327,6 +328,10 @@ export function usePushNotifications() {
         // reach it — a phone that silently never rings.
         const voipToken = Platform.OS === "ios" ? await waitForVoIPToken() : null;
         const nativeCallCapable = Platform.OS === "android" || Boolean(voipToken);
+        // Told to the call layer as well as the backend, so the two agree about which
+        // tier this device is on. A device the backend rings natively must not also
+        // draw the fallback prompt, and one it cannot ring natively must still get it.
+        setNativeCallTierCapable(nativeCallCapable);
 
         await registerPushToken({
           fcmToken: pushToken,

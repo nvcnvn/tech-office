@@ -35,7 +35,7 @@ import {
 } from "apis";
 import { joinVoiceCall, endVoiceCall, respondToVoiceCallInvite } from "apis";
 import { configureCallAudioSession, releaseCallAudioSession } from "./call-audio";
-import { voiceClient } from "./voice-client";
+import { voiceClient, toVoiceJoinCredentials } from "./voice-client";
 
 /** Metadata keys the backend sets on every wake. Mirrors callWakeEventKey in
  *  backend/internal/notification/call_wake.go. */
@@ -58,6 +58,9 @@ interface TrackedCall {
    *  not hang up the phone that did the answering. */
   answeredHere: boolean;
   channelId?: string;
+  /** The pending invitation. Declining it is what records a decline; ending the call
+   *  instead records a cancel, as though the caller had hung up. */
+  invitationId?: string;
   ringExpiresAt?: number;
 }
 
@@ -79,10 +82,32 @@ type SessionResolver = () => { isAuthenticated: boolean } | null;
 let resolveSession: SessionResolver = () => null;
 let onCallAnswered: ((serverCallId: string, channelId?: string) => void) | null = null;
 
+/**
+ * Whether this device rings through the OS rather than through the in-app prompt.
+ *
+ * Set from the push registration, which is the one place that knows whether a VoIP
+ * token actually arrived — a device that claims the native tier without one would show
+ * no incoming UI at all. The in-app prompt and the local call notification are the
+ * fallback tier and must not be drawn on top of the system call screen (FR-014).
+ */
+let nativeTierCapable = false;
+
+export function setNativeCallTierCapable(capable: boolean): void {
+  nativeTierCapable = capable;
+  log("native call tier capability set", { capable });
+}
+
+/** True when the OS draws this device's incoming calls, so the fallback prompt and the
+ *  local call notification must stay out of the way. */
+export function isNativeCallTierCapable(): boolean {
+  return nativeTierCapable;
+}
+
 interface WakeMetadata {
   event: CallWakeEvent;
   sequence: number;
   channelId?: string;
+  invitationId?: string;
   ringExpiresAt?: number;
   organizationId?: string;
 }
@@ -107,6 +132,7 @@ function readWakeMetadata(raw: Record<string, unknown> | undefined): WakeMetadat
     event: (value(WAKE_EVENT_KEY) as CallWakeEvent | undefined) ?? "incoming",
     sequence: Number.parseInt(value("sequence") ?? "0", 10) || 0,
     channelId: value("channelId"),
+    invitationId: value("invitationId"),
     ringExpiresAt: Number.isNaN(parsedExpiry) ? undefined : parsedExpiry,
     organizationId: value("organizationId"),
   };
@@ -143,6 +169,12 @@ async function closeNativeCall(
   } catch (error) {
     log("failed to report call ended to the OS", { serverCallId, nativeId, reason, error: String(error) });
   }
+  // A call ended remotely while this device was in it leaves LiveKit connected and the
+  // microphone open unless it is torn down here.
+  if (voiceClient.getSnapshot().activeCallId === serverCallId) {
+    await voiceClient.disconnect();
+  }
+  voiceClient.setAudioSessionOwnedExternally(false);
   releaseCallAudioSession();
 }
 
@@ -220,6 +252,7 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
     sequence: metadata.sequence,
     answeredHere: false,
     channelId: metadata.channelId,
+    invitationId: metadata.invitationId,
     ringExpiresAt: metadata.ringExpiresAt,
   });
   log("ringing", { serverCallId, nativeId: session.id, channelId: metadata.channelId });
@@ -243,14 +276,43 @@ async function handleAnswered(nativeId: string, requestId: string): Promise<void
   const tracked = trackedCalls.get(serverCallId);
   if (tracked) tracked.answeredHere = true;
 
-  // The native framework owns the audio session; LiveKit only carries media. Doing this
-  // before the join is what keeps the two from fighting over the session — the failure
-  // mode is a call that connects with nobody able to hear.
+  // The native framework owns the audio session; LiveKit only carries media. Both of
+  // these have to be in place before WebRTC touches the session — the failure mode is a
+  // call that connects with nobody able to hear.
   configureCallAudioSession();
+  voiceClient.setAudioSessionOwnedExternally(true);
 
   try {
-    await joinVoiceCall(serverCallId);
+    // Answering the invitation rather than joining the call is what acknowledges the
+    // incoming-call notification, so it is not replayed as a stale prompt when the app
+    // next reconnects. Joining directly is the fallback for a wake that names no
+    // invitation.
+    const credentials = tracked?.invitationId
+      ? toVoiceJoinCredentials(
+          (
+            await respondToVoiceCallInvite({
+              invitationId: tracked.invitationId,
+              response: "accept",
+            })
+          ).joinCredentials,
+          serverCallId,
+          tracked?.channelId,
+        )
+      : toVoiceJoinCredentials(
+          (await joinVoiceCall(serverCallId)).joinCredentials,
+          serverCallId,
+          tracked?.channelId,
+        );
+
+    // Told to the OS before the media connect, which is the slow half: Telecom tears
+    // the call down if the answer is not fulfilled inside five seconds.
     await Calls.fulfillIncomingCallConnected(requestId);
+
+    if (!credentials) {
+      throw new Error("the server returned no join credentials for this call");
+    }
+    await voiceClient.connect(credentials);
+
     onCallAnswered?.(serverCallId, tracked?.channelId);
     log("call answered and joined", { serverCallId, nativeId });
   } catch (error) {
@@ -276,17 +338,28 @@ async function handleEnded(nativeId: string): Promise<void> {
   const tracked = trackedCalls.get(serverCallId);
   trackedCalls.delete(serverCallId);
   releaseCallAudioSession();
+  if (voiceClient.getSnapshot().activeCallId === serverCallId) {
+    await voiceClient.disconnect();
+  }
+  voiceClient.setAudioSessionOwnedExternally(false);
 
   try {
-    // Declining before answering is an invitation response; hanging up afterwards ends
-    // the call. Both reach the server after the OS call is already closed, so a slow
-    // network cannot hold the phone's UI hostage.
-    if (tracked?.answeredHere) {
-      await endVoiceCall(serverCallId);
+    // Declining before answering is an invitation response, not an end: the two produce
+    // different call records and different feedback to the caller, who otherwise sees a
+    // call that looks as though it cancelled itself.
+    if (!tracked?.answeredHere && tracked?.invitationId) {
+      await respondToVoiceCallInvite({
+        invitationId: tracked.invitationId,
+        response: "decline",
+      });
     } else {
       await endVoiceCall(serverCallId);
     }
-    log("call ended from the system UI", { serverCallId, nativeId });
+    log("call ended from the system UI", {
+      serverCallId,
+      nativeId,
+      answeredHere: Boolean(tracked?.answeredHere),
+    });
   } catch (error) {
     log("failed to tell the server the call ended", { serverCallId, error: String(error) });
   }
@@ -346,39 +419,36 @@ export function startNativeCallIntegration(options: {
     }),
   ];
 
+  // The reverse direction of the mute control: anything that mutes the workspace call
+  // from inside the app has to show on the lock screen too, or the two surfaces disagree
+  // about whether the microphone is open (FR-012). Mirrored from the client's own state
+  // rather than from each caller, so a future in-app mute button cannot forget to.
+  let mirroredMute: boolean | null = null;
+  const unsubscribeMute = voiceClient.subscribe((snapshot) => {
+    const tracked = snapshot.activeCallId ? trackedCalls.get(snapshot.activeCallId) : undefined;
+    if (!tracked) {
+      mirroredMute = null;
+      return;
+    }
+    if (snapshot.isMuted === mirroredMute) return;
+    mirroredMute = snapshot.isMuted;
+    void Calls.setMuted(tracked.nativeId, snapshot.isMuted).catch((error: unknown) => {
+      log("failed to mirror mute into the system call", {
+        serverCallId: snapshot.activeCallId,
+        isMuted: snapshot.isMuted,
+        error: String(error),
+      });
+    });
+  });
+
   log("native call integration started", { platform: Platform.OS });
 
   return () => {
     subscriptions.forEach((subscription) => subscription.remove());
     subscriptions = [];
+    unsubscribeMute();
     trackedCalls.clear();
   };
-}
-
-/**
- * Reports a decline made inside the app so the OS call closes too, keeping the two
- * representations of one call from drifting apart.
- */
-export async function declineTrackedCall(serverCallId: string, invitationId: string): Promise<void> {
-  const tracked = trackedCalls.get(serverCallId);
-  if (tracked) {
-    await closeNativeCall(serverCallId, tracked.nativeId, "declinedElsewhere");
-  }
-  await respondToVoiceCallInvite({ invitationId, response: "decline" });
-}
-
-/**
- * Reflects a mute made inside the app back into the OS call object, so the lock screen
- * and the in-app surface never disagree about whether the microphone is open (FR-012).
- */
-export async function syncMutedToSystemCall(serverCallId: string, isMuted: boolean): Promise<void> {
-  const tracked = trackedCalls.get(serverCallId);
-  if (!tracked) return;
-  try {
-    await Calls.setMuted(tracked.nativeId, isMuted);
-  } catch (error) {
-    log("failed to mirror mute into the system call", { serverCallId, isMuted, error: String(error) });
-  }
 }
 
 /** Whether this device is presenting a given call through the OS. Lets the in-app

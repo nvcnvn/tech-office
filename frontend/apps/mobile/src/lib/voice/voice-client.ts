@@ -63,6 +63,17 @@ export class VoiceClient {
     };
   }
 
+  /**
+   * When true, the native call framework (CallKit / Telecom) owns the audio session
+   * and LiveKit must not touch it. Both frameworks want the session, and whichever
+   * loses produces a call that connects with nobody able to hear.
+   */
+  private audioSessionOwnedExternally = false;
+
+  setAudioSessionOwnedExternally(owned: boolean): void {
+    this.audioSessionOwnedExternally = owned;
+  }
+
   async connect(credentials: VoiceJoinCredentials): Promise<void> {
     await this.disconnect();
 
@@ -80,8 +91,13 @@ export class VoiceClient {
       const liveKitClient = (await import("livekit-client")) as any;
       liveKit.registerGlobals?.();
 
-      this.audioSession = liveKit.AudioSession ?? null;
-      await this.audioSession?.startAudioSession?.();
+      // Skipped entirely for a call the OS is presenting: CallKit activates the
+      // AVAudioSession itself, and Telecom owns Android's routing. Starting LiveKit's
+      // own session here races them and loses silently.
+      if (!this.audioSessionOwnedExternally) {
+        this.audioSession = liveKit.AudioSession ?? null;
+        await this.audioSession?.startAudioSession?.();
+      }
 
       const Room = liveKit.Room ?? liveKitClient.Room;
       if (!Room) {
@@ -214,6 +230,47 @@ export class VoiceClient {
       listener(this.snapshot);
     }
   }
+}
+
+function protoToDate(
+  ts: { seconds?: number | bigint | string } | null | undefined,
+): Date | null {
+  if (!ts) return null;
+  const secs = Number(ts.seconds ?? 0);
+  return secs > 0 ? new Date(secs * 1000) : null;
+}
+
+/**
+ * Maps the RPC's join credentials onto what the client connects with.
+ *
+ * Shared by every answer path — the in-app prompt and the lock-screen answer alike —
+ * so a call answered from the phone's own UI joins exactly the same room, the same way,
+ * as one answered inside the app.
+ */
+export function toVoiceJoinCredentials(
+  credentials:
+    | {
+        livekitUrl?: string;
+        livekitToken?: string;
+        roomName?: string;
+        expiresAt?: { seconds?: number | bigint | string } | null;
+      }
+    | null
+    | undefined,
+  activeCallId?: string,
+  activeChannelId?: string,
+): VoiceJoinCredentials | null {
+  if (!credentials?.livekitToken || !credentials.roomName) return null;
+  return {
+    livekitUrl: credentials.livekitUrl ?? "",
+    livekitToken: credentials.livekitToken,
+    roomName: credentials.roomName,
+    activeCallId,
+    activeChannelId,
+    expiresAt: credentials.expiresAt
+      ? (protoToDate(credentials.expiresAt)?.toISOString() ?? undefined)
+      : undefined,
+  };
 }
 
 export function createVoiceClient(): VoiceClient {

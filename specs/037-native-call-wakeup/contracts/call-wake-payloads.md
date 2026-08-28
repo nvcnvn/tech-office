@@ -39,6 +39,7 @@ the call to the OS and then ends it. Never return from a VoIP push without repor
   "event": "incoming",
   "callId": "<uuid>",
   "channelId": "<uuid>",
+  "invitationId": "<uuid>",
   "organizationId": "<uuid>",
   "callerDisplayName": "Ana Duarte",
   "callerEmployeeId": "<uuid>",
@@ -50,6 +51,11 @@ the call to the OS and then ends it. Never return from a VoIP push without repor
 
 - `callerDisplayName` and `workspaceName` are the **only** human-readable strings — FR-008
   forbids message content or conversation detail on the lock screen.
+- `invitationId` names the pending invitation this wake rings for. Answering and declining
+  from the system UI respond to the *invitation*, not to the call, which is what makes a
+  lock-screen decline record outcome `declined` rather than `cancelled` and acknowledge the
+  persistent `voice_call_incoming` notification so it is not replayed as a stale prompt.
+  Incoming wakes only.
 - `ringExpiresAt` is the call's start plus the 45 s ring timeout. It lets a device that was
   woken late decide not to ring at all, and bounds the UI if the terminal wake is lost.
 - There is no video field. Video is out of scope for this epic, and a field that exists only

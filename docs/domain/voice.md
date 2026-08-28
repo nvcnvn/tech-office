@@ -203,11 +203,33 @@ timeout sweep call it too.
 answered — the backend knows which person answered, not which handset. The answering
 device recognises the call it is in and ignores the wake.
 
+**Answering and declining from the system UI go through the invitation, not the call.**
+The `incoming` wake carries the pending `invitationId`, so the lock screen's answer calls
+`RespondToVoiceCallInvite(accept)` and its decline calls `RespondToVoiceCallInvite(decline)`
+— the same two RPCs the in-app prompt uses. That is what makes a native decline record
+outcome `declined`, publish `voice_call_ended` to the caller, and acknowledge the
+persistent `voice_call_incoming` notification so it is not replayed. `EndVoiceCall` is
+used only once the call has been answered on this device. A wake naming no invitation
+falls back to `JoinVoiceCall`.
+
+**Only one incoming surface is ever drawn.** A device that registered a VoIP token (iOS)
+or runs Telecom (Android) reports itself native-call capable to both the backend and the
+mobile client; on that device `notification-stream-provider.tsx` suppresses the tier-B
+in-app prompt and the local call notification entirely, leaving the system call screen as
+the sole incoming UI. Answering it opens the conversation behind the system UI, which is
+how the in-call bar and the transcript become reachable once the phone is unlocked.
+
 ## Client surfaces
 
 - Web: `/workspace/voice`.
 - Mobile: `src/components/voice/` and `src/lib/voice/`:
-  - `native-call.ts` — wake → report → join → end, both platforms (tier A).
+  - `native-call.ts` — wake → report → join → end, both platforms (tier A). Started from
+    the authenticated tab layout, because a call cannot be joined without a workspace
+    session. It also mirrors the client's mute state into the OS call object from the
+    `voiceClient` snapshot, so the lock screen and the app cannot disagree.
+  - `voice-client.ts` — LiveKit transport. During a system-presented call it is told the
+    audio session is owned externally and does not start its own; the answer path builds
+    join credentials with the shared `toVoiceJoinCredentials`.
   - `call-audio.ts` — the audio session belongs to CallKit/Telecom; LiveKit carries media
     only. On iOS audio starts in the framework's activation callback; on Android routing
     is left to Telecom and `setCommunicationDevice`/`startBluetoothSco` are never called.

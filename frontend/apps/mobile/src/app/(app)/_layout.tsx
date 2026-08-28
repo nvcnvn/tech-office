@@ -21,7 +21,6 @@ import {
   leaveVoiceCall,
   respondToVoiceCallInvite,
   voiceCallErrorMessage,
-  type VoiceJoinCredentials,
 } from "apis";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { AuthContext } from "@/hooks/use-auth";
@@ -42,8 +41,10 @@ import {
 } from "@/lib/mobile-navigation";
 import {
   voiceClient,
+  toVoiceJoinCredentials,
   type VoiceClientSnapshot,
 } from "@/lib/voice/voice-client";
+import { startNativeCallIntegration } from "@/lib/voice/native-call";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   lightPalette,
@@ -60,30 +61,6 @@ const TAB_IONICONS = {
   tasks: { outline: "checkbox-outline", filled: "checkbox" },
   more: { outline: "ellipsis-horizontal", filled: "ellipsis-horizontal" },
 } as const;
-
-function protoToDate(ts: { seconds?: number | bigint | string } | null | undefined): Date | null {
-  if (!ts) return null;
-  const secs = Number(ts.seconds ?? 0);
-  return secs > 0 ? new Date(secs * 1000) : null;
-}
-
-function toVoiceJoinCredentials(
-  credentials: VoiceJoinCredentials | undefined | null,
-  activeCallId?: string,
-  activeChannelId?: string,
-) {
-  if (!credentials?.livekitToken || !credentials.roomName) return null;
-  return {
-    livekitUrl: credentials.livekitUrl,
-    livekitToken: credentials.livekitToken,
-    roomName: credentials.roomName,
-    activeCallId,
-    activeChannelId,
-    expiresAt: credentials.expiresAt
-      ? protoToDate(credentials.expiresAt)?.toISOString()
-      : undefined,
-  };
-}
 
 function TabIcon({
   tab,
@@ -148,6 +125,7 @@ export default function AppLayout() {
   useAppStatePresence();
   usePushNotifications();
 
+
   React.useEffect(() => {
     if (incomingVoiceCall) {
       setVoicePromptError(null);
@@ -165,6 +143,23 @@ export default function AppLayout() {
       }) as never,
     );
   }, [router]);
+
+  // The OS-drawn call screen only works if something is listening for the wake. Started
+  // here rather than at module load because a call cannot be joined without a workspace
+  // session, and this is the first place one is guaranteed to exist.
+  React.useEffect(() => {
+    if (!auth?.isAuthenticated) return;
+    return startNativeCallIntegration({
+      getSession: () => ({ isAuthenticated: true }),
+      // A call answered from the lock screen leaves the app on whatever screen it was
+      // last on. Opening the conversation behind the system call UI is what makes the
+      // in-app call bar, the participants and the transcript reachable once the user
+      // unlocks.
+      onAnswered: (_serverCallId, channelId) => {
+        if (channelId) navigateToVoiceCallChannel(channelId);
+      },
+    });
+  }, [auth?.isAuthenticated, navigateToVoiceCallChannel]);
 
   const handleAcceptIncomingCall = React.useCallback(async () => {
     if (!incomingVoiceCall || voicePromptAction) return;

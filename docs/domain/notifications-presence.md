@@ -145,6 +145,13 @@ that does not result in a call reported to CallKit terminates the app. The dispa
 refuses any event kind outside `incoming | cancelled | answered_elsewhere |
 declined_elsewhere | ended`.
 
+An `incoming` wake carries the pending `invitationId` alongside the call id, the channel,
+the caller's display name and the workspace name. That one field is what lets a phone
+declining from its lock screen decline the *invitation* rather than end the call: ending
+records the call as `cancelled`, as though the caller had hung up, and leaves the
+persistent `voice_call_incoming` notification unacknowledged so it replays as a stale
+prompt on the next reconnect. Terminal wakes carry the identity fields only.
+
 Provider I/O happens on a background sender, not on the caller's goroutine, so it never
 sits inside a request transaction. Before sending an `incoming` wake the sender confirms
 the call is still live, which closes the window where a rolled-back transaction would
