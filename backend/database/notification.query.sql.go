@@ -894,6 +894,7 @@ type GetFailedDeliveriesRow struct {
 	Priority              int16              `json:"priority"`
 }
 
+// lint:cross-tenant delivery retry sweep over every organization; runs on AdminPool
 func (q *Queries) GetFailedDeliveries(ctx context.Context, db DBTX, limit int32) ([]*GetFailedDeliveriesRow, error) {
 	rows, err := db.Query(ctx, getFailedDeliveries, limit)
 	if err != nil {
@@ -1807,6 +1808,7 @@ SELECT DISTINCT organization_id
 FROM notification.active_connection
 `
 
+// lint:cross-tenant presence sweep — the organization list is the result, so it cannot be the input
 func (q *Queries) ListOrganizationsWithActiveConnections(ctx context.Context, db DBTX) ([]dbuuid.UUID, error) {
 	rows, err := db.Query(ctx, listOrganizationsWithActiveConnections)
 	if err != nil {
@@ -1835,6 +1837,7 @@ WHERE fallback_status = 'queued'
   AND fallback_due_at <= $1
 `
 
+// lint:cross-tenant fallback sweep — the organization list is the result, so it cannot be the input
 func (q *Queries) ListOrganizationsWithDueFallbackRecipients(ctx context.Context, db DBTX, nowAt pgtype.Timestamptz) ([]dbuuid.UUID, error) {
 	rows, err := db.Query(ctx, listOrganizationsWithDueFallbackRecipients, nowAt)
 	if err != nil {

@@ -54,13 +54,6 @@ CREATE TABLE IF NOT EXISTS notification.live_receipt (
         ON DELETE CASCADE
 );
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_dist_partition WHERE logicalrelid = 'notification.live_receipt'::regclass) THEN
-        PERFORM create_distributed_table('notification.live_receipt', 'organization_id', colocate_with => 'public.organization');
-    END IF;
-END $$;
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_live_receipt_org_recipient_connection
     ON notification.live_receipt (organization_id, notification_recipient_id, connection_id);
 

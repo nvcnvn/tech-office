@@ -45,10 +45,7 @@ jobs:
           - name: tech-office-postgres
             context: backend/docker
             dockerfile: backend/docker/postgres.Dockerfile
-            # amd64 only: this image compiles Citus from source, and doing that for
-            # arm64 under QEMU takes hours. Build it natively on an arm64 machine if
-            # you need one.
-            platforms: linux/amd64
+            platforms: linux/amd64,linux/arm64
           - name: tech-office-web-transformar
             context: frontend
             dockerfile: frontend/Dockerfile

@@ -365,6 +365,7 @@ UPDATE calendar.event_reminder
 SET status = 'cancelled'
 WHERE organization_id = $1 AND event_id = $2 AND status = 'pending';
 
+-- lint:cross-tenant scheduler sweep over every organization's due reminders; runs on AdminPool
 -- name: ListPendingRemindersGlobal :many
 SELECT * FROM calendar.event_reminder
 WHERE status = 'pending'

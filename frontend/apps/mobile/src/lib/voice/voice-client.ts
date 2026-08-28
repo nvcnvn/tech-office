@@ -26,6 +26,12 @@ export interface VoiceClientSnapshot {
   activeCallId: string | null;
   activeChannelId: string | null;
   isMuted: boolean;
+  /**
+   * How many other people are in the room right now. Zero on a call the caller
+   * started means it is still ringing: the caller is alone in a room nobody has
+   * answered, which is a different thing to say than "in voice call".
+   */
+  remoteParticipantCount: number;
   error: string | null;
 }
 
@@ -45,6 +51,7 @@ export class VoiceClient {
     activeCallId: null,
     activeChannelId: null,
     isMuted: false,
+    remoteParticipantCount: 0,
     error: null,
   };
 
@@ -116,6 +123,19 @@ export class VoiceClient {
           connectionQuality: "good",
         });
       });
+      const publishParticipantCount = () => {
+        this.update({
+          remoteParticipantCount: room?.remoteParticipants?.size ?? 0,
+        });
+      };
+      room.on?.(
+        roomEvent.ParticipantConnected ?? "participantConnected",
+        publishParticipantCount,
+      );
+      room.on?.(
+        roomEvent.ParticipantDisconnected ?? "participantDisconnected",
+        publishParticipantCount,
+      );
       room.on?.(roomEvent.Disconnected ?? "disconnected", (reason?: unknown) => {
         if (this.deliberateDisconnect) {
           // Handled by disconnect() itself; suppress duplicate update.
@@ -130,6 +150,7 @@ export class VoiceClient {
           activeCallId: null,
           activeChannelId: null,
           connectionQuality: "unknown",
+          remoteParticipantCount: 0,
           error: isExpectedVoiceDisconnect(reason)
             ? null
             : "Disconnected from call",
@@ -167,6 +188,7 @@ export class VoiceClient {
         credentials,
         activeCallId: credentials.activeCallId ?? null,
         activeChannelId: credentials.activeChannelId ?? null,
+        remoteParticipantCount: room.remoteParticipants?.size ?? 0,
         error: null,
       });
     } catch (error) {
@@ -182,6 +204,7 @@ export class VoiceClient {
         credentials: null,
         activeCallId: null,
         activeChannelId: null,
+        remoteParticipantCount: 0,
         error:
           error instanceof Error ? error.message : "Unable to join voice call.",
       });
@@ -207,6 +230,7 @@ export class VoiceClient {
         activeCallId: null,
         activeChannelId: null,
         connectionQuality: "unknown",
+        remoteParticipantCount: 0,
         error: null,
       });
     } finally {

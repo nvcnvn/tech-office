@@ -3049,6 +3049,7 @@ type ListOrganizationIDsWithActiveRitualDefinitionsRow struct {
 	DefinitionCount int32       `json:"definition_count"`
 }
 
+// lint:cross-tenant scheduler sweep — the organization list is the result, so it cannot be the input
 // System-scope background query for the global ritual sweep. Intentionally NOT filtered by
 // organization_id: its purpose is to discover which organizations to sweep. Returns only
 // organization IDs and a per-organization active-definition count, no tenant row data, and

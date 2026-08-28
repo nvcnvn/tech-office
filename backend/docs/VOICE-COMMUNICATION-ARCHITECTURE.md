@@ -33,8 +33,9 @@ flowchart LR
 2. Voice creates a `voice.call_session`, creates a LiveKit room, upserts the initiator as a participant, mints a room-scoped join token, writes a chat system message, and publishes a live SSE event.
 3. `JoinVoiceCall` and accepted invitations recheck channel access, enforce participant caps, upsert participant state, and mint a token for the same LiveKit room.
 4. `LeaveVoiceCall` marks the participant left. Direct-message calls behave like phone calls: once answered, either participant leaving ends the call as `completed` for both sides. Group/channel calls remain joinable until the final active participant leaves or an explicit end request closes the call.
-5. Direct-message invite responses are terminal while the call is still ringing: decline ends the call as `declined`, caller cancellation ends it as `cancelled`, and an expired invite response ends it as `missed`. Group invite decline only changes that invitee's participant state and leaves the group call running.
-6. LiveKit webhooks reconcile participant joins/leaves, room-finished events, and egress status. Unknown rooms are accepted and ignored so LiveKit retries do not poison the queue.
+5. Ending a call deletes its LiveKit room, whichever path ended it. `voice_call_ended` is a live-only SSE event that is never replayed, so room teardown is the terminal signal that does not depend on the client being reachable; clients re-read `GetActiveVoiceCall` on an unexpected disconnect rather than assuming the call is over.
+6. Direct-message invite responses are terminal while the call is still ringing: decline ends the call as `declined`, caller cancellation ends it as `cancelled`, and an expired invite response ends it as `missed`. Group invite decline only changes that invitee's participant state and leaves the group call running.
+7. LiveKit webhooks reconcile participant joins/leaves, room-finished events, and egress status. Unknown rooms are accepted and ignored so LiveKit retries do not poison the queue.
 
 Postgres remains the source of truth. LiveKit reconnects or webhook timing cannot re-open an ended call because all webhook handlers first load the call by `(organization_id, livekit_room_name)` and return early for ended sessions.
 

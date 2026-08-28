@@ -565,10 +565,12 @@ FROM organization.department_member
 WHERE employee_id = $1
   AND organization_id = $2;
 
+-- lint:cross-tenant presence sweep — the organization list is the result, so it cannot be the input
 -- name: ListOrganizationsWithActiveConnections :many
 SELECT DISTINCT organization_id
 FROM notification.active_connection;
 
+-- lint:cross-tenant fallback sweep — the organization list is the result, so it cannot be the input
 -- name: ListOrganizationsWithDueFallbackRecipients :many
 SELECT DISTINCT organization_id
 FROM notification.notification_recipient
@@ -767,6 +769,7 @@ SET delivery_status = $1,
 WHERE organization_id = $3
   AND id = $4;
 
+-- lint:cross-tenant delivery retry sweep over every organization; runs on AdminPool
 -- name: GetFailedDeliveries :many
 SELECT nr.*, n.priority
 FROM notification.notification_recipient nr

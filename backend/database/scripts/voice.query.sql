@@ -90,6 +90,7 @@ SET state = 'ended',
 WHERE organization_id = @organization_id AND id = @call_session_id
 RETURNING *;
 
+-- lint:cross-tenant ring-timeout sweep — the organization list is the result, so it cannot be the input
 -- name: ListOrganizationsWithExpiredRingingCalls :many
 SELECT DISTINCT organization_id
 FROM voice.call_session

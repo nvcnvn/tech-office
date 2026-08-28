@@ -5,7 +5,6 @@
 -- This file is kept as a canonical schema reference for developers and documentation.
 
 -- TechOffice uses schema to separate business domains
-CREATE EXTENSION IF NOT EXISTS citus;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS unaccent;
@@ -96,7 +95,6 @@ CREATE SCHEMA IF NOT EXISTS flows;
 -- comments, section embeds, and real-time collaboration tracking.
 CREATE SCHEMA IF NOT EXISTS docs;
 
-
 -- Trigram fuzzy matching for multilingual search
 -- Note: Search queries use set_limit(0.1) for better short query matching (default is 0.3)
 -- "public" schema is for shared data accessible by the application, but not specific to any organization.
@@ -118,21 +116,17 @@ CREATE TABLE IF NOT EXISTS public.organization(
     UNIQUE (id, client_id)
 );
 
-SELECT create_distributed_table('public.organization', 'id');
-
 COMMENT ON COLUMN public.organization.status IS 'Organization lifecycle status: active, suspended, deleted. MUST align with backend constants in internal/organization/constants.go and frontend TypeScript types in packages/apis/src/organization.ts';
 
 -- ============================================================================
 -- public.permission: Canonical registry of all system permissions
--- Reference table — replicated to every Citus worker node for efficient JOINs
+-- Global table — no organization_id, shared by every tenant
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS public.permission (
     id TEXT PRIMARY KEY,              -- e.g., 'chat.sendMessage'
     domain TEXT NOT NULL,             -- e.g., 'chat'
     description TEXT NOT NULL         -- Human-readable description
 );
-
-SELECT create_reference_table('public.permission');
 
 COMMENT ON TABLE public.permission IS
 'System-defined permission registry. Reference table replicated to all nodes. Permission IDs follow <domain>.<action> format. Rows are immutable at runtime — only modified by migrations.';
@@ -148,8 +142,6 @@ CREATE TABLE IF NOT EXISTS public.default_role (
     is_system BOOLEAN NOT NULL DEFAULT false  -- System roles cannot be deleted from orgs
 );
 
-SELECT create_reference_table('public.default_role');
-
 COMMENT ON TABLE public.default_role IS
 'Template roles that get copied to iam.role when a new organization is created. is_system=true roles cannot be deleted by org admins.';
 
@@ -162,8 +154,6 @@ CREATE TABLE IF NOT EXISTS public.default_role_permission (
     permission_id TEXT NOT NULL REFERENCES public.permission(id) ON DELETE CASCADE,
     PRIMARY KEY (role_id, permission_id)
 );
-
-SELECT create_reference_table('public.default_role_permission');
 
 COMMENT ON TABLE public.default_role_permission IS
 'Maps default roles to permissions. Copied to iam.role_permission for new organizations.';
@@ -337,11 +327,9 @@ CREATE TABLE IF NOT EXISTS iam.identity(
     email varchar(255) NOT NULL,
     identity_type text CHECK (identity_type IN ('human', 'service')) NOT NULL DEFAULT 'human',
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id)
 );
-
-SELECT create_distributed_table('iam.identity', 'organization_id', colocate_with => 'public.organization');
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_iam_identity_org_email ON iam.identity(organization_id, email);
 
@@ -365,14 +353,12 @@ CREATE TABLE IF NOT EXISTS iam.role (
     UNIQUE (organization_id, name)
 );
 
-SELECT create_distributed_table('iam.role', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_role_org_system ON iam.role(organization_id, is_system);
 
 COMMENT ON TABLE iam.role IS
 'Organization-specific roles. System roles are seeded from public.default_role on org creation and cannot be deleted. Custom roles have source_default_role_id = NULL.';
 COMMENT ON COLUMN iam.role.source_default_role_id IS
-'Links back to public.default_role.id for roles seeded during org creation. NULL for custom-created roles. NOT a foreign key since reference tables cannot be FK targets from distributed tables in all Citus versions.';
+'Links back to public.default_role.id for roles seeded during org creation. NULL for custom-created roles. NOT a foreign key: it points from a tenant table into a global one.';
 
 -- ============================================================================
 -- iam.role_permission: Role→permission mappings per organization
@@ -388,8 +374,6 @@ CREATE TABLE IF NOT EXISTS iam.role_permission (
         REFERENCES iam.role(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('iam.role_permission', 'organization_id', colocate_with => 'public.organization');
 
 COMMENT ON TABLE iam.role_permission IS
 'Maps organization roles to permissions. Seeded from public.default_role_permission on org creation. Mutable — owners can add/remove permissions from roles.';
@@ -410,8 +394,6 @@ CREATE TABLE IF NOT EXISTS iam.employee_role (
         REFERENCES iam.role(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('iam.employee_role', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_employee_role_employee ON iam.employee_role(organization_id, employee_id);
 CREATE INDEX IF NOT EXISTS idx_employee_role_role ON iam.employee_role(organization_id, role_id);
@@ -435,14 +417,12 @@ CREATE TABLE IF NOT EXISTS iam.user_preference (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- One preference record per employee
     CONSTRAINT unique_employee_preference UNIQUE (organization_id, employee_id)
 );
-
-SELECT create_distributed_table('iam.user_preference', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for user_preference
 CREATE INDEX IF NOT EXISTS idx_user_preference_employee 
@@ -467,7 +447,7 @@ COMMENT ON COLUMN iam.user_preference.additional_preferences IS
 -- IAM: Global User Accounts & Authentication (Feature 018)
 -- =============================================================================
 -- These tables are GLOBAL (no organization_id in PK) - users can belong to
--- multiple organizations with different roles. NOT Citus-distributed.
+-- multiple organizations with different roles. Global tables, no organization_id.
 
 -- iam.user: Global user accounts (NOT organization-scoped)
 CREATE TABLE IF NOT EXISTS iam.user (
@@ -604,11 +584,9 @@ CREATE TABLE IF NOT EXISTS organization.employee(
     additional_info jsonb,
     is_active boolean NOT NULL DEFAULT TRUE,
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id)
 );
-
-SELECT create_distributed_table('organization.employee', 'organization_id', colocate_with => 'public.organization');
 
 -- Separate trigram indexes for efficient fuzzy search on individual fields
 -- Strategy: Search each field independently and merge results in application layer
@@ -630,7 +608,7 @@ CREATE TABLE IF NOT EXISTS organization.department(
     manager_count int NOT NULL DEFAULT 0 CHECK (manager_count >= 0),
     child_count int NOT NULL DEFAULT 0 CHECK (child_count >= 0),
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_department_parent
         FOREIGN KEY (organization_id, parent_department_id)
@@ -638,8 +616,6 @@ CREATE TABLE IF NOT EXISTS organization.department(
         ON DELETE RESTRICT,
     CONSTRAINT no_self_reference CHECK (parent_department_id IS NULL OR parent_department_id != id)
 );
-
-SELECT create_distributed_table('organization.department', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for department tree traversal
 CREATE INDEX IF NOT EXISTS idx_department_parent ON organization.department(organization_id, parent_department_id)
@@ -660,7 +636,7 @@ CREATE TABLE IF NOT EXISTS organization.department_member(
     employee_id uuid NOT NULL,
     role TEXT CHECK (ROLE IN ('member', 'manager')) NOT NULL DEFAULT 'member',
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_department_member_department
         FOREIGN KEY (organization_id, department_id)
@@ -670,11 +646,9 @@ CREATE TABLE IF NOT EXISTS organization.department_member(
         FOREIGN KEY (organization_id, employee_id)
         REFERENCES organization.employee(organization_id, id)
         ON DELETE CASCADE,
-    -- Unique constraint must include organization_id for Citus
+    -- Unique constraint must lead with organization_id
     CONSTRAINT unique_dept_member UNIQUE (organization_id, department_id, employee_id)
 );
-
-SELECT create_distributed_table('organization.department_member', 'organization_id', colocate_with => 'public.organization');
 
 COMMENT ON COLUMN organization.department_member.role IS 'Department membership role: member, manager. MUST align with backend constants in internal/department/constants.go and frontend TypeScript types in packages/apis/src/department.ts';
 
@@ -703,7 +677,7 @@ CREATE TABLE IF NOT EXISTS chat.channel(
     -- Metadata
     created_by_employee_id uuid NOT NULL,
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_channel_creator
         FOREIGN KEY (organization_id, created_by_employee_id)
@@ -714,8 +688,6 @@ CREATE TABLE IF NOT EXISTS chat.channel(
     CONSTRAINT valid_channel_type CHECK (channel_type IN ('chat', 'direct_message', 'project_ticket_thread', 'crm_deal_notes', 'support_ticket')),
     CONSTRAINT slug_format CHECK (title_slug ~ '^[a-z0-9-]+$' AND length(title_slug) <= 64)
 );
-
-SELECT create_distributed_table('chat.channel', 'organization_id', colocate_with => 'public.organization');
 
 COMMENT ON COLUMN chat.channel.channel_type IS 'Channel type: chat, direct_message, project_ticket_thread, crm_deal_notes, support_ticket. MUST align with backend constants in internal/chat/constants.go, proto enum rpc.v1.ChannelType, and frontend TypeScript types in packages/apis/src/chat.ts';
 
@@ -755,7 +727,7 @@ CREATE TABLE IF NOT EXISTS chat.message(
     mentions jsonb, -- Array of {type: "employee"|"department", id: "uuid", label: "Display Name"}
     file_ids uuid[], -- Array of file UUIDs from files.file_metadata table (e.g., ["uuid1", "uuid2"])
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_message_channel
         FOREIGN KEY (organization_id, channel_id)
@@ -770,8 +742,6 @@ CREATE TABLE IF NOT EXISTS chat.message(
         REFERENCES chat.message(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('chat.message', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for message
 -- Optimized pagination using UUID v7 as cursor (UUID v7 contains millisecond timestamp in first 48 bits)
@@ -814,7 +784,7 @@ CREATE TABLE IF NOT EXISTS chat.channel_membership(
     -- Timestamps
     joined_at timestamptz NOT NULL DEFAULT now(), -- When member joined channel
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_channel_membership_channel
         FOREIGN KEY (organization_id, channel_id)
@@ -828,12 +798,10 @@ CREATE TABLE IF NOT EXISTS chat.channel_membership(
         FOREIGN KEY (organization_id, last_viewed_message_id)
         REFERENCES chat.message(organization_id, id)
         ON DELETE RESTRICT,
-    -- Constraints - unique constraint must have organization_id for Citus
+    -- Constraints - unique constraint must lead with organization_id
     CONSTRAINT unique_membership UNIQUE (organization_id, channel_id, employee_id),
     CONSTRAINT valid_notification_pref CHECK (notification_preference IN ('all', 'mentions', 'muted'))
 );
-
-SELECT create_distributed_table('chat.channel_membership', 'organization_id', colocate_with => 'public.organization');
 
 COMMENT ON COLUMN chat.channel_membership.notification_preference IS 'Per-channel notification preference: all, mentions, muted. MUST align with backend constants in internal/chat/constants.go, proto enum rpc.v1.NotificationPreference, and frontend TypeScript types in packages/apis/src/chat.ts';
 
@@ -866,7 +834,7 @@ CREATE TABLE IF NOT EXISTS chat.reaction(
     emoji_code text NOT NULL, -- Unicode emoji or shortcode (e.g., "👍", ":thumbs_up:")
     -- Timestamp
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_reaction_message
         FOREIGN KEY (organization_id, message_id)
@@ -876,12 +844,10 @@ CREATE TABLE IF NOT EXISTS chat.reaction(
         FOREIGN KEY (organization_id, employee_id)
         REFERENCES organization.employee(organization_id, id)
         ON DELETE CASCADE,
-    -- Constraints - unique constraint must have organization_id for Citus
+    -- Constraints - unique constraint must lead with organization_id
     CONSTRAINT unique_reaction UNIQUE (organization_id, message_id, employee_id, emoji_code)
     -- One reaction per employee-message-emoji combination (toggle behavior)
 );
-
-SELECT create_distributed_table('chat.reaction', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for reaction
 CREATE INDEX IF NOT EXISTS idx_reaction_message ON chat.reaction(organization_id, message_id, emoji_code);
@@ -898,7 +864,7 @@ CREATE TABLE IF NOT EXISTS chat.typing_indicator(
     employee_id uuid NOT NULL,
     -- Timestamp
     updated_at timestamptz NOT NULL DEFAULT now(), -- Last typing heartbeat
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_typing_indicator_channel
         FOREIGN KEY (organization_id, channel_id)
@@ -908,11 +874,9 @@ CREATE TABLE IF NOT EXISTS chat.typing_indicator(
         FOREIGN KEY (organization_id, employee_id)
         REFERENCES organization.employee(organization_id, id)
         ON DELETE CASCADE,
-    -- Constraints - unique constraint must have organization_id for Citus
+    -- Constraints - unique constraint must lead with organization_id
     CONSTRAINT unique_typing UNIQUE (organization_id, channel_id, employee_id)
 );
-
-SELECT create_distributed_table('chat.typing_indicator', 'organization_id', colocate_with => 'public.organization');
 
 -- Index for typing_indicator
 CREATE INDEX IF NOT EXISTS idx_typing_channel ON chat.typing_indicator(organization_id, channel_id, updated_at DESC);
@@ -936,17 +900,15 @@ CREATE TABLE IF NOT EXISTS chat.user_chat_config(
     sidebar_category_collapsed jsonb NOT NULL DEFAULT '{}', -- {channels: false, direct_messages: false}
     -- Timestamps
     updated_at timestamptz NOT NULL DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_user_chat_config_employee
         FOREIGN KEY (organization_id, employee_id)
         REFERENCES organization.employee(organization_id, id)
         ON DELETE CASCADE,
-    -- Constraints - unique constraint must have organization_id for Citus
+    -- Constraints - unique constraint must lead with organization_id
     CONSTRAINT unique_user_chat_config UNIQUE (organization_id, employee_id)
 );
-
-SELECT create_distributed_table('chat.user_chat_config', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for user_chat_config
 CREATE INDEX IF NOT EXISTS idx_user_chat_config_employee ON chat.user_chat_config(organization_id, employee_id);
@@ -963,9 +925,6 @@ COMMENT ON COLUMN chat.user_chat_config.category_limits IS 'JSONB object definin
 COMMENT ON COLUMN chat.user_chat_config.pinned_channel_ids IS 'Array of pinned channel IDs (subset of channel_categories keys). Pinned channels appear at top within their category, ordered by position in this array. Non-pinned channels follow, ordered by updated_at DESC.';
 
 COMMENT ON COLUMN chat.user_chat_config.sidebar_category_collapsed IS 'JSONB object tracking collapsed state of sidebar categories. Example: {"channels": false, "direct_messages": false}.';
-
-
-
 
 -- notification.notification: Core notification data published by backend services
 CREATE TABLE IF NOT EXISTS notification.notification(
@@ -994,7 +953,7 @@ CREATE TABLE IF NOT EXISTS notification.notification(
     source_category text NOT NULL DEFAULT 'activity',
     -- Timestamps
     updated_at timestamptz DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT notification_policy_key_valid CHECK (
         policy_key IN (
@@ -1022,8 +981,6 @@ CREATE TABLE IF NOT EXISTS notification.notification(
         source_category IN ('activity', 'mention', 'system')
     )
 );
-
-SELECT create_distributed_table('notification.notification', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for notification
 CREATE INDEX IF NOT EXISTS idx_notification_org_updated ON notification.notification(organization_id, updated_at DESC);
@@ -1079,7 +1036,7 @@ CREATE TABLE IF NOT EXISTS notification.notification_recipient(
     fallback_updated_at timestamptz,
     -- Timestamps
     updated_at timestamptz DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     CONSTRAINT fk_notification_recipient_notification
         FOREIGN KEY (organization_id, notification_id)
@@ -1118,8 +1075,6 @@ CREATE TABLE IF NOT EXISTS notification.notification_recipient(
         )
     )
 );
-
-SELECT create_distributed_table('notification.notification_recipient', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for notification_recipient
 CREATE INDEX IF NOT EXISTS idx_recipient_employee_org ON notification.notification_recipient(organization_id, employee_id, read_status);
@@ -1181,8 +1136,6 @@ CREATE TABLE IF NOT EXISTS notification.resource_subscription(
         UNIQUE (organization_id, employee_id, resource_domain, resource_id)
 );
 
-SELECT create_distributed_table('notification.resource_subscription', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_resource_subscription_resource
     ON notification.resource_subscription(organization_id, resource_domain, resource_id, subscription_state);
 
@@ -1221,8 +1174,6 @@ CREATE TABLE IF NOT EXISTS notification.resource_subscription_reason(
         )
     )
 );
-
-SELECT create_distributed_table('notification.resource_subscription_reason', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_resource_subscription_reason_subscription
     ON notification.resource_subscription_reason(organization_id, subscription_id, created_at ASC);
@@ -1269,8 +1220,6 @@ CREATE TABLE IF NOT EXISTS notification.resource_surface(
         UNIQUE (organization_id, surface_domain, surface_resource_id)
 );
 
-SELECT create_distributed_table('notification.resource_surface', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_resource_surface_parent
     ON notification.resource_surface(organization_id, parent_domain, parent_resource_id, inherits_subscription);
 
@@ -1309,8 +1258,6 @@ CREATE UNLOGGED TABLE IF NOT EXISTS notification.active_connection(
         REFERENCES chat.channel(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('notification.active_connection', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for active_connection
 CREATE INDEX IF NOT EXISTS idx_active_connection_employee ON notification.active_connection(organization_id, employee_id, connection_status);
@@ -1375,8 +1322,6 @@ CREATE TABLE IF NOT EXISTS notification.push_token (
         ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('notification.push_token', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_push_token_employee
     ON notification.push_token(organization_id, employee_id)
     WHERE is_valid = true;
@@ -1408,8 +1353,6 @@ CREATE TABLE IF NOT EXISTS notification.presence_visibility (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('notification.presence_visibility', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_presence_visibility_org_mode
     ON notification.presence_visibility(organization_id, visibility_mode);
@@ -1456,8 +1399,6 @@ CREATE TABLE IF NOT EXISTS notification.delivery_attempt (
         ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('notification.delivery_attempt', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_delivery_attempt_org_recipient_attempted
     ON notification.delivery_attempt (organization_id, notification_recipient_id, attempted_at DESC);
 
@@ -1485,8 +1426,6 @@ CREATE UNLOGGED TABLE IF NOT EXISTS notification.active_context (
         context_type IN ('channel', 'document', 'task')
     )
 );
-
-SELECT create_distributed_table('notification.active_context', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_active_context_org_lookup
     ON notification.active_context (organization_id, context_type, context_id, last_seen_at DESC);
@@ -1522,8 +1461,6 @@ CREATE TABLE IF NOT EXISTS notification.ephemeral_signal (
 )
 WITH (autovacuum_vacuum_scale_factor = 0.0, autovacuum_vacuum_threshold = 1000);
 
-SELECT create_distributed_table('notification.ephemeral_signal', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_ephemeral_signal_channel
     ON notification.ephemeral_signal(organization_id, channel_id, created_at DESC);
 
@@ -1546,11 +1483,9 @@ CREATE TABLE IF NOT EXISTS notification.notification_batch(
     processed_at timestamptz,
     -- Timestamps
     updated_at timestamptz DEFAULT now(),
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id)
 );
-
-SELECT create_distributed_table('notification.notification_batch', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for notification_batch
 CREATE INDEX IF NOT EXISTS idx_batch_org_status ON notification.notification_batch(organization_id, processing_status, updated_at);
@@ -1587,8 +1522,6 @@ CREATE TABLE IF NOT EXISTS notification.notification_delivery_log(
         ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('notification.notification_delivery_log', 'organization_id', colocate_with => 'public.organization');
-
 -- Indexes for notification_delivery_log
 CREATE INDEX IF NOT EXISTS idx_delivery_log_recipient ON notification.notification_delivery_log(organization_id, notification_recipient_id, attempted_at DESC);
 
@@ -1616,8 +1549,6 @@ CREATE TABLE IF NOT EXISTS notification.personal_preference(
         muted_domains <@ ARRAY['chat', 'projects', 'docs', 'crm', 'hr', 'support', 'finance', 'system']::text[]
     )
 );
-
-SELECT create_distributed_table('notification.personal_preference', 'organization_id', colocate_with => 'public.organization');
 
 COMMENT ON TABLE notification.personal_preference IS 
 'Global notification preferences per employee. Controls DND schedule and domain-level muting.';
@@ -1658,7 +1589,7 @@ CREATE TABLE IF NOT EXISTS files.file_metadata (
     is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     CONSTRAINT fk_file_uploader 
@@ -1666,8 +1597,6 @@ CREATE TABLE IF NOT EXISTS files.file_metadata (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE RESTRICT
 );
-
-SELECT create_distributed_table('files.file_metadata', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for file_metadata
 CREATE INDEX IF NOT EXISTS idx_file_metadata_context 
@@ -1717,8 +1646,6 @@ CREATE TABLE IF NOT EXISTS files.file_quota (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-SELECT create_distributed_table('files.file_quota', 'organization_id', colocate_with => 'public.organization');
-
 COMMENT ON TABLE files.file_quota IS 
 'Per-organization storage quota configuration and real-time usage tracking. One row per organization.';
 
@@ -1748,8 +1675,6 @@ CREATE TABLE IF NOT EXISTS files.file_deletion_log (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE RESTRICT
 );
-
-SELECT create_distributed_table('files.file_deletion_log', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for file_deletion_log
 CREATE INDEX IF NOT EXISTS idx_deletion_log_file_id
@@ -1783,7 +1708,7 @@ CREATE TABLE IF NOT EXISTS files.file_access_rule (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     CONSTRAINT fk_file_access_file 
@@ -1794,8 +1719,6 @@ CREATE TABLE IF NOT EXISTS files.file_access_rule (
     -- Unique constraint: one access rule per file
     CONSTRAINT unique_file_access UNIQUE (organization_id, file_id)
 );
-
-SELECT create_distributed_table('files.file_access_rule', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for file_access_rule
 CREATE INDEX IF NOT EXISTS idx_file_access_context 
@@ -1831,7 +1754,7 @@ CREATE TABLE IF NOT EXISTS files.file_pdf_conversion (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     CONSTRAINT fk_pdf_conversion_file 
@@ -1842,8 +1765,6 @@ CREATE TABLE IF NOT EXISTS files.file_pdf_conversion (
     -- Unique constraint: one conversion per original file
     CONSTRAINT unique_file_conversion UNIQUE (organization_id, original_file_id)
 );
-
-SELECT create_distributed_table('files.file_pdf_conversion', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for file_pdf_conversion
 CREATE INDEX IF NOT EXISTS idx_pdf_conversion_original 
@@ -1886,7 +1807,7 @@ CREATE TABLE IF NOT EXISTS files.file_content_index (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     CONSTRAINT fk_file_content_file 
@@ -1897,8 +1818,6 @@ CREATE TABLE IF NOT EXISTS files.file_content_index (
     -- Unique constraint: one index per file
     CONSTRAINT unique_file_index UNIQUE (organization_id, file_id)
 );
-
-SELECT create_distributed_table('files.file_content_index', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for file_content_index
 CREATE INDEX IF NOT EXISTS idx_file_content_file 
@@ -2010,13 +1929,8 @@ CREATE TABLE IF NOT EXISTS "flows"."random" (
 );
 
 -- Distribute the runs table by workflow_name_shard
-SELECT create_distributed_table('flows.runs', 'workflow_name_shard');
 
 -- Distribute child tables colocated with runs for foreign key support
-SELECT create_distributed_table('flows.steps', 'workflow_name_shard', colocate_with => 'flows.runs');
-SELECT create_distributed_table('flows.waits', 'workflow_name_shard', colocate_with => 'flows.runs');
-SELECT create_distributed_table('flows.events', 'workflow_name_shard', colocate_with => 'flows.runs');
-SELECT create_distributed_table('flows.random', 'workflow_name_shard', colocate_with => 'flows.runs');
 -- ============================================================================
 -- DOCS SCHEMA: Document Management System (Notion/Confluence-style)
 -- ============================================================================
@@ -2060,7 +1974,7 @@ CREATE TABLE IF NOT EXISTS docs.document (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2080,8 +1994,6 @@ CREATE TABLE IF NOT EXISTS docs.document (
         (parent_document_id IS NOT NULL AND depth > 0)
     )
 );
-
-SELECT create_distributed_table('docs.document', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.document
 CREATE INDEX IF NOT EXISTS idx_document_parent 
@@ -2152,7 +2064,7 @@ CREATE TABLE IF NOT EXISTS docs.document_version (
     -- Timestamps
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2168,8 +2080,6 @@ CREATE TABLE IF NOT EXISTS docs.document_version (
     -- Constraints
     CONSTRAINT unique_version_number UNIQUE (organization_id, document_id, version_number)
 );
-
-SELECT create_distributed_table('docs.document_version', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.document_version
 CREATE INDEX IF NOT EXISTS idx_version_document 
@@ -2196,7 +2106,7 @@ CREATE TABLE IF NOT EXISTS docs.document_slug_history (
     -- Timestamps
     changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2208,8 +2118,6 @@ CREATE TABLE IF NOT EXISTS docs.document_slug_history (
     -- Constraints
     CONSTRAINT unique_old_slug UNIQUE (organization_id, old_slug)
 );
-
-SELECT create_distributed_table('docs.document_slug_history', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.document_slug_history
 CREATE INDEX IF NOT EXISTS idx_slug_history_document 
@@ -2237,7 +2145,7 @@ CREATE TABLE IF NOT EXISTS docs.document_access (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2253,8 +2161,6 @@ CREATE TABLE IF NOT EXISTS docs.document_access (
     -- Constraints
     CONSTRAINT unique_grantee UNIQUE (organization_id, document_id, grantee_type, grantee_id)
 );
-
-SELECT create_distributed_table('docs.document_access', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.document_access
 CREATE INDEX IF NOT EXISTS idx_access_document 
@@ -2277,7 +2183,6 @@ COMMENT ON COLUMN docs.document_access.access_level IS
 COMMENT ON COLUMN docs.document_access.grantee_type IS 
 'Type of grantee: employee (individual), department (team grant). MUST align with backend constants in internal/docs/constants.go.';
 
-
 -- docs.section_embed: Cross-document section citations/embeds (line-based with version snapshots)
 CREATE TABLE IF NOT EXISTS docs.section_embed (
     id UUID DEFAULT uuidv7(),
@@ -2299,7 +2204,7 @@ CREATE TABLE IF NOT EXISTS docs.section_embed (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2315,8 +2220,6 @@ CREATE TABLE IF NOT EXISTS docs.section_embed (
     -- Constraints
     CONSTRAINT no_self_embed CHECK (source_document_id != target_document_id)
 );
-
-SELECT create_distributed_table('docs.section_embed', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.section_embed
 CREATE INDEX IF NOT EXISTS idx_embed_source 
@@ -2365,7 +2268,7 @@ CREATE TABLE IF NOT EXISTS docs.comment (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2382,8 +2285,6 @@ CREATE TABLE IF NOT EXISTS docs.comment (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE RESTRICT
 );
-
-SELECT create_distributed_table('docs.comment', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.comment
 CREATE INDEX IF NOT EXISTS idx_comment_document 
@@ -2413,7 +2314,7 @@ CREATE TABLE IF NOT EXISTS docs.comment_reply (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2426,8 +2327,6 @@ CREATE TABLE IF NOT EXISTS docs.comment_reply (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE RESTRICT
 );
-
-SELECT create_distributed_table('docs.comment_reply', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.comment_reply
 CREATE INDEX IF NOT EXISTS idx_reply_comment 
@@ -2453,7 +2352,7 @@ CREATE UNLOGGED TABLE IF NOT EXISTS docs.document_editor (
     connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_heartbeat TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, document_id, employee_id),
     
     -- Foreign keys (Note: UNLOGGED tables don't enforce FK constraints as strictly)
@@ -2466,8 +2365,6 @@ CREATE UNLOGGED TABLE IF NOT EXISTS docs.document_editor (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('docs.document_editor', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.document_editor
 CREATE INDEX IF NOT EXISTS idx_editor_document 
@@ -2501,7 +2398,7 @@ CREATE TABLE IF NOT EXISTS docs.document_reaction (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2517,8 +2414,6 @@ CREATE TABLE IF NOT EXISTS docs.document_reaction (
     -- Constraints - one reaction per employee-document (toggle behavior)
     CONSTRAINT unique_employee_reaction UNIQUE (organization_id, document_id, employee_id)
 );
-
-SELECT create_distributed_table('docs.document_reaction', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for docs.document_reaction
 CREATE INDEX IF NOT EXISTS idx_reaction_document 
@@ -2566,7 +2461,7 @@ CREATE TABLE IF NOT EXISTS collaboration.project (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding (organization_id first)
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2579,8 +2474,6 @@ CREATE TABLE IF NOT EXISTS collaboration.project (
     CONSTRAINT unique_project_key UNIQUE (organization_id, key),
     CONSTRAINT valid_project_key CHECK (key ~ '^[A-Z][A-Z0-9_]{0,9}$') -- 1-10 uppercase alphanumeric
 );
-
-SELECT create_distributed_table('collaboration.project', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for project
 CREATE INDEX IF NOT EXISTS idx_project_owner 
@@ -2629,7 +2522,7 @@ CREATE TABLE IF NOT EXISTS collaboration.project_state (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2642,8 +2535,6 @@ CREATE TABLE IF NOT EXISTS collaboration.project_state (
     CONSTRAINT unique_state_name UNIQUE (organization_id, project_id, name),
     CONSTRAINT unique_state_position UNIQUE (organization_id, project_id, position)
 );
-
-SELECT create_distributed_table('collaboration.project_state', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for project_state
 CREATE INDEX IF NOT EXISTS idx_state_project 
@@ -2682,7 +2573,7 @@ CREATE TABLE IF NOT EXISTS collaboration.task_level (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2695,8 +2586,6 @@ CREATE TABLE IF NOT EXISTS collaboration.task_level (
     CONSTRAINT unique_level_name UNIQUE (organization_id, project_id, name),
     CONSTRAINT unique_level_depth UNIQUE (organization_id, project_id, depth)
 );
-
-SELECT create_distributed_table('collaboration.task_level', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for task_level
 CREATE INDEX IF NOT EXISTS idx_level_project 
@@ -2750,7 +2639,7 @@ CREATE TABLE IF NOT EXISTS collaboration.task (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2788,8 +2677,6 @@ CREATE TABLE IF NOT EXISTS collaboration.task (
     CONSTRAINT no_self_parent CHECK (parent_task_id IS NULL OR parent_task_id != id),
     CONSTRAINT valid_date_range CHECK (start_date IS NULL OR due_date IS NULL OR start_date <= due_date)
 );
-
-SELECT create_distributed_table('collaboration.task', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for task
 CREATE INDEX IF NOT EXISTS idx_task_project_state 
@@ -2854,7 +2741,7 @@ CREATE TABLE IF NOT EXISTS collaboration.task_assignee (
     assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     assigned_by_employee_id UUID NOT NULL,
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2874,8 +2761,6 @@ CREATE TABLE IF NOT EXISTS collaboration.task_assignee (
     -- Constraints
     CONSTRAINT unique_task_assignee UNIQUE (organization_id, task_id, employee_id, role)
 );
-
-SELECT create_distributed_table('collaboration.task_assignee', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for task_assignee
 CREATE INDEX IF NOT EXISTS idx_assignee_task 
@@ -2921,7 +2806,7 @@ CREATE TABLE IF NOT EXISTS collaboration.custom_field_definition (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2933,8 +2818,6 @@ CREATE TABLE IF NOT EXISTS collaboration.custom_field_definition (
     -- Constraints
     CONSTRAINT unique_field_name UNIQUE (organization_id, project_id, name)
 );
-
-SELECT create_distributed_table('collaboration.custom_field_definition', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for custom_field_definition
 CREATE INDEX IF NOT EXISTS idx_field_def_project 
@@ -2963,7 +2846,7 @@ CREATE TABLE IF NOT EXISTS collaboration.custom_field_value (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -2979,8 +2862,6 @@ CREATE TABLE IF NOT EXISTS collaboration.custom_field_value (
     -- Constraints
     CONSTRAINT unique_task_field UNIQUE (organization_id, task_id, field_definition_id)
 );
-
-SELECT create_distributed_table('collaboration.custom_field_value', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for custom_field_value
 CREATE INDEX IF NOT EXISTS idx_field_value_task 
@@ -3026,7 +2907,7 @@ CREATE TABLE IF NOT EXISTS collaboration.workflow_rule (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -3043,8 +2924,6 @@ CREATE TABLE IF NOT EXISTS collaboration.workflow_rule (
         REFERENCES collaboration.custom_field_definition(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('collaboration.workflow_rule', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for workflow_rule
 CREATE INDEX IF NOT EXISTS idx_rule_project 
@@ -3086,7 +2965,7 @@ CREATE TABLE IF NOT EXISTS collaboration.workflow_rule_execution (
     executed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     duration_ms INT, -- Execution time
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -3103,8 +2982,6 @@ CREATE TABLE IF NOT EXISTS collaboration.workflow_rule_execution (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE RESTRICT
 );
-
-SELECT create_distributed_table('collaboration.workflow_rule_execution', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for workflow_rule_execution
 CREATE INDEX IF NOT EXISTS idx_execution_rule 
@@ -3138,7 +3015,7 @@ CREATE TABLE IF NOT EXISTS collaboration.project_membership (
     invited_by_employee_id UUID,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -3158,8 +3035,6 @@ CREATE TABLE IF NOT EXISTS collaboration.project_membership (
     -- Constraints
     CONSTRAINT unique_project_member UNIQUE (organization_id, project_id, employee_id)
 );
-
-SELECT create_distributed_table('collaboration.project_membership', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for project_membership
 CREATE INDEX IF NOT EXISTS idx_membership_project 
@@ -3202,7 +3077,7 @@ CREATE TABLE IF NOT EXISTS collaboration.saved_view (
     -- Timestamps
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     
-    -- Composite primary key for Citus sharding
+    -- Composite primary key, organization_id first (tenancy discipline)
     PRIMARY KEY (organization_id, id),
     
     -- Foreign keys
@@ -3215,8 +3090,6 @@ CREATE TABLE IF NOT EXISTS collaboration.saved_view (
         REFERENCES organization.employee(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('collaboration.saved_view', 'organization_id', colocate_with => 'public.organization');
 
 -- Indexes for saved_view
 CREATE INDEX IF NOT EXISTS idx_view_project 

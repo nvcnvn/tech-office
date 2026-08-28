@@ -498,7 +498,7 @@ func (l *iamLogicImpl) ResetOrgAccountCredential(ctx context.Context, tx databas
 }
 
 // ListOrgAccounts lists org-managed worker accounts.
-// Uses two queries to avoid Citus distributed/local join restrictions:
+// Uses two queries because iam.user is a global table and the rest is tenant data:
 // 1. Distributed query for identity + employee + lockout data
 // 2. Local query against iam.user for display_name, status, etc.
 func (l *iamLogicImpl) ListOrgAccounts(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, cursor *dbuuid.UUID, limit int, statusFilter *string) ([]*OrgAccountRow, int32, error) {
@@ -541,7 +541,7 @@ func (l *iamLogicImpl) ListOrgAccounts(ctx context.Context, tx database.DBTX, or
 		userMap[u.ID] = u
 	}
 
-	// Fetch active PIN credential status (separate query for Citus compat).
+	// Fetch active PIN credential status (separate query: tenant-scoped).
 	pinIDs, err := l.queries.CheckActivePINCredentialBatch(ctx, tx, &database.CheckActivePINCredentialBatchParams{
 		OrganizationID: orgID,
 		IdentityIds:    ids,
@@ -575,7 +575,8 @@ func (l *iamLogicImpl) ListOrgAccounts(ctx context.Context, tx database.DBTX, or
 			accountStatus = "deactivated"
 		}
 
-		// Apply status filter in Go since we can't filter in SQL with Citus restrictions.
+		// Apply the status filter in Go: status lives on the global iam.user row, which the
+		// tenant-scoped query above does not join.
 		if statusFilter != nil && *statusFilter != "" && accountStatus != *statusFilter {
 			continue
 		}

@@ -315,6 +315,7 @@ export default function AppLayout() {
         <ActiveVoiceCallBar
           connectionState={voiceSnapshot.connectionState}
           isMuted={voiceSnapshot.isMuted}
+          remoteParticipantCount={voiceSnapshot.remoteParticipantCount}
           leaving={activeVoiceLeaving}
           onReturn={handleReturnToActiveVoiceCall}
           onLeave={() => void handleLeaveActiveVoiceCall()}

@@ -1205,6 +1205,7 @@ type ListPendingRemindersGlobalParams struct {
 	Limit  int32              `json:"limit"`
 }
 
+// lint:cross-tenant scheduler sweep over every organization's due reminders; runs on AdminPool
 func (q *Queries) ListPendingRemindersGlobal(ctx context.Context, db DBTX, arg *ListPendingRemindersGlobalParams) ([]*CalendarEventReminder, error) {
 	rows, err := db.Query(ctx, listPendingRemindersGlobal, arg.FireAt, arg.Limit)
 	if err != nil {

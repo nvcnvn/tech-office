@@ -37,8 +37,8 @@ services:
         limits: {memory: 512M}
 
   # --- Database --------------------------------------------------------------
-  # Single-node Citus. Every distributed table lives on this one instance, so a
-  # physical backup of it is a complete backup of the system.
+  # One node holds every table, so a physical backup of it is a complete backup of
+  # the system. Scaling out is read replicas first; see deploy/README.md.
   # ponytail: no replica, no automatic failover — deliberate (see deploy/README.md
   # "What this deployment is not"). Recovery is restore-from-S3, minutes not seconds.
   postgres:
@@ -46,7 +46,7 @@ services:
     command:
       - postgres
       - -c
-      - shared_preload_libraries=citus,pg_textsearch,pg_stat_statements
+      - shared_preload_libraries=pg_textsearch,pg_stat_statements
       - -c
       - shared_buffers=${PG_SHARED_BUFFERS}
       - -c
@@ -72,7 +72,6 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      # Citus needs the coordinator to know its own name inside the overlay network.
       PGDATA: /var/lib/postgresql/data/pgdata
     networks: [internal]
     volumes:

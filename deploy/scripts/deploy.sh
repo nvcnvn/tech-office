@@ -11,7 +11,8 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 load_env
-require_env RELEASE_TAG WEB_TAG WEB_DOMAIN API_DOMAIN MEDIA_DOMAIN POSTGRES_PASSWORD DATABASE_URL
+require_env RELEASE_TAG WEB_TAG WEB_DOMAIN API_DOMAIN MEDIA_DOMAIN POSTGRES_PASSWORD DATABASE_URL \
+	R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME R2_ENDPOINT
 swarm_active || die "this machine is not a swarm manager — run deploy/scripts/bootstrap.sh"
 
 render_configs
@@ -27,7 +28,7 @@ if [ "$FIRST_INSTALL" = true ]; then
 	# the database only. Every later deploy migrates against the running cluster.
 	info "first install — starting the database before anything talks to it"
 	BACKEND_REPLICAS=0 WEB_REPLICAS=0 \
-		docker stack deploy --detach=false --resolve-image=changed --with-registry-auth \
+		stack_deploy --resolve-image=changed --with-registry-auth \
 			"${STACK_ARGS[@]}" "$STACK_NAME"
 fi
 
@@ -35,7 +36,7 @@ wait_for_service "${STACK_NAME}_postgres"
 "$DEPLOY_DIR/scripts/migrate.sh" up
 
 info "deploying"
-docker stack deploy --detach=false --prune --resolve-image=changed --with-registry-auth \
+stack_deploy --prune --resolve-image=changed --with-registry-auth \
 	"${STACK_ARGS[@]}" "$STACK_NAME"
 
 wait_for_service "${STACK_NAME}_backend"

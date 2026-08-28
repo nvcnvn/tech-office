@@ -4,7 +4,7 @@
 -- generates N instances, the system now sends a single summary notification per assignee.
 
 -- Step 1: Drop the old unnamed check constraint (notification_notification_type_check)
--- from the parent table and all Citus shard tables.
+-- from the parent table.
 DO $$
 DECLARE
     rec RECORD;
@@ -19,7 +19,7 @@ BEGIN
 END $$;
 
 -- Step 2: Drop and re-create the named constraint on the parent table only.
--- Citus will propagate the new named constraint to shards automatically.
+
 ALTER TABLE notification.notification
     DROP CONSTRAINT IF EXISTS notification_notification_type_valid;
 ALTER TABLE notification.notification

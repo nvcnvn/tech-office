@@ -22,7 +22,7 @@ This document describes the domain-driven design (DDD) architecture of the Tech 
 
 ## 1. Architecture Overview
 
-Tech Office is organized as a **modular monolith** following DDD principles with schema-per-domain PostgreSQL (Citus-distributed). Each business domain owns its schema, tables, and query files. Cross-domain communication happens through well-defined Go interfaces — never through direct DB joins across schemas.
+Tech Office is organized as a **modular monolith** following DDD principles with schema-per-domain PostgreSQL on a single node. Each business domain owns its schema, tables, and query files. Cross-domain communication happens through well-defined Go interfaces — never through direct DB joins across schemas.
 
 ```
 ┌───────────────────────────────────────────────────────────────────┐
@@ -38,7 +38,7 @@ Tech Office is organized as a **modular monolith** following DDD principles with
 │                     Database Layer (sqlc)                          │
 │  Type-safe queries, models, schema-per-domain                     │
 ├───────────────────────────────────────────────────────────────────┤
-│              PostgreSQL + Citus (multi-tenant sharding)            │
+│         PostgreSQL (single node, organization_id tenancy)         │
 │  Schemas: public | iam | organization | chat | notification |     │
 │           files | docs | voice | collaboration | calendar         │
 └───────────────────────────────────────────────────────────────────┘
@@ -312,7 +312,7 @@ graph LR
 - **Tables**: `organization`, `permission`, `default_role`, `default_role_permission`
 - **Role**: Master tenant registry, canonical permission list, template roles
 - **Referenced by**: Every other schema (via `organization_id` FK)
-- **Citus strategy**: `organization` is the distribution anchor; `permission` and `default_role` are reference tables replicated to all nodes
+- **Tenancy strategy**: `organization` is the tenant root that every tenant table keys off; `permission` and `default_role` are global tables with no `organization_id`
 
 #### `iam` (Identity & Access Management)
 - **Schema**: `iam`

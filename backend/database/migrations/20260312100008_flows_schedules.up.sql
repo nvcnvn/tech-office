@@ -16,4 +16,3 @@ CREATE TABLE IF NOT EXISTS "flows"."schedules" (
 
 -- Schedules is a reference table (replicated to all nodes) because it is
 -- not sharded by workflow_name_shard and is small (one row per cron schedule).
-SELECT create_reference_table('flows.schedules');

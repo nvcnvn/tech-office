@@ -3915,7 +3915,7 @@ type IamRole struct {
 	Name           string      `json:"name"`
 	Description    pgtype.Text `json:"description"`
 	IsSystem       bool        `json:"is_system"`
-	// Links back to public.default_role.id for roles seeded during org creation. NULL for custom-created roles. NOT a foreign key since reference tables cannot be FK targets from distributed tables in all Citus versions.
+	// Links back to public.default_role.id for roles seeded during org creation. NULL for custom-created roles. NOT a foreign key: it points from a tenant table into a global one.
 	SourceDefaultRoleID pgtype.Text `json:"source_default_role_id"`
 }
 
@@ -4410,7 +4410,7 @@ type NotificationDeliveryAttempt struct {
 	Channel string `json:"channel"`
 	// Outcome of this delivery attempt: queued, sent, skipped, failed.
 	AttemptStatus string `json:"attempt_status"`
-	// Why this attempt was queued, sent, skipped, or failed. Values: live_only_policy, no_active_context_match, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, provider_error, delivery_error, no_call_wake_target, native_tier_unavailable, call_already_ended.
+	// Why this attempt was queued, sent, skipped, or failed. Values: live_only_policy, no_active_context_match, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, provider_error, delivery_error, no_call_wake_target, native_tier_unavailable, call_already_ended, acting_device_excluded.
 	Reason      pgtype.Text        `json:"reason"`
 	AttemptedAt pgtype.Timestamptz `json:"attempted_at"`
 	// Backend instance that recorded this attempt. Supports multi-instance debugging.

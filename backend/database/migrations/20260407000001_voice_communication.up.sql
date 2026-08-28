@@ -151,13 +151,6 @@ ALTER TABLE voice.call_session
     REFERENCES organization.employee(organization_id, id)
     ON DELETE RESTRICT;
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_dist_partition WHERE logicalrelid = 'voice.call_session'::regclass) THEN
-        PERFORM create_distributed_table('voice.call_session', 'organization_id', colocate_with => 'public.organization');
-    END IF;
-END $$;
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_call_active_per_channel
     ON voice.call_session(organization_id, channel_id)
     WHERE state IN ('ringing', 'active', 'ending');
@@ -203,13 +196,6 @@ CREATE TABLE IF NOT EXISTS voice.call_participant(
     CONSTRAINT voice_participant_left_at_valid CHECK (state NOT IN ('left', 'declined', 'removed') OR left_at IS NOT NULL)
 );
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_dist_partition WHERE logicalrelid = 'voice.call_participant'::regclass) THEN
-        PERFORM create_distributed_table('voice.call_participant', 'organization_id', colocate_with => 'public.organization');
-    END IF;
-END $$;
-
 CREATE INDEX IF NOT EXISTS idx_voice_participant_employee
     ON voice.call_participant(organization_id, employee_id, updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_voice_participant_call_state
@@ -249,13 +235,6 @@ CREATE TABLE IF NOT EXISTS voice.call_invitation(
     CONSTRAINT voice_invitation_response_time_valid CHECK ((status = 'pending' AND responded_at IS NULL) OR (status <> 'pending' AND responded_at IS NOT NULL))
 );
 
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_dist_partition WHERE logicalrelid = 'voice.call_invitation'::regclass) THEN
-        PERFORM create_distributed_table('voice.call_invitation', 'organization_id', colocate_with => 'public.organization');
-    END IF;
-END $$;
-
 CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_invitation_pending
     ON voice.call_invitation(organization_id, call_session_id, invitee_employee_id)
     WHERE status = 'pending';
@@ -294,13 +273,6 @@ CREATE TABLE IF NOT EXISTS voice.call_artifact(
     CONSTRAINT voice_artifact_ready_requires_file CHECK (status <> 'ready' OR file_id IS NOT NULL),
     CONSTRAINT voice_artifact_failed_requires_error CHECK (status <> 'failed' OR error_code IS NOT NULL)
 );
-
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_dist_partition WHERE logicalrelid = 'voice.call_artifact'::regclass) THEN
-        PERFORM create_distributed_table('voice.call_artifact', 'organization_id', colocate_with => 'public.organization');
-    END IF;
-END $$;
 
 CREATE INDEX IF NOT EXISTS idx_voice_artifact_status
     ON voice.call_artifact(organization_id, status, updated_at);
@@ -348,13 +320,6 @@ CREATE TABLE IF NOT EXISTS voice.voice_message(
     CONSTRAINT voice_message_waveform_array CHECK (waveform_peaks IS NULL OR jsonb_typeof(waveform_peaks) = 'array'),
     CONSTRAINT voice_message_posted_requires_assets CHECK (status <> 'posted' OR (message_id IS NOT NULL AND file_id IS NOT NULL AND duration_ms IS NOT NULL AND posted_at IS NOT NULL))
 );
-
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_dist_partition WHERE logicalrelid = 'voice.voice_message'::regclass) THEN
-        PERFORM create_distributed_table('voice.voice_message', 'organization_id', colocate_with => 'public.organization');
-    END IF;
-END $$;
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_voice_message_posted_message
     ON voice.voice_message(organization_id, message_id)

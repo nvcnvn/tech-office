@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Document Management System - sqlc Queries
--- Follows Citus sharding constraints: organization_id first in all keys
+-- Follows the tenancy discipline: organization_id first in all keys
 -- ============================================================================
 
 -- ============================================================================

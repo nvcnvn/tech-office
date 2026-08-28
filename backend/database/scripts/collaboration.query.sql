@@ -725,6 +725,7 @@ WHERE organization_id = @organization_id
   AND (last_generated_date IS NULL OR last_generated_date < sqlc.arg('target_date')::date + generation_window_days)
 ORDER BY id;
 
+-- lint:cross-tenant scheduler sweep — the organization list is the result, so it cannot be the input
 -- name: ListOrganizationIDsWithActiveRitualDefinitions :many
 -- System-scope background query for the global ritual sweep. Intentionally NOT filtered by
 -- organization_id: its purpose is to discover which organizations to sweep. Returns only

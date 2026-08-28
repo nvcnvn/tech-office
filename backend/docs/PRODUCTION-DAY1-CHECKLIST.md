@@ -37,7 +37,7 @@ smoke tests that prove a real user can sign in and place a call.
 - [ ] `https://transformar.work/.well-known/apple-app-site-association` and `https://transformar.work/.well-known/assetlinks.json` are served without auth, redirects, or HTML fallbacks.
 - [ ] `deploy/.env` has been created from `deploy/.env.example` and every REQUIRED value is filled in, and `deploy/scripts/bootstrap.sh` has run.
 - [ ] Node labels are assigned for the fleet's size (`edge db app voice processing obs`), and the machines are on one internal network with the swarm ports open between them.
-- [ ] The `tech-office-postgres` image is the one in use — the deployment's PostgreSQL needs `citus`, `pg_textsearch`, `pgroonga` and `pgbackrest`, and a stock `postgres` image has none of them.
+- [ ] The `tech-office-postgres` image is the one in use — the deployment's PostgreSQL needs `pg_textsearch`, `pgroonga` and `pgbackrest`, and a stock `postgres` image has none of them.
 - [ ] `DATABASE_URL` matches `POSTGRES_PASSWORD` (bootstrap rewrites it) and resolves over the overlay network.
 - [ ] `JWT_PRIVATE_KEY_PATH` points at a mounted production signing key. Do not allow the backend to fall back to the ephemeral dev signer.
 - [ ] `WEBAPP_URL=https://transformar.work`. This value is used for IAM email links and must match the public web host.

@@ -208,7 +208,7 @@ WHERE organization_id = $1
 -- Assigns employee to department with specified role.
 -- Uses ON CONFLICT to handle employee already assigned (moves to new department).
 -- NOTE: Application MUST handle count updates manually (see count management queries).
--- CITUS CONSTRAINT: ON CONFLICT DO UPDATE cannot use now() - must pass timestamp as $5 parameter
+-- updated_at is passed as $5 so the caller controls the timestamp.
 INSERT INTO organization.department_member (
   id,
   organization_id,
@@ -226,7 +226,7 @@ ON CONFLICT (organization_id, employee_id) DO UPDATE
 SET 
   department_id = EXCLUDED.department_id,
   role = EXCLUDED.role,
-  updated_at = $5  -- Must be parameter, not now() (Citus limitation)
+  updated_at = $5  -- caller-supplied timestamp
 RETURNING *;
 
 -- name: RemoveEmployeeFromDepartment :one
@@ -451,9 +451,9 @@ ORDER BY name
 LIMIT sqlc.arg('limit')::INT;
 
 -- =============================================================================
--- DEPARTMENT COUNT MANAGEMENT (Application-Managed, Citus Compatible)
+-- DEPARTMENT COUNT MANAGEMENT (Application-Managed)
 -- =============================================================================
--- NOTE: Citus does not support triggers on distributed tables.
+-- NOTE: these counts are maintained in application code rather than by a trigger.
 -- These queries MUST be called in application logic after INSERT/UPDATE/DELETE operations
 -- on organization.department_member and organization.department tables.
 
@@ -515,7 +515,7 @@ WHERE id = sqlc.arg('department_id')
 -- =============================================================================
 -- NOTES:
 -- 1. All queries enforce organization_id for multi-tenant isolation
--- 2. Count updates are handled in application logic (Citus does not support triggers)
+-- 2. Count updates are handled in application logic
 -- 3. IsDepartmentDescendant MUST be called before MoveDepartment
 -- 4. DeleteDepartment includes member_count/child_count checks in WHERE clause
 -- 5. AssignEmployeeToDepartment uses ON CONFLICT for upsert behavior

@@ -44,6 +44,7 @@ type ContactGuard interface {
 
 type MediaClient interface {
 	EnsureRoom(ctx context.Context, opts RoomOptions) error
+	DeleteRoom(ctx context.Context, roomName string) error
 	MintJoinCredentials(ctx context.Context, opts JoinTokenOptions) (*JoinCredentials, error)
 	StartRoomRecording(ctx context.Context, opts RecordingOptions) (*RecordingStart, error)
 }
@@ -1034,6 +1035,23 @@ func (l *Logic) endCall(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID
 	// terminal wake lives here and not at each caller: a new way to end a call cannot
 	// forget to stop the phones (FR-013, SC-005).
 	l.emitTerminalCallWake(ctx, tx, orgID, endedCall, terminalWakeEventForOutcome(outcome), actingDeviceIdentifier)
+
+	// Tearing down the room is the only terminal signal that does not depend on the
+	// recipient being reachable. The `voice_call_ended` event is live_only: it is never
+	// persisted and never replayed, so a caller whose stream was down for the moment a
+	// callee declined would otherwise sit in a room nobody else can join, with the UI
+	// still showing a call in progress and nothing left to end it. LiveKit disconnecting
+	// them is transport-level and every client already clears its call state on it.
+	//
+	// Best-effort and inline: if this transaction rolls back after the room is gone, the
+	// room_finished webhook LiveKit fires on deletion ends the call anyway, and the ring
+	// timeout sweep is the backstop.
+	if l.MediaClient != nil {
+		if err := l.MediaClient.DeleteRoom(ctx, endedCall.LivekitRoomName); err != nil {
+			slog.WarnContext(ctx, "failed to delete livekit room for ended call",
+				"error", err, "call_id", endedCall.ID.String(), "room", endedCall.LivekitRoomName)
+		}
+	}
 	return endedCall, nil
 }
 

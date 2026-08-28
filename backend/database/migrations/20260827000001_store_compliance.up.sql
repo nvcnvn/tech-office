@@ -112,8 +112,6 @@ CREATE TABLE IF NOT EXISTS compliance.content_report (
         REFERENCES organization.employee(organization_id, id) ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('compliance.content_report', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_compliance_content_report_queue
     ON compliance.content_report(organization_id, status, id DESC);
 
@@ -147,8 +145,6 @@ CREATE TABLE IF NOT EXISTS compliance.block (
         FOREIGN KEY (organization_id, blocked_employee_id)
         REFERENCES organization.employee(organization_id, id) ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('compliance.block', 'organization_id', colocate_with => 'public.organization');
 
 -- Asked from the opposite side by the guards in CreateOrGetDirectMessage and call
 -- initiation: "has the recipient blocked this initiator?"
@@ -184,8 +180,6 @@ CREATE TABLE IF NOT EXISTS compliance.removal_request (
         REFERENCES organization.employee(organization_id, id) ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('compliance.removal_request', 'organization_id', colocate_with => 'public.organization');
-
 -- One outstanding request per person per organization: a second tap re-surfaces the
 -- existing request rather than creating a duplicate.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_compliance_removal_request_outstanding
@@ -220,13 +214,11 @@ CREATE TABLE IF NOT EXISTS compliance.account_deletion (
     failure_reason   TEXT,
     attempts         INT         NOT NULL DEFAULT 0,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-    -- Set by application code; Citus forbids triggers.
+    -- Set by application code rather than a trigger.
     updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     CONSTRAINT pk_compliance_account_deletion PRIMARY KEY (organization_id, id)
 );
-
-SELECT create_distributed_table('compliance.account_deletion', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_compliance_account_deletion_active
     ON compliance.account_deletion(organization_id, state)

@@ -845,6 +845,7 @@ WHERE state = 'ringing'
   AND ring_deadline_at <= $1
 `
 
+// lint:cross-tenant ring-timeout sweep — the organization list is the result, so it cannot be the input
 func (q *Queries) ListOrganizationsWithExpiredRingingCalls(ctx context.Context, db DBTX, nowAt pgtype.Timestamptz) ([]dbuuid.UUID, error) {
 	rows, err := db.Query(ctx, listOrganizationsWithExpiredRingingCalls, nowAt)
 	if err != nil {

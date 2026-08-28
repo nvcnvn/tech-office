@@ -11,7 +11,7 @@
 # to this deployment's hostnames and is built here from deploy/.env.
 #
 # --all builds everything from source instead, for an air-gapped fleet or a fork.
-# Be warned that tech-office-postgres compiles Citus from source and takes a while.
+# tech-office-postgres installs its extensions from packages, so it builds quickly.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 

@@ -42,9 +42,8 @@ neither client infers it.
 
 **Anonymisation at the tenant layer, destruction at the global layer.**
 
-Roughly fifty columns across a dozen schemas reference an employee id, and Citus
-does not support `ON DELETE SET NULL`, so a cascade-based erase is neither
-available nor desirable. Instead:
+Roughly fifty columns across a dozen schemas reference an employee id, so a
+cascade-based erase would be a sprawling and fragile thing to maintain. Instead:
 
 - `organization.employee` **survives** as a de-identified tombstone —
   `given_name` → `'Deleted'`, `family_name` → `'user'`, `email` → `''`,

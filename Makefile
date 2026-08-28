@@ -100,6 +100,17 @@ BACKEND_TEST_TIMEOUT ?= 900s
 # out two real 20s ping intervals), not the queue.
 BACKEND_TEST_PARALLEL ?= 8
 
+# Verifies the multi-tenant schema discipline: every tenant table pinned to an
+# organization_id parameter, every unique key leading with it. We do not shard today,
+# but this is the property that makes sharding possible later, and it only stays true
+# if something checks it. Reads the generated schema snapshot, so run
+# backend/scripts/regen-schema.sh after a migration.
+.PHONY: lint-tenancy
+lint-tenancy:
+	@echo "\n=== Checking tenancy discipline ==="
+	cd backend && go test ./tools/tenancylint/ && go run ./tools/tenancylint/
+
+
 test-backend: check-postgres check-backend
 	@echo "\n=== Running backend integration tests ==="
 	cd backend && go test -v -count=1 -parallel $(BACKEND_TEST_PARALLEL) -timeout $(BACKEND_TEST_TIMEOUT) ./integration/...

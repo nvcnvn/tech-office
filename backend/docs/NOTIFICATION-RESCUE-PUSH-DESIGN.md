@@ -465,7 +465,7 @@ This means a foreground SSE receipt never delays the OS-level incoming-call path
 
 ### Shard-safe rescue worker claim strategy
 
-The rescue worker should avoid one cross-tenant `FOR UPDATE SKIP LOCKED` scan. Phase 1 can first list organizations with due queued fallback rows, then claim a bounded batch per organization with `FOR UPDATE SKIP LOCKED`. This keeps each claim scoped by `organization_id` and aligned with Citus sharding rules.
+The rescue worker should avoid one cross-tenant `FOR UPDATE SKIP LOCKED` scan. Phase 1 can first list organizations with due queued fallback rows, then claim a bounded batch per organization with `FOR UPDATE SKIP LOCKED`. This keeps each claim scoped by `organization_id` and aligned with the tenancy rules in Constitution Principle I.
 
 ### Client receipt flushing
 

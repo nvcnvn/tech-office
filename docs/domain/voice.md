@@ -51,6 +51,23 @@ Supporting tables: `voice.call_participant` (states `invited → ringing → joi
 accepted | declined | expired | revoked`, FK to the `notification.notification` row that
 rang the invitee).
 
+## Ending a call tears down the room
+
+`Logic.endCall` deletes the LiveKit room as well as writing the terminal record. This is
+deliberate redundancy: `voice_call_ended` is published with `DeliveryClassLiveOnly`, so it
+is never persisted and never replayed. A client whose stream happened to be down at the
+moment the call ended — a backgrounded phone, a network blip, a web tab on another screen
+— would never learn, and would sit in a room nobody else can join with the UI still
+showing a call in progress and nothing left to end it. Room deletion is transport-level:
+LiveKit disconnects whoever is still connected, and both clients already clear their call
+state on an unexpected disconnect and re-read `GetActiveVoiceCall` rather than assuming
+the call is over (in a channel call the room can drop just one participant). It also stops
+a join token minted before the call ended from walking back into a live room.
+
+The delete is best-effort and runs inside the same transaction as the record update. If
+that transaction rolls back, the `room_finished` webhook LiveKit fires on deletion ends
+the call anyway, and the ring timeout sweep is the backstop.
+
 ## The ring timeout sweep
 
 `internal/voice/ring_timeout.go` runs on every instance on a one-second tick. It claims
@@ -109,7 +126,7 @@ back into the business record. Handled events:
 |---|---|
 | `participant_joined` | participant → `joined`; first join promotes the call `ringing → active` |
 | `participant_left` | participant → `disconnected`/`left` |
-| `room_finished` | call → `ended`, outcome inferred by `inferWebhookOutcome` |
+| `room_finished` | call → `ended`, outcome inferred by `inferWebhookOutcome`; a no-op when `endCall` deleted the room, since the call is already `ended` |
 | `egress_started` | `recording_status → processing` |
 | `egress_ended` | recording artefact → `ready`, triggers transcription |
 
@@ -268,7 +285,11 @@ mirrored centrally, from the one snapshot, rather than in each leave button.
     `voiceClient` snapshot, so the lock screen and the app cannot disagree, and closes
     the OS call when that snapshot shows the app has left it. `useNativeCallPresented`
     exposes the presented-call set to in-app surfaces so they can stand aside.
-  - `voice-client.ts` — LiveKit transport. During a system-presented call it is told the
+  - `voice-client.ts` — LiveKit transport. Its snapshot carries
+    `remoteParticipantCount`, which is what lets the global active-call bar say
+    **Calling** rather than *In voice call* while the caller is still alone in the room —
+    connected to the room is not the same as connected to a person, and saying otherwise
+    is what made a declined 1:1 call look as though it were running. During a system-presented call it is told the
     audio session is owned externally and does not start its own; the answer path builds
     join credentials with the shared `toVoiceJoinCredentials`.
   - `call-audio.ts` — the audio session belongs to CallKit/Telecom; LiveKit carries media

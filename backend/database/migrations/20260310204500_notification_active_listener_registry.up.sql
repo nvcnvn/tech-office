@@ -7,8 +7,6 @@ CREATE TABLE IF NOT EXISTS notification.active_listener (
     listener_status text NOT NULL DEFAULT 'active' CHECK (listener_status IN ('active', 'stale'))
 );
 
-SELECT create_reference_table('notification.active_listener');
-
 CREATE INDEX IF NOT EXISTS idx_active_listener_status
     ON notification.active_listener(listener_status, last_heartbeat DESC);
 

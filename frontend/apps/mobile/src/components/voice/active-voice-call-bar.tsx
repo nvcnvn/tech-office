@@ -22,19 +22,26 @@ import type { VoiceClientConnectionState } from "@/lib/voice/voice-client";
 interface ActiveVoiceCallBarProps {
   connectionState: VoiceClientConnectionState;
   isMuted: boolean;
+  remoteParticipantCount: number;
   leaving?: boolean;
   onReturn: () => void;
   onLeave: () => void;
 }
 
-function connectionLabel(connectionState: VoiceClientConnectionState): string {
+function connectionLabel(
+  connectionState: VoiceClientConnectionState,
+  remoteParticipantCount: number,
+): string {
   switch (connectionState) {
     case "connecting":
       return "Connecting";
     case "reconnecting":
       return "Reconnecting";
     case "connected":
-      return "In voice call";
+      // Connected to the room is not the same as connected to a person. A caller
+      // alone in the room is still ringing the other side, and saying "in voice
+      // call" there is what makes a declined call look as though it is running.
+      return remoteParticipantCount > 0 ? "In voice call" : "Calling";
     default:
       return "Voice call";
   }
@@ -43,6 +50,7 @@ function connectionLabel(connectionState: VoiceClientConnectionState): string {
 export function ActiveVoiceCallBar({
   connectionState,
   isMuted,
+  remoteParticipantCount,
   leaving = false,
   onReturn,
   onLeave,
@@ -85,10 +93,12 @@ export function ActiveVoiceCallBar({
         </View>
         <View style={styles.textWrap}>
           <Text style={[styles.title, { color: palette.text.primary }]} numberOfLines={1}>
-            {connectionLabel(connectionState)}
+            {connectionLabel(connectionState, remoteParticipantCount)}
           </Text>
           <Text style={[styles.subtitle, { color: palette.text.secondary }]} numberOfLines={1}>
-            {isMuted ? "Microphone muted" : "Microphone on"} - Tap to return
+            {connectionState === "connected" && remoteParticipantCount === 0
+              ? "Waiting for an answer - Tap to return"
+              : `${isMuted ? "Microphone muted" : "Microphone on"} - Tap to return`}
           </Text>
         </View>
         {isBusy && !leaving ? (

@@ -38,20 +38,6 @@ CREATE SCHEMA chat;
 
 
 --
--- Name: citus; Type: EXTENSION; Schema: -; Owner: -
---
-
-CREATE EXTENSION IF NOT EXISTS citus WITH SCHEMA pg_catalog;
-
-
---
--- Name: EXTENSION citus; Type: COMMENT; Schema: -; Owner: -
---
-
-COMMENT ON EXTENSION citus IS 'Citus distributed database';
-
-
---
 -- Name: collaboration; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -2374,7 +2360,7 @@ COMMENT ON TABLE iam.role IS 'Organization-specific roles. System roles are seed
 -- Name: COLUMN role.source_default_role_id; Type: COMMENT; Schema: iam; Owner: -
 --
 
-COMMENT ON COLUMN iam.role.source_default_role_id IS 'Links back to public.default_role.id for roles seeded during org creation. NULL for custom-created roles. NOT a foreign key since reference tables cannot be FK targets from distributed tables in all Citus versions.';
+COMMENT ON COLUMN iam.role.source_default_role_id IS 'Links back to public.default_role.id for roles seeded during org creation. NULL for custom-created roles. NOT a foreign key: it points from a tenant table into a global one.';
 
 
 --

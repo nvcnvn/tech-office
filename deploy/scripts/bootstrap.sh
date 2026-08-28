@@ -84,7 +84,7 @@ fi
 # and store them properly.
 gen_into_env() {
 	local key="$1" value
-	if grep -qE "^${key}=.+" "$DEPLOY_DIR/.env"; then return 0; fi
+	if grep -qE "^${key}=[^[:space:]#]" "$DEPLOY_DIR/.env"; then return 0; fi
 	value="$(openssl rand -base64 36 | tr -d '/+=' | cut -c1-40)"
 	if grep -qE "^${key}=" "$DEPLOY_DIR/.env"; then
 		sed -i.bak "s|^${key}=.*|${key}=${value}|" "$DEPLOY_DIR/.env" && rm -f "$DEPLOY_DIR/.env.bak"
@@ -107,8 +107,11 @@ if [ "${DATABASE_URL}" != "$NEW_URL" ]; then
 	load_env
 fi
 
+# R2 is checked here because the backend exits at startup without it, which otherwise
+# shows up as a crash-looping service long after bootstrap said it was finished.
 require_env POSTGRES_PASSWORD BACKUP_S3_BUCKET BACKUP_S3_KEY BACKUP_S3_KEY_SECRET \
-	BACKUP_CIPHER_PASS LIVEKIT_API_SECRET WEB_DOMAIN API_DOMAIN MEDIA_DOMAIN
+	BACKUP_CIPHER_PASS LIVEKIT_API_SECRET WEB_DOMAIN API_DOMAIN MEDIA_DOMAIN \
+	R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET_NAME R2_ENDPOINT
 
 # --- pgBackRest configuration ------------------------------------------------
 # Holds the object-storage credentials and the backup encryption passphrase, so it

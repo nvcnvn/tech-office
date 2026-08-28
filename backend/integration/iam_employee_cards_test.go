@@ -16,12 +16,11 @@ import (
 // TestGetEmployeeCards covers the batch employee card lookup endpoint.
 //
 // Historical context: this endpoint previously used a correlated subquery that
-// joined notification.active_connection (notification schema, distributed table)
-// inside a query against organization.employee (organization schema). On Citus
-// this produced:
-//
-//	ERROR: complex joins are only supported when all distributed tables are
-//	       co-located and joined on their distribution columns (SQLSTATE 0A000)
+// joined notification.active_connection (notification schema) inside a query
+// against organization.employee (organization schema), which broke under the
+// Citus deployment this project has since dropped. The cross-schema join is also
+// forbidden by Constitution Principle I in its own right, so the split below
+// stands on its own merits and should not be undone.
 //
 // The fix splits the work into two separate queries:
 //  1. GetEmployeeCardsByIDs — joins only within the organization schema.

@@ -61,8 +61,6 @@ CREATE TABLE IF NOT EXISTS iam.credential (
         ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('iam.credential', 'organization_id', colocate_with => 'public.organization');
-
 -- One active credential per type per identity
 CREATE UNIQUE INDEX IF NOT EXISTS idx_credential_identity_type_active
     ON iam.credential(organization_id, identity_id, credential_type)
@@ -102,8 +100,6 @@ CREATE TABLE IF NOT EXISTS iam.account_lockout (
         REFERENCES iam.identity(organization_id, id)
         ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('iam.account_lockout', 'organization_id', colocate_with => 'public.organization');
 
 COMMENT ON TABLE iam.account_lockout IS
 'Tracks consecutive failed PIN authentication attempts per identity. Enforces escalating lockouts: tier 1 (3 fails, 1 min), tier 2 (4 fails, 5 min), tier 3 (5 fails, 15 min), tier 4 (6 fails, full lock requiring admin reset). Reset to tier 0 on successful auth. lockout_tier MUST align with backend constants.';

@@ -37,7 +37,7 @@ docker run -d --name "$NAME" \
 	-v "$VOL:/var/lib/postgresql/data" \
 	-e PGDATA=/var/lib/postgresql/data/pgdata \
 	"$IMAGE" \
-	postgres -c shared_preload_libraries=citus,pg_textsearch,pg_stat_statements \
+	postgres -c shared_preload_libraries=pg_textsearch,pg_stat_statements \
 		-c archive_mode=off -c listen_addresses=127.0.0.1 >/dev/null
 
 for _ in $(seq 1 60); do
@@ -64,7 +64,7 @@ expect_positive() {
 }
 
 expect_positive "schema version"        "SELECT version FROM public.schema_migrations"
-expect_positive "citus shards"          "SELECT count(*) FROM pg_dist_shard"
+expect_positive "employees"             "SELECT count(*) FROM organization.employee"
 expect_positive "permission catalogue"  "SELECT count(*) FROM public.permission"
 expect_positive "organizations"         "SELECT count(*) FROM public.organization"
 echo "  info recovered to: $(q 'SELECT pg_last_wal_replay_lsn()' 2>/dev/null || echo n/a)"

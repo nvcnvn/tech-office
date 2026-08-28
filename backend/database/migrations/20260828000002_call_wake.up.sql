@@ -65,7 +65,7 @@ COMMENT ON COLUMN notification.delivery_attempt.reason IS 'Why this attempt was 
 --
 -- token_type is a real column rather than a token_metadata JSONB key because it is
 -- part of the uniqueness key and is CHECK-constrained; a JSONB expression index
--- would satisfy neither cleanly under Citus. token_metadata.tokenType is retired in
+-- would satisfy neither cleanly. token_metadata.tokenType is retired in
 -- favour of this column — there is one definition of a token's type, not two.
 --
 -- The 'fcm' default reproduces today's behaviour for every existing row: every

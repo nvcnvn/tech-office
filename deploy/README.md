@@ -1,6 +1,6 @@
 # On-premises deployment (Docker Swarm)
 
-Deploys the whole of Tech Office — web, backend, PostgreSQL/Citus, LiveKit, file
+Deploys the whole of Tech Office — web, backend, PostgreSQL, LiveKit, file
 processing, backups and (optionally) monitoring — onto **1 to 7 machines** you control,
 with Docker Swarm doing the scheduling and Traefik terminating TLS.
 
@@ -42,6 +42,8 @@ Stated plainly so nobody discovers it during an incident:
 - DNS for three names pointing at the **edge** node's public address:
   `WEB_DOMAIN`, `API_DOMAIN`, `MEDIA_DOMAIN`.
 - An S3 or Cloudflare R2 bucket for backups, with its own credentials.
+- A second bucket for user files (`R2_*`). The backend has no local-disk fallback and
+  exits at startup without it, so this one is required too.
 - Firewall openings:
 
   | Port | Proto | Node | Why |
@@ -56,7 +58,7 @@ Stated plainly so nobody discovers it during an incident:
 
 ```sh
 cp deploy/.env.example deploy/.env
-$EDITOR deploy/.env                       # domains, S3 bucket + keys, SSO client ids
+$EDITOR deploy/.env                       # domains, S3 + R2 buckets and keys, SSO client ids
 
 deploy/scripts/bootstrap.sh               # swarm, node labels, keys, pgbackrest.conf
 deploy/scripts/build-images.sh            # your web image, built with your URLs
@@ -71,7 +73,7 @@ GitHub Container Registry by `.github/workflows/publish-images.yml`:
 ```
 ghcr.io/nvcnvn/tech-office-backend           linux/amd64, linux/arm64
 ghcr.io/nvcnvn/tech-office-backend-migrate   linux/amd64, linux/arm64
-ghcr.io/nvcnvn/tech-office-postgres          linux/amd64  (it compiles Citus from source)
+ghcr.io/nvcnvn/tech-office-postgres          linux/amd64, linux/arm64
 ```
 
 A fourth is published for the project's own hosted deployment:
@@ -84,10 +86,22 @@ ghcr.io/nvcnvn/tech-office-web-transformar   linux/amd64
 SSO client IDs compiled into it, so it would serve a UI that talks to somebody else's
 servers. The `-transformar` suffix is there so it cannot be picked up by accident.
 
-They are public, so nodes pull them without credentials — `REGISTRY=ghcr.io/nvcnvn` and
-nothing else. (If you fork this, remember GitHub creates new packages private: flip each
-to Public once, under the account's Packages settings, or `docker login ghcr.io` with a
-`read:packages` token on every node.)
+`publish-images.yml` runs on `v*` tags, so a tag has to have been pushed before
+`RELEASE_TAG=latest` resolves to anything, and **GitHub creates new packages private**.
+Check before you rely on them:
+
+```sh
+docker manifest inspect ghcr.io/nvcnvn/tech-office-backend:latest
+```
+
+A `denied` there means the package is private or not published yet, and the deploy will
+fail with `no such image`. Fix it once, either way:
+
+- make each package Public under the account's Packages settings, after which nodes pull
+  with `REGISTRY=ghcr.io/nvcnvn` and no credentials; or
+- `docker login ghcr.io` with a `read:packages` token on every node; or
+- build them yourself with `deploy/scripts/build-images.sh --all`, which needs no
+  registry at all on a one-machine fleet.
 
 **The web image is not published, and cannot be.** Next.js inlines `NEXT_PUBLIC_*` at
 build time, so a web image is specific to one deployment's hostnames.
@@ -189,7 +203,7 @@ deploy/scripts/backup-now.sh full        # an extra backup, e.g. before an upgra
 
 **Prove it works.** Run this weekly, and always after changing anything about the backup
 configuration. It restores the latest backup into a throwaway volume, starts a scratch
-PostgreSQL on it, checks that the schema, the Citus shard metadata and the real tables
+PostgreSQL on it, checks that the schema, the migration version and the real tables
 came back, then deletes everything. It never touches production.
 
 ```sh
@@ -298,6 +312,8 @@ Two or more machines need `REGISTRY` set, or every node except the builder fails
 
 | Symptom | Cause |
 |---|---|
+| `deploy.sh` stops after `docker stack deploy did not converge` | The task list it prints names the service; usually a published port already bound on that node, or an image no node can pull. Raise the cap with `DEPLOY_TIMEOUT=1800` if the fleet is merely slow |
+| Backend crash-loops with `failed to create R2 client` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_ENDPOINT` are empty in `deploy/.env` |
 | Tasks stuck in `Pending` | No node carries the label that service places on — `docker node inspect <node> --format '{{.Spec.Labels}}'` |
 | `no such image` on some nodes | `REGISTRY` unset on a multi-node fleet |
 | Certificates never issue | Port 80 not reachable from the internet, or DNS not pointing at the edge node |

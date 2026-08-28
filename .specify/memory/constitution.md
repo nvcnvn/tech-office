@@ -33,7 +33,7 @@ REMOVED SECTIONS:
 
 TEMPLATE UPDATE STATUS:
 ✅ .specify/memory/constitution.md - MINOR version bump (5.16.0 → 5.17.0)
-✅ Version history updated with v5.17.0 entry
+✅ Version history updated with v5.18.0 entry
 ✅ .specify/templates/plan-template.md - No changes needed (references principles generically)
 ✅ .specify/templates/tasks-template.md - No changes needed
 ✅ .specify/templates/spec-template.md - No changes needed
@@ -53,7 +53,7 @@ VALIDATION SUMMARY:
 
 # Tech Office Constitution
 
-**Version**: 5.17.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-08-26
+**Version**: 5.18.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-08-28
 
 ## Purpose & Scope
 
@@ -65,9 +65,16 @@ This constitution defines **governance principles** and **architectural mandates
 
 ## Core Principles
 
-### I. Data Governance & Multi-Tenancy with Citus Sharding (NON-NEGOTIABLE)
+### I. Data Governance & Multi-Tenancy (NON-NEGOTIABLE)
 
 **Rule**: All data modeling MUST begin with PostgreSQL schema design. Use schema-per-domain approach. ALL business tables MUST include `organization_id UUID NOT NULL` with foreign key to `public.organization(id)`.
+
+**Deployment reality**: the database is a **single PostgreSQL node**. It is not sharded, and no sharding extension is installed. The tenancy rules below are nonetheless mandatory, for two independent reasons:
+
+1. **Tenant isolation.** A leading `organization_id` on every key and filter is how a tenant's data is kept from leaking into another tenant's response. This reason applies today and would apply on a single node forever.
+2. **Shard-readiness.** These same rules are the entry requirements for every horizontal scaling option (Citus, PgDog, manual shards). They cost nothing to hold while the schema is being written and require a data migration to retrofit. We keep the option open by keeping the discipline, not by running the extension.
+
+The discipline is machine-checked. `make lint-tenancy` parses `schema.sql` and every `*.query.sql` with the real PostgreSQL parser and fails the build on a violation. It classifies tables automatically — a table with an `organization_id` column is a tenant table, one without is global — so there is no allowlist to maintain.
 
 **Requirements**:
 - Design SQL schema first, then generate types and APIs
@@ -75,8 +82,9 @@ This constitution defines **governance principles** and **architectural mandates
 - DDL changes: Use `IF NOT EXISTS` for idempotency
 - Schema organization: `public` for system, domain schemas for business logic (e.g., `iam`, `organization`, `crm`)
 - All tenant tables must have `organization_id` for partition and tenant isolation
-- **Citus Sharding Requirement (CRITICAL)**: ALL unique indexes and primary keys MUST include `organization_id` as first column for sharding compatibility
+- **Unique key requirement (CRITICAL)**: ALL unique indexes and primary keys on tenant tables MUST include `organization_id` as first column. This is the one rule that cannot be retrofitted cheaply: a uniqueness that spans tenants cannot be enforced once the table is split, so a unique key missing `organization_id` closes off horizontal scaling permanently. Partial unique indexes are exempt, since they constrain only the rows they cover.
 - **Composite Foreign Keys (CRITICAL)**: Any foreign key referencing a tenant table MUST reference the composite key `(organization_id, id)` (or additional business keys) and declare `organization_id` as the leading column in the constraint. Inline single-column `REFERENCES ... (id)` declarations are forbidden for tenant tables.
+- **JOIN requirement (CRITICAL)**: ALL joins between tenant tables MUST carry `organization_id` in the join condition, e.g. `JOIN t2 ON (t1.organization_id, t1.ref_id) = (t2.organization_id, t2.id)`. Without it the join is a cross-tenant join that happens to be filtered elsewhere, which is both a leak risk and unsplittable.
 - Composite indexes: Design based on data cardinality and query patterns for optimal performance
 - Index reuse: Prefer a single composite index `(organization_id, col_a [, col_b ...])` that satisfies multiple query patterns over multiple overlapping indexes. Document why additional indexes are needed when creating more than one per leading key combination.
 - Code generation: Use `sqlc` for type-safe Go models from SQL queries
@@ -87,64 +95,50 @@ This constitution defines **governance principles** and **architectural mandates
 - User-facing API contracts MUST NOT include `organization_id` fields; extract from auth context via interceptors
 - Allow `organization_id` in request ONLY for system-scope operations (background jobs, admin operations) with documented justification
 
+**Legitimately cross-tenant queries**: scheduler sweeps, delivery retry workers and the account-deletion path answer questions no single tenant context can ("which organizations have work due?"). These are permitted, MUST run on `AdminPool`, and MUST be marked in the query file so the exemption is visible in review:
+
+```sql
+-- lint:cross-tenant scheduler sweep — the organization list is the result, not the input
+-- name: ListOrganizationsWithDueFallbackRecipients :many
+```
+
+An unmarked query that fails to pin `organization_id` is a build failure, not a warning.
+
 **Migration Workflow (CRITICAL - forward-only psql runner)**:
-1. Keep `backend/database/scripts/schema.sql` authoritative. Update it before writing migrations so schema and generated code stay aligned.
-2. Create timestamped `.up.sql` files under `backend/database/migrations/` using `YYYYMMDDHHMMSS_description.up.sql`. `.down.sql` files may exist for manual rollback documentation, but the standard runner is forward-only and does not execute them.
-3. Run `cd backend && ./scripts/migrate.sh` after setting `DATABASE_URL`. The script applies each `.up.sql` file with `psql`, records the current version in `public.schema_migrations`, and replays the dirty version automatically if a previous run failed mid-file.
+1. Create timestamped `.up.sql` files under `backend/database/migrations/` using `YYYYMMDDHHMMSS_description.up.sql`. `.down.sql` files may exist for manual rollback documentation, but the standard runner is forward-only and does not execute them.
+2. Run `cd backend && ./scripts/migrate.sh` after setting `DATABASE_URL`. The script applies each `.up.sql` file with `psql`, records the current version in `public.schema_migrations`, and replays the dirty version automatically if a previous run failed mid-file.
+3. Regenerate `backend/database/scripts/schema.sql` with `backend/scripts/regen-schema.sh`. **`schema.sql` is a generated snapshot of the migrations and MUST NEVER be hand-edited** — it is produced by applying the migrations to a throwaway database and dumping the result, so any manual edit is silently discarded on the next regeneration.
 4. Treat rollback as an explicit operator task: write compensating forward migrations or execute reviewed manual SQL when necessary. Do not rely on automated down-migration execution in routine workflows.
 5. Commit schema changes, migrations, and regenerated artifacts in the same PR. Atlas or other auto-diff tooling is prohibited.
 
-**Citus Sharding Constraints (CRITICAL - NON-NEGOTIABLE)**:
-
-Due to Citus distributed architecture, the following limitations MUST be adhered to:
-
-1. **NO Triggers**: Citus does NOT support triggers on distributed tables. ALL trigger logic MUST be implemented in application code.
-
-2. **Immutable Functions in ON CONFLICT DO UPDATE**: When using `ON CONFLICT ... DO UPDATE`, you CANNOT use `now()` or other volatile functions in the UPDATE clause. MUST pass timestamp as parameter from application.
-   - ❌ FORBIDDEN: `ON CONFLICT ... DO UPDATE SET updated_at = now()`
-   - ✅ CORRECT: `ON CONFLICT ... DO UPDATE SET updated_at = $N` (parameterized timestamp)
-
-3. **Foreign Key Cascade Restrictions**:
-   - ✅ SUPPORTED: `ON DELETE CASCADE`, `ON DELETE RESTRICT`, `ON UPDATE CASCADE`, `ON UPDATE RESTRICT`
-   - ❌ NOT SUPPORTED: `ON DELETE SET NULL`, `ON DELETE SET DEFAULT`, `ON UPDATE SET NULL`, `ON UPDATE SET DEFAULT`
-
-4. **Index Requirements**:
-   - ALL indexes on distributed tables MUST include `organization_id` as the first column
-   - Partial indexes are supported but MUST include `organization_id` in the indexed columns
-
-5. **JOIN Requirements**:
-   - ALL JOINs between distributed tables MUST include `organization_id` in the join condition
-   - Example: `JOIN table2 ON (table1.organization_id, table1.ref_id) = (table2.organization_id, table2.id)`
-
-6. **Transaction Limitations**:
-   - Cross-shard transactions are supported but have performance implications
-   - Keep transactions within single organization (single shard) when possible
+**Available because the database is not sharded**: triggers on tenant tables, `now()` and other volatile functions inside `ON CONFLICT ... DO UPDATE`, and `ON DELETE SET NULL` / `ON DELETE SET DEFAULT` foreign keys all work and are permitted. Earlier versions of this constitution forbade them because Citus did; that prohibition is withdrawn. Existing application-managed equivalents (the department member counters, parameterized `updated_at` timestamps) are correct as written and do not need to be rewritten — but new code is not obliged to imitate them.
 
 **Schema Design Checklist**:
 - [ ] All tenant tables have composite primary key `(organization_id, id)`
 - [ ] All unique indexes start with `organization_id`
 - [ ] All foreign keys reference composite keys including `organization_id`
-- [ ] No triggers defined on distributed tables
-- [ ] No `ON DELETE SET NULL` or `ON DELETE SET DEFAULT` in foreign keys
-- [ ] No `now()` in `ON CONFLICT DO UPDATE` clauses
 - [ ] All JOINs include `organization_id` in the join condition
+- [ ] Every query pins `organization_id` to a parameter, or carries a `-- lint:cross-tenant` marker with a reason
 - [ ] New migration files added under `backend/database/migrations/` and validated via `./scripts/migrate.sh`
+- [ ] `backend/scripts/regen-schema.sh` re-run and `make lint-tenancy` green
 
 **Examples**:
 ```sql
--- ✅ CORRECT: Tenant table with UUID v7 PK and organization_id FK (Citus-ready)
+-- ✅ CORRECT: Tenant table with UUID v7 id and a composite primary key
 CREATE TABLE crm.contact (
-    id UUID PRIMARY KEY DEFAULT uuidv7(),
+    id UUID NOT NULL DEFAULT uuidv7(),
     organization_id UUID NOT NULL REFERENCES public.organization(id),
     name TEXT NOT NULL,
     email TEXT NOT NULL,
-    -- Primary key already includes organization_id implicitly for Citus
     CONSTRAINT pk_contact PRIMARY KEY (organization_id, id)
 );
 
--- ✅ CORRECT: Unique index includes organization_id for Citus sharding
+-- ✅ CORRECT: Unique index leads with organization_id
 CREATE UNIQUE INDEX IF NOT EXISTS idx_contact_org_email 
     ON crm.contact(organization_id, email);
+
+-- ❌ WRONG: uniqueness that spans tenants — unsplittable, and a leak surface
+CREATE UNIQUE INDEX idx_contact_email ON crm.contact(email);
 
 -- ✅ CORRECT: Composite foreign key referencing tenant identity table
 ALTER TABLE organization.employee
@@ -162,22 +156,19 @@ CREATE INDEX IF NOT EXISTS idx_employee_org_status
 SELECT * FROM crm.contact 
 WHERE organization_id = $1 AND id = $2;
 
--- ✅ CORRECT: ON CONFLICT DO UPDATE with parameterized timestamp
--- name: UpsertContact :one
-INSERT INTO crm.contact (id, organization_id, name, email)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, email) DO UPDATE
-SET name = EXCLUDED.name,
-    updated_at = $5  -- ✅ Parameter, not now()
-RETURNING *;
+-- ✅ CORRECT: JOIN carries organization_id, and the query pins it once
+-- name: ListContactsWithOwner :many
+SELECT c.*, e.given_name
+FROM crm.contact c
+JOIN organization.employee e
+  ON (c.organization_id, c.owner_employee_id) = (e.organization_id, e.id)
+WHERE c.organization_id = $1;
 
--- ❌ WRONG: ON CONFLICT DO UPDATE with now() function
-INSERT INTO crm.contact (id, organization_id, name, email)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (organization_id, email) DO UPDATE
-SET name = EXCLUDED.name,
-    updated_at = now()  -- ❌ Citus does not support volatile functions here
-RETURNING *;
+-- ❌ WRONG: join without organization_id — `make lint-tenancy` fails this
+SELECT c.*, e.given_name
+FROM crm.contact c
+JOIN organization.employee e ON c.owner_employee_id = e.id
+WHERE c.organization_id = $1;
 ```
 
 ```go
@@ -188,7 +179,7 @@ func (s *ContactService) GetContact(ctx context.Context, id dbuuid.UUID) (*Conta
 }
 ```
 
-**Rationale**: Multi-tenancy is non-negotiable for SaaS. Schema-first prevents drift between database and code, enforces tenant isolation at the data layer, and makes cross-service contracts explicit. Multi-tenant data breach = catastrophic business failure. Defense in depth: enforce isolation at connection pool layer (TenantPool/AdminPool), application layer (explicit `organization_id` filters), and API contract layer (context-derived tenant context prevents manipulation attacks).
+**Rationale**: Multi-tenancy is non-negotiable for SaaS. Schema-first prevents drift between database and code, enforces tenant isolation at the data layer, and makes cross-service contracts explicit. Multi-tenant data breach = catastrophic business failure. Defense in depth: enforce isolation at connection pool layer (TenantPool/AdminPool), application layer (explicit `organization_id` filters), API contract layer (context-derived tenant context prevents manipulation attacks), and CI (`make lint-tenancy` parses the SQL rather than trusting review to catch a missing predicate).
 
 ---
 
@@ -1195,9 +1186,9 @@ export async function sendMessage(params: SendMessageParams): Promise<SendMessag
 - UNLOGGED tables MUST be documented with data loss acceptance (e.g., "notification.active_connection - users reconnect on crash")
 
 **4. Database Sharding Awareness**:
-- PostgreSQL database MUST use Citus distributed architecture (see Principle I)
-- All queries MUST be shard-aware (include `organization_id` for co-location)
-- Cross-shard queries have performance implications (document justification)
+- PostgreSQL runs as a single node; no sharding extension is installed
+- All queries MUST nonetheless be shard-ready (pin `organization_id`, carry it through joins) per Principle I
+- Deliberately cross-tenant queries MUST run on `AdminPool` and carry a `-- lint:cross-tenant` marker stating why
 
 **5. Connection Management**:
 - Connection pools MUST be sized for N instances × concurrent requests
@@ -1315,7 +1306,7 @@ class NotificationClient {
 - **Operational Simplicity**: Database-backed state eliminates complex distributed coordination (no Redis cluster, no message queue dependencies)
 - **Failure Resilience**: UNLOGGED table data loss on crash is acceptable for reconnectable state (users simply reconnect)
 
-**Reference**: PostgreSQL UNLOGGED tables documentation, Citus distributed architecture (Principle I)
+**Reference**: PostgreSQL UNLOGGED tables documentation, tenancy discipline (Principle I)
 
 ---
 
@@ -1572,6 +1563,7 @@ exercised before release.
 - v5.12.0 (2026-03-18): Principle II expanded with Scenario-as-Contract mandate — test scenarios MUST be derived from spec User Stories and FR-XXX Requirements; every User Story and user-observable FR must have a scenario; scenario stubs reviewed and approved during planning (before tasks are created) constitute the behavioral contract; FR traceability comments required in test files; plan-template.md updated with traceability checks
 - v5.11.0 (2026-03-10): Added Principle XII (Architecture Documentation Maintenance) mandating that backend/docs/ architecture documents be consulted before architectural changes and updated after implementation + tests pass; added architecture doc checks to plan and tasks templates
 - v5.10.0 (2026-03-10): Principle II overhauled to scenario-first testing workflow — test scenarios MUST be composed and reviewed before implementation; added Definition of Done requiring entire test suite to pass; updated plan and tasks templates with scenario composition and review gates
+- v5.18.0 (2026-08-28): Removed Citus. The database is a single PostgreSQL node; the trigger, volatile-function and `ON DELETE SET NULL` prohibitions in Principle I are withdrawn. The tenancy discipline they were introduced to serve (organization_id on every tenant table, leading every unique key, carried through every join, pinned by every query) is retained for tenant isolation and shard-readiness, and is now machine-checked by `make lint-tenancy` instead of by review. Corrected the migration workflow: schema.sql is generated from the migrations, never hand-edited.
 - v5.9.0 (2026-03-07): Enhanced Principle VIII with NON-NEGOTIABLE rule mandating named constants instead of value literals; fixed 34 existing violations across 9 backend files; added NotificationPreference constants to notification package
 - v5.8.0 (2025-12-20): Enhanced Principle VIII (Cross-Stack Constant & Type Synchronization) with automated testing requirements and real bug example demonstrating the impact of constant mismatches between backend and frontend layers
 - v5.7.0 (2025-11-12): Added Principle XI (Distributed-First Architecture & Horizontal Scalability) to mandate distributed system design thinking from day one

@@ -200,7 +200,7 @@ func (b *pongBatcher) drain(pending []*pongRequest) {
 	}
 }
 
-// flush groups the batch by organization — Citus shard locality is mandatory, so a
+// flush groups the batch by organization — every statement stays inside one tenant, so a
 // cross-organization multi-row update is never issued — and resolves each waiter from
 // the RETURNING set of its group's statement.
 func (b *pongBatcher) flush(ctx context.Context, pending []*pongRequest) {

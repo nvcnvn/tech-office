@@ -13,7 +13,7 @@ every service, port, volume, secret and health check the system needs.
 
 | Stack profile | Services | Notes |
 | --- | --- | --- |
-| core (always) | `traefik`, `postgres`, `backend`, `web` | Traefik terminates TLS; PostgreSQL runs single-node Citus |
+| core (always) | `traefik`, `postgres`, `backend`, `web` | Traefik terminates TLS; PostgreSQL runs as a single node |
 | `voice` | `livekit` | signalling proxied, media direct to the node |
 | `processing` | `clamav`, `gotenberg`, `whisper` | malware scanning, office→PDF, transcription |
 | `backup` | `pgbackup` | pgBackRest base backups to S3/R2; WAL archiving is on the `postgres` service itself |

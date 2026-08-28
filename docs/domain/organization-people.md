@@ -8,8 +8,9 @@ Tenant creation, the employee roster, and the department hierarchy. Owned by
 
 ## Organization
 
-`public.organization` is the tenant root and the Citus distribution anchor — every
-distributed table is colocated with it.
+`public.organization` is the tenant root. Every tenant table carries an
+`organization_id` referencing it, leading every primary key and unique constraint;
+`make lint-tenancy` enforces that and the matching predicate in every query.
 
 | Column | Notes |
 |---|---|
@@ -94,8 +95,8 @@ derived from either (see [auth-identity.md](auth-identity.md#3-pin-org-managed-w
 strips it to a de-identified tombstone (`given_name` → `'Deleted'`, `family_name` →
 `'user'`, `email` → `''`, the rest NULL, `is_active` → false) so the organization keeps its
 messages, files, tasks and documents while they stop naming anybody. Roughly fifty columns
-across a dozen schemas FK to this row and Citus does not support `ON DELETE SET NULL`, so
-this is the only shape erasure can take here. See
+across a dozen schemas FK to this row, and nulling every one of them on delete would be a
+sprawling and fragile cascade, so this is the shape erasure takes here. See
 [compliance-safety.md](compliance-safety.md).
 
 ### Listing and cards

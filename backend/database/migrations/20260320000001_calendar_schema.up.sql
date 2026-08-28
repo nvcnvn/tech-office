@@ -49,8 +49,6 @@ CREATE TABLE IF NOT EXISTS calendar.event (
     CONSTRAINT chk_event_end_after_start CHECK (end_time > start_time OR all_day = TRUE)
 );
 
-SELECT create_distributed_table('calendar.event', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_event_org_organizer
     ON calendar.event(organization_id, organizer_id, start_time DESC);
 
@@ -96,8 +94,6 @@ CREATE TABLE IF NOT EXISTS calendar.recurrence_exception (
         UNIQUE (organization_id, series_id, original_start_time)
 );
 
-SELECT create_distributed_table('calendar.recurrence_exception', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_recurrence_exception_series
     ON calendar.recurrence_exception(organization_id, series_id, original_start_time);
 
@@ -126,8 +122,6 @@ CREATE TABLE IF NOT EXISTS calendar.attendee (
     CONSTRAINT uq_attendee_event_employee UNIQUE (organization_id, event_id, employee_id)
 );
 
-SELECT create_distributed_table('calendar.attendee', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_attendee_org_employee_event
     ON calendar.attendee(organization_id, employee_id, event_id);
 
@@ -152,8 +146,6 @@ CREATE TABLE IF NOT EXISTS calendar.resource (
 
     CONSTRAINT pk_calendar_resource PRIMARY KEY (organization_id, id)
 );
-
-SELECT create_distributed_table('calendar.resource', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_resource_org_type_active
     ON calendar.resource(organization_id, resource_type, is_active);
@@ -182,8 +174,6 @@ CREATE TABLE IF NOT EXISTS calendar.resource_acl (
     )
 );
 
-SELECT create_distributed_table('calendar.resource_acl', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_resource_acl_resource
     ON calendar.resource_acl(organization_id, resource_id);
 
@@ -210,8 +200,6 @@ CREATE TABLE IF NOT EXISTS calendar.resource_booking (
         REFERENCES organization.employee(organization_id, id) ON DELETE RESTRICT
 );
 
-SELECT create_distributed_table('calendar.resource_booking', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_resource_booking_resource_time
     ON calendar.resource_booking(organization_id, resource_id, start_time, end_time);
 
@@ -235,8 +223,6 @@ CREATE TABLE IF NOT EXISTS calendar.working_hours (
         REFERENCES organization.employee(organization_id, id) ON DELETE CASCADE,
     CONSTRAINT uq_working_hours_employee_day UNIQUE (organization_id, employee_id, day_of_week)
 );
-
-SELECT create_distributed_table('calendar.working_hours', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_working_hours_employee
     ON calendar.working_hours(organization_id, employee_id);
@@ -264,8 +250,6 @@ CREATE TABLE IF NOT EXISTS calendar.delegation (
     CONSTRAINT uq_delegation_owner_delegate UNIQUE (organization_id, owner_id, delegate_id)
 );
 
-SELECT create_distributed_table('calendar.delegation', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_delegation_delegate
     ON calendar.delegation(organization_id, delegate_id);
 
@@ -292,8 +276,6 @@ CREATE TABLE IF NOT EXISTS calendar.check_in (
         REFERENCES organization.employee(organization_id, id) ON DELETE RESTRICT,
     CONSTRAINT uq_check_in_event_employee UNIQUE (organization_id, event_id, employee_id)
 );
-
-SELECT create_distributed_table('calendar.check_in', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_check_in_event
     ON calendar.check_in(organization_id, event_id);
@@ -323,8 +305,6 @@ CREATE TABLE IF NOT EXISTS calendar.audit_entry (
     CONSTRAINT fk_audit_actor FOREIGN KEY (organization_id, actor_id)
         REFERENCES organization.employee(organization_id, id) ON DELETE RESTRICT
 );
-
-SELECT create_distributed_table('calendar.audit_entry', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_audit_entry_event_time
     ON calendar.audit_entry(organization_id, event_id, occurred_at DESC);
@@ -359,8 +339,6 @@ CREATE TABLE IF NOT EXISTS calendar.booking_link (
         REFERENCES organization.employee(organization_id, id) ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('calendar.booking_link', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_booking_link_token
     ON calendar.booking_link(organization_id, token)
     WHERE status = 'active';
@@ -391,8 +369,6 @@ CREATE TABLE IF NOT EXISTS calendar.event_reminder (
         FOREIGN KEY (organization_id, event_id)
         REFERENCES calendar.event(organization_id, id) ON DELETE CASCADE
 );
-
-SELECT create_distributed_table('calendar.event_reminder', 'organization_id', colocate_with => 'public.organization');
 
 CREATE INDEX IF NOT EXISTS idx_calendar_event_reminder_pending
     ON calendar.event_reminder(organization_id, fire_at)

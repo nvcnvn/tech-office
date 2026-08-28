@@ -94,7 +94,7 @@ LIMIT 1;
 -- name: UpsertUserPreference :one
 -- Insert or update user preference (theme mode, preference source)
 -- Handles first-time users and theme changes
--- Uses parameterized updated_at per Citus constraint (no now() in ON CONFLICT DO UPDATE)
+-- Takes updated_at as a parameter so the caller controls the timestamp.
 --
 -- Parameters:
 -- - $1 id (UUID): Record ID (uuidv7)
@@ -210,6 +210,7 @@ SET password_hash = $2,
     updated_at = now()
 WHERE user_id = $1;
 
+-- lint:cross-tenant answers which organizations a person belongs to, a question no single org context can
 -- name: GetUserOrganizations :many
 SELECT
     e.id,
@@ -251,6 +252,7 @@ ORDER BY r.is_system DESC, r.name ASC;
 
 -- === Invitation Queries ===
 
+-- lint:cross-tenant the invitation token is the credential and is presented before any org context exists
 -- name: GetInvitationByToken :one
 SELECT * FROM iam.invitation
 WHERE token = $1 AND status = 'pending';
@@ -275,6 +277,7 @@ INSERT INTO iam.invitation (
     $1, $2, $3, $4, $5, $6, $7
 ) RETURNING *;
 
+-- lint:cross-tenant accepts an invitation resolved by token, before the invitee has an org context
 -- name: UpdateInvitationStatus :exec
 UPDATE iam.invitation
 SET status = $2,
@@ -494,7 +497,7 @@ WHERE e.id = ANY($1::uuid[])
 
 -- name: GetLatestEmployeePresenceByIDs :many
 -- Fetch latest live presence for a batch of employees.
--- Reads only notification.active_connection to stay Citus-friendly.
+-- Reads only notification.active_connection, keeping the statement inside one tenant.
 SELECT DISTINCT ON (ac.employee_id)
     ac.employee_id,
     CASE
@@ -649,7 +652,7 @@ WHERE id = @id::uuid;
 
 -- name: ListOrgManagedAccounts :many
 -- Lists org-managed worker accounts with pagination.
--- Uses only distributed tables (co-located on organization_id) for Citus compatibility.
+-- Uses only tenant tables joined on organization_id.
 SELECT
     i.id,
     i.login_identifier,
@@ -730,7 +733,7 @@ WHERE u.id = ANY(@user_ids::uuid[]);
 -- name: GetLoginIdentifierBatch :many
 -- Batch-fetch login_identifier from iam.identity for a list of employee IDs.
 -- Used to enrich the employee listing with the login handle for org-managed workers.
--- Distributed on organization_id for Citus compatibility.
+-- Scoped by organization_id.
 SELECT i.id, i.login_identifier
 FROM iam.identity i
 WHERE i.organization_id = @organization_id::uuid
@@ -741,11 +744,12 @@ WHERE i.organization_id = @organization_id::uuid
 -- Account deletion (Feature 036)
 -- =============================================================================
 
+-- lint:cross-tenant see the note below; account-deletion path only, runs on AdminPool
 -- name: ListIdentityOrganizations :many
 -- Every organization a person belongs to.
 --
 -- This query has no organization_id predicate and therefore fans out across every
--- Citus shard. That is unavoidable: finding all of a person's organizations is
+-- tenant. That is unavoidable: finding all of a person's organizations is
 -- precisely the question no single tenant context can answer, so TenantPool — which
 -- enforces an organization_id context — cannot serve it. It MUST run on AdminPool.
 -- The cost is acceptable because it runs only on the account-deletion path, an
@@ -806,7 +810,7 @@ WHERE er.organization_id = $1
 -- still point at (FR-006, research.md R1).
 --
 -- The row is NOT deleted: roughly fifty columns across a dozen schemas reference an
--- employee id, and Citus does not support ON DELETE SET NULL, so deleting it would
+-- employee id, and nulling every one of them on delete would be a sprawling cascade, so deleting the row would
 -- mean either breaking every one of those references or a fifty-table sweep in a
 -- cross-shard transaction. Anonymising is one UPDATE and gives the erasure the
 -- stores require while leaving the employer's business records intact.
@@ -846,6 +850,7 @@ WHERE organization_id = $1 AND employee_id = $2;
 DELETE FROM iam.account_lockout
 WHERE organization_id = $1 AND identity_id = $2;
 
+-- lint:cross-tenant see the note below; account-deletion path only, runs on AdminPool
 -- name: CountRemainingIdentities :one
 -- Whether any organization membership remains for this person. Cross-shard for the
 -- same reason as ListIdentityOrganizations; runs on AdminPool.

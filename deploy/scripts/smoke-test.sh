@@ -17,7 +17,9 @@ fi
 check() {
 	local name="$1" url="$2" expect="$3"
 	local code
-	code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null || echo 000)"
+	# curl already prints 000 when it never got a response, so no `|| echo 000` here —
+	# that appended a second 000 and made every failure read as "000000".
+	code="$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$url" 2>/dev/null)" || true
 	if [ "$code" = "$expect" ]; then
 		echo "  ok   ${name} (${url}) -> ${code}"
 	else

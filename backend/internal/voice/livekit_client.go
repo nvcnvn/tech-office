@@ -86,6 +86,25 @@ func (c *LiveKitClient) EnsureRoom(ctx context.Context, opts RoomOptions) error 
 	return nil
 }
 
+// DeleteRoom disconnects everyone still in the room and removes it.
+//
+// Called when a call ends so a client that missed the live-only `voice_call_ended`
+// event is still dropped out of the call, and so a join token minted before the call
+// ended cannot be used to walk back into a room the business record says is over.
+// A room that is already gone is not an error - the call ended either way.
+func (c *LiveKitClient) DeleteRoom(ctx context.Context, roomName string) error {
+	if roomName == "" {
+		return nil
+	}
+	if _, err := c.roomService.DeleteRoom(ctx, &lklivekit.DeleteRoomRequest{Room: roomName}); err != nil {
+		if isLiveKitNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("delete livekit room: %w", err)
+	}
+	return nil
+}
+
 func (c *LiveKitClient) MintJoinCredentials(_ context.Context, opts JoinTokenOptions) (*JoinCredentials, error) {
 	publish, subscribe, data := true, true, true
 	grant := &lkauth.VideoGrant{
@@ -154,4 +173,9 @@ func (c *LiveKitClient) StartRoomRecording(ctx context.Context, opts RecordingOp
 func isLiveKitAlreadyExists(err error) bool {
 	message := strings.ToLower(err.Error())
 	return strings.Contains(message, "already") && strings.Contains(message, "exist")
+}
+
+func isLiveKitNotFound(err error) bool {
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "not found") || strings.Contains(message, "does not exist")
 }

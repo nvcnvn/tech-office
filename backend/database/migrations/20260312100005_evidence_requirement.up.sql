@@ -19,7 +19,5 @@ CREATE TABLE IF NOT EXISTS collaboration.evidence_requirement (
         ON DELETE CASCADE
 );
 
-SELECT create_distributed_table('collaboration.evidence_requirement', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_evidence_req_definition
     ON collaboration.evidence_requirement(organization_id, ritual_definition_id, position);

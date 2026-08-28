@@ -314,6 +314,22 @@ export function useVoiceCall(
               );
               void leaveVoiceCall(callId).catch(() => undefined);
             }
+            // The server deletes the LiveKit room when a call ends, so an
+            // unexpected disconnect is the terminal signal for a client that
+            // missed the live-only voice_call_ended event. Re-read the call
+            // rather than assuming it is over: in a group call the room can drop
+            // just this participant.
+            if (channelId) {
+              void getActiveVoiceCall(channelId)
+                .then((response) => {
+                  setCall(
+                    response.hasActiveCall
+                      ? toSessionSummary(response.call)
+                      : null,
+                  );
+                })
+                .catch(() => undefined);
+            }
           }
         })
         .on(RoomEvent.ParticipantConnected, () => {
@@ -381,7 +397,7 @@ export function useVoiceCall(
         throw nextError;
       }
     },
-    [detachRemoteAudio, disconnectMedia],
+    [channelId, detachRemoteAudio, disconnectMedia],
   );
 
   const connectMediaInBackground = useCallback(

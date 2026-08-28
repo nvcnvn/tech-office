@@ -225,7 +225,7 @@ ORDER BY id DESC;
 
 -- name: AdvanceAccountDeletionState :one
 -- The worker moves one record forward a state at a time. updated_at is passed as a
--- parameter because Citus forbids volatile functions in this position.
+-- parameter so the caller controls the timestamp and the write is reproducible in tests.
 UPDATE compliance.account_deletion
 SET state = $3,
     attempts = attempts + 1,

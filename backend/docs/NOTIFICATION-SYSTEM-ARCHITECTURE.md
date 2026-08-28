@@ -90,8 +90,9 @@ group. Each waiter is then resolved from that `RETURNING` set: present → `ACK`
 
 Three properties follow from that shape:
 
-- **Shard locality.** Grouping by organization keeps every statement single-shard, as
-  Citus requires. A cross-organization batch is never issued.
+- **Tenant locality.** Grouping by organization keeps every statement scoped to one
+  tenant, which bounds lock and index footprint and keeps the batch splittable if the
+  database is ever sharded. A cross-organization batch is never issued.
 - **Authoritative directives.** Because each handler awaits its own flush rather than
   firing and forgetting, it can say authoritatively that a connection no longer exists.
 - **No resurrection.** The statement is an `UPDATE`, never an upsert, so a pong arriving

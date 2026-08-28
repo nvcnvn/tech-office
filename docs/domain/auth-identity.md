@@ -157,8 +157,8 @@ The mechanism, the state machine and the cross-shard membership query are docume
 
 Feature 020 replaced role checks with permission checks. Roles are just named bundles.
 
-- `public.permission` — the canonical catalogue, a Citus **reference table** replicated to
-  every worker. IDs are `<domain>.<action>`, e.g. `chat.sendMessage`. Rows are immutable at
+- `public.permission` — the canonical catalogue, a global table with no `organization_id`.
+  IDs are `<domain>.<action>`, e.g. `chat.sendMessage`. Rows are immutable at
   runtime; only migrations change them. Domains: `iam`, `org`, `dept`, `chat`, `files`,
   `docs`, `collab`, `notif`, `calendar`, `pref`.
 - `public.default_role` + `public.default_role_permission` — the three system role

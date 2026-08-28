@@ -32,11 +32,5 @@ CREATE TABLE IF NOT EXISTS collaboration.ritual_definition_department_pool (
         UNIQUE (organization_id, ritual_definition_id, department_id)
 );
 
-SELECT create_distributed_table(
-    'collaboration.ritual_definition_department_pool',
-    'organization_id',
-    colocate_with => 'public.organization'
-);
-
 CREATE INDEX IF NOT EXISTS idx_rddp_definition
     ON collaboration.ritual_definition_department_pool(organization_id, ritual_definition_id);

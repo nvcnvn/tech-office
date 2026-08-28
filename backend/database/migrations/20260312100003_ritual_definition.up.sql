@@ -24,8 +24,6 @@ CREATE TABLE IF NOT EXISTS collaboration.ritual_definition (
         ON DELETE RESTRICT
 );
 
-SELECT create_distributed_table('collaboration.ritual_definition', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_ritual_def_project
     ON collaboration.ritual_definition(organization_id, project_id)
     WHERE is_archived = FALSE;

@@ -167,7 +167,28 @@ profile_enabled() {
 }
 
 swarm_active() {
-	[ "$(docker info --format '{{.Swarm.LocalState}}' 2>/dev/null)" = "active" ]
+	[ "$(docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null)" = "active" ]
+}
+
+# `docker stack deploy --detach=false` waits for convergence with no timeout of its
+# own, so one task that can never start — a port already bound on the node, an image
+# no node can pull — hangs the deploy forever and prints nothing useful. Cap it and
+# say which task is the problem. The spec is already in the swarm when the wait is
+# cut short, so swarm keeps converging; re-running deploy.sh picks up where it left off.
+stack_deploy() {
+	local limit="${DEPLOY_TIMEOUT:-900}" rc=0 timeout_bin
+	timeout_bin="$(command -v timeout || command -v gtimeout || true)"
+	${timeout_bin:+"$timeout_bin" "$limit"} \
+		docker stack deploy --detach=false "$@" || rc=$?
+	[ "$rc" -eq 0 ] && return 0
+
+	echo >&2
+	echo "tasks that are not running:" >&2
+	docker stack ps "$STACK_NAME" --no-trunc \
+		--format '  {{.Name}}  {{.CurrentState}}  {{.Error}}' 2>/dev/null \
+		| grep -v '  Running ' >&2 || true
+	[ "$rc" = 124 ] && die "docker stack deploy did not converge within ${limit}s"
+	die "docker stack deploy failed (exit ${rc})"
 }
 
 # Blocks until a service reports at least one running task, or fails loudly.

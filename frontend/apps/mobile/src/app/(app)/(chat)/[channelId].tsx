@@ -843,22 +843,33 @@ export default function ChannelScreen() {
 
   useEffect(() => voiceClient.subscribe(setVoiceSnapshot), []);
 
-  // React to unexpected disconnects from the VoiceClient (e.g. network drop).
-  // VoiceClient only records an error for disconnects that are genuine
-  // failures, so an ordinary hang-up never lands here. Clear the joined state
-  // and call the leave API so the backend doesn't keep a stale participant.
+  // React to disconnects from the VoiceClient. VoiceClient only records an error
+  // for disconnects that are genuine failures, so a network drop leaves the
+  // backend holding a stale participant and needs the leave API. A clean drop is
+  // the server having deleted the LiveKit room because the call ended - the one
+  // terminal signal that survives a missed live-only voice_call_ended event - so
+  // re-read the call either way rather than assuming it is over: in a channel
+  // call the room can drop just this participant.
   useEffect(() => {
-    if (
-      voiceSnapshot.connectionState === "disconnected" &&
-      voiceSnapshot.error &&
-      joinedVoiceCallId
-    ) {
-      const callId = joinedVoiceCallId;
-      setJoinedVoiceCallId(null);
+    if (voiceSnapshot.connectionState !== "disconnected" || !joinedVoiceCallId) {
+      return;
+    }
+    const callId = joinedVoiceCallId;
+    setJoinedVoiceCallId(null);
+    if (voiceSnapshot.error) {
       setVoiceError(voiceSnapshot.error);
       void leaveVoiceCall(callId).catch(() => undefined);
     }
-  }, [voiceSnapshot.connectionState, voiceSnapshot.error]);
+    if (channelId) {
+      void getActiveVoiceCall(channelId)
+        .then((response) => {
+          setActiveVoiceCall(
+            response.hasActiveCall ? toMobileVoiceCall(response.call) : null,
+          );
+        })
+        .catch(() => undefined);
+    }
+  }, [channelId, joinedVoiceCallId, voiceSnapshot.connectionState, voiceSnapshot.error]);
 
   useEffect(() => {
     if (!channelId) {

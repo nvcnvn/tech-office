@@ -38,8 +38,6 @@ CREATE TABLE IF NOT EXISTS collaboration.evidence_submission (
         ON DELETE RESTRICT
 );
 
-SELECT create_distributed_table('collaboration.evidence_submission', 'organization_id', colocate_with => 'public.organization');
-
 CREATE INDEX IF NOT EXISTS idx_evidence_sub_task
     ON collaboration.evidence_submission(organization_id, task_id);
 

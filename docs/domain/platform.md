@@ -9,7 +9,7 @@ thing is tested.
 ## Shape
 
 A single Go binary (`backend/cmd`) serving Connect-RPC over HTTP/1.1 and h2c, backed by
-one PostgreSQL cluster running Citus. The frontend is a pnpm workspace with a Next.js web
+one single-node PostgreSQL instance. The frontend is a pnpm workspace with a Next.js web
 app, an Expo mobile app, and shared packages (`apis`, `rpc`, `notifications`, `links`,
 `theme-tokens`, `validations`).
 
@@ -23,7 +23,7 @@ Connect layer   (per domain: owns pools, proto↔DB conversion, transactions)
   ▼
 Logic layer     (per domain: business rules, pool-agnostic, injected as interfaces)
   ▼
-sqlc queries → PostgreSQL + Citus
+sqlc queries → PostgreSQL
 ```
 
 The two-layer split (Connect layer / Logic layer) is Constitution principle III. Logic
@@ -34,15 +34,14 @@ decides transaction scope.
 
 Tenant isolation is **application-enforced, not RLS-enforced**.
 
-- Nearly every table carries `organization_id` and a composite primary key
-  `(organization_id, id)`, and is distributed with
-  `create_distributed_table(..., 'organization_id', colocate_with => 'public.organization')`.
-  Colocation is what lets multi-table joins stay single-shard.
-- Reference tables (`public.permission`, `public.default_role`,
-  `public.default_role_permission`, `notification.active_listener`) are replicated to every
-  worker instead of sharded.
-- Global, non-distributed tables: `iam.user`, `iam.sso_identity`, `iam.password_credential`,
-  `iam.session`, `iam.password_reset_token`. A user is global; membership is per-org.
+- 84 of the 100 tables carry `organization_id` and a composite primary key
+  `(organization_id, id)`. Every unique constraint on them leads with `organization_id`,
+  and every join between two of them carries it in the join condition.
+- The remaining 16 are global, with no `organization_id`: `public.permission`,
+  `public.default_role`, `public.default_role_permission`, `public.organization`,
+  `notification.active_listener`, the `flows.*` engine tables, and the account tables
+  `iam.user`, `iam.sso_identity`, `iam.password_credential`, `iam.session`,
+  `iam.password_reset_token`. A user is global; membership is per-org.
 - `iam.user.id`, `iam.identity.id` and `organization.employee.id` are **the same UUID** for
   a person. There is no user↔organization mapping table; enumerating somebody's
   memberships is `SELECT organization_id FROM iam.identity WHERE id = $1`, which has no
@@ -60,6 +59,27 @@ Two pools, both in `backend/database/pool.go`:
 authenticated org context exists; the `organization_id` predicate in each query is what
 actually scopes the data. A query that forgets it is a tenant leak, and no database-level
 backstop will catch it.
+
+**`make lint-tenancy` is that backstop.** `backend/tools/tenancylint` parses `schema.sql`
+and all 517 sqlc queries with the real PostgreSQL parser and fails the build unless every
+tenant table in a statement is transitively connected, through `organization_id`
+equalities, to an `organization_id = <parameter>` predicate. That one rule catches both a
+missing filter and a join that forgot to carry `organization_id`. Tenant tables are
+discovered from the schema — a table with an `organization_id` column is a tenant table —
+so there is no list to keep in sync.
+
+Eleven queries are legitimately cross-tenant (scheduler sweeps, the delivery retry worker,
+the account-deletion path) and carry a `-- lint:cross-tenant <reason>` marker above their
+`-- name:` line. They must run on `AdminPool`.
+
+The database is a **single PostgreSQL node** and is not sharded — an earlier single-node
+Citus deployment was removed in August 2026, since it imposed real constraints (no
+triggers, no `now()` in `ON CONFLICT DO UPDATE`, no `ON DELETE SET NULL`) while delivering
+nothing at one node. The discipline above outlives it: it is what keeps tenants isolated
+today, and what would let the database be split later without a data migration. Two known
+exceptions are recorded in `knownUniqueGaps` in the linter — `iam.invitation`'s primary key
+and token uniqueness are global, because an invitation is resolved by token before the
+invitee has any org context.
 
 ## Authentication and authorization
 
@@ -170,8 +190,7 @@ translate it back to Kubernetes themselves.
 
 **Shape.** 1–7 machines, placement by node label
 (`techoffice.{edge,db,app,voice,processing,obs}`), Traefik terminating TLS in front of
-web, backend and the LiveKit signalling socket, and one Citus-enabled PostgreSQL
-instance. WebRTC media bypasses the proxy entirely, because ICE needs the client's real
+web, backend and the LiveKit signalling socket, and one PostgreSQL instance. WebRTC media bypasses the proxy entirely, because ICE needs the client's real
 address: `LIVEKIT_TRANSPORT=mux` publishes one muxed UDP port in host mode, and
 `LIVEKIT_TRANSPORT=host` puts LiveKit on the voice node's own network stack so it can
 own a real UDP range. Stack files are split by
@@ -190,8 +209,8 @@ Prometheus metrics, so those alerts are infrastructure-level plus Traefik's per-
 
 **Images** are published to `ghcr.io/nvcnvn/` by `.github/workflows/publish-images.yml`:
 `tech-office-backend` and `tech-office-backend-migrate` for both architectures,
-`tech-office-postgres` for amd64 only because it compiles Citus from source. The web
-image is a special case: Next.js inlines `NEXT_PUBLIC_*` at build time, so an image is
+`tech-office-postgres` for both architectures too, now that no extension is built from
+source. The web image is a special case: Next.js inlines `NEXT_PUBLIC_*` at build time, so an image is
 welded to one deployment's hostnames. CI publishes exactly one —
 `tech-office-web-transformar`, for the project's own hosted site — under a name that
 cannot be mistaken for a generic image, and every other deployment builds its own with
@@ -201,7 +220,7 @@ Backups are pgBackRest to S3/R2: weekly full, daily differential, hourly increme
 plus continuous WAL archiving via `archive_command`, compressed and encrypted
 client-side. That combination is what makes point-in-time recovery possible;
 `deploy/scripts/verify-restore.sh` restores the latest backup into a throwaway cluster
-and asserts the schema, Citus shard metadata and table contents came back, which is the
+and asserts the schema, migration version and table contents came back, which is the
 only evidence that any of it works. There is deliberately no PostgreSQL failover —
 recovery is restore-from-object-storage.
 

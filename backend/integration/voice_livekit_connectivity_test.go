@@ -108,6 +108,34 @@ func TestVoiceLiveKitConnectivity(t *testing.T) {
 			assert.Equal(t, http.StatusOK, r2.StatusCode, "bob's token must be valid")
 		})
 	})
+
+	t.Run("when the call ends", func(t *testing.T) {
+		call, credentials := w.startVoiceCall(alice, channelID)
+		require.NotNil(t, credentials)
+
+		roomClient := lksdk.NewRoomServiceClient(cfg.LiveKitURL, cfg.LiveKitAPIKey, cfg.LiveKitAPISecret)
+		rooms, err := roomClient.ListRooms(context.Background(), &lklivekit.ListRoomsRequest{
+			Names: []string{credentials.RoomName},
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, rooms.Rooms, "the room must exist before the call ends")
+
+		w.endVoiceCall(alice, call.Id)
+
+		// Room teardown is the only terminal signal that does not depend on the
+		// client being reachable: voice_call_ended is live_only and never replayed,
+		// so a caller whose stream was down when the callee declined would otherwise
+		// sit in a room forever with the UI still showing a call in progress.
+		t.Run("the media room is torn down so nobody is left in a call that is over", func(t *testing.T) {
+			require.Eventually(t, func() bool {
+				remaining, err := roomClient.ListRooms(context.Background(), &lklivekit.ListRoomsRequest{
+					Names: []string{credentials.RoomName},
+				})
+				return err == nil && len(remaining.Rooms) == 0
+			}, 5*time.Second, 200*time.Millisecond,
+				"room %q must be deleted when the call ends", credentials.RoomName)
+		})
+	})
 }
 
 // wsToHTTP converts a ws:// or wss:// URL to the equivalent http:// or https://.

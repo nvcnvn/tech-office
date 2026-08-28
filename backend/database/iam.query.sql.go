@@ -101,7 +101,7 @@ type AnonymiseEmployeeParams struct {
 // still point at (FR-006, research.md R1).
 //
 // The row is NOT deleted: roughly fifty columns across a dozen schemas reference an
-// employee id, and Citus does not support ON DELETE SET NULL, so deleting it would
+// employee id, and nulling every one of them on delete would be a sprawling cascade, so deleting the row would
 // mean either breaking every one of those references or a fifty-table sweep in a
 // cross-shard transaction. Anonymising is one UPDATE and gives the erasure the
 // stores require while leaving the employer's business records intact.
@@ -326,6 +326,7 @@ FROM iam.identity
 WHERE id = $1
 `
 
+// lint:cross-tenant see the note below; account-deletion path only, runs on AdminPool
 // Whether any organization membership remains for this person. Cross-shard for the
 // same reason as ListIdentityOrganizations; runs on AdminPool.
 func (q *Queries) CountRemainingIdentities(ctx context.Context, db DBTX, id dbuuid.UUID) (int32, error) {
@@ -1297,6 +1298,7 @@ WHERE token = $1 AND status = 'pending'
 `
 
 // === Invitation Queries ===
+// lint:cross-tenant the invitation token is the credential and is presented before any org context exists
 func (q *Queries) GetInvitationByToken(ctx context.Context, db DBTX, token string) (*IamInvitation, error) {
 	row := db.QueryRow(ctx, getInvitationByToken, token)
 	var i IamInvitation
@@ -1376,7 +1378,7 @@ type GetLatestEmployeePresenceByIDsRow struct {
 }
 
 // Fetch latest live presence for a batch of employees.
-// Reads only notification.active_connection to stay Citus-friendly.
+// Reads only notification.active_connection, keeping the statement inside one tenant.
 func (q *Queries) GetLatestEmployeePresenceByIDs(ctx context.Context, db DBTX, arg *GetLatestEmployeePresenceByIDsParams) ([]*GetLatestEmployeePresenceByIDsRow, error) {
 	rows, err := db.Query(ctx, getLatestEmployeePresenceByIDs, arg.OrganizationID, arg.EmployeeIds, arg.ResponsiveWindowSeconds)
 	if err != nil {
@@ -1417,7 +1419,7 @@ type GetLoginIdentifierBatchRow struct {
 
 // Batch-fetch login_identifier from iam.identity for a list of employee IDs.
 // Used to enrich the employee listing with the login handle for org-managed workers.
-// Distributed on organization_id for Citus compatibility.
+// Scoped by organization_id.
 func (q *Queries) GetLoginIdentifierBatch(ctx context.Context, db DBTX, arg *GetLoginIdentifierBatchParams) ([]*GetLoginIdentifierBatchRow, error) {
 	rows, err := db.Query(ctx, getLoginIdentifierBatch, arg.OrganizationID, arg.IdentityIds)
 	if err != nil {
@@ -1836,6 +1838,7 @@ type GetUserOrganizationsRow struct {
 	RoleNames      []string           `json:"role_names"`
 }
 
+// lint:cross-tenant answers which organizations a person belongs to, a question no single org context can
 func (q *Queries) GetUserOrganizations(ctx context.Context, db DBTX, id dbuuid.UUID) ([]*GetUserOrganizationsRow, error) {
 	rows, err := db.Query(ctx, getUserOrganizations, id)
 	if err != nil {
@@ -2328,10 +2331,11 @@ ORDER BY organization_id
 // =============================================================================
 // Account deletion (Feature 036)
 // =============================================================================
+// lint:cross-tenant see the note below; account-deletion path only, runs on AdminPool
 // Every organization a person belongs to.
 //
 // This query has no organization_id predicate and therefore fans out across every
-// Citus shard. That is unavoidable: finding all of a person's organizations is
+// tenant. That is unavoidable: finding all of a person's organizations is
 // precisely the question no single tenant context can answer, so TenantPool — which
 // enforces an organization_id context — cannot serve it. It MUST run on AdminPool.
 // The cost is acceptable because it runs only on the account-deletion path, an
@@ -2389,7 +2393,7 @@ type ListOrgManagedAccountsRow struct {
 }
 
 // Lists org-managed worker accounts with pagination.
-// Uses only distributed tables (co-located on organization_id) for Citus compatibility.
+// Uses only tenant tables joined on organization_id.
 func (q *Queries) ListOrgManagedAccounts(ctx context.Context, db DBTX, arg *ListOrgManagedAccountsParams) ([]*ListOrgManagedAccountsRow, error) {
 	rows, err := db.Query(ctx, listOrgManagedAccounts, arg.OrganizationID, arg.CursorID, arg.ResultLimit)
 	if err != nil {
@@ -2673,6 +2677,7 @@ type UpdateInvitationStatusParams struct {
 	AcceptedAt pgtype.Timestamptz `json:"accepted_at"`
 }
 
+// lint:cross-tenant accepts an invitation resolved by token, before the invitee has an org context
 func (q *Queries) UpdateInvitationStatus(ctx context.Context, db DBTX, arg *UpdateInvitationStatusParams) error {
 	_, err := db.Exec(ctx, updateInvitationStatus, arg.ID, arg.Status, arg.AcceptedAt)
 	return err
@@ -2823,7 +2828,7 @@ type UpsertUserPreferenceParams struct {
 
 // Insert or update user preference (theme mode, preference source)
 // Handles first-time users and theme changes
-// Uses parameterized updated_at per Citus constraint (no now() in ON CONFLICT DO UPDATE)
+// Takes updated_at as a parameter so the caller controls the timestamp.
 //
 // Parameters:
 // - $1 id (UUID): Record ID (uuidv7)
