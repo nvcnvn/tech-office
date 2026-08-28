@@ -199,9 +199,16 @@ path routes through, rather than from each caller. That is what makes it impossi
 new way of ending a call to forget to stop the phones. The webhook path and the ring
 timeout sweep call it too.
 
-`answered_elsewhere` fans out to *all* of that person's devices, including the one that
-answered — the backend knows which person answered, not which handset. The answering
-device recognises the call it is in and ignores the wake.
+**The handset that acted is excluded from the terminal fan-out.** `JoinVoiceCall`,
+`LeaveVoiceCall`, `EndVoiceCall` and `RespondToVoiceCallInvite` each carry a
+`device_identifier`, and the device that named itself is skipped, recorded as
+`acting_device_excluded` on its `delivery_attempt` row. This is not tidiness: the iOS
+client module reports *every* call wake to CallKit as a new incoming call before
+JavaScript runs, so a terminal wake sent back to the phone that just answered or declined
+rings it a second time and no client-side check can prevent it. The person's *other*
+devices are still stopped, which is why the exclusion is per device rather than per
+person. Clients that do not present calls natively send an empty identifier and are
+unaffected.
 
 **Answering and declining from the system UI go through the invitation, not the call.**
 The `incoming` wake carries the pending `invitationId`, so the lock screen's answer calls

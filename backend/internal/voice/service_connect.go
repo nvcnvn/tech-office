@@ -108,7 +108,7 @@ func (s *ServiceConnect) JoinVoiceCall(
 	var credentials *rpcv1.VoiceJoinCredentials
 	if err := txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
 		var logicErr error
-		call, credentials, logicErr = s.Logic.JoinVoiceCall(ctx, tx, orgID, employeeID, callID)
+		call, credentials, logicErr = s.Logic.JoinVoiceCall(ctx, tx, orgID, employeeID, callID, req.Msg.GetDeviceIdentifier())
 		return logicErr
 	}); err != nil {
 		return nil, handleVoiceError(err, map[string]string{"callId": req.Msg.GetCallId()})
@@ -132,7 +132,7 @@ func (s *ServiceConnect) LeaveVoiceCall(
 	var call *rpcv1.VoiceCallSession
 	if err := txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
 		var logicErr error
-		call, logicErr = s.Logic.LeaveVoiceCall(ctx, tx, orgID, employeeID, callID)
+		call, logicErr = s.Logic.LeaveVoiceCall(ctx, tx, orgID, employeeID, callID, req.Msg.GetDeviceIdentifier())
 		return logicErr
 	}); err != nil {
 		return nil, handleVoiceError(err, map[string]string{"callId": req.Msg.GetCallId()})
@@ -156,7 +156,7 @@ func (s *ServiceConnect) EndVoiceCall(
 	var call *rpcv1.VoiceCallSession
 	if err := txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
 		var logicErr error
-		call, logicErr = s.Logic.EndVoiceCall(ctx, tx, orgID, employeeID, callID)
+		call, logicErr = s.Logic.EndVoiceCall(ctx, tx, orgID, employeeID, callID, req.Msg.GetDeviceIdentifier())
 		return logicErr
 	}); err != nil {
 		return nil, handleVoiceError(err, map[string]string{"callId": req.Msg.GetCallId()})
@@ -225,7 +225,7 @@ func (s *ServiceConnect) RespondToVoiceCallInvite(
 	var credentials *rpcv1.VoiceJoinCredentials
 	if err := txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
 		var logicErr error
-		invitation, credentials, logicErr = s.Logic.RespondToVoiceCallInvite(ctx, tx, orgID, employeeID, invitationID, req.Msg.GetResponse())
+		invitation, credentials, logicErr = s.Logic.RespondToVoiceCallInvite(ctx, tx, orgID, employeeID, invitationID, req.Msg.GetResponse(), req.Msg.GetDeviceIdentifier())
 		return logicErr
 	}); err != nil {
 		return nil, handleVoiceError(err, map[string]string{"invitationId": req.Msg.GetInvitationId()})

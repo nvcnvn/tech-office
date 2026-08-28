@@ -115,6 +115,7 @@ an alert push. Three rules are inverted for this class:
 | a `sse_receipt_confirmed` cancels it | **never cancelled by a receipt** — the phone must ring natively even with a tab open |
 | DND and muted domains suppress it | **rings through both**; `suppressed_by_preference` must never appear on a `call_wake` row |
 | one attempt per recipient | **one attempt per device per event** |
+| every target is sent to | **the device that caused the ending is skipped**, reason `acting_device_excluded` |
 
 The window is already zero without special handling: the incoming-call notification is
 priority 0, and `rescuePushWindowForRequest` returns 0 for priority 0.

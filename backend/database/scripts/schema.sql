@@ -2762,7 +2762,7 @@ CREATE TABLE notification.delivery_attempt (
     instance_id text,
     metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
     CONSTRAINT delivery_attempt_channel_valid CHECK ((channel = ANY (ARRAY['sse'::text, 'push'::text, 'replay'::text, 'call_wake'::text]))),
-    CONSTRAINT delivery_attempt_reason_valid CHECK (((reason IS NULL) OR (reason = ANY (ARRAY['live_only_policy'::text, 'no_active_context_match'::text, 'no_push_target'::text, 'recipient_ineligible'::text, 'recipient_online'::text, 'suppressed_by_preference'::text, 'sse_receipt_confirmed'::text, 'acknowledged_before_fallback'::text, 'connection_unresponsive'::text, 'provider_error'::text, 'delivery_error'::text, 'no_call_wake_target'::text, 'native_tier_unavailable'::text, 'call_already_ended'::text])))),
+    CONSTRAINT delivery_attempt_reason_valid CHECK (((reason IS NULL) OR (reason = ANY (ARRAY['live_only_policy'::text, 'no_active_context_match'::text, 'no_push_target'::text, 'recipient_ineligible'::text, 'recipient_online'::text, 'suppressed_by_preference'::text, 'sse_receipt_confirmed'::text, 'acknowledged_before_fallback'::text, 'connection_unresponsive'::text, 'provider_error'::text, 'delivery_error'::text, 'no_call_wake_target'::text, 'native_tier_unavailable'::text, 'call_already_ended'::text, 'acting_device_excluded'::text])))),
     CONSTRAINT delivery_attempt_status_valid CHECK ((attempt_status = ANY (ARRAY['queued'::text, 'sent'::text, 'skipped'::text, 'failed'::text])))
 );
 
@@ -2792,7 +2792,7 @@ COMMENT ON COLUMN notification.delivery_attempt.attempt_status IS 'Outcome of th
 -- Name: COLUMN delivery_attempt.reason; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.delivery_attempt.reason IS 'Why this attempt was queued, sent, skipped, or failed. Values: live_only_policy, no_active_context_match, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, provider_error, delivery_error, no_call_wake_target, native_tier_unavailable, call_already_ended.';
+COMMENT ON COLUMN notification.delivery_attempt.reason IS 'Why this attempt was queued, sent, skipped, or failed. Values: live_only_policy, no_active_context_match, no_push_target, recipient_ineligible, recipient_online, suppressed_by_preference, sse_receipt_confirmed, acknowledged_before_fallback, connection_unresponsive, provider_error, delivery_error, no_call_wake_target, native_tier_unavailable, call_already_ended, acting_device_excluded.';
 
 
 --

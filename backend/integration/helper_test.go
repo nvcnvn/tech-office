@@ -686,7 +686,14 @@ func (w *testWorld) inviteToVoiceCallError(actor testUser, callID string, employ
 
 func (w *testWorld) respondToVoiceCallInvite(actor testUser, invitationID string, response rpcv1.VoiceInviteResponse) (*rpcv1.VoiceCallInvitation, *rpcv1.VoiceJoinCredentials) {
 	w.t.Helper()
-	req := connect.NewRequest(&rpcv1.RespondToVoiceCallInviteRequest{InvitationId: invitationID, Response: response})
+	return w.respondToVoiceCallInviteFromDevice(actor, invitationID, response, "")
+}
+
+// respondToVoiceCallInviteFromDevice names the handset that answered or declined, which
+// is what keeps the resulting terminal wake from being sent back to it.
+func (w *testWorld) respondToVoiceCallInviteFromDevice(actor testUser, invitationID string, response rpcv1.VoiceInviteResponse, deviceIdentifier string) (*rpcv1.VoiceCallInvitation, *rpcv1.VoiceJoinCredentials) {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.RespondToVoiceCallInviteRequest{InvitationId: invitationID, Response: response, DeviceIdentifier: deviceIdentifier})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	resp, err := w.voice.RespondToVoiceCallInvite(context.Background(), req)
 	require.NoError(w.t, err)

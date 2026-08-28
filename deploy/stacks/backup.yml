@@ -1,0 +1,63 @@
+# Backup profile: pgBackRest to S3/R2.
+#
+# Runs beside Postgres on the db node, reads PGDATA directly and talks to the server
+# over the unix socket, so backups cost the cluster only a checkpoint. WAL archiving
+# is configured on the postgres service itself (core.yml) — this service takes the
+# base backups, expires old ones, and publishes freshness metrics.
+version: "3.8"
+
+services:
+  pgbackup:
+    image: ${REGISTRY:-}${REGISTRY:+/}tech-office-postgres:${RELEASE_TAG}
+    user: postgres
+    entrypoint: ["/bin/bash", "/usr/local/bin/backup-loop.sh"]
+    environment:
+      PGBACKREST_CONFIG: /run/secrets/pgbackrest.conf
+      PGUSER: ${POSTGRES_USER}
+      PGDATABASE: ${POSTGRES_DB}
+      BACKUP_FULL_ON_WEEKDAY: ${BACKUP_FULL_ON_WEEKDAY}
+      BACKUP_FULL_AT_HOUR: ${BACKUP_FULL_AT_HOUR}
+      BACKUP_DIFF_AT_HOUR: ${BACKUP_DIFF_AT_HOUR}
+      BACKUP_INCREMENTAL_ENABLED: ${BACKUP_INCREMENTAL_ENABLED}
+    networks: [internal]
+    volumes:
+      # Read-only: pgBackRest only ever reads the data directory during a backup.
+      - {type: volume, source: pgdata, target: /var/lib/postgresql/data, read_only: true}
+      - pgsocket:/var/run/postgresql
+      - pgbackrest-lock:/var/lib/pgbackrest-lock
+      - metrics-textfile:/metrics
+    secrets: [pgbackrest.conf]
+    configs:
+      - {source: backup_loop, target: /usr/local/bin/backup-loop.sh}
+    logging:
+      driver: json-file
+      options: {max-size: "20m", max-file: "5"}
+    deploy:
+      replicas: 1
+      placement:
+        # Must be the same node as postgres: it reads that node's data directory.
+        constraints: [node.labels.techoffice.db == true]
+      restart_policy: {condition: any, delay: 30s}
+      resources:
+        limits: {memory: 1G}
+
+networks:
+  internal:
+    name: techoffice_internal
+    external: true
+
+volumes:
+  pgdata: {}
+  pgsocket: {}
+  pgbackrest-lock: {}
+  metrics-textfile: {}
+
+configs:
+  backup_loop:
+    name: techoffice_backuploop_${CONFIG_VERSION}
+    file: ../config/backup/backup-loop.sh
+
+secrets:
+  pgbackrest.conf:
+    name: techoffice_pgbackrest_${SECRET_VERSION}
+    file: ../secrets/pgbackrest.conf

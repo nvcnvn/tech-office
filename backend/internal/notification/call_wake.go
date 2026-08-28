@@ -45,11 +45,11 @@ const callWakeSendBuffer = 256
 //
 // MUST align with the CallWakePayload type in frontend/packages/apis/src/push-tokens.ts.
 type CallWakePayload struct {
-	Event             string `json:"event"`
-	CallID            string `json:"callId"`
-	OrganizationID    string `json:"organizationId"`
-	Sequence          int64  `json:"sequence"`
-	ChannelID         string `json:"channelId,omitempty"`
+	Event          string `json:"event"`
+	CallID         string `json:"callId"`
+	OrganizationID string `json:"organizationId"`
+	Sequence       int64  `json:"sequence"`
+	ChannelID      string `json:"channelId,omitempty"`
 	// InvitationID lets a device decline through the invitation path rather than
 	// ending the call, so a native decline produces the same records a in-app decline
 	// does (FR-020). Incoming wakes only.
@@ -168,6 +168,11 @@ type CallWakeRequest struct {
 	CallerDisplayName string
 	CallerEmployeeID  dbuuid.UUID
 	WorkspaceName     string
+	// ExcludeDeviceIdentifier names a device that must not be sent this wake, because it
+	// is the one that caused the event. The client module reports every call wake to
+	// CallKit as a new incoming call before JavaScript runs, so a terminal wake sent
+	// back to the handset that just answered or declined rings it a second time.
+	ExcludeDeviceIdentifier string
 	// InvitationID is the pending invite this wake rings for. Carried so a device that
 	// declines from the lock screen can answer the invitation instead of ending the
 	// call, which is what makes a native decline record a decline rather than a cancel.
@@ -489,6 +494,15 @@ func groupCallWakeDevices(rows []*database.GetEmployeeCallWakeTokensRow) []callW
 // Everything else is tier B: today's alert ring, which the fallback path sends through
 // PushLogic exactly as it does now. A device is never planned onto both.
 func (d *callWakeDispatcher) planDevice(device callWakeDevice, req *CallWakeRequest, payload *CallWakePayload) (*callWakeSend, string) {
+	// The handset that answered, declined or hung up has already closed its own call and
+	// must not be told again: the iOS client module reports every call wake to CallKit as
+	// a new incoming call before JavaScript runs, so this wake would ring it a second
+	// time. Recorded as a skip rather than dropped silently, so the guarantee of one row
+	// per device per event still holds.
+	if req.ExcludeDeviceIdentifier != "" && device.deviceIdentifier == req.ExcludeDeviceIdentifier {
+		return nil, FallbackReasonActingDeviceExcluded
+	}
+
 	base := callWakeSend{
 		orgID:       req.OrganizationID,
 		employeeID:  req.EmployeeID,

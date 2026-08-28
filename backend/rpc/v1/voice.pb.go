@@ -675,10 +675,16 @@ func (x *GetActiveVoiceCallResponse) GetHasActiveCall() bool {
 }
 
 type JoinVoiceCallRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CallId        string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CallId string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	// Which physical device is joining. Set by clients that present calls through the
+	// operating system, so the answered_elsewhere wake that stops this person's other
+	// phones is not also sent back to the one that answered — on iOS every call wake is
+	// reported to CallKit as a new incoming call, so a wake sent to the answering device
+	// rings it again. Empty from clients that do not present calls natively.
+	DeviceIdentifier string `protobuf:"bytes,2,opt,name=device_identifier,json=deviceIdentifier,proto3" json:"device_identifier,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *JoinVoiceCallRequest) Reset() {
@@ -714,6 +720,13 @@ func (*JoinVoiceCallRequest) Descriptor() ([]byte, []int) {
 func (x *JoinVoiceCallRequest) GetCallId() string {
 	if x != nil {
 		return x.CallId
+	}
+	return ""
+}
+
+func (x *JoinVoiceCallRequest) GetDeviceIdentifier() string {
+	if x != nil {
+		return x.DeviceIdentifier
 	}
 	return ""
 }
@@ -771,10 +784,13 @@ func (x *JoinVoiceCallResponse) GetJoinCredentials() *VoiceJoinCredentials {
 }
 
 type LeaveVoiceCallRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CallId        string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CallId string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	// Which physical device left. Excluded from the terminal wake fan-out for the same
+	// reason as JoinVoiceCallRequest.device_identifier.
+	DeviceIdentifier string `protobuf:"bytes,2,opt,name=device_identifier,json=deviceIdentifier,proto3" json:"device_identifier,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *LeaveVoiceCallRequest) Reset() {
@@ -810,6 +826,13 @@ func (*LeaveVoiceCallRequest) Descriptor() ([]byte, []int) {
 func (x *LeaveVoiceCallRequest) GetCallId() string {
 	if x != nil {
 		return x.CallId
+	}
+	return ""
+}
+
+func (x *LeaveVoiceCallRequest) GetDeviceIdentifier() string {
+	if x != nil {
+		return x.DeviceIdentifier
 	}
 	return ""
 }
@@ -859,10 +882,13 @@ func (x *LeaveVoiceCallResponse) GetCall() *VoiceCallSession {
 }
 
 type EndVoiceCallRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CallId        string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CallId string                 `protobuf:"bytes,1,opt,name=call_id,json=callId,proto3" json:"call_id,omitempty"`
+	// Which physical device ended the call. Excluded from the terminal wake fan-out for
+	// the same reason as JoinVoiceCallRequest.device_identifier.
+	DeviceIdentifier string `protobuf:"bytes,2,opt,name=device_identifier,json=deviceIdentifier,proto3" json:"device_identifier,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *EndVoiceCallRequest) Reset() {
@@ -898,6 +924,13 @@ func (*EndVoiceCallRequest) Descriptor() ([]byte, []int) {
 func (x *EndVoiceCallRequest) GetCallId() string {
 	if x != nil {
 		return x.CallId
+	}
+	return ""
+}
+
+func (x *EndVoiceCallRequest) GetDeviceIdentifier() string {
+	if x != nil {
+		return x.DeviceIdentifier
 	}
 	return ""
 }
@@ -1051,11 +1084,14 @@ func (x *InviteToVoiceCallResponse) GetInvitations() []*VoiceCallInvitation {
 }
 
 type RespondToVoiceCallInviteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InvitationId  string                 `protobuf:"bytes,1,opt,name=invitation_id,json=invitationId,proto3" json:"invitation_id,omitempty"`
-	Response      VoiceInviteResponse    `protobuf:"varint,2,opt,name=response,proto3,enum=rpc.v1.VoiceInviteResponse" json:"response,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	InvitationId string                 `protobuf:"bytes,1,opt,name=invitation_id,json=invitationId,proto3" json:"invitation_id,omitempty"`
+	Response     VoiceInviteResponse    `protobuf:"varint,2,opt,name=response,proto3,enum=rpc.v1.VoiceInviteResponse" json:"response,omitempty"`
+	// Which physical device answered or declined. Excluded from the terminal wake fan-out
+	// for the same reason as JoinVoiceCallRequest.device_identifier.
+	DeviceIdentifier string `protobuf:"bytes,3,opt,name=device_identifier,json=deviceIdentifier,proto3" json:"device_identifier,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *RespondToVoiceCallInviteRequest) Reset() {
@@ -1100,6 +1136,13 @@ func (x *RespondToVoiceCallInviteRequest) GetResponse() VoiceInviteResponse {
 		return x.Response
 	}
 	return VoiceInviteResponse_VOICE_INVITE_RESPONSE_UNSPECIFIED
+}
+
+func (x *RespondToVoiceCallInviteRequest) GetDeviceIdentifier() string {
+	if x != nil {
+		return x.DeviceIdentifier
+	}
+	return ""
 }
 
 type RespondToVoiceCallInviteResponse struct {
@@ -2295,18 +2338,21 @@ const file_rpc_v1_voice_proto_rawDesc = "" +
 	"channel_id\x18\x01 \x01(\tR\tchannelId\"r\n" +
 	"\x1aGetActiveVoiceCallResponse\x12,\n" +
 	"\x04call\x18\x01 \x01(\v2\x18.rpc.v1.VoiceCallSessionR\x04call\x12&\n" +
-	"\x0fhas_active_call\x18\x02 \x01(\bR\rhasActiveCall\"/\n" +
+	"\x0fhas_active_call\x18\x02 \x01(\bR\rhasActiveCall\"\\\n" +
 	"\x14JoinVoiceCallRequest\x12\x17\n" +
-	"\acall_id\x18\x01 \x01(\tR\x06callId\"\x8e\x01\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12+\n" +
+	"\x11device_identifier\x18\x02 \x01(\tR\x10deviceIdentifier\"\x8e\x01\n" +
 	"\x15JoinVoiceCallResponse\x12,\n" +
 	"\x04call\x18\x01 \x01(\v2\x18.rpc.v1.VoiceCallSessionR\x04call\x12G\n" +
-	"\x10join_credentials\x18\x02 \x01(\v2\x1c.rpc.v1.VoiceJoinCredentialsR\x0fjoinCredentials\"0\n" +
+	"\x10join_credentials\x18\x02 \x01(\v2\x1c.rpc.v1.VoiceJoinCredentialsR\x0fjoinCredentials\"]\n" +
 	"\x15LeaveVoiceCallRequest\x12\x17\n" +
-	"\acall_id\x18\x01 \x01(\tR\x06callId\"F\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12+\n" +
+	"\x11device_identifier\x18\x02 \x01(\tR\x10deviceIdentifier\"F\n" +
 	"\x16LeaveVoiceCallResponse\x12,\n" +
-	"\x04call\x18\x01 \x01(\v2\x18.rpc.v1.VoiceCallSessionR\x04call\".\n" +
+	"\x04call\x18\x01 \x01(\v2\x18.rpc.v1.VoiceCallSessionR\x04call\"[\n" +
 	"\x13EndVoiceCallRequest\x12\x17\n" +
-	"\acall_id\x18\x01 \x01(\tR\x06callId\"D\n" +
+	"\acall_id\x18\x01 \x01(\tR\x06callId\x12+\n" +
+	"\x11device_identifier\x18\x02 \x01(\tR\x10deviceIdentifier\"D\n" +
 	"\x14EndVoiceCallResponse\x12,\n" +
 	"\x04call\x18\x01 \x01(\v2\x18.rpc.v1.VoiceCallSessionR\x04call\"V\n" +
 	"\x18InviteToVoiceCallRequest\x12\x17\n" +
@@ -2314,10 +2360,11 @@ const file_rpc_v1_voice_proto_rawDesc = "" +
 	"\femployee_ids\x18\x02 \x03(\tR\vemployeeIds\"\x88\x01\n" +
 	"\x19InviteToVoiceCallResponse\x12,\n" +
 	"\x04call\x18\x01 \x01(\v2\x18.rpc.v1.VoiceCallSessionR\x04call\x12=\n" +
-	"\vinvitations\x18\x02 \x03(\v2\x1b.rpc.v1.VoiceCallInvitationR\vinvitations\"\x7f\n" +
+	"\vinvitations\x18\x02 \x03(\v2\x1b.rpc.v1.VoiceCallInvitationR\vinvitations\"\xac\x01\n" +
 	"\x1fRespondToVoiceCallInviteRequest\x12#\n" +
 	"\rinvitation_id\x18\x01 \x01(\tR\finvitationId\x127\n" +
-	"\bresponse\x18\x02 \x01(\x0e2\x1b.rpc.v1.VoiceInviteResponseR\bresponse\"\xa8\x01\n" +
+	"\bresponse\x18\x02 \x01(\x0e2\x1b.rpc.v1.VoiceInviteResponseR\bresponse\x12+\n" +
+	"\x11device_identifier\x18\x03 \x01(\tR\x10deviceIdentifier\"\xa8\x01\n" +
 	" RespondToVoiceCallInviteResponse\x12;\n" +
 	"\n" +
 	"invitation\x18\x01 \x01(\v2\x1b.rpc.v1.VoiceCallInvitationR\n" +

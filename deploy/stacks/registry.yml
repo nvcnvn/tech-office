@@ -1,0 +1,30 @@
+# Optional private registry, for a fleet with no reachable external registry.
+#
+# Pulls happen over the node's own network, so every node must trust it. Either put
+# it behind Traefik with a real certificate, or add it to each node's
+# /etc/docker/daemon.json as an insecure registry (bootstrap.sh prints the snippet).
+version: "3.8"
+
+services:
+  registry:
+    image: registry:2
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    ports:
+      - {target: 5000, published: 5000, protocol: tcp, mode: host}
+    networks: [internal]
+    volumes:
+      - registry-data:/var/lib/registry
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.role == manager]
+      restart_policy: {condition: any, delay: 10s}
+
+networks:
+  internal:
+    name: techoffice_internal
+    external: true
+
+volumes:
+  registry-data: {}

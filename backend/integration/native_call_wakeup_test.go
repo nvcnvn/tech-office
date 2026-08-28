@@ -153,6 +153,40 @@ func TestNativeCallWakeupTerminalEvents(t *testing.T) {
 		}
 	})
 
+	t.Run("the handset that declined is not woken again by its own decline", func(t *testing.T) {
+		// The phone that just declined has already closed its own call. Sending it the
+		// resulting terminal wake rings it a second time, because the iOS client module
+		// reports every call wake to CallKit as a new incoming call before JavaScript
+		// runs — there is no client-side way to ignore it. The person's *other* devices
+		// still have to be stopped, so the exclusion is per device, not per person.
+		w.registerCallWakeDevice(callee, "device-tablet", "ios", true)
+
+		call, _ := w.startVoiceCall(caller, dm.Channel.Id)
+		w.waitForCallWakeAttempts(call.Id, 2)
+		incoming := w.waitForVoiceIncomingNotificationForCall(callee, call.Id, 5*time.Second)
+		invitationID := incoming.GetActionData()["invitationId"]
+		require.NotEmpty(t, invitationID)
+
+		w.respondToVoiceCallInviteFromDevice(callee, invitationID,
+			rpcv1.VoiceInviteResponse_VOICE_INVITE_RESPONSE_DECLINE, "device-phone")
+
+		attempts := w.waitForCallWakeAttempts(call.Id, 3)
+		byDevice := map[string][]callWakeAttempt{}
+		for _, attempt := range attempts {
+			if attempt.Event == "" || attempt.Event == notification.CallWakeEventIncoming {
+				continue
+			}
+			byDevice[attempt.DeviceIdentifier] = append(byDevice[attempt.DeviceIdentifier], attempt)
+		}
+
+		require.NotEmpty(t, byDevice["device-tablet"],
+			"the person's other device must still be told to stop ringing")
+		for _, attempt := range byDevice["device-phone"] {
+			assert.Equal(t, notification.FallbackReasonActingDeviceExcluded, attempt.Reason,
+				"the declining handset must be recorded as excluded, not sent a wake that rings it again")
+		}
+	})
+
 	t.Run("the ring deadline is set while ringing and cleared when the call ends", func(t *testing.T) {
 		// Nothing bounded a ringing call before this feature; the deadline column is
 		// what the sweep claims on, so its absence is a call that rings forever.

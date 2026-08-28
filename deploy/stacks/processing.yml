@@ -1,0 +1,84 @@
+# Processing profile: file scanning, document conversion, speech-to-text.
+#
+# All three are optional in the sense that the backend degrades rather than fails
+# when they are down, but uploads stay unscanned without ClamAV — do not disable it
+# on a deployment that accepts files from users.
+version: "3.8"
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "3"}
+
+services:
+  clamav:
+    image: clamav/clamav-debian:1.4
+    networks: [internal]
+    volumes:
+      - clamav-db:/var/lib/clamav
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 300s
+    logging: *logging
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.processing == true]
+      restart_policy: {condition: any, delay: 10s}
+      resources:
+        # clamd holds the whole signature database in memory. Under ~2G it is killed
+        # mid-scan and every upload fails validation.
+        limits: {memory: 3G}
+        reservations: {memory: 2G}
+
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    command: ["gotenberg", "--api-timeout=30s", "--api-port=8081"]
+    networks: [internal]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8081/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.processing == true]
+      restart_policy: {condition: any, delay: 10s}
+      resources:
+        limits: {memory: 2G}
+
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cpu
+    environment:
+      WHISPER__MODEL: ${WHISPER_MODEL}
+      HF_HOME: /app/hf-cache
+    networks: [internal]
+    volumes:
+      - whisper-cache:/app/hf-cache
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 300s
+    logging: *logging
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.processing == true]
+      restart_policy: {condition: any, delay: 10s}
+      resources:
+        limits: {memory: 4G}
+
+networks:
+  internal:
+    name: techoffice_internal
+    external: true
+
+volumes:
+  clamav-db: {}
+  whisper-cache: {}

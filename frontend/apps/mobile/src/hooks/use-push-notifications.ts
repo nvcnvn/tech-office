@@ -28,6 +28,7 @@ import {
 import { ensureVoiceCallNotificationChannel } from "@/lib/voice/voice-notifications";
 import { getVoIPPushToken, registerVoIPPush } from "expo-callkit-telecom";
 import { setNativeCallTierCapable } from "@/lib/voice/native-call";
+import { setVoiceDeviceIdentifier } from "apis";
 
 interface NativePushRegistration {
   token: string;
@@ -292,6 +293,16 @@ export function usePushNotifications() {
           await ensureVoiceCallNotificationChannel();
         }
 
+        // PushKit hands out a VoIP token without the notification permission prompt, and
+        // it — not the FCM registration below — is what decides whether the OS rings this
+        // device. Resolved first so a denied permission or a transient FCM failure cannot
+        // silently demote the device to the fallback prompt while the backend, reading a
+        // still-valid VoIP token row, keeps ringing it natively. The user would see two
+        // unrelated call UIs for one call.
+        const voipToken = Platform.OS === "ios" ? await waitForVoIPToken() : null;
+        const nativeCallCapable = Platform.OS === "android" || Boolean(voipToken);
+        setNativeCallTierCapable(nativeCallCapable);
+
         // Request permission
         const { status: existingStatus } =
           await Notifications.getPermissionsAsync();
@@ -321,18 +332,14 @@ export function usePushNotifications() {
 
         const pushToken = registration.token;
         const deviceId = await getStablePushDeviceIdentifier();
+        // The same identifier the backend fans call wakes out by. Registered with the
+        // voice client so every answer, decline and hang-up names this handset, and the
+        // terminal wake that stops the person's other phones is not delivered back here
+        // — on iOS that wake is reported to CallKit as a new incoming call and rings.
+        setVoiceDeviceIdentifier(deviceId);
 
-        // The VoIP token is fetched before either registration so both rows agree about
-        // whether this device can run the native call tier. A device that claims the
-        // native tier but has no VoIP token would be routed to a transport that cannot
-        // reach it — a phone that silently never rings.
-        const voipToken = Platform.OS === "ios" ? await waitForVoIPToken() : null;
-        const nativeCallCapable = Platform.OS === "android" || Boolean(voipToken);
-        // Told to the call layer as well as the backend, so the two agree about which
-        // tier this device is on. A device the backend rings natively must not also
-        // draw the fallback prompt, and one it cannot ring natively must still get it.
-        setNativeCallTierCapable(nativeCallCapable);
-
+        // Both token rows carry the same capability, so the backend never routes a
+        // device to a transport that cannot reach it — a phone that silently never rings.
         await registerPushToken({
           fcmToken: pushToken,
           deviceIdentifier: deviceId,

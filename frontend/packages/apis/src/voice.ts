@@ -231,21 +231,38 @@ export async function getActiveVoiceCall(channelId: string): Promise<GetActiveVo
         });
 }
 
+/**
+ * Which physical device this client is.
+ *
+ * Sent on every call action so the backend can leave this handset out of the terminal
+ * call-wake fan-out. Without it, the wake that stops a person's *other* phones is also
+ * delivered here — and on iOS every call wake is reported to CallKit as a new incoming
+ * call, so the phone that just answered or declined rings a second time.
+ *
+ * Registered once, rather than passed by each caller, because a call site that forgets it
+ * produces exactly that phantom ring and nothing else looks wrong.
+ */
+let voiceDeviceIdentifier = "";
+
+export function setVoiceDeviceIdentifier(deviceIdentifier: string): void {
+	voiceDeviceIdentifier = deviceIdentifier;
+}
+
 export async function joinVoiceCall(callId: string): Promise<JoinVoiceCallResponse> {
         return await rpcCall(async () => {
-                return await voiceClient.joinVoiceCall({ callId }) as JoinVoiceCallResponse;
+                return await voiceClient.joinVoiceCall({ callId, deviceIdentifier: voiceDeviceIdentifier }) as JoinVoiceCallResponse;
         });
 }
 
 export async function leaveVoiceCall(callId: string): Promise<LeaveVoiceCallResponse> {
         return await rpcCall(async () => {
-                return await voiceClient.leaveVoiceCall({ callId }) as LeaveVoiceCallResponse;
+                return await voiceClient.leaveVoiceCall({ callId, deviceIdentifier: voiceDeviceIdentifier }) as LeaveVoiceCallResponse;
         });
 }
 
 export async function endVoiceCall(callId: string): Promise<EndVoiceCallResponse> {
         return await rpcCall(async () => {
-                return await voiceClient.endVoiceCall({ callId }) as EndVoiceCallResponse;
+                return await voiceClient.endVoiceCall({ callId, deviceIdentifier: voiceDeviceIdentifier }) as EndVoiceCallResponse;
         });
 }
 
@@ -267,6 +284,7 @@ export async function respondToVoiceCallInvite(
                 return await voiceClient.respondToVoiceCallInvite({
                         invitationId: params.invitationId,
                         response: toVoiceInviteResponse(params.response),
+                        deviceIdentifier: voiceDeviceIdentifier,
                 }) as RespondToVoiceCallInviteResponse;
         });
 }

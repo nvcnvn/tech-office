@@ -1,0 +1,58 @@
+# Traefik static configuration. Rendered from traefik.yml.tmpl by deploy/scripts/lib.sh.
+#
+# Routing comes from the file provider, not from container labels: the Docker/Swarm
+# provider would mean mounting the daemon socket into an internet-facing container,
+# and the route table here is three fixed hostnames that do not change per deploy.
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+log:
+  level: INFO
+
+accessLog:
+  filters:
+    statusCodes: ["400-599"]
+
+ping:
+  entryPoint: metrics
+
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entryPoint:
+          to: websecure
+          scheme: https
+          permanent: true
+  websecure:
+    address: ":443"
+    transport:
+      respondingTimeouts:
+        # The notification stream is a long-lived SSE response; a write timeout would
+        # cut every client off on a fixed interval.
+        readTimeout: 0
+        writeTimeout: 0
+        idleTimeout: 180s
+  metrics:
+    address: ":8082"
+
+providers:
+  file:
+    directory: /etc/traefik/dynamic
+    watch: true
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addServicesLabels: true
+
+certificatesResolvers:
+  le:
+    acme:
+      email: ${ACME_EMAIL}
+      storage: /acme/acme.json
+      httpChallenge:
+        entryPoint: web

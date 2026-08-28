@@ -102,6 +102,12 @@ message GetActiveVoiceCallResponse {
 
 message JoinVoiceCallRequest {
   string call_id = 1;
+  // Which physical device is joining. Set by clients that present calls through the
+  // operating system, so the answered_elsewhere wake that stops this person's other
+  // phones is not also sent back to the one that answered — on iOS every call wake is
+  // reported to CallKit as a new incoming call, so a wake sent to the answering device
+  // rings it again. Empty from clients that do not present calls natively.
+  string device_identifier = 2;
 }
 
 message JoinVoiceCallResponse {
@@ -111,6 +117,9 @@ message JoinVoiceCallResponse {
 
 message LeaveVoiceCallRequest {
   string call_id = 1;
+  // Which physical device left. Excluded from the terminal wake fan-out for the same
+  // reason as JoinVoiceCallRequest.device_identifier.
+  string device_identifier = 2;
 }
 
 message LeaveVoiceCallResponse {
@@ -119,6 +128,9 @@ message LeaveVoiceCallResponse {
 
 message EndVoiceCallRequest {
   string call_id = 1;
+  // Which physical device ended the call. Excluded from the terminal wake fan-out for
+  // the same reason as JoinVoiceCallRequest.device_identifier.
+  string device_identifier = 2;
 }
 
 message EndVoiceCallResponse {
@@ -138,6 +150,9 @@ message InviteToVoiceCallResponse {
 message RespondToVoiceCallInviteRequest {
   string invitation_id = 1;
   VoiceInviteResponse response = 2;
+  // Which physical device answered or declined. Excluded from the terminal wake fan-out
+  // for the same reason as JoinVoiceCallRequest.device_identifier.
+  string device_identifier = 3;
 }
 
 message RespondToVoiceCallInviteResponse {

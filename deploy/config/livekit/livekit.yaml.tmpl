@@ -1,0 +1,22 @@
+# LiveKit SFU. Rendered from livekit.yaml.tmpl by deploy/scripts/lib.sh.
+# API keys come from the LIVEKIT_KEYS environment variable, never this file.
+port: 7880
+bind_addresses:
+  - 0.0.0.0
+logging:
+  level: info
+rtc:
+  tcp_port: ${LIVEKIT_TCP_PORT}
+  # One multiplexed UDP port instead of a 50000-60000 range: one firewall rule, one
+  # published port, and Swarm does not have to program thousands of NAT rules.
+  udp_port: ${LIVEKIT_UDP_PORT}
+  # Empty LIVEKIT_NODE_IP means "discover my public address over STUN" (internet
+  # deployment). Setting it pins the address clients are told to send media to,
+  # which is what a LAN-only deployment needs.
+  use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP}
+  node_ip: "${LIVEKIT_NODE_IP}"
+turn:
+  # Off. TURN/TLS wants port 443, which Traefik owns. Clients that cannot reach
+  # ${LIVEKIT_UDP_PORT}/udp fall back to ICE-TCP on ${LIVEKIT_TCP_PORT}. Deploy coturn
+  # separately if you have users behind proxies that block everything but 443.
+  enabled: false

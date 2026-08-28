@@ -1,0 +1,155 @@
+# Observability profile — entirely optional.
+#
+# Drop `observability` from PROFILES if you already run Prometheus/Grafana/Loki. The
+# rest of the stack does not depend on any of it; the only coupling is the textfile
+# volume the backup service writes its freshness metric into.
+version: "3.8"
+
+x-logging: &logging
+  driver: json-file
+  options: {max-size: "20m", max-file: "3"}
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    ports:
+      - {target: 9090, published: 9090, protocol: tcp, mode: host}
+    networks: [internal]
+    volumes:
+      - prometheus-data:/prometheus
+    configs:
+      - {source: prom_config, target: /etc/prometheus/prometheus.yml}
+      - {source: prom_alerts, target: /etc/prometheus/alerts.yml}
+    logging: *logging
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.obs == true]
+      restart_policy: {condition: any, delay: 10s}
+      resources:
+        limits: {memory: 2G}
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
+    ports:
+      - {target: 9093, published: 9093, protocol: tcp, mode: host}
+    networks: [internal]
+    volumes:
+      - alertmanager-data:/alertmanager
+    configs:
+      - {source: alertmanager_config, target: /etc/alertmanager/alertmanager.yml}
+    logging: *logging
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.obs == true]
+      restart_policy: {condition: any, delay: 10s}
+
+  grafana:
+    image: grafana/grafana:11.5.1
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    # Not behind Traefik on purpose: no public Grafana, no extra public auth surface.
+    # Reach it over an SSH tunnel to the obs node, or open 3000 to your admin subnet
+    # only — Swarm host-mode publishing cannot bind to a single interface.
+    ports:
+      - {target: 3000, published: 3000, protocol: tcp, mode: host}
+    networks: [internal]
+    volumes:
+      - grafana-data:/var/lib/grafana
+    configs:
+      - {source: grafana_datasource, target: /etc/grafana/provisioning/datasources/prometheus.yml}
+    logging: *logging
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.obs == true]
+      restart_policy: {condition: any, delay: 10s}
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command:
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/docker/.+)($|/)
+      - --collector.textfile.directory=/metrics
+    networks: [internal]
+    volumes:
+      - {type: bind, source: /, target: /host, read_only: true, bind: {propagation: rslave}}
+      - metrics-textfile:/metrics
+    logging: *logging
+    deploy:
+      mode: global
+      restart_policy: {condition: any, delay: 10s}
+      resources:
+        limits: {memory: 256M}
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    command: ["--docker_only=true", "--housekeeping_interval=30s"]
+    networks: [internal]
+    volumes:
+      - {type: bind, source: /, target: /rootfs, read_only: true}
+      - {type: bind, source: /var/run, target: /var/run, read_only: true}
+      - {type: bind, source: /sys, target: /sys, read_only: true}
+      - {type: bind, source: /var/lib/docker, target: /var/lib/docker, read_only: true}
+    logging: *logging
+    deploy:
+      mode: global
+      restart_policy: {condition: any, delay: 10s}
+      resources:
+        limits: {memory: 512M}
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.16.0
+    command: ["--extend.query-path=/etc/pg-queries.yml"]
+    environment:
+      DATA_SOURCE_NAME: ${DATABASE_URL}
+    networks: [internal]
+    configs:
+      - {source: pg_queries, target: /etc/pg-queries.yml}
+    logging: *logging
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.obs == true]
+      restart_policy: {condition: any, delay: 10s}
+      resources:
+        limits: {memory: 256M}
+
+networks:
+  internal:
+    name: techoffice_internal
+    external: true
+
+volumes:
+  prometheus-data: {}
+  alertmanager-data: {}
+  grafana-data: {}
+  metrics-textfile: {}
+
+configs:
+  prom_config:
+    name: techoffice_promcfg_${CONFIG_VERSION}
+    file: ../config/prometheus/prometheus.yml
+  prom_alerts:
+    name: techoffice_promalerts_${CONFIG_VERSION}
+    file: ../config/prometheus/alerts.yml
+  pg_queries:
+    name: techoffice_pgqueries_${CONFIG_VERSION}
+    file: ../config/prometheus/pg-queries.yml
+  alertmanager_config:
+    name: techoffice_amcfg_${CONFIG_VERSION}
+    file: ../config/alertmanager/alertmanager.yml
+  grafana_datasource:
+    name: techoffice_grafanads_${CONFIG_VERSION}
+    file: ../config/grafana/provisioning/datasources/prometheus.yml

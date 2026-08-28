@@ -1,0 +1,21 @@
+# Extra postgres_exporter queries. WAL archiving health is not in the default
+# collectors, and it is the signal that tells you PITR has quietly stopped working.
+#
+# The exporter's database user needs pg_monitor:
+#   GRANT pg_monitor TO <POSTGRES_USER>;
+pg_stat_archiver:
+  query: |
+    SELECT archived_count,
+           failed_count,
+           COALESCE(EXTRACT(epoch FROM now() - last_archived_time), 0) AS seconds_since_last_archive
+      FROM pg_stat_archiver
+  metrics:
+    - archived_count:
+        usage: COUNTER
+        description: WAL segments successfully archived since the last stats reset
+    - failed_count:
+        usage: COUNTER
+        description: WAL segments that failed to archive
+    - seconds_since_last_archive:
+        usage: GAUGE
+        description: Seconds since the last successful WAL archive

@@ -213,7 +213,7 @@ func (l *Logic) GetActiveVoiceCall(ctx context.Context, tx database.DBTX, orgID,
 	return session, true, err
 }
 
-func (l *Logic) JoinVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, callID dbuuid.UUID) (*rpcv1.VoiceCallSession, *rpcv1.VoiceJoinCredentials, error) {
+func (l *Logic) JoinVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, callID dbuuid.UUID, actingDeviceIdentifier string) (*rpcv1.VoiceCallSession, *rpcv1.VoiceJoinCredentials, error) {
 	call, err := l.getLiveCall(ctx, tx, orgID, callID)
 	if err != nil {
 		return nil, nil, err
@@ -242,10 +242,11 @@ func (l *Logic) JoinVoiceCall(ctx context.Context, tx database.DBTX, orgID, empl
 		if err != nil {
 			return nil, nil, fmt.Errorf("mark voice call answered: %w", err)
 		}
-		// Stop the ring on this person's other phones. The device that answered is in
-		// the fan-out too — the backend knows which person answered, not which handset
-		// — and ignores a terminal wake for the call it is currently in (FR-004).
-		l.emitTerminalCallWake(ctx, tx, orgID, call, notification.CallWakeEventAnsweredElsewhere)
+		// Stop the ring on this person's other phones. The device that answered names
+		// itself so it is excluded: on iOS every call wake is reported to CallKit as a
+		// new incoming call, so sending one back to the answering handset would ring it
+		// again (FR-004).
+		l.emitTerminalCallWake(ctx, tx, orgID, call, notification.CallWakeEventAnsweredElsewhere, actingDeviceIdentifier)
 	}
 
 	credentials, err := l.credentials(ctx, call, participant)
@@ -260,7 +261,7 @@ func (l *Logic) JoinVoiceCall(ctx context.Context, tx database.DBTX, orgID, empl
 	return session, credentials, nil
 }
 
-func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, callID dbuuid.UUID) (*rpcv1.VoiceCallSession, error) {
+func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, callID dbuuid.UUID, actingDeviceIdentifier string) (*rpcv1.VoiceCallSession, error) {
 	call, err := l.getCall(ctx, tx, orgID, callID)
 	if err != nil {
 		return nil, err
@@ -302,7 +303,7 @@ func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 	}
 	if directMessageCall && (call.AnsweredAt.Valid || call.State == CallStateActive) {
 		endedOutcome = CallOutcomeCompleted
-		call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "direct_participant_left")
+		call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "direct_participant_left", actingDeviceIdentifier)
 		if err != nil {
 			return nil, err
 		}
@@ -314,7 +315,7 @@ func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 		}
 		if remaining == 0 {
 			endedOutcome = endOutcomeFor(call)
-			call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "final_participant_left")
+			call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "final_participant_left", actingDeviceIdentifier)
 			if err != nil {
 				return nil, err
 			}
@@ -342,7 +343,7 @@ func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 	return session, nil
 }
 
-func (l *Logic) EndVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, callID dbuuid.UUID) (*rpcv1.VoiceCallSession, error) {
+func (l *Logic) EndVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, callID dbuuid.UUID, actingDeviceIdentifier string) (*rpcv1.VoiceCallSession, error) {
 	call, err := l.getCall(ctx, tx, orgID, callID)
 	if err != nil {
 		return nil, err
@@ -354,7 +355,7 @@ func (l *Logic) EndVoiceCall(ctx context.Context, tx database.DBTX, orgID, emplo
 		return nil, err
 	}
 	endedOutcome := endOutcomeFor(call)
-	call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "ended_by_user")
+	call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "ended_by_user", actingDeviceIdentifier)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +419,7 @@ func (l *Logic) InviteToVoiceCall(ctx context.Context, tx database.DBTX, orgID, 
 	return session, invitations, nil
 }
 
-func (l *Logic) RespondToVoiceCallInvite(ctx context.Context, tx database.DBTX, orgID, employeeID, invitationID dbuuid.UUID, response rpcv1.VoiceInviteResponse) (*rpcv1.VoiceCallInvitation, *rpcv1.VoiceJoinCredentials, error) {
+func (l *Logic) RespondToVoiceCallInvite(ctx context.Context, tx database.DBTX, orgID, employeeID, invitationID dbuuid.UUID, response rpcv1.VoiceInviteResponse, actingDeviceIdentifier string) (*rpcv1.VoiceCallInvitation, *rpcv1.VoiceJoinCredentials, error) {
 	invitation, err := l.Queries.GetVoiceCallInvitation(ctx, tx, &database.GetVoiceCallInvitationParams{OrganizationID: orgID, InvitationID: invitationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil, ErrInviteNotFound
@@ -451,7 +452,7 @@ func (l *Logic) RespondToVoiceCallInvite(ctx context.Context, tx database.DBTX, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("expire voice invitation: %w", err)
 		}
-		if err := l.expireDirectVoiceInvite(ctx, tx, orgID, employeeID, call, invitation); err != nil {
+		if err := l.expireDirectVoiceInvite(ctx, tx, orgID, employeeID, call, invitation, actingDeviceIdentifier); err != nil {
 			return nil, nil, err
 		}
 		return invitationToProto(expiredInvitation), nil, nil
@@ -459,7 +460,7 @@ func (l *Logic) RespondToVoiceCallInvite(ctx context.Context, tx database.DBTX, 
 
 	switch response {
 	case rpcv1.VoiceInviteResponse_VOICE_INVITE_RESPONSE_ACCEPT:
-		updatedInvitation, credentials, err := l.acceptVoiceInvite(ctx, tx, orgID, employeeID, call, invitation, now)
+		updatedInvitation, credentials, err := l.acceptVoiceInvite(ctx, tx, orgID, employeeID, call, invitation, now, actingDeviceIdentifier)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -481,7 +482,7 @@ func (l *Logic) RespondToVoiceCallInvite(ctx context.Context, tx database.DBTX, 
 		}
 		return invitationToProto(updatedInvitation), credentials, err
 	case rpcv1.VoiceInviteResponse_VOICE_INVITE_RESPONSE_DECLINE:
-		updatedInvitation, endedCall, err := l.declineVoiceInvite(ctx, tx, orgID, employeeID, call, invitation, now)
+		updatedInvitation, endedCall, err := l.declineVoiceInvite(ctx, tx, orgID, employeeID, call, invitation, now, actingDeviceIdentifier)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -888,7 +889,7 @@ func (l *Logic) findPendingInvitation(ctx context.Context, tx database.DBTX, org
 	return nil, nil
 }
 
-func (l *Logic) acceptVoiceInvite(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, call *database.VoiceCallSession, invitation *database.VoiceCallInvitation, now pgtype.Timestamptz) (*database.VoiceCallInvitation, *rpcv1.VoiceJoinCredentials, error) {
+func (l *Logic) acceptVoiceInvite(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, call *database.VoiceCallSession, invitation *database.VoiceCallInvitation, now pgtype.Timestamptz, actingDeviceIdentifier string) (*database.VoiceCallInvitation, *rpcv1.VoiceJoinCredentials, error) {
 	activeCount, err := l.Queries.CountActiveVoiceCallParticipants(ctx, tx, &database.CountActiveVoiceCallParticipantsParams{OrganizationID: orgID, CallSessionID: call.ID})
 	if err != nil {
 		return nil, nil, fmt.Errorf("count voice participants: %w", err)
@@ -917,7 +918,7 @@ func (l *Logic) acceptVoiceInvite(ctx context.Context, tx database.DBTX, orgID, 
 		if err != nil {
 			return nil, nil, fmt.Errorf("mark voice call answered: %w", err)
 		}
-		l.emitTerminalCallWake(ctx, tx, orgID, answered, notification.CallWakeEventAnsweredElsewhere)
+		l.emitTerminalCallWake(ctx, tx, orgID, answered, notification.CallWakeEventAnsweredElsewhere, actingDeviceIdentifier)
 	}
 	credentials, err := l.credentials(ctx, call, participant)
 	if err != nil {
@@ -926,7 +927,7 @@ func (l *Logic) acceptVoiceInvite(ctx context.Context, tx database.DBTX, orgID, 
 	return updatedInvitation, credentials, nil
 }
 
-func (l *Logic) declineVoiceInvite(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, call *database.VoiceCallSession, invitation *database.VoiceCallInvitation, now pgtype.Timestamptz) (*database.VoiceCallInvitation, *database.VoiceCallSession, error) {
+func (l *Logic) declineVoiceInvite(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, call *database.VoiceCallSession, invitation *database.VoiceCallInvitation, now pgtype.Timestamptz, actingDeviceIdentifier string) (*database.VoiceCallInvitation, *database.VoiceCallSession, error) {
 	updatedInvitation, err := l.Queries.UpdateVoiceCallInvitationStatus(ctx, tx, &database.UpdateVoiceCallInvitationStatusParams{
 		Status:         InvitationStatusDeclined,
 		RespondedAt:    now,
@@ -959,7 +960,7 @@ func (l *Logic) declineVoiceInvite(ctx context.Context, tx database.DBTX, orgID,
 		return nil, nil, err
 	}
 	if directMessageCall && call.State == CallStateRinging && employeeID != call.InitiatorEmployeeID {
-		endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeDeclined, "direct_invite_declined")
+		endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeDeclined, "direct_invite_declined", actingDeviceIdentifier)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -974,7 +975,7 @@ func (l *Logic) declineVoiceInvite(ctx context.Context, tx database.DBTX, orgID,
 	return updatedInvitation, nil, nil
 }
 
-func (l *Logic) expireDirectVoiceInvite(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, call *database.VoiceCallSession, invitation *database.VoiceCallInvitation) error {
+func (l *Logic) expireDirectVoiceInvite(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, call *database.VoiceCallSession, invitation *database.VoiceCallInvitation, actingDeviceIdentifier string) error {
 	directMessageCall, err := l.isDirectMessageCall(ctx, tx, orgID, call)
 	if err != nil {
 		return err
@@ -982,7 +983,7 @@ func (l *Logic) expireDirectVoiceInvite(ctx context.Context, tx database.DBTX, o
 	if !directMessageCall || call.State != CallStateRinging || employeeID == call.InitiatorEmployeeID {
 		return nil
 	}
-	endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeMissed, "direct_invite_expired")
+	endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeMissed, "direct_invite_expired", actingDeviceIdentifier)
 	if err != nil {
 		return err
 	}
@@ -1016,7 +1017,7 @@ func (l *Logic) credentials(ctx context.Context, call *database.VoiceCallSession
 	}, nil
 }
 
-func (l *Logic) endCall(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, call *database.VoiceCallSession, endedBy dbuuid.UUID, outcome, reason string) (*database.VoiceCallSession, error) {
+func (l *Logic) endCall(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, call *database.VoiceCallSession, endedBy dbuuid.UUID, outcome, reason, actingDeviceIdentifier string) (*database.VoiceCallSession, error) {
 	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	endedCall, err := l.Queries.EndVoiceCallSession(ctx, tx, &database.EndVoiceCallSessionParams{
 		Outcome:           pgtype.Text{String: outcome, Valid: true},
@@ -1032,7 +1033,7 @@ func (l *Logic) endCall(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID
 	// Every path that ends a call routes through here, which is exactly why the
 	// terminal wake lives here and not at each caller: a new way to end a call cannot
 	// forget to stop the phones (FR-013, SC-005).
-	l.emitTerminalCallWake(ctx, tx, orgID, endedCall, terminalWakeEventForOutcome(outcome))
+	l.emitTerminalCallWake(ctx, tx, orgID, endedCall, terminalWakeEventForOutcome(outcome), actingDeviceIdentifier)
 	return endedCall, nil
 }
 

@@ -88,7 +88,8 @@ func (l *Logic) sweepExpiredRingingCalls(ctx context.Context, adminPool database
 
 				// Stop every device that is still ringing. This runs before the chat
 				// message so a phone is released as early as possible in the tick.
-				l.emitTerminalCallWake(ctx, tx, orgID, call, terminalWakeEventForOutcome(CallOutcomeMissed))
+				// The sweep rang out on its own; every device still ringing needs stopping.
+				l.emitTerminalCallWake(ctx, tx, orgID, call, terminalWakeEventForOutcome(CallOutcomeMissed), "")
 
 				if err := l.acknowledgeVoiceCallNotificationsForCall(ctx, tx, orgID, call.ID); err != nil {
 					return err

@@ -1,0 +1,52 @@
+# Voice profile: LiveKit SFU.
+#
+# Media does NOT go through Traefik — WebRTC needs the client to reach this node
+# directly, so 7881/tcp and 7882/udp are published in host mode (source IP preserved,
+# routing mesh bypassed) and must be open on the voice node's firewall. Only the
+# signalling WebSocket (7880) is proxied, over wss://${MEDIA_DOMAIN}.
+version: "3.8"
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.12.0
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_WEBHOOK_URL: http://backend:18080/api/livekit/webhook
+    ports:
+      - {target: ${LIVEKIT_TCP_PORT}, published: ${LIVEKIT_TCP_PORT}, protocol: tcp, mode: host}
+      - {target: ${LIVEKIT_UDP_PORT}, published: ${LIVEKIT_UDP_PORT}, protocol: udp, mode: host}
+    networks: [internal]
+    configs:
+      - {source: livekit_config, target: /etc/livekit/livekit.yaml}
+    logging:
+      driver: json-file
+      options: {max-size: "50m", max-file: "5"}
+    healthcheck:
+      test: ["CMD", "/livekit-server", "--version"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    deploy:
+      # One SFU. LiveKit clusters through Redis; that is a different deployment and
+      # a fleet this size does not need it — one node carries hundreds of audio
+      # participants. ponytail: add Redis + replicas when one node saturates.
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.voice == true]
+      restart_policy: {condition: any, delay: 5s}
+      update_config: {order: stop-first, failure_action: rollback}
+      resources:
+        limits: {memory: 4G}
+        reservations: {memory: 512M}
+
+networks:
+  internal:
+    name: techoffice_internal
+    external: true
+
+configs:
+  livekit_config:
+    name: techoffice_livekit_${CONFIG_VERSION}
+    file: ../config/livekit/livekit.yaml

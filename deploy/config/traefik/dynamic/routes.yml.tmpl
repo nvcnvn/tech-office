@@ -1,0 +1,41 @@
+# Traefik dynamic routing. Rendered from routes.yml.tmpl by deploy/scripts/lib.sh.
+http:
+  routers:
+    web:
+      rule: "Host(`${WEB_DOMAIN}`)"
+      entryPoints: [websecure]
+      service: web
+      tls:
+        ${TLS_ROUTER_OPTIONS}
+    api:
+      rule: "Host(`${API_DOMAIN}`)"
+      entryPoints: [websecure]
+      service: api
+      tls:
+        ${TLS_ROUTER_OPTIONS}
+    livekit-signal:
+      rule: "Host(`${MEDIA_DOMAIN}`)"
+      entryPoints: [websecure]
+      service: livekit
+      tls:
+        ${TLS_ROUTER_OPTIONS}
+
+  services:
+    web:
+      loadBalancer:
+        servers:
+          - url: "http://web:13000"
+    api:
+      loadBalancer:
+        # h2c, because Connect-RPC clients negotiate HTTP/2 for streaming calls and
+        # the backend serves h2c behind the proxy.
+        servers:
+          - url: "h2c://backend:18080"
+        # Flush every write straight through — SSE and streaming RPCs must not sit in
+        # the proxy's buffer.
+        responseForwarding:
+          flushInterval: "1ms"
+    livekit:
+      loadBalancer:
+        servers:
+          - url: "http://livekit:7880"

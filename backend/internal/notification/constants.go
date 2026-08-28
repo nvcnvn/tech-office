@@ -678,6 +678,11 @@ const (
 	// FallbackReasonCallAlreadyEnded records a wake that was not sent because the call
 	// was already over by the time the dispatcher reached the device.
 	FallbackReasonCallAlreadyEnded = "call_already_ended"
+	// FallbackReasonActingDeviceExcluded records a terminal wake deliberately withheld
+	// from the handset that caused the ending. The iOS client module reports every call
+	// wake to CallKit as a new incoming call before JavaScript runs, so sending one back
+	// to the phone that just answered or declined would ring it again.
+	FallbackReasonActingDeviceExcluded = "acting_device_excluded"
 )
 
 var fallbackReasons = map[string]struct{}{
@@ -693,6 +698,7 @@ var fallbackReasons = map[string]struct{}{
 	FallbackReasonNoCallWakeTarget:       {},
 	FallbackReasonNativeTierUnavailable:  {},
 	FallbackReasonCallAlreadyEnded:       {},
+	FallbackReasonActingDeviceExcluded:   {},
 }
 
 // IsValidFallbackReason returns true when the reason matches an allowed value.

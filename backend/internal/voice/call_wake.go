@@ -29,10 +29,16 @@ type CallWakeDispatcher interface {
 // showing an incoming call for a call that is over is the worst failure this feature
 // has, because the user cannot dismiss it from inside the app.
 //
+// actingDeviceIdentifier names the handset that caused the ending, when a client told us
+// which one it was, and is excluded from the fan-out. That exclusion is not tidiness: on
+// iOS the client module reports *every* call wake to CallKit as a new incoming call
+// before JavaScript runs, so a wake sent to the phone that just declined rings it again.
+// The device that acted has already closed its own call and needs no telling.
+//
 // It is best-effort by design: a call has already ended by the time this runs, and
 // failing the caller's RPC because a push could not be queued would trade a stuck
 // screen for a stuck call.
-func (l *Logic) emitTerminalCallWake(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, call *database.VoiceCallSession, event string) {
+func (l *Logic) emitTerminalCallWake(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, call *database.VoiceCallSession, event, actingDeviceIdentifier string) {
 	if l.CallWakeDispatcher == nil || call == nil {
 		return
 	}
@@ -54,12 +60,13 @@ func (l *Logic) emitTerminalCallWake(ctx context.Context, tx database.DBTX, orgI
 
 	for _, target := range targets {
 		if _, err := l.CallWakeDispatcher.DispatchCallWake(ctx, tx, &notification.CallWakeRequest{
-			OrganizationID: orgID,
-			EmployeeID:     target.EmployeeID,
-			RecipientID:    target.RecipientID,
-			Event:          event,
-			CallID:         call.ID,
-			CallStartedAt:  call.StartedAt.Time,
+			OrganizationID:          orgID,
+			EmployeeID:              target.EmployeeID,
+			RecipientID:             target.RecipientID,
+			Event:                   event,
+			CallID:                  call.ID,
+			CallStartedAt:           call.StartedAt.Time,
+			ExcludeDeviceIdentifier: actingDeviceIdentifier,
 		}); err != nil {
 			slog.WarnContext(ctx, "failed to dispatch terminal call wake",
 				"error", err, "call_id", call.ID.String(), "event", event,
