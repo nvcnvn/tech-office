@@ -1,9 +1,10 @@
+# Always deployed merged with core.yml (deploy.sh does this) — the overlay network
+# and shared volumes are defined there.
 # Processing profile: file scanning, document conversion, speech-to-text.
 #
 # All three are optional in the sense that the backend degrades rather than fails
 # when they are down, but uploads stay unscanned without ClamAV — do not disable it
 # on a deployment that accepts files from users.
-version: "3.8"
 
 x-logging: &logging
   driver: json-file
@@ -73,11 +74,6 @@ services:
       restart_policy: {condition: any, delay: 10s}
       resources:
         limits: {memory: 4G}
-
-networks:
-  internal:
-    name: techoffice_internal
-    external: true
 
 volumes:
   clamav-db: {}

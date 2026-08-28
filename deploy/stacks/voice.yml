@@ -1,10 +1,11 @@
+# Always deployed merged with core.yml (deploy.sh does this) — the overlay network
+# and shared volumes are defined there.
 # Voice profile: LiveKit SFU.
 #
 # Media does NOT go through Traefik — WebRTC needs the client to reach this node
 # directly, so 7881/tcp and 7882/udp are published in host mode (source IP preserved,
 # routing mesh bypassed) and must be open on the voice node's firewall. Only the
 # signalling WebSocket (7880) is proxied, over wss://${MEDIA_DOMAIN}.
-version: "3.8"
 
 services:
   livekit:
@@ -14,8 +15,8 @@ services:
       LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
       LIVEKIT_WEBHOOK_URL: http://backend:18080/api/livekit/webhook
     ports:
-      - {target: ${LIVEKIT_TCP_PORT}, published: ${LIVEKIT_TCP_PORT}, protocol: tcp, mode: host}
-      - {target: ${LIVEKIT_UDP_PORT}, published: ${LIVEKIT_UDP_PORT}, protocol: udp, mode: host}
+      - {target: "${LIVEKIT_TCP_PORT}", published: "${LIVEKIT_TCP_PORT}", protocol: tcp, mode: host}
+      - {target: "${LIVEKIT_UDP_PORT}", published: "${LIVEKIT_UDP_PORT}", protocol: udp, mode: host}
     networks: [internal]
     configs:
       - {source: livekit_config, target: /etc/livekit/livekit.yaml}
@@ -40,11 +41,6 @@ services:
       resources:
         limits: {memory: 4G}
         reservations: {memory: 512M}
-
-networks:
-  internal:
-    name: techoffice_internal
-    external: true
 
 configs:
   livekit_config:

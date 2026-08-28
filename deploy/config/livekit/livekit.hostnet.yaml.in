@@ -1,0 +1,24 @@
+# LiveKit SFU — real UDP media range on the host network (LIVEKIT_TRANSPORT=host).
+# Rendered by deploy/scripts/lib.sh. API keys come from the LIVEKIT_KEYS environment
+# variable, never this file.
+#
+# This is the transport shape LiveKit prefers for scale: many host ports to spread
+# participant traffic across, instead of one shared socket. It needs the container on
+# the host network, so the voice node runs exactly one LiveKit task and the whole
+# range must be open to it on the firewall.
+port: 7880
+bind_addresses:
+  - 0.0.0.0
+logging:
+  level: info
+rtc:
+  tcp_port: ${LIVEKIT_TCP_PORT}
+  port_range_start: ${LIVEKIT_UDP_RANGE_START}
+  port_range_end: ${LIVEKIT_UDP_RANGE_END}
+  use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP}
+  node_ip: "${LIVEKIT_NODE_IP}"
+turn:
+  # Off. LiveKit's embedded TURN/TLS wants 443, which Traefik owns on the edge node.
+  # A corporate-network fallback needs a dedicated L4 TLS edge on a `turn.` hostname;
+  # ICE-TCP on ${LIVEKIT_TCP_PORT} covers most restrictive networks without it.
+  enabled: false

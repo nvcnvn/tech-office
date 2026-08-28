@@ -26,9 +26,11 @@ RELEASE_TAG  ?= $(shell date -u +%Y%m%d%H%M%S)
 RELEASE_TAG  := $(RELEASE_TAG)
 
 
-BACKEND_IMAGE     ?= docker.io/nvcnvn/tech-office-backend
-MIGRATE_IMAGE     ?= docker.io/nvcnvn/tech-office-backend-migrate
-WEB_IMAGE         ?= docker.io/nvcnvn/tech-office-web
+# Images are published to the GitHub Container Registry by
+# .github/workflows/publish-images.yml. These targets are the manual escape hatch.
+BACKEND_IMAGE     ?= ghcr.io/nvcnvn/tech-office-backend
+MIGRATE_IMAGE     ?= ghcr.io/nvcnvn/tech-office-backend-migrate
+WEB_IMAGE         ?= ghcr.io/nvcnvn/tech-office-web
 BACKEND_IMAGE_TAG ?= $(RELEASE_TAG)
 MIGRATE_IMAGE_TAG ?= $(RELEASE_TAG)
 WEB_IMAGE_TAG     ?= $(RELEASE_TAG)
@@ -405,6 +407,13 @@ prod-build-mobile: prod-preflight-mobile
 		EXPO_PUBLIC_RELEASE_TAG=$(RELEASE_TAG) \
 		pnpm dlx eas-cli build --profile $(MOBILE_PROFILE) --platform $(MOBILE_PLATFORM) --non-interactive
 
-.PHONY: k8s-render-prod
-k8s-render-prod:
-	kubectl kustomize backend/k8s/overlays/prod
+# ---------------------------------------------------------------------------
+# Deployment
+# ---------------------------------------------------------------------------
+# The deployment lives in deploy/ and is driven by its own scripts, which read
+# deploy/.env rather than this Makefile's variables. See deploy/README.md.
+
+.PHONY: deploy-config
+deploy-config:
+	@bash -c '. deploy/scripts/lib.sh; load_env; render_configs; build_stack_args; \
+		docker stack config "$${STACK_ARGS[@]}" >/dev/null && echo "deploy/ stack files are valid"'

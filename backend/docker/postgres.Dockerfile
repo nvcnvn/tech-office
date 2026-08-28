@@ -25,6 +25,7 @@ RUN apt-get update \
 		libtool \
 		postgresql-server-dev-18 \
 		ca-certificates \
+		pgbackrest \
 		curl \
 		gnupg \
 		lsb-release \

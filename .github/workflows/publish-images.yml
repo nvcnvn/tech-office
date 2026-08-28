@@ -1,0 +1,95 @@
+# Publishes the deployment's images to the GitHub Container Registry.
+#
+# Three of them are the same for every deployment. The fourth, tech-office-web, is NOT:
+# Next.js bakes NEXT_PUBLIC_* in at build time, so a web image is welded to one
+# deployment's hostnames. The one built here is welded to transformar.work — it is the
+# image *our* hosted deployment runs, published so that deployment does not have to
+# build it on the fleet. That is why it carries the `-transformar` suffix: anyone
+# self-hosting builds their own with deploy/scripts/build-images.sh, and pulling this
+# one by mistake would give them an app that talks to our servers.
+#
+# Packages are created private by default. After the first successful run, open
+# https://github.com/users/nvcnvn/packages and set each package to Public so that
+# on-premises fleets can pull without credentials.
+name: Publish images
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish (default: short SHA)"
+        required: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: tech-office-backend
+            context: backend
+            dockerfile: backend/Dockerfile
+            # The Go build cross-compiles, so both architectures are cheap.
+            platforms: linux/amd64,linux/arm64
+          - name: tech-office-backend-migrate
+            context: backend
+            dockerfile: backend/Dockerfile.migrate
+            platforms: linux/amd64,linux/arm64
+          - name: tech-office-postgres
+            context: backend/docker
+            dockerfile: backend/docker/postgres.Dockerfile
+            # amd64 only: this image compiles Citus from source, and doing that for
+            # arm64 under QEMU takes hours. Build it natively on an arm64 machine if
+            # you need one.
+            platforms: linux/amd64
+          - name: tech-office-web-transformar
+            context: frontend
+            dockerfile: frontend/Dockerfile
+            # amd64 only: a Next.js build carries platform-specific SWC binaries, so
+            # this cannot be cross-compiled the way the Go images are, and building it
+            # twice under QEMU is not worth the runner minutes.
+            platforms: linux/amd64
+            # No build args — the Dockerfile's ARG defaults already are the
+            # transformar.work production values.
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.name }}
+          tags: |
+            type=ref,event=tag
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/') }}
+            type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
+            type=sha,format=short
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: ${{ matrix.platforms }}
+          push: true
+          # Only tech-office-web reads this; it becomes NEXT_PUBLIC_RELEASE_TAG.
+          build-args: |
+            RELEASE_TAG=${{ steps.meta.outputs.version }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}

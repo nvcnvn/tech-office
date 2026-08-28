@@ -155,9 +155,55 @@ than just endpoints:
 
 CORS is currently `cors.AllowAll()`.
 
-Operational endpoints outside the RPC surface: `/healthz` (k8s probes),
+Operational endpoints outside the RPC surface: `/healthz` (container health probes;
+the binary's own `tech-office healthcheck` subcommand probes it from inside the
+distroless image, which has no shell or curl),
 `/api/internal/status` (detailed JSON), `/api/notifications/stream` (raw SSE for
 `EventSource` clients), `/api/livekit/webhook`, and `/api/linking/{generate,resolve,preview}`.
+
+## Deployment
+
+One path: the Docker Swarm / Compose stacks in `deploy/`. The Kubernetes manifests are
+gone. `deploy/stacks/*.yml` describes every service, port, volume, secret and health
+check the system needs, so it also serves as the blueprint for anyone who wants to
+translate it back to Kubernetes themselves.
+
+**Shape.** 1–7 machines, placement by node label
+(`techoffice.{edge,db,app,voice,processing,obs}`), Traefik terminating TLS in front of
+web, backend and the LiveKit signalling socket, and one Citus-enabled PostgreSQL
+instance. WebRTC media bypasses the proxy entirely, because ICE needs the client's real
+address: `LIVEKIT_TRANSPORT=mux` publishes one muxed UDP port in host mode, and
+`LIVEKIT_TRANSPORT=host` puts LiveKit on the voice node's own network stack so it can
+own a real UDP range. Stack files are split by
+profile — `voice`, `processing`, `backup`, `observability`, `registry` — and a profile
+left out of `PROFILES` is removed from the fleet on the next deploy, which is how a site
+with its own monitoring opts out of ours. `deploy/README.md` is the runbook.
+
+**Observability** is OpenObserve: one container covering metric storage, PromQL,
+dashboards and alerting, fed by a single OpenTelemetry collector that scrapes
+node-exporter, cAdvisor, postgres_exporter and Traefik and pushes over OTLP. It replaced
+a Prometheus + Grafana + Alertmanager trio. The alert set lives in
+`deploy/config/openobserve/alerts.json` and is posted to OpenObserve's API by
+`deploy/scripts/provision-openobserve.sh`; the backend itself still exposes no
+Prometheus metrics, so those alerts are infrastructure-level plus Traefik's per-service
+5xx rate.
+
+**Images** are published to `ghcr.io/nvcnvn/` by `.github/workflows/publish-images.yml`:
+`tech-office-backend` and `tech-office-backend-migrate` for both architectures,
+`tech-office-postgres` for amd64 only because it compiles Citus from source. The web
+image is a special case: Next.js inlines `NEXT_PUBLIC_*` at build time, so an image is
+welded to one deployment's hostnames. CI publishes exactly one —
+`tech-office-web-transformar`, for the project's own hosted site — under a name that
+cannot be mistaken for a generic image, and every other deployment builds its own with
+`deploy/scripts/build-images.sh` or points `WEB_IMAGE` at its own published one.
+
+Backups are pgBackRest to S3/R2: weekly full, daily differential, hourly incremental,
+plus continuous WAL archiving via `archive_command`, compressed and encrypted
+client-side. That combination is what makes point-in-time recovery possible;
+`deploy/scripts/verify-restore.sh` restores the latest backup into a throwaway cluster
+and asserts the schema, Citus shard metadata and table contents came back, which is the
+only evidence that any of it works. There is deliberately no PostgreSQL failover —
+recovery is restore-from-object-storage.
 
 ## Schema and migrations
 

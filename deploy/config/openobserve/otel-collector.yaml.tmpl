@@ -1,0 +1,73 @@
+# OpenTelemetry collector. Rendered from otel-collector.yaml.tmpl by lib.sh.
+#
+# OpenObserve stores and queries metrics but does not scrape them, so this is the
+# scraper. The receiver takes plain Prometheus scrape_configs, which is why the
+# exporter targets below are the same ones a Prometheus deployment would use.
+#
+# `tasks.<service>` is Swarm's DNS record listing every task of a service — how the
+# global exporters (one per node) are all discovered. Plain `<service>` resolves to
+# the load-balanced VIP and would only ever scrape one of them.
+receivers:
+  prometheus:
+    config:
+      global:
+        scrape_interval: 30s
+        external_labels:
+          deployment: ${WEB_DOMAIN}
+      scrape_configs:
+        - job_name: node
+          dns_sd_configs:
+            - names: ["tasks.node-exporter"]
+              type: A
+              port: 9100
+
+        - job_name: containers
+          dns_sd_configs:
+            - names: ["tasks.cadvisor"]
+              type: A
+              port: 8080
+
+        - job_name: postgres
+          static_configs:
+            - targets: ["postgres-exporter:9187"]
+
+        - job_name: traefik
+          static_configs:
+            - targets: ["traefik:8082"]
+
+        # LiveKit publishes Prometheus metrics only when `prometheus_port` is set in
+        # its config; left off by default because the SFU's own logs cover a fleet
+        # this size.
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 8192
+  resourcedetection:
+    detectors: [env, system]
+    timeout: 5s
+
+exporters:
+  otlphttp/openobserve:
+    # No trailing slash: the exporter appends /v1/metrics itself, and a trailing
+    # slash produces a 404.
+    endpoint: http://openobserve:5080/api/${OBSERVE_ORG}
+    headers:
+      Authorization: "Basic ${OBSERVE_AUTH_B64}"
+      stream-name: metrics
+    retry_on_failure:
+      enabled: true
+      max_elapsed_time: 300s
+    sending_queue:
+      enabled: true
+      queue_size: 5000
+
+service:
+  telemetry:
+    logs:
+      level: warn
+  pipelines:
+    metrics:
+      receivers: [prometheus]
+      processors: [resourcedetection, batch]
+      exporters: [otlphttp/openobserve]

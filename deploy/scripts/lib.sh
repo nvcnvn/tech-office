@@ -45,6 +45,22 @@ derive_env() {
 		export APNS_VOIP_KEY_PATH=""
 	fi
 
+	# Media transport: one muxed UDP port on the overlay, or a real UDP range on the
+	# voice node's own network stack. The second is what LiveKit prefers for scale;
+	# the first is one firewall rule.
+	case "${LIVEKIT_TRANSPORT:-mux}" in
+		mux)
+			export LIVEKIT_SIGNAL_URL="http://livekit:7880"
+			export LIVEKIT_BACKEND_URL="ws://livekit:7880"
+			;;
+		host)
+			[ -n "${LIVEKIT_HOST:-}" ] || die "LIVEKIT_TRANSPORT=host needs LIVEKIT_HOST (the voice node's internal IP) in deploy/.env"
+			export LIVEKIT_SIGNAL_URL="http://${LIVEKIT_HOST}:7880"
+			export LIVEKIT_BACKEND_URL="ws://${LIVEKIT_HOST}:7880"
+			;;
+		*) die "LIVEKIT_TRANSPORT must be 'mux' or 'host', got '${LIVEKIT_TRANSPORT}'" ;;
+	esac
+
 	if [ -n "${LIVEKIT_NODE_IP:-}" ]; then
 		export LIVEKIT_USE_EXTERNAL_IP=false
 	else
@@ -57,7 +73,19 @@ derive_env() {
 		*) die "TLS_MODE must be 'acme' or 'file', got '${TLS_MODE:-}'" ;;
 	esac
 
+	# Compose interpolation has no ${VAR:+alt}, so the registry prefix (with its
+	# trailing slash, or nothing at all) is computed here instead of in the YAML.
+	# The OTLP exporter authenticates to OpenObserve with HTTP basic auth, which the
+	# collector config carries pre-encoded.
+	export OBSERVE_AUTH_B64="$(printf '%s:%s' "${OBSERVE_ROOT_EMAIL:-}" "${OBSERVE_ROOT_PASSWORD:-}" | base64 | tr -d '\n')"
+
 	export REGISTRY="${REGISTRY:-}"
+	export IMAGE_PREFIX="${REGISTRY:+$REGISTRY/}"
+	# The web image is built per-deployment (Next.js bakes the public URLs in), so it
+	# does not come from the project's registry — it goes wherever you can push.
+	export WEB_IMAGE_PREFIX="${WEB_REGISTRY:+$WEB_REGISTRY/}"
+	# WEB_IMAGE overrides the lot for a deployment that publishes its own web image.
+	export WEB_IMAGE_REF="${WEB_IMAGE:-${WEB_IMAGE_PREFIX}tech-office-web}:${WEB_TAG}"
 }
 
 # ${VAR} substitution without depending on envsubst (not installed on a minimal
@@ -81,6 +109,9 @@ render_configs() {
 	done < <(find "$DEPLOY_DIR/config" -name '*.tmpl')
 
 	# The two files whose *shape* changes with configuration, not just their values.
+	render "$DEPLOY_DIR/config/livekit/livekit.$( [ "${LIVEKIT_TRANSPORT:-mux}" = host ] && echo hostnet || echo mux ).yaml.in" \
+		"$DEPLOY_DIR/config/livekit/livekit.yaml"
+
 	if [ "$TLS_MODE" = "file" ]; then
 		cat >"$DEPLOY_DIR/config/traefik/dynamic/tls.yml" <<-EOF
 		# Operator-supplied certificate (TLS_MODE=file).
@@ -96,14 +127,6 @@ render_configs() {
 			>"$DEPLOY_DIR/config/traefik/dynamic/tls.yml"
 	fi
 
-	if [ -n "${ALERT_SLACK_WEBHOOK_URL:-}" ]; then
-		render "$DEPLOY_DIR/config/alertmanager/alertmanager.slack.yml.in" \
-			"$DEPLOY_DIR/config/alertmanager/alertmanager.yml"
-	else
-		cp "$DEPLOY_DIR/config/alertmanager/alertmanager.null.yml.in" \
-			"$DEPLOY_DIR/config/alertmanager/alertmanager.yml"
-	fi
-
 	# Swarm configs and secrets are immutable, so their names carry a content hash:
 	# editing a config file gives it a new name, which rolls the services using it.
 	CONFIG_VERSION="$(cat_tree "$DEPLOY_DIR/config" | sha256)"
@@ -117,17 +140,30 @@ cat_tree() {
 
 # PROFILES selects which stack files are deployed. core is always included; anything
 # not listed is removed from the swarm on the next deploy (--prune).
-stack_args() {
-	local files=("$DEPLOY_DIR/stacks/core.yml") p
-	for p in ${PROFILES:-voice processing backup observability}; do
+# Sets the global STACK_ARGS array (no mapfile: this has to work on bash 3 too).
+build_stack_args() {
+	STACK_ARGS=(-c "$DEPLOY_DIR/stacks/core.yml")
+	local p
+	for p in ${PROFILES-voice processing backup observability}; do
 		case "$p" in
 			core) ;;
-			voice|processing|backup|observability|registry)
-				files+=("$DEPLOY_DIR/stacks/$p.yml") ;;
+			voice)
+				# One knob, two stack shapes — see LIVEKIT_TRANSPORT in .env.
+				if [ "${LIVEKIT_TRANSPORT:-mux}" = host ]; then
+					STACK_ARGS+=(-c "$DEPLOY_DIR/stacks/voice-hostnet.yml")
+				else
+					STACK_ARGS+=(-c "$DEPLOY_DIR/stacks/voice.yml")
+				fi ;;
+			processing|backup|observability|registry)
+				STACK_ARGS+=(-c "$DEPLOY_DIR/stacks/$p.yml") ;;
 			*) die "unknown profile '$p'" ;;
 		esac
 	done
-	printf -- '-c\n%s\n' "${files[@]}"
+}
+
+profile_enabled() {
+	case " ${PROFILES-voice processing backup observability} " in *" $1 "*) return 0 ;; esac
+	return 1
 }
 
 swarm_active() {

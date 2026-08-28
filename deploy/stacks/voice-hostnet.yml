@@ -1,0 +1,43 @@
+# Always deployed merged with core.yml (deploy.sh does this) — the overlay network
+# and shared volumes are defined there.
+#
+# Voice profile, host-network variant (LIVEKIT_TRANSPORT=host).
+#
+# LiveKit runs directly on the voice node's network stack so it can own a real UDP
+# media range rather than a single muxed port. The cost is that it is no longer on
+# the overlay network, so two links go through addresses instead of service names:
+# Traefik reaches it at LIVEKIT_HOST, and its webhooks come back through the public
+# API hostname (they are signed with the LiveKit API key, so that path is safe).
+
+services:
+  livekit:
+    image: livekit/livekit-server:v1.12.0
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    environment:
+      LIVEKIT_KEYS: "${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}"
+      LIVEKIT_WEBHOOK_URL: https://${API_DOMAIN}/api/livekit/webhook
+    networks: [hostnet]
+    configs:
+      - {source: livekit_config, target: /etc/livekit/livekit.yaml}
+    logging:
+      driver: json-file
+      options: {max-size: "50m", max-file: "5"}
+    deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.voice == true]
+      restart_policy: {condition: any, delay: 5s}
+      update_config: {order: stop-first, failure_action: rollback}
+      resources:
+        limits: {memory: 4G}
+        reservations: {memory: 512M}
+
+networks:
+  hostnet:
+    name: host
+    external: true
+
+configs:
+  livekit_config:
+    name: techoffice_livekit_${CONFIG_VERSION}
+    file: ../config/livekit/livekit.yaml

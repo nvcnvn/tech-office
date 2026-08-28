@@ -1,9 +1,10 @@
+# Always deployed merged with core.yml (deploy.sh does this) — the overlay network
+# and shared volumes are defined there.
 # Optional private registry, for a fleet with no reachable external registry.
 #
 # Pulls happen over the node's own network, so every node must trust it. Either put
 # it behind Traefik with a real certificate, or add it to each node's
 # /etc/docker/daemon.json as an insecure registry (bootstrap.sh prints the snippet).
-version: "3.8"
 
 services:
   registry:
@@ -20,11 +21,6 @@ services:
       placement:
         constraints: [node.role == manager]
       restart_policy: {condition: any, delay: 10s}
-
-networks:
-  internal:
-    name: techoffice_internal
-    external: true
 
 volumes:
   registry-data: {}

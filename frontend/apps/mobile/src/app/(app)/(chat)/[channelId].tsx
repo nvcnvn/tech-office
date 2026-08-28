@@ -103,6 +103,10 @@ import {
   type VoiceClientSnapshot,
 } from "@/lib/voice/voice-client";
 import {
+  isNativeCallTierCapable,
+  useNativeCallPresented,
+} from "@/lib/voice/native-call";
+import {
   parseNavigationContext,
   resolveNavigationBackHref,
   withNavigationContext,
@@ -1559,7 +1563,14 @@ export default function ChannelScreen() {
             type === "chat_reaction" || event.notificationType === "reaction";
 
           if (isVoiceEvent) {
-            if (event.notificationType === "voice_call_incoming" && event.callId) {
+            // On a device the OS rings for, this call is already on screen as a system
+            // incoming call. The inline prompt is the fallback tier only — mirrors the
+            // same suppression in notification-stream-provider (FR-014).
+            if (
+              event.notificationType === "voice_call_incoming" &&
+              event.callId &&
+              !isNativeCallTierCapable()
+            ) {
               setIncomingVoiceCall({
                 channelId,
                 callId: event.callId,
@@ -2058,6 +2069,9 @@ export default function ChannelScreen() {
       (joinedVoiceCallId === activeVoiceCall.id ||
         voiceSnapshot.activeCallId === activeVoiceCall.id),
   );
+  const osIsPresentingThisCall = useNativeCallPresented(
+    activeVoiceCall?.id ?? incomingVoiceCall?.callId,
+  );
 
   return (
     <>
@@ -2264,6 +2278,13 @@ export default function ChannelScreen() {
         )}
 
         {(() => {
+          // The phone is ringing for this call on its own screen. A second "join this
+          // call" affordance in the app is the old in-app tier showing through, and
+          // dismissing it only swaps it for another one (FR-014). Once the call is
+          // answered the in-app banner is wanted again — that is the surface that mutes,
+          // shows quality and leaves.
+          if (osIsPresentingThisCall && !isActiveVoiceCallJoined) return null;
+
           // Compute whether we should show the prominent "channel call started"
           // prompt. Shown when there is an active call that the user hasn't
           // joined, there is no targeted invitation already displaying, and the

@@ -1,4 +1,10 @@
-FROM golang:1.25-bookworm AS builder
+# Cross-compile from the builder's native architecture rather than emulating the
+# target: pure-Go builds do this for free, and QEMU would make the multi-arch
+# publish job take hours.
+FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS builder
+
+ARG TARGETOS=linux
+ARG TARGETARCH=amd64
 
 WORKDIR /src
 
@@ -10,7 +16,7 @@ COPY database ./database
 COPY internal ./internal
 COPY rpc ./rpc
 
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} \
 	go build -trimpath -ldflags='-s -w' -o /out/tech-office ./cmd
 
 FROM gcr.io/distroless/base-debian12:nonroot

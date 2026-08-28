@@ -219,12 +219,44 @@ persistent `voice_call_incoming` notification so it is not replayed. `EndVoiceCa
 used only once the call has been answered on this device. A wake naming no invitation
 falls back to `JoinVoiceCall`.
 
+The answer is confirmed to the OS **before** that RPC runs, not after it. iOS fails the
+answer action — the user sees "Call failed" — if it is not fulfilled promptly, Telecom
+tears the call down after five seconds, and CallKit only activates the audio session once
+the answer is fulfilled, which is what `call-audio.ts` starts LiveKit's audio from. A join
+round trip ahead of it sat inside both budgets and held off the activation. If the join
+then fails, the OS call is closed rather than left showing a connected call with no audio.
+
+The identifier naming this handset is registered with the voice client as the first thing
+the push-registration effect does, before the VoIP token poll, the permission prompt or
+any network call, and independently of whether those succeed. It needs only local storage,
+and a call answered before it was set named no device — so the terminal wake meant for the
+person's other phones came back to this one and rang it again.
+
+The client tracks each presented call in module state, which does not survive a JavaScript
+reload while the OS call does. Answering or hanging up a call the module has forgotten
+therefore rebuilds what it knows from `getActiveCallSession()` — the OS session carries the
+wake payload verbatim, including the invitation id — instead of failing the answer or
+leaving the caller ringing.
+
 **Only one incoming surface is ever drawn.** A device that registered a VoIP token (iOS)
 or runs Telecom (Android) reports itself native-call capable to both the backend and the
 mobile client; on that device `notification-stream-provider.tsx` suppresses the tier-B
 in-app prompt and the local call notification entirely, leaving the system call screen as
-the sole incoming UI. Answering it opens the conversation behind the system UI, which is
-how the in-call bar and the transcript become reachable once the phone is unlocked.
+the sole incoming UI. The channel screen suppresses the same way: it does not raise its
+own inline incoming banner on a native-capable device, and while the OS is presenting an
+unanswered call it draws **no** call banner at all — neither the "voice call started …
+Join / Later" discovery prompt nor the join affordance that prompt falls through to.
+Answering it opens the conversation behind the system UI, which is how the in-call bar and
+the transcript become reachable once the phone is unlocked; from that point the in-app
+banner is drawn again, because it is the surface that mutes, shows quality and leaves.
+
+**Leaving from inside the app closes the system call.** The app has several ways to hang
+up — the global active-call bar, the channel's call banner, an unexpected LiveKit
+disconnect. None of them talk to CallKit or Telecom. Instead `native-call.ts` watches the
+`voiceClient` snapshot and, when the active call id leaves a call the OS is presenting,
+reports that call ended to the OS. Without it the system call screen survives the hang-up
+with a running timer and no audio, and the user cannot dismiss it from the app. It is
+mirrored centrally, from the one snapshot, rather than in each leave button.
 
 ## Client surfaces
 
@@ -233,7 +265,9 @@ how the in-call bar and the transcript become reachable once the phone is unlock
   - `native-call.ts` — wake → report → join → end, both platforms (tier A). Started from
     the authenticated tab layout, because a call cannot be joined without a workspace
     session. It also mirrors the client's mute state into the OS call object from the
-    `voiceClient` snapshot, so the lock screen and the app cannot disagree.
+    `voiceClient` snapshot, so the lock screen and the app cannot disagree, and closes
+    the OS call when that snapshot shows the app has left it. `useNativeCallPresented`
+    exposes the presented-call set to in-app surfaces so they can stand aside.
   - `voice-client.ts` — LiveKit transport. During a system-presented call it is told the
     audio session is owned externally and does not start its own; the answer path builds
     join credentials with the shared `toVoiceJoinCredentials`.

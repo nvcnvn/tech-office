@@ -1,6 +1,6 @@
 -- WARNING: Database migrations are managed by backend/scripts/migrate.sh.
 -- DO NOT apply this file directly in production. Use `backend/scripts/migrate.sh`,
--- which runs timestamped `.up.sql` files under `backend/k8s/base/database/migrations`
+-- which runs timestamped `.up.sql` files under `backend/database/migrations`
 -- with `psql` and records progress in `public.schema_migrations`.
 -- This file is kept as a canonical schema reference for developers and documentation.
 

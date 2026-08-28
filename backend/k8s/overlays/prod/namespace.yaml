@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: tech-office-prod
-  labels:
-    name: tech-office-prod
-    app: tech-office
-    environment: prod

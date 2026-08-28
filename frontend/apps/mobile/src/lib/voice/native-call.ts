@@ -25,6 +25,7 @@
  *      which is why the wake payload carries everything needed to ring.
  */
 
+import { useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import * as Calls from "expo-callkit-telecom";
 
@@ -66,6 +67,25 @@ interface TrackedCall {
 
 const trackedCalls = new Map<string, TrackedCall>();
 
+/** Notified whenever the set of OS-presented calls changes. In-app call surfaces
+ *  subscribe through {@link useNativeCallPresented} so they can stay out of the way of a
+ *  call the phone itself is already showing (FR-014). */
+const trackedCallListeners = new Set<() => void>();
+
+function notifyTrackedCallsChanged(): void {
+  trackedCallListeners.forEach((listener) => listener());
+}
+
+function trackCall(serverCallId: string, call: TrackedCall): void {
+  trackedCalls.set(serverCallId, call);
+  notifyTrackedCallsChanged();
+}
+
+/** Forgets a call. Returns nothing: callers must not care whether it was there. */
+function untrackCall(serverCallId: string): void {
+  if (trackedCalls.delete(serverCallId)) notifyTrackedCallsChanged();
+}
+
 /** Resolves the workspace call id for an OS call id — the reverse lookup the system
  *  callbacks need, since they only know the OS's own identifier. */
 function serverCallIdFor(nativeId: string): string | undefined {
@@ -73,6 +93,38 @@ function serverCallIdFor(nativeId: string): string | undefined {
     if (tracked.nativeId === nativeId) return serverCallId;
   }
   return undefined;
+}
+
+/**
+ * Rebuilds what this module knows about a call from the OS's own session store.
+ *
+ * Module state does not survive a JavaScript reload, but the OS call does — leaving the
+ * phone showing a call this module has never heard of. Answering it then failed outright
+ * ("Call failed"), because the answer handler had no server call id to join with. The
+ * session carries the wake payload verbatim, so everything needed is still there.
+ */
+async function recoverTrackedCall(nativeId: string): Promise<string | undefined> {
+  const session = await Calls.getActiveCallSession();
+  const incoming = session?.incomingCallEvent;
+  if (!session || session.id !== nativeId || !incoming) return undefined;
+
+  const metadata = readWakeMetadata(incoming.metadata as Record<string, unknown> | undefined);
+  trackCall(incoming.serverCallId, {
+    nativeId,
+    sequence: metadata.sequence,
+    // The OS remembers whether the call was ever connected, which is what decides between
+    // declining an invitation and ending an answered call further down.
+    answeredHere: session.status === "connected",
+    channelId: metadata.channelId,
+    invitationId: metadata.invitationId,
+    ringExpiresAt: metadata.ringExpiresAt,
+  });
+  log("recovered call tracking from the OS session store", {
+    serverCallId: incoming.serverCallId,
+    nativeId,
+    status: session.status,
+  });
+  return incoming.serverCallId;
 }
 
 /** A workspace session must exist before a call can be joined. Supplied by the auth
@@ -163,7 +215,7 @@ async function closeNativeCall(
   nativeId: string,
   reason: Calls.CallEndedReason,
 ): Promise<void> {
-  trackedCalls.delete(serverCallId);
+  untrackCall(serverCallId);
   try {
     await Calls.reportCallEnded(nativeId, reason);
   } catch (error) {
@@ -247,7 +299,7 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
     return;
   }
 
-  trackedCalls.set(serverCallId, {
+  trackCall(serverCallId, {
     nativeId: session.id,
     sequence: metadata.sequence,
     answeredHere: false,
@@ -266,7 +318,7 @@ async function handleWake(session: Calls.CallSession): Promise<void> {
  * after the callback has already returned.
  */
 async function handleAnswered(nativeId: string, requestId: string): Promise<void> {
-  const serverCallId = serverCallIdFor(nativeId);
+  const serverCallId = serverCallIdFor(nativeId) ?? (await recoverTrackedCall(nativeId));
   if (!serverCallId) {
     log("answered a call this device does not track", { nativeId });
     await Calls.reportCallEnded(nativeId, "failed");
@@ -281,6 +333,20 @@ async function handleAnswered(nativeId: string, requestId: string): Promise<void
   // call that connects with nobody able to hear.
   configureCallAudioSession();
   voiceClient.setAudioSessionOwnedExternally(true);
+
+  // Fulfilled before anything that touches the network, and deliberately so. iOS fails
+  // the answer action if it is not fulfilled promptly — the user sees "Call failed" —
+  // and Telecom tears the call down after five seconds. It is also what makes audio
+  // work: CallKit only activates the audio session once the answer is fulfilled, and
+  // call-audio.ts starts LiveKit's audio from that activation. Waiting for a join RPC
+  // first put a server round trip inside both budgets and blocked the activation.
+  try {
+    await Calls.fulfillIncomingCallConnected(requestId);
+  } catch (error) {
+    log("the OS rejected the answer - closing the call", { serverCallId, error: String(error) });
+    await closeNativeCall(serverCallId, nativeId, "failed");
+    return;
+  }
 
   try {
     // Answering the invitation rather than joining the call is what acknowledges the
@@ -304,10 +370,6 @@ async function handleAnswered(nativeId: string, requestId: string): Promise<void
           tracked?.channelId,
         );
 
-    // Told to the OS before the media connect, which is the slow half: Telecom tears
-    // the call down if the answer is not fulfilled inside five seconds.
-    await Calls.fulfillIncomingCallConnected(requestId);
-
     if (!credentials) {
       throw new Error("the server returned no join credentials for this call");
     }
@@ -316,27 +378,24 @@ async function handleAnswered(nativeId: string, requestId: string): Promise<void
     onCallAnswered?.(serverCallId, tracked?.channelId);
     log("call answered and joined", { serverCallId, nativeId });
   } catch (error) {
-    // Answering and then failing to join is the one case where the OS call must not be
-    // left open: the user would see a connected call with no audio and no way out.
+    // The answer is already fulfilled, so the OS is showing a connected call. Failing to
+    // join now would strand the user in one with no audio and no way out.
     log("join failed after answering - closing the call", { serverCallId, error: String(error) });
-    try {
-      await Calls.failIncomingCallConnected(nativeId, requestId);
-    } catch {
-      // Falling through to reportCallEnded below is enough; the call still closes.
-    }
     await closeNativeCall(serverCallId, nativeId, "failed");
   }
 }
 
 /** The user hung up or declined from the system UI. */
 async function handleEnded(nativeId: string): Promise<void> {
-  const serverCallId = serverCallIdFor(nativeId);
+  // Recovered the same way as an answer: without it, hanging up a call this module has
+  // forgotten tells the server nothing and the caller rings until the deadline sweep.
+  const serverCallId = serverCallIdFor(nativeId) ?? (await recoverTrackedCall(nativeId));
   if (!serverCallId) {
     releaseCallAudioSession();
     return;
   }
   const tracked = trackedCalls.get(serverCallId);
-  trackedCalls.delete(serverCallId);
+  untrackCall(serverCallId);
   releaseCallAudioSession();
   if (voiceClient.getSnapshot().activeCallId === serverCallId) {
     await voiceClient.disconnect();
@@ -424,7 +483,24 @@ export function startNativeCallIntegration(options: {
   // about whether the microphone is open (FR-012). Mirrored from the client's own state
   // rather than from each caller, so a future in-app mute button cannot forget to.
   let mirroredMute: boolean | null = null;
-  const unsubscribeMute = voiceClient.subscribe((snapshot) => {
+  let lastActiveCallId: string | null = null;
+  const unsubscribeCallState = voiceClient.subscribe((snapshot) => {
+    // Leaving a call from inside the app closes LiveKit and tells the server, but
+    // nothing tells the OS: the system call screen stays up with a running timer and no
+    // audio, and it cannot be dismissed from the app. Closing it here rather than in
+    // each of the app's leave buttons means a new one cannot forget to.
+    if (lastActiveCallId && lastActiveCallId !== snapshot.activeCallId) {
+      const left = trackedCalls.get(lastActiveCallId);
+      if (left) {
+        log("call left from inside the app - closing the system call", {
+          serverCallId: lastActiveCallId,
+          nativeId: left.nativeId,
+        });
+        void closeNativeCall(lastActiveCallId, left.nativeId, "remoteEnded");
+      }
+    }
+    lastActiveCallId = snapshot.activeCallId;
+
     const tracked = snapshot.activeCallId ? trackedCalls.get(snapshot.activeCallId) : undefined;
     if (!tracked) {
       mirroredMute = null;
@@ -446,13 +522,27 @@ export function startNativeCallIntegration(options: {
   return () => {
     subscriptions.forEach((subscription) => subscription.remove());
     subscriptions = [];
-    unsubscribeMute();
+    unsubscribeCallState();
     trackedCalls.clear();
+    notifyTrackedCallsChanged();
   };
 }
 
-/** Whether this device is presenting a given call through the OS. Lets the in-app
- *  surfaces defer to the system UI instead of drawing a second incoming-call screen. */
-export function isNativeCallActive(serverCallId: string): boolean {
-  return trackedCalls.has(serverCallId);
+/**
+ * Whether this device is presenting a given call through the OS, as reactive state.
+ *
+ * The in-app call banners are the fallback tier. Drawing one for a call the phone is
+ * already ringing gives the user two unrelated call UIs, only one of which can answer
+ * it — which is what this lets a surface avoid (FR-014).
+ */
+export function useNativeCallPresented(serverCallId: string | null | undefined): boolean {
+  return useSyncExternalStore(
+    (onStoreChange) => {
+      trackedCallListeners.add(onStoreChange);
+      return () => {
+        trackedCallListeners.delete(onStoreChange);
+      };
+    },
+    () => Boolean(serverCallId && trackedCalls.has(serverCallId)),
+  );
 }

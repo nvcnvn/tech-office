@@ -153,28 +153,31 @@ LiveKit listens on:
 
 The local config uses `devkey` / `devsecretdevsecretdevsecretdevsecret` for LiveKit. Set `TECH_OFFICE_HOST_IP` to your LAN IP when testing from a physical device so the backend returns a reachable LiveKit URL.
 
-## Production LiveKit Gateway and TURN Runbook
+## Production LiveKit transport runbook
 
 LiveKit owns ICE server discovery and TURN credentials. The app backend only returns `livekit_url`, `livekit_token`, `room_name`, and token expiry in voice join credentials.
 
-1. Configure `backend/k8s/base/livekit/configmap.yaml` with the production transport profile: `rtc.port_range_start=5000`, `rtc.port_range_end=6000`, `turn.enabled=true`, `turn.domain=transformar-turn.media.devguards.com`, `turn.tls_port=443`, and `turn.external_tls=true`.
-2. Route `transformar.api.devguards.com` and `transformar.media.devguards.com` through the Gateway API resources in `backend/k8s/overlays/prod/`. Those listeners terminate HTTPS on `443/tcp` and forward plain HTTP/WebSocket traffic to the backend and LiveKit signal service.
-3. Expose `transformar-turn.media.devguards.com:443` through a dedicated L4 TCP or TLS edge. TURN/TLS is not ordinary HTTP, so it should not share an HTTP listener with the API and signal hosts.
-4. Allow `5000-6000/udp` directly to the LiveKit node network path. The production manifest now uses host networking for LiveKit so it can own a real UDP media range instead of a single Service-muxed UDP port.
-5. If Cloudflare sits in front of the stack, proxy only the HTTPS hosts by default. Keep `turn.` and the UDP media path DNS-only unless you have Spectrum configured for those protocols.
-6. Verify clients can connect from web and mobile networks, then capture room name, client platform, network profile, and selected relay or direct candidate path in the smoke checklist.
+Production runs from the Docker Swarm stack in [`deploy/`](../../deploy/README.md); everything below is set in `deploy/.env` and rendered into `deploy/config/livekit/livekit.yaml`.
+
+1. Choose the media transport with `LIVEKIT_TRANSPORT`. See the next section — the short version is `mux` for a small office, `host` when one socket starts to hurt.
+2. Signalling only goes through Traefik: `wss://${MEDIA_DOMAIN}` terminates on the edge node and forwards to LiveKit's `7880`. Media never touches the proxy.
+3. Set `LIVEKIT_NODE_IP` to the voice node's LAN IP for a LAN-only deployment, or leave it empty for an internet-facing one so LiveKit discovers its public address over STUN. This is the single most common cause of "the call connects but there is no audio".
+4. Open the chosen media ports on the voice node: `LIVEKIT_TCP_PORT` plus either `LIVEKIT_UDP_PORT` or the `LIVEKIT_UDP_RANGE_START`–`LIVEKIT_UDP_RANGE_END` range.
+5. If Cloudflare sits in front of the stack, proxy only the HTTPS hostnames. Keep the UDP media path DNS-only unless you have Spectrum configured for it.
+6. Verify clients can connect from web and mobile networks — including a phone on mobile data, not just the office LAN — then capture room name, client platform, network profile, and selected relay or direct candidate path in the smoke checklist.
 
 ## UDP mux versus UDP range
 
-- A UDP range (`rtc.port_range_start` and `rtc.port_range_end`) gives LiveKit many host ports to advertise and spread participant traffic across. This is the production shape LiveKit prefers for raw performance and scale.
-- A single UDP mux port (`rtc.udp_port`) pushes all direct RTC traffic through one public UDP port. It is easier to expose from Kubernetes Services and firewalls, but it concentrates all media on one socket and becomes the first place you feel contention as room counts and bitrate rise.
-- The single mux port this repo used before the production change was `7882/udp` in `backend/k8s/base/livekit/configmap.yaml`. If you ever switch back to mux mode, that `rtc.udp_port` setting is the exact port clients use for direct UDP media.
+`LIVEKIT_TRANSPORT` picks between two shapes, and `deploy/scripts/lib.sh` renders the matching LiveKit config and stack file.
+
+- `host` — a UDP range (`rtc.port_range_start`/`rtc.port_range_end`, default `5000-6000`) gives LiveKit many host ports to advertise and spread participant traffic across. This is the shape LiveKit prefers for raw performance and scale. It needs the container on the voice node's own network stack, so exactly one LiveKit task runs there, and Traefik and the backend reach it at `LIVEKIT_HOST` instead of by service name.
+- `mux` — a single UDP port (`rtc.udp_port`, default `7882`) pushes all direct RTC traffic through one public port. It keeps LiveKit on the overlay network and needs one firewall rule, which is why it is the default; but it concentrates all media on one socket and becomes the first place you feel contention as room counts and bitrate rise. Swarm also cannot publish a port *range* in host mode, so a range genuinely requires the host-network variant.
+- The embedded TURN server is off in both. TURN/TLS wants `443/tcp`, which Traefik owns on the edge node, and an embedded TURN listener cannot share it. ICE-TCP on `LIVEKIT_TCP_PORT` is the fallback for clients that cannot send UDP; a real TURN relay for HTTPS-only corporate networks needs a dedicated L4 TLS edge on a separate `turn.` hostname, which this deployment does not set up.
 - TURN relay range (`turn.relay_range_start` and `turn.relay_range_end`) is a different knob. It constrains the UDP sockets the embedded TURN server uses when relaying media to the SFU; it is not the same thing as the public client-facing RTC media range and usually does not require matching edge firewall openings.
-- In short: use a UDP range when you can give LiveKit direct node networking, use single-port UDP mux when platform constraints make large UDP exposure awkward, and keep TURN/TLS on `443/tcp` as the corporate-network fallback path.
 
 ## Operations
 
 - **Webhook failures**: check backend logs for `rejected livekit webhook` or `failed to process livekit webhook`; verify the backend resolved the same LiveKit key pair exposed by `LIVEKIT_KEYS` or your explicit `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` overrides.
 - **Stale active call**: inspect `voice.call_session` and `voice.call_participant` for active participants. A final `LeaveVoiceCall` or LiveKit `room_finished` webhook should close the call.
 - **Recording stuck processing**: check LiveKit egress logs, then inspect `voice.call_artifact.provider_job_id`, `storage_key`, and `error_message`.
-- **Mobile/WebRTC issues**: verify `PUBLIC_LIVEKIT_URL`, the Gateway listener for `transformar.media.devguards.com:443`, direct UDP reachability on `5000-6000/udp`, the TURN/TLS listener for `transformar-turn.media.devguards.com:443`, and whether the client selected direct UDP or TURN relay.
+- **Mobile/WebRTC issues**: verify `PUBLIC_LIVEKIT_URL`, that Traefik's `livekit-signal` router is serving `${MEDIA_DOMAIN}` on 443, direct UDP reachability on the configured media port or range, `LIVEKIT_NODE_IP`, and whether the client selected a direct or relay candidate.

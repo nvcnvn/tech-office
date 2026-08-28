@@ -191,7 +191,6 @@ export function ChatMessageBody({
       <VoiceCallRecord
         label={voiceCallEvent.label}
         callId={timelineMetadata?.callId}
-        metadata={timelineMetadata}
         channelId={channelId}
         messageTimestamp={messageTimestamp}
         outcomeHint={voiceCallEvent.outcomeHint}

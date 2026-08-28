@@ -13,7 +13,11 @@ We wanted a secure, simple, and beautifully designed alternative that keeps team
 
 ## Hosting & Support
 
-* **100% Open Source:** The source code is completely free to self-host.
+* **100% Open Source:** The source code is completely free to self-host. Everything you
+  need is in [`deploy/`](deploy/README.md): Docker Swarm stacks for 1 to 7 machines,
+  with TLS, backups to S3/R2, and optional monitoring. Prebuilt images live at
+  `ghcr.io/nvcnvn/`. There is no Kubernetes deployment in this repository — the compose
+  files are a complete blueprint if you would rather run it there.
 * **Affordable Hosting:** If you don't want the hassle of self-hosting, we offer a cheap, flat-rate hosted version to cover hardware (CPU, RAM, bandwidth, and storage) with a tiny profit margin to keep the project running. Check it out at [transformar.work](https://transformar.work/).
 * **Sponsor:** If you like this project and want to support it, feel free to drop a small sponsor on [GitHub Sponsors](https://github.com/sponsors/nvcnvn).
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
-import { getDownloadUrl, listCallRecords, type GetCallRecordResponse } from "apis";
+import { getCallRecord, getDownloadUrl, listCallRecords, type GetCallRecordResponse } from "apis";
 import { voice } from "rpc";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
@@ -34,6 +34,10 @@ const VOICE_CALL_EVENT_MAP: Record<string, VoiceCallEvent> = {
 
 interface VoiceCallRecordProps {
   label: string;
+  /** The call this system message is about, from the message's own timeline metadata.
+   *  Present on anything written by current code; absent on older messages, which still
+   *  fall back to listing the channel's recent calls and matching on timestamp. */
+  callId?: string;
   channelId?: string;
   messageTimestamp?: Date | null;
   outcomeHint?: VoiceCallOutcomeHint;
@@ -191,28 +195,43 @@ export function voiceCallEventFromText(messageText: string): VoiceCallEvent | nu
 
 export function VoiceCallRecord({
   label,
+  callId,
   channelId,
   messageTimestamp,
   outcomeHint,
   maxWidth = 320,
 }: VoiceCallRecordProps) {
   const [record, setRecord] = useState<VoiceCallRecordData | null>(null);
-  const [loading, setLoading] = useState(Boolean(channelId && outcomeHint));
-  const shouldLoadRecord = Boolean(channelId && outcomeHint);
+  const shouldLoadRecord = Boolean(outcomeHint && (callId || channelId));
+  const [loading, setLoading] = useState(shouldLoadRecord);
+  // The list renders each row's timestamp as a fresh Date, so depending on the object
+  // re-ran this effect on every render — which set state, which rendered again. One
+  // voice-call message on screen was enough to put the backend under a few hundred
+  // requests a minute. A number cannot churn that way.
+  const messageTimestampMs = messageTimestamp?.getTime() ?? null;
 
   useEffect(() => {
     let cancelled = false;
     async function loadRecord() {
-      if (!shouldLoadRecord || !channelId) {
+      if (!shouldLoadRecord) {
         setRecord(null);
         setLoading(false);
         return;
       }
       setLoading(true);
       try {
-        const response = await listCallRecords({ channelId, limit: 12 });
+        // The message names its own call, so fetch that one record. Listing the
+        // channel's recent calls and picking the closest by timestamp is the fallback
+        // for messages written before the id was recorded, not the normal path.
+        const loaded = callId
+          ? ((await getCallRecord(callId)).record ?? null)
+          : selectClosestRecord(
+              (await listCallRecords({ channelId: channelId!, limit: 12 })).records,
+              messageTimestampMs === null ? null : new Date(messageTimestampMs),
+              outcomeHint,
+            );
         if (!cancelled) {
-          setRecord(selectClosestRecord(response.records, messageTimestamp, outcomeHint));
+          setRecord(loaded);
         }
       } catch {
         if (!cancelled) {
@@ -228,7 +247,7 @@ export function VoiceCallRecord({
     return () => {
       cancelled = true;
     };
-  }, [channelId, messageTimestamp, outcomeHint, shouldLoadRecord]);
+  }, [callId, channelId, messageTimestampMs, outcomeHint, shouldLoadRecord]);
 
   const call = record?.call;
   const startedAt = timestampToDate(call?.startedAt);

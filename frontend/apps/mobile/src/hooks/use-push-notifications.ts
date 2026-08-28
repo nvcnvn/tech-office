@@ -282,6 +282,14 @@ export function usePushNotifications() {
 
     async function register() {
       try {
+        // Resolved before anything that can block or bail out. It needs nothing from
+        // push registration — only SecureStore — but sat behind the VoIP token poll, the
+        // permission prompt and the FCM round trip, and was skipped entirely when any of
+        // those failed. A call answered in that window named no handset, so the terminal
+        // wake meant for the person's *other* phones came back to this one and, on iOS,
+        // was reported to CallKit as a second incoming call.
+        setVoiceDeviceIdentifier(await getStablePushDeviceIdentifier());
+
         if (Platform.OS === "android") {
           await Notifications.setNotificationChannelAsync("default", {
             name: "default",
@@ -331,12 +339,9 @@ export function usePushNotifications() {
         }
 
         const pushToken = registration.token;
+        // The same identifier already registered with the voice client above, and the
+        // one the backend fans call wakes out by.
         const deviceId = await getStablePushDeviceIdentifier();
-        // The same identifier the backend fans call wakes out by. Registered with the
-        // voice client so every answer, decline and hang-up names this handset, and the
-        // terminal wake that stops the person's other phones is not delivered back here
-        // — on iOS that wake is reported to CallKit as a new incoming call and rings.
-        setVoiceDeviceIdentifier(deviceId);
 
         // Both token rows carry the same capability, so the backend never routes a
         // device to a transport that cannot reach it — a phone that silently never rings.

@@ -1,78 +1,70 @@
+# Always deployed merged with core.yml (deploy.sh does this) — the overlay network
+# and shared volumes are defined there.
+#
 # Observability profile — entirely optional.
 #
-# Drop `observability` from PROFILES if you already run Prometheus/Grafana/Loki. The
-# rest of the stack does not depend on any of it; the only coupling is the textfile
-# volume the backup service writes its freshness metric into.
-version: "3.8"
+# OpenObserve is one container doing what Prometheus + Grafana + Alertmanager used to
+# do here: metric storage, PromQL, dashboards and alerting. It does not scrape, so a
+# single OpenTelemetry collector does the scraping and pushes over OTLP.
+#
+# Drop `observability` from PROFILES if you already run your own. Nothing else in the
+# stack depends on it; the only coupling is the textfile volume the backup service
+# writes its freshness metric into.
 
 x-logging: &logging
   driver: json-file
   options: {max-size: "20m", max-file: "3"}
 
 services:
-  prometheus:
-    image: prom/prometheus:v3.1.0
-    command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=30d
-      - --web.enable-lifecycle
+  openobserve:
+    image: public.ecr.aws/zinclabs/openobserve:v0.92.2
+    environment:
+      ZO_ROOT_USER_EMAIL: ${OBSERVE_ROOT_EMAIL}
+      ZO_ROOT_USER_PASSWORD: ${OBSERVE_ROOT_PASSWORD}
+      ZO_DATA_DIR: /data
+      # Single node, SQLite metadata, local Parquet files. Clustered mode wants etcd
+      # and object storage, which is a different deployment for a different scale.
+      ZO_LOCAL_MODE: "true"
+      ZO_LOCAL_MODE_STORAGE: disk
+      ZO_COMPACT_DATA_RETENTION_DAYS: ${OBSERVE_RETENTION_DAYS}
+      ZO_TELEMETRY: "false"
+      ZO_HTTP_PORT: "5080"
+    # Not behind Traefik on purpose: no public observability UI. Reach it over an SSH
+    # tunnel, or open 5080 to your admin subnet only — Swarm host-mode publishing
+    # cannot bind to a single interface.
     ports:
-      - {target: 9090, published: 9090, protocol: tcp, mode: host}
+      - {target: 5080, published: 5080, protocol: tcp, mode: host}
     networks: [internal]
     volumes:
-      - prometheus-data:/prometheus
-    configs:
-      - {source: prom_config, target: /etc/prometheus/prometheus.yml}
-      - {source: prom_alerts, target: /etc/prometheus/alerts.yml}
+      - openobserve-data:/data
     logging: *logging
     deploy:
+      replicas: 1
+      placement:
+        constraints: [node.labels.techoffice.obs == true]
+      restart_policy: {condition: any, delay: 10s}
+      update_config: {order: stop-first, failure_action: rollback}
+      resources:
+        limits: {memory: 4G}
+        reservations: {memory: 512M}
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.159.0
+    command: ["--config=/etc/otel/config.yaml"]
+    networks: [internal]
+    configs:
+      - {source: otel_config, target: /etc/otel/config.yaml}
+    logging: *logging
+    deploy:
+      # One collector for the whole fleet, not one per node: it discovers every
+      # exporter task through Swarm DNS, so a second copy would only duplicate
+      # every series.
       replicas: 1
       placement:
         constraints: [node.labels.techoffice.obs == true]
       restart_policy: {condition: any, delay: 10s}
       resources:
-        limits: {memory: 2G}
-
-  alertmanager:
-    image: prom/alertmanager:v0.28.0
-    command: ["--config.file=/etc/alertmanager/alertmanager.yml"]
-    ports:
-      - {target: 9093, published: 9093, protocol: tcp, mode: host}
-    networks: [internal]
-    volumes:
-      - alertmanager-data:/alertmanager
-    configs:
-      - {source: alertmanager_config, target: /etc/alertmanager/alertmanager.yml}
-    logging: *logging
-    deploy:
-      replicas: 1
-      placement:
-        constraints: [node.labels.techoffice.obs == true]
-      restart_policy: {condition: any, delay: 10s}
-
-  grafana:
-    image: grafana/grafana:11.5.1
-    environment:
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
-      GF_USERS_ALLOW_SIGN_UP: "false"
-      GF_ANALYTICS_REPORTING_ENABLED: "false"
-    # Not behind Traefik on purpose: no public Grafana, no extra public auth surface.
-    # Reach it over an SSH tunnel to the obs node, or open 3000 to your admin subnet
-    # only — Swarm host-mode publishing cannot bind to a single interface.
-    ports:
-      - {target: 3000, published: 3000, protocol: tcp, mode: host}
-    networks: [internal]
-    volumes:
-      - grafana-data:/var/lib/grafana
-    configs:
-      - {source: grafana_datasource, target: /etc/grafana/provisioning/datasources/prometheus.yml}
-    logging: *logging
-    deploy:
-      replicas: 1
-      placement:
-        constraints: [node.labels.techoffice.obs == true]
-      restart_policy: {condition: any, delay: 10s}
+        limits: {memory: 512M}
 
   node-exporter:
     image: prom/node-exporter:v1.8.2
@@ -80,7 +72,7 @@ services:
       - --path.rootfs=/host
       - --path.procfs=/host/proc
       - --path.sysfs=/host/sys
-      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/docker/.+)($|/)
+      - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc|var/lib/docker/.+)($$|/)
       - --collector.textfile.directory=/metrics
     networks: [internal]
     volumes:
@@ -126,30 +118,14 @@ services:
       resources:
         limits: {memory: 256M}
 
-networks:
-  internal:
-    name: techoffice_internal
-    external: true
-
 volumes:
-  prometheus-data: {}
-  alertmanager-data: {}
-  grafana-data: {}
+  openobserve-data: {}
   metrics-textfile: {}
 
 configs:
-  prom_config:
-    name: techoffice_promcfg_${CONFIG_VERSION}
-    file: ../config/prometheus/prometheus.yml
-  prom_alerts:
-    name: techoffice_promalerts_${CONFIG_VERSION}
-    file: ../config/prometheus/alerts.yml
+  otel_config:
+    name: techoffice_otel_${CONFIG_VERSION}
+    file: ../config/openobserve/otel-collector.yaml
   pg_queries:
     name: techoffice_pgqueries_${CONFIG_VERSION}
-    file: ../config/prometheus/pg-queries.yml
-  alertmanager_config:
-    name: techoffice_amcfg_${CONFIG_VERSION}
-    file: ../config/alertmanager/alertmanager.yml
-  grafana_datasource:
-    name: techoffice_grafanads_${CONFIG_VERSION}
-    file: ../config/grafana/provisioning/datasources/prometheus.yml
+    file: ../config/openobserve/pg-queries.yml

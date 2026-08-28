@@ -1,14 +1,15 @@
+# Always deployed merged with core.yml (deploy.sh does this) — the overlay network
+# and shared volumes are defined there.
 # Backup profile: pgBackRest to S3/R2.
 #
 # Runs beside Postgres on the db node, reads PGDATA directly and talks to the server
 # over the unix socket, so backups cost the cluster only a checkpoint. WAL archiving
 # is configured on the postgres service itself (core.yml) — this service takes the
 # base backups, expires old ones, and publishes freshness metrics.
-version: "3.8"
 
 services:
   pgbackup:
-    image: ${REGISTRY:-}${REGISTRY:+/}tech-office-postgres:${RELEASE_TAG}
+    image: ${IMAGE_PREFIX}tech-office-postgres:${RELEASE_TAG}
     user: postgres
     entrypoint: ["/bin/bash", "/usr/local/bin/backup-loop.sh"]
     environment:
@@ -40,11 +41,6 @@ services:
       restart_policy: {condition: any, delay: 30s}
       resources:
         limits: {memory: 1G}
-
-networks:
-  internal:
-    name: techoffice_internal
-    external: true
 
 volumes:
   pgdata: {}

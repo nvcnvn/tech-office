@@ -1,7 +1,6 @@
 # Core stack: edge proxy, database, backend, web.
 # Deployed by deploy/scripts/deploy.sh — it exports deploy/.env into the environment
 # first, so every ${VAR} below resolves from there.
-version: "3.8"
 
 x-logging: &logging
   driver: json-file
@@ -43,7 +42,7 @@ services:
   # ponytail: no replica, no automatic failover — deliberate (see deploy/README.md
   # "What this deployment is not"). Recovery is restore-from-S3, minutes not seconds.
   postgres:
-    image: ${REGISTRY:-}${REGISTRY:+/}tech-office-postgres:${RELEASE_TAG}
+    image: ${IMAGE_PREFIX}tech-office-postgres:${RELEASE_TAG}
     command:
       - postgres
       - -c
@@ -98,7 +97,7 @@ services:
 
   # --- Application -----------------------------------------------------------
   backend:
-    image: ${REGISTRY:-}${REGISTRY:+/}tech-office-backend:${RELEASE_TAG}
+    image: ${IMAGE_PREFIX}tech-office-backend:${RELEASE_TAG}
     command: ["server"]
     environment:
       SERVER_PORT: "18080"
@@ -133,7 +132,7 @@ services:
       CLAMAV_HOST: clamav
       CLAMAV_PORT: "3310"
       GOTENBERG_URL: http://gotenberg:8081
-      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_URL: ${LIVEKIT_BACKEND_URL}
       PUBLIC_LIVEKIT_URL: wss://${MEDIA_DOMAIN}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
@@ -166,7 +165,7 @@ services:
         reservations: {memory: 512M}
 
   web:
-    image: ${REGISTRY:-}${REGISTRY:+/}tech-office-web:${RELEASE_TAG}
+    image: ${WEB_IMAGE_REF}
     environment:
       NODE_ENV: production
       PORT: "13000"

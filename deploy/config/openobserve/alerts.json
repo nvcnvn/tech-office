@@ -1,0 +1,107 @@
+[
+  {
+    "name": "PostgresDown",
+    "description": "PostgreSQL is unreachable — the entire application is offline.",
+    "stream_type": "metrics",
+    "stream_name": "pg_up",
+    "is_real_time": false,
+    "enabled": true,
+    "query_condition": {
+      "type": "promql",
+      "promql": "min(pg_up)",
+      "promql_condition": {"column": "value", "operator": "<", "value": 1}
+    },
+    "trigger_condition": {"period": 5, "frequency": 5, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 60},
+    "destinations": []
+  },
+  {
+    "name": "BackupTooOld",
+    "description": "No successful pgBackRest backup in over 26 hours. Check `docker service logs techoffice_pgbackup`. Until this clears, recovery depends on WAL replay from an ageing base backup.",
+    "stream_type": "metrics",
+    "stream_name": "techoffice_pgbackrest_last_backup_timestamp_seconds",
+    "is_real_time": false,
+    "enabled": true,
+    "query_condition": {
+      "type": "promql",
+      "promql": "time() - max(techoffice_pgbackrest_last_backup_timestamp_seconds)",
+      "promql_condition": {"column": "value", "operator": ">=", "value": 93600}
+    },
+    "trigger_condition": {"period": 30, "frequency": 30, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 720},
+    "destinations": []
+  },
+  {
+    "name": "BackupFailed",
+    "description": "The last pgBackRest backup attempt exited non-zero.",
+    "stream_type": "metrics",
+    "stream_name": "techoffice_pgbackrest_last_backup_status",
+    "is_real_time": false,
+    "enabled": true,
+    "query_condition": {
+      "type": "promql",
+      "promql": "max(techoffice_pgbackrest_last_backup_status)",
+      "promql_condition": {"column": "value", "operator": ">=", "value": 1}
+    },
+    "trigger_condition": {"period": 15, "frequency": 15, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 720},
+    "destinations": []
+  },
+  {
+    "name": "WALArchivingFailing",
+    "description": "WAL archiving to object storage is failing. Point-in-time recovery is broken AND the database disk will fill as WAL accumulates.",
+    "stream_type": "metrics",
+    "stream_name": "pg_stat_archiver_failed_count",
+    "is_real_time": false,
+    "enabled": true,
+    "query_condition": {
+      "type": "promql",
+      "promql": "increase(pg_stat_archiver_failed_count[15m])",
+      "promql_condition": {"column": "value", "operator": ">", "value": 0}
+    },
+    "trigger_condition": {"period": 15, "frequency": 15, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 120},
+    "destinations": []
+  },
+  {
+    "name": "DiskSpaceLow",
+    "description": "A filesystem on one of the nodes is below 10% free.",
+    "stream_type": "metrics",
+    "stream_name": "node_filesystem_avail_bytes",
+    "is_real_time": false,
+    "enabled": true,
+    "query_condition": {
+      "type": "promql",
+      "promql": "min(node_filesystem_avail_bytes{fstype!~\"tmpfs|overlay\"} / node_filesystem_size_bytes)",
+      "promql_condition": {"column": "value", "operator": "<", "value": 0.1}
+    },
+    "trigger_condition": {"period": 15, "frequency": 15, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 360},
+    "destinations": []
+  },
+  {
+    "name": "TargetDown",
+    "description": "A scrape target has been unreachable for several minutes.",
+    "stream_type": "metrics",
+    "stream_name": "up",
+    "is_real_time": false,
+    "enabled": true,
+    "query_condition": {
+      "type": "promql",
+      "promql": "min(up)",
+      "promql_condition": {"column": "value", "operator": "<", "value": 1}
+    },
+    "trigger_condition": {"period": 10, "frequency": 10, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 120},
+    "destinations": []
+  },
+  {
+    "name": "HighServerErrorRate",
+    "description": "More than 5% of requests to a service are returning 5xx.",
+    "stream_type": "metrics",
+    "stream_name": "traefik_service_requests_total",
+    "is_real_time": false,
+    "enabled": true,
+    "query_condition": {
+      "type": "promql",
+      "promql": "sum(rate(traefik_service_requests_total{code=~\"5..\"}[5m])) / sum(rate(traefik_service_requests_total[5m]))",
+      "promql_condition": {"column": "value", "operator": ">", "value": 0.05}
+    },
+    "trigger_condition": {"period": 10, "frequency": 10, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 120},
+    "destinations": []
+  }
+]

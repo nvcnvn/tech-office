@@ -1,0 +1,10 @@
+# Real configuration and credentials for a specific deployment.
+.env
+secrets/
+
+# Rendered from the .tmpl / .in files by deploy/scripts/lib.sh at deploy time.
+config/traefik/traefik.yml
+config/traefik/dynamic/routes.yml
+config/traefik/dynamic/tls.yml
+config/livekit/livekit.yaml
+config/openobserve/otel-collector.yaml

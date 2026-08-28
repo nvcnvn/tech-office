@@ -22,7 +22,7 @@ git diff --name-only HEAD
 If the change touched **none** of the following, report "no snapshot update required" and stop:
 
 - `backend/rpc/**` — an RPC surface changed
-- `backend/database/scripts/schema.sql` or `backend/k8s/base/database/migrations/**` — a constraint, table, or column changed
+- `backend/database/scripts/schema.sql` or `backend/database/migrations/**` — a constraint, table, or column changed
 - `backend/internal/**` — behaviour, a background job cadence, or a cross-domain call changed
 - `frontend/apps/**` or `frontend/packages/**` — a client surface or shared contract changed
 

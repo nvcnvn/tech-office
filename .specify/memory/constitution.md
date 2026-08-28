@@ -89,7 +89,7 @@ This constitution defines **governance principles** and **architectural mandates
 
 **Migration Workflow (CRITICAL - forward-only psql runner)**:
 1. Keep `backend/database/scripts/schema.sql` authoritative. Update it before writing migrations so schema and generated code stay aligned.
-2. Create timestamped `.up.sql` files under `backend/k8s/base/database/migrations/` using `YYYYMMDDHHMMSS_description.up.sql`. `.down.sql` files may exist for manual rollback documentation, but the standard runner is forward-only and does not execute them.
+2. Create timestamped `.up.sql` files under `backend/database/migrations/` using `YYYYMMDDHHMMSS_description.up.sql`. `.down.sql` files may exist for manual rollback documentation, but the standard runner is forward-only and does not execute them.
 3. Run `cd backend && ./scripts/migrate.sh` after setting `DATABASE_URL`. The script applies each `.up.sql` file with `psql`, records the current version in `public.schema_migrations`, and replays the dirty version automatically if a previous run failed mid-file.
 4. Treat rollback as an explicit operator task: write compensating forward migrations or execute reviewed manual SQL when necessary. Do not rely on automated down-migration execution in routine workflows.
 5. Commit schema changes, migrations, and regenerated artifacts in the same PR. Atlas or other auto-diff tooling is prohibited.
@@ -128,7 +128,7 @@ Due to Citus distributed architecture, the following limitations MUST be adhered
 - [ ] No `ON DELETE SET NULL` or `ON DELETE SET DEFAULT` in foreign keys
 - [ ] No `now()` in `ON CONFLICT DO UPDATE` clauses
 - [ ] All JOINs include `organization_id` in the join condition
-- [ ] New migration files added under `backend/k8s/base/database/migrations/` and validated via `./scripts/migrate.sh`
+- [ ] New migration files added under `backend/database/migrations/` and validated via `./scripts/migrate.sh`
 
 **Examples**:
 ```sql
@@ -1542,7 +1542,7 @@ exercised before release.
 - Target: PostgreSQL 18+
 - Singular table names, `snake_case` naming
 - Primary keys: `id`, updated timestamps: `updated_at` (no `created_at`)
-- Migrations: forward-only `psql` runner over timestamped `.up.sql` files in `backend/k8s/base/database/migrations/`; apply via `cd backend && ./scripts/migrate.sh`, check state with `./scripts/migrate.sh status`, and recover by rerunning the script after fixing SQL issues
+- Migrations: forward-only `psql` runner over timestamped `.up.sql` files in `backend/database/migrations/`; apply via `cd backend && ./scripts/migrate.sh`, check state with `./scripts/migrate.sh status`, and recover by rerunning the script after fixing SQL issues
 - Query files: `backend/database/scripts/*.query.sql` (domain-specific)
 - Code generation: Run `sqlc generate` after SQL changes
 

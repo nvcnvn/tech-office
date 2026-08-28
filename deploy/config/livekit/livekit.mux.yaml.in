@@ -1,0 +1,25 @@
+# LiveKit SFU — single muxed UDP port (LIVEKIT_TRANSPORT=mux).
+# Rendered by deploy/scripts/lib.sh. API keys come from the LIVEKIT_KEYS environment
+# variable, never this file.
+#
+# One UDP port instead of a 1000-port range: one firewall rule, one published port,
+# and Swarm does not have to program a NAT rule per port. All media shares one
+# socket, which is the first thing to feel contention as rooms and bitrate grow —
+# switch to LIVEKIT_TRANSPORT=host when that happens.
+port: 7880
+bind_addresses:
+  - 0.0.0.0
+logging:
+  level: info
+rtc:
+  tcp_port: ${LIVEKIT_TCP_PORT}
+  udp_port: ${LIVEKIT_UDP_PORT}
+  # Empty LIVEKIT_NODE_IP means "discover my public address over STUN" (internet
+  # deployment). Setting it pins the address clients are told to send media to,
+  # which is what a LAN-only deployment needs.
+  use_external_ip: ${LIVEKIT_USE_EXTERNAL_IP}
+  node_ip: "${LIVEKIT_NODE_IP}"
+turn:
+  # Off. TURN/TLS wants port 443, which Traefik owns. Clients that cannot reach
+  # ${LIVEKIT_UDP_PORT}/udp fall back to ICE-TCP on ${LIVEKIT_TCP_PORT}.
+  enabled: false

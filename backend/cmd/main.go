@@ -24,6 +24,7 @@ func main() {
 			StartServer,
 			ToolsCommand,
 			SeedDemoOrgCommand,
+			HealthcheckCommand,
 		},
 	}
 
