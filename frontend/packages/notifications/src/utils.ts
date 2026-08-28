@@ -136,6 +136,20 @@ export function getNotificationTypeIcon(notificationType: string): string {
 		doc_updated: '📄',
 		doc_commented: '💬',
 		doc_mentioned: '@',
+		ritual_instance_assigned: '🔁',
+		ritual_instance_overdue: '⏰',
+		ritual_instance_missed: '⚠️',
+		ritual_instances_scheduled: '🔁',
+		evidence_submitted: '📎',
+		evidence_approved: '✅',
+		evidence_rejected: '❌',
+		calendar_event_invite: '📅',
+		calendar_event_cancel: '🚫',
+		calendar_event_change: '📅',
+		calendar_event_reminder: '⏰',
+		calendar_check_in_missed: '⚠️',
+		calendar_event_digest: '🗓️',
+		account_removal_requested: '🚪',
 	};
 	return icons[notificationType as NotificationType] || '📢';
 }
@@ -163,6 +177,20 @@ export function getNotificationTypeLabel(notificationType: string): string {
 		doc_updated: 'Updated',
 		doc_commented: 'Comment',
 		doc_mentioned: 'Mentioned',
+		ritual_instance_assigned: 'Ritual assigned',
+		ritual_instance_overdue: 'Ritual overdue',
+		ritual_instance_missed: 'Ritual missed',
+		ritual_instances_scheduled: 'Rituals scheduled',
+		evidence_submitted: 'Evidence submitted',
+		evidence_approved: 'Evidence approved',
+		evidence_rejected: 'Evidence rejected',
+		calendar_event_invite: 'Event invite',
+		calendar_event_cancel: 'Event cancelled',
+		calendar_event_change: 'Event changed',
+		calendar_event_reminder: 'Event reminder',
+		calendar_check_in_missed: 'Check-in missed',
+		calendar_event_digest: 'Agenda',
+		account_removal_requested: 'Removal requested',
 	};
 	return labels[notificationType as NotificationType] || notificationType;
 }

@@ -84,6 +84,15 @@ func (l *Logic) notifyOwnersOfRemovalRequest(ctx context.Context, tx database.DB
 			Title:               "Account removal requested",
 			Message:             name + " has asked to be removed from this workspace.",
 			PublishingServiceId: "compliance",
+			// Stated rather than defaulted. An unset Priority is PriorityAlways, which
+			// pushes immediately and bypasses do-not-disturb and domain mute - too loud
+			// for a request an owner answers in their own time. The rest were falling
+			// through to persistent_default/activity, which files a compliance request
+			// under general activity in the notification centre.
+			Priority:       int32(notification.PriorityDefault),
+			PolicyKey:      notification.PolicyKeyPersistentDefault,
+			DeliveryClass:  notification.DeliveryClassPersistent,
+			SourceCategory: notification.SourceCategorySystem,
 		}); err != nil {
 			return err
 		}

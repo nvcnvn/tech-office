@@ -47,6 +47,28 @@ These are different signals and the distinction matters:
 | 2 | deliver only when online |
 | 4 | silent / ephemeral — never persisted, log only |
 
+### What priority 0 costs
+
+`PriorityAlways` is not "important", it is "reach them whatever it takes":
+`ShouldSendPush` returns true before it looks at presence or at which channel the
+recipient is viewing, `ShouldSuppressPush` returns before do-not-disturb and domain mute,
+and `rescuePushWindowForRequest` collapses the rescue delay to zero. Only `mention` and
+`voice_call_incoming` earn it — an @you and a ringing phone are both things a person has
+asked to be interrupted for.
+
+Ordinary chat (`message`, `reply`) publishes at `PriorityDefault`. It used to publish at 0,
+which meant a DM pushed someone who was reading that very conversation and no setting
+could quiet it. Two things had to change together, because either alone does nothing: the
+priority, and passing the channel as `active_channel_id` so `ShouldSendPush` can see which
+conversation the recipient is in. Before that the "already viewing the target channel"
+branch was unreachable for chat — the channel was only ever in `action_data`.
+
+`active_channel_id` is overloaded, which is why the message publish sets it on the direct
+-message branch only. On a persistent notification it means "skip the push if they are
+looking at this"; on a `live_only` one it *reroutes* the notification to whoever is viewing
+that channel instead of to the recipients it was addressed to. A channel message is
+`live_only`, and naming its channel would quietly narrow its audience.
+
 ## Delivery pipeline
 
 ```
@@ -177,6 +199,15 @@ through do-not-disturb.
 Priority 4 (`typing`, `reaction`) never touches the database. `RouteEphemeralSignal` looks
 up connections whose `active_channel_id` matches and writes straight to their event
 channels; if a connection's buffer is full the signal is dropped rather than blocking.
+
+**Priority 4 is load-bearing here, not a label.** The publisher decides *whether* to skip
+the DB write from `delivery_class = live_only` plus a non-empty `active_channel_id`, but
+`publishToInstancesByChannel` decides *how to notify* from `priority == PrioritySilent`
+alone. Set one without the other and the two halves disagree: the row is never inserted,
+yet the listener is told to go and read it, finds nothing, logs `no notification
+recipients found` and drops the signal. That is what silently swallowed reaction removals
+until they were moved to priority 4 to match reaction additions. Any new live-only
+channel signal must be priority 4.
 
 ## V2 resource subscriptions
 
@@ -310,7 +341,12 @@ See [compliance-safety.md](compliance-safety.md).
 
 Adding a type means changing four places in one PR (Constitution VIII): the DB CHECK,
 `internal/notification/constants.go`, the proto, and
-`frontend/packages/apis/src/notifications.ts`.
+`frontend/packages/apis/src/notification.ts` — plus the two `Record<NotificationType, …>`
+maps in `frontend/packages/notifications/src/utils.ts`, which the union makes exhaustive.
+Those maps are why the union matters beyond type-checking: a type missing from them falls
+back to a generic bell icon and renders its **raw type string** as the label in the
+notification centre, which is what every calendar, ritual and evidence notification did
+while the union stopped at `doc_mentioned`.
 
 ## Client surfaces
 
@@ -352,6 +388,14 @@ Nothing breaks at runtime, because `IsValidNotificationType` is only called from
 contract test is therefore not testing what its name claims. Fixing it means moving the
 ritual constants into the notification package and asserting against the database CHECK
 rather than the Go slice.
+
+**D9 — the clients listen for SSE event types the backend never sends.**
+The server emits exactly three `EventType` values: `notification`, `ping` and
+`connection_established`. Mobile subscribes to and branches on `chat_message` and
+`chat_reaction` in `hooks/use-sse.ts` and three chat screens. Nothing breaks, because every
+real event arrives as `notification` and the reaction branch has an
+`event.notificationType === "reaction"` fallback beside the dead `type === "chat_reaction"`
+check — but the vocabulary is fiction and reads as though a second event family exists.
 
 **D7 — mobile handles notification types the backend cannot emit.**
 `apps/mobile/src/lib/linking.ts` branches on `thread_reply`, `message_reply`,

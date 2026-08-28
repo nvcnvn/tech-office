@@ -78,7 +78,7 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	}
 	defer tenantPool.Close()
 
-	flowPool, err := database.NewPool(ctx, dsl, nil)
+	flowPool, err := database.NewFlowPool(ctx, dsl)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create flow database pool", "error", err)
 		return err

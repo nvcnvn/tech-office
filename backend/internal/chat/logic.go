@@ -1226,10 +1226,17 @@ func (s *chatLogicImpl) broadcastNewMessage(
 	// Format notification title based on channel type
 	var title string
 	deliveryClass := notification.DeliveryClassLiveOnly
+	// The channel is named to the publisher only on the branch that actually pushes.
+	// It is what lets ShouldSendPush skip a recipient who is already reading this
+	// conversation - but on the live_only branch below, a non-empty active_channel_id
+	// also reroutes the whole notification to "people viewing this channel" instead of
+	// to the members it was addressed to, which is not what a channel message wants.
+	activeChannelID := ""
 	if channel.ChannelType == ChannelTypeDirectMessage {
 		// Direct message: "{{authorName}} direct messaged you"
 		title = fmt.Sprintf("%s direct messaged you", authorName)
 		deliveryClass = notification.DeliveryClassPersistent
+		activeChannelID = channelID.String()
 	} else {
 		// Regular channel: "{{authorName}} in #{{channelSlug}}"
 		title = fmt.Sprintf("%s in #%s", authorName, channel.TitleSlug)
@@ -1243,13 +1250,20 @@ func (s *chatLogicImpl) broadcastNewMessage(
 		Recipients: &rpcv1.NotificationRecipients{
 			EmployeeIds: recipientIDs,
 		},
-		Title:          title,
-		Message:        previewText,
-		ActionData:     actionData,
-		Priority:       notification.PriorityAlways,
-		PolicyKey:      notification.PolicyKeyChatMessage,
-		DeliveryClass:  deliveryClass,
-		SourceCategory: notification.SourceCategoryActivity,
+		Title:      title,
+		Message:    previewText,
+		ActionData: actionData,
+		// Default, not Always. Priority 0 is the tier that reaches someone whatever it
+		// takes: it returns from ShouldSendPush before presence or the active channel
+		// are looked at, from ShouldSuppressPush before do-not-disturb and domain mute,
+		// and it collapses the rescue window to zero. An ordinary message does not earn
+		// that - it pushed people who were reading the conversation at the time, and no
+		// setting could quiet it. An @mention still publishes at Always.
+		Priority:        int32(notification.PriorityDefault),
+		PolicyKey:       notification.PolicyKeyChatMessage,
+		DeliveryClass:   deliveryClass,
+		ActiveChannelId: activeChannelID,
+		SourceCategory:  notification.SourceCategoryActivity,
 		NavigationTarget: &rpcv1.NavigationTarget{
 			Domain:       notification.SourceDomainChat,
 			ResourceType: "channel",
@@ -1867,13 +1881,17 @@ func (s *chatLogicImpl) ReplyToMessage(ctx context.Context, tx database.DBTX, or
 					Recipients: &rpcv1.NotificationRecipients{
 						EmployeeIds: recipientIDs,
 					},
-					Title:          title,
-					Message:        previewText,
-					ActionData:     actionData,
-					Priority:       0,
-					PolicyKey:      notification.PolicyKeyChatReply,
-					DeliveryClass:  notification.DeliveryClassPersistent,
-					SourceCategory: notification.SourceCategoryActivity,
+					Title:      title,
+					Message:    previewText,
+					ActionData: actionData,
+					// Default rather than the old literal 0 (Always): see the message
+					// publish above. A reply is ordinary traffic, so do-not-disturb,
+					// domain mute and "already reading this channel" all apply to it.
+					Priority:        int32(notification.PriorityDefault),
+					PolicyKey:       notification.PolicyKeyChatReply,
+					DeliveryClass:   notification.DeliveryClassPersistent,
+					ActiveChannelId: parentMessage.ChannelID.String(),
+					SourceCategory:  notification.SourceCategoryActivity,
 					NavigationTarget: &rpcv1.NavigationTarget{
 						Domain:       notification.SourceDomainChat,
 						ResourceType: "channel",
@@ -1937,13 +1955,17 @@ func (s *chatLogicImpl) ReplyToMessage(ctx context.Context, tx database.DBTX, or
 			Recipients: &rpcv1.NotificationRecipients{
 				EmployeeIds: []string{parentMessage.AuthorEmployeeID.String()},
 			},
-			Title:          title,
-			Message:        previewText,
-			ActionData:     actionData,
-			Priority:       0,
-			PolicyKey:      notification.PolicyKeyChatReply,
-			DeliveryClass:  notification.DeliveryClassPersistent,
-			SourceCategory: notification.SourceCategoryActivity,
+			Title:      title,
+			Message:    previewText,
+			ActionData: actionData,
+			// Default rather than the old literal 0 (Always): see the message publish
+			// above. A reply to your own message is still ordinary traffic, so
+			// do-not-disturb, domain mute and "already reading this channel" apply.
+			Priority:        int32(notification.PriorityDefault),
+			PolicyKey:       notification.PolicyKeyChatReply,
+			DeliveryClass:   notification.DeliveryClassPersistent,
+			ActiveChannelId: parentMessage.ChannelID.String(),
+			SourceCategory:  notification.SourceCategoryActivity,
 			NavigationTarget: &rpcv1.NavigationTarget{
 				Domain:       notification.SourceDomainChat,
 				ResourceType: "channel",
@@ -2793,9 +2815,16 @@ func (s *chatLogicImpl) RemoveReaction(ctx context.Context, tx database.DBTX, or
 			}
 			return actionData
 		}(),
-		Title:           title,
-		Message:         messagePreview,
-		Priority:        int32(notification.PriorityOnline),
+		Title:   title,
+		Message: messagePreview,
+		// Silent, like the reaction-added signal above. This is not cosmetic:
+		// publishToInstancesByChannel decides between the inline-data path and the
+		// "listener queries the DB" path on priority == PrioritySilent alone, while the
+		// live_only branch above it already skipped the DB write. At any other priority
+		// the listener looks up a notification row that was never inserted, finds
+		// nothing, and drops the signal - so removing a reaction never reached the
+		// author's other clients.
+		Priority:        int32(notification.PrioritySilent),
 		ActiveChannelId: message.ChannelID.String(),
 		PolicyKey:       notification.PolicyKeyChatReactionLive,
 		DeliveryClass:   notification.DeliveryClassLiveOnly,

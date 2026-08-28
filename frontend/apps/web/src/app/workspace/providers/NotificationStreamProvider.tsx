@@ -25,6 +25,7 @@ import type { NotificationPopup } from "@/hooks/useNotificationPopup";
 import { ContextRailProvider } from "./ContextRailProvider";
 import {
   dispatchVoiceCallStreamEvent,
+  isVoiceCallNotificationType,
   voiceCallEventFromNotification,
   voiceCallEventKey,
 } from "../voice/voiceCallEvents";
@@ -257,9 +258,13 @@ export function useNotificationStream(): NotificationStreamContextValue {
 function mapNotificationToPopup(
   notification: Notification,
 ): NotificationPopup | null {
-  // voice_call_incoming is handled by the workspace-level incoming call dialog.
-  // Do not also show it as a generic notification toast.
-  if (notification.notificationType === "voice_call_incoming") {
+  // Every voice_call_* notification is plumbing for the call UI, not something to
+  // read: they are published silent and live-only, with a placeholder "Voice call"
+  // title and an empty body, and the call surfaces (the incoming dialog, the call
+  // bar, the channel announcement) are what the user is meant to see. Rendering
+  // them as generic toasts produces a ghost banner that flashes on every call
+  // signal and says nothing.
+  if (isVoiceCallNotificationType(notification.notificationType)) {
     return null;
   }
 

@@ -148,6 +148,108 @@ deploy/scripts/label-node.sh node-2 db obs
 Keep `db` and `voice` apart when you can: a backup that saturates the disk and an SFU
 that needs steady CPU are bad neighbours.
 
+## Sizing
+
+The reference box is an **OVH Advance-1**: AMD EPYC 4245P (6 cores / 12 threads),
+32 GB DDR5 ECC, 2x960 GB NVMe in soft RAID 1. Everything below is derived from that;
+if yours is bigger, scale the memory column and `PG_*` together rather than one at a time.
+
+### Memory
+
+Limits are ceilings, not allocations, so they oversubscribe on paper — the point is that
+no single service can take the machine down. Postgres is the only one whose ceiling is
+also a reservation.
+
+| Service | Limit | Why |
+|---|---|---|
+| OS + Docker + mdraid | ~2 G (unclaimed) | leave it alone |
+| postgres | 10 G (reserve 6 G) | 4 G `shared_buffers` + backends + page cache |
+| backend x2 (x3 mid-update) | 1500 M each | `GOMEMLIMIT=1200MiB` under it |
+| web x2 | 768 M each | `--max-old-space-size=640` under it |
+| traefik | 256 M | it proxies, it does not buffer |
+| livekit | 2 G | 32 participants of audio, not video walls |
+| clamav | 2560 M | the signature database is resident; under ~2 G clamd is OOM-killed |
+| gotenberg | 1500 M | one Chromium per conversion |
+| whisper | 3 G | **drop the model from `PROFILES` while `VOICE_TRANSCRIPTION_ENABLED=false`** |
+| openobserve | 2 G | 30 days of one node's metrics is small |
+| otel + node-exporter + cadvisor + pg-exporter | ~1.5 G total | monitoring must cost less than what it monitors |
+| pgbackup | 1 G | pgBackRest streams, it does not buffer the cluster |
+
+That is ~27 G of ceiling against 30 G of usable RAM, with the 3rd backend replica
+during a rolling update already counted — and only if you drop whisper while
+transcription is off. Leave whisper running and the mid-update total is ~30 G,
+which is the whole machine.
+
+Two backend replicas, not three: `start-first` keeps one serving throughout an
+update, and a third steady replica costs 1.5 G and 2 CPUs on a box that has 6.
+
+### CPU
+
+Only Postgres runs uncapped. Everything else has a `cpus` limit so that a transcription,
+a virus scan, a PDF render or a backup cannot starve it: whisper 3.0, livekit 3.0,
+clamav 2.0, gotenberg 2.0, pgbackup 2.0, backend 2.0 each, openobserve 1.5, web 1.0,
+traefik 1.0, exporters 0.25-0.5. Go 1.25 reads `GOMAXPROCS` from the cgroup quota, so the
+backend limit sizes its scheduler for free.
+
+### Connections
+
+Sized from the pools outward, never the other way round. Each replica opens three
+pools and they do different jobs, so they get different policies
+(`backend/database/pool.go`):
+
+| Pool | Max | Min | Idle | Lifetime | What uses it |
+|---|---|---|---|---|---|
+| tenant | 8 | 2 | 5 min | 30 min | every authenticated RPC: chat, docs, calendar, collaboration, voice, compliance |
+| admin | 6 | 2 | 5 min | 30 min | permission lookup on every request, plus notification/push loops |
+| flow | 3 | 1 | 30 min | 1 h | one flows worker per replica, polling on a ticker |
+
+```
+17 per replica
+  x 3 replicas (BACKEND_REPLICAS + 1 during a start-first update)
+  = 51
++ ~12 for postgres-exporter, pgBackRest, migrations, your psql
++ 5 superuser_reserved_connections
+= PG_MAX_CONNECTIONS 80
+```
+
+`TestFleetWideConnectionCeiling` fails if those two ever drift apart.
+
+pgx defaults `MaxConns` to `max(4, NumCPU)`, which on a 12-thread box is 12 for *every*
+pool — 108 connections fleet-wide mid-update, for six cores. The sizing cannot live in
+`DATABASE_URL` either, because the migration container passes that same string to `psql`
+and libpq rejects pgx's `pool_*` parameters.
+
+One connection each in the admin and flow pools is held permanently by a `LISTEN` loop
+(notifications, and the flows worker) and never returns to the pool. That is why admin
+keeps two warm connections to have one genuinely spare, and why flow's ceiling of three
+is two usable.
+
+### PostgreSQL 18
+
+Worth knowing about what 18 changed under this deployment:
+
+- **Asynchronous I/O.** `io_method=worker` (the default) with `io_workers=4` gets read-ahead
+  on sequential scans, bitmap heap scans and vacuum. `io_uring` is *not* used: swarm ignores
+  `security_opt`, so the `io_uring_*` syscalls stay blocked by the default seccomp profile,
+  and unblocking them daemon-wide for an OLTP workload that mostly hits `shared_buffers` is
+  a bad trade. Revisit if the workload turns analytical.
+- `effective_io_concurrency` now defaults to 16 instead of 1; raised to 32 for NVMe.
+- **B-tree skip scan** makes a multicolumn index usable when the leading column is not in
+  the `WHERE` clause. With `org_id` leading almost every index here, some single-column
+  indexes are now redundant — audit with `pg_stat_user_indexes` before adding more.
+- `autovacuum_vacuum_max_threshold` caps the scale factor with an absolute row count, so
+  large tables stop waiting for 20% of an ever-growing table to go dead.
+- `dynamic_shared_memory_type=sysv` because swarm ignores `shm_size` and the default
+  64 MB `/dev/shm` is not enough for parallel hash joins.
+
+Verify after a deploy:
+
+```sh
+docker exec -it $(docker ps -qf name=techoffice_postgres) \
+  psql -U office -d office -c "SELECT name, setting FROM pg_settings
+    WHERE name IN ('io_method','shared_buffers','work_mem','max_connections','data_checksums');"
+```
+
 ## Profiles
 
 `PROFILES` selects what runs. Anything not listed is **removed** on the next deploy, so

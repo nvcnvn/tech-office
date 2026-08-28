@@ -59,7 +59,21 @@ export type NotificationType =
 	| 'task_updated'
 	| 'doc_updated'
 	| 'doc_commented'
-	| 'doc_mentioned';
+	| 'doc_mentioned'
+	| 'ritual_instance_assigned'
+	| 'ritual_instance_overdue'
+	| 'ritual_instance_missed'
+	| 'ritual_instances_scheduled'
+	| 'evidence_submitted'
+	| 'evidence_approved'
+	| 'evidence_rejected'
+	| 'calendar_event_invite'
+	| 'calendar_event_cancel'
+	| 'calendar_event_change'
+	| 'calendar_event_reminder'
+	| 'calendar_check_in_missed'
+	| 'calendar_event_digest'
+	| 'account_removal_requested';
 
 
 /**

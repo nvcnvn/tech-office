@@ -840,6 +840,29 @@ export default function ChannelScreen() {
   const [voiceSnapshot, setVoiceSnapshot] = useState<VoiceClientSnapshot>(() =>
     voiceClient.getSnapshot(),
   );
+  // The last call we know has ended. GetActiveVoiceCall answers "was there a call
+  // when this request was issued", so a refresh kicked off by an earlier signal
+  // lands after the terminal event and reports the call as still active. Without
+  // this it puts the call back, and nothing later takes it away: no further event
+  // is coming for a call that is already over.
+  const endedVoiceCallIdRef = useRef<string | null>(null);
+
+  // Every call loaded from the server lands here rather than in setActiveVoiceCall
+  // directly, so one stale response cannot resurrect an ended call.
+  const applyLoadedVoiceCall = useCallback(
+    (nextCall: MobileVoiceCallSummary | null) => {
+      if (
+        nextCall &&
+        (nextCall.state === "ended" ||
+          nextCall.id === endedVoiceCallIdRef.current)
+      ) {
+        setActiveVoiceCall(null);
+        return;
+      }
+      setActiveVoiceCall(nextCall);
+    },
+    [],
+  );
 
   useEffect(() => voiceClient.subscribe(setVoiceSnapshot), []);
 
@@ -863,13 +886,19 @@ export default function ChannelScreen() {
     if (channelId) {
       void getActiveVoiceCall(channelId)
         .then((response) => {
-          setActiveVoiceCall(
+          applyLoadedVoiceCall(
             response.hasActiveCall ? toMobileVoiceCall(response.call) : null,
           );
         })
         .catch(() => undefined);
     }
-  }, [channelId, joinedVoiceCallId, voiceSnapshot.connectionState, voiceSnapshot.error]);
+  }, [
+    applyLoadedVoiceCall,
+    channelId,
+    joinedVoiceCallId,
+    voiceSnapshot.connectionState,
+    voiceSnapshot.error,
+  ]);
 
   useEffect(() => {
     if (!channelId) {
@@ -881,7 +910,7 @@ export default function ChannelScreen() {
     getActiveVoiceCall(channelId)
       .then((response) => {
         if (!cancelled) {
-          setActiveVoiceCall(
+          applyLoadedVoiceCall(
             response.hasActiveCall ? toMobileVoiceCall(response.call) : null,
           );
           setVoiceError(null);
@@ -898,13 +927,14 @@ export default function ChannelScreen() {
     return () => {
       cancelled = true;
     };
-  }, [channelId]);
+  }, [applyLoadedVoiceCall, channelId]);
 
   const handleStartVoiceCall = useCallback(async () => {
     if (!channelId || voiceLoading) return;
     setVoiceLoading(true);
     setVoiceError(null);
     try {
+      endedVoiceCallIdRef.current = null;
       const response = await startVoiceCall({ channelId });
       const nextCall = toMobileVoiceCall(response.call);
       setActiveVoiceCall(nextCall);
@@ -1028,7 +1058,10 @@ export default function ChannelScreen() {
       await voiceClient.disconnect();
       const response = await leaveVoiceCall(activeVoiceCall.id);
       const nextCall = toMobileVoiceCall(response.call);
-      setActiveVoiceCall(nextCall?.state === "ended" ? null : nextCall);
+      if (!nextCall || nextCall.state === "ended") {
+        endedVoiceCallIdRef.current = activeVoiceCall.id;
+      }
+      applyLoadedVoiceCall(nextCall);
       setJoinedVoiceCallId(null);
       await queryClient.invalidateQueries({ queryKey: ["messages", channelId] });
     } catch (error) {
@@ -1038,7 +1071,14 @@ export default function ChannelScreen() {
     } finally {
       setVoiceLoading(false);
     }
-  }, [activeVoiceCall, channelId, joinedVoiceCallId, queryClient, voiceLoading]);
+  }, [
+    activeVoiceCall,
+    applyLoadedVoiceCall,
+    channelId,
+    joinedVoiceCallId,
+    queryClient,
+    voiceLoading,
+  ]);
 
   // ── Report active channel so notification provider can suppress local popups ──
   const {
@@ -1601,6 +1641,7 @@ export default function ChannelScreen() {
               setActiveVoiceCall((current) =>
                 event.callId && current && current.id !== event.callId ? current : null,
               );
+              endedVoiceCallIdRef.current = event.callId ?? endedVoiceCallIdRef.current;
               setJoinedVoiceCallId((current) => current === event.callId ? null : current);
               setIncomingVoiceCall((current) => current?.callId === event.callId ? null : current);
               setVoiceError(null);
@@ -1611,7 +1652,7 @@ export default function ChannelScreen() {
             } else {
               getActiveVoiceCall(channelId)
                 .then((response) => {
-                  setActiveVoiceCall(
+                  applyLoadedVoiceCall(
                     response.hasActiveCall ? toMobileVoiceCall(response.call) : null,
                   );
                 })

@@ -34,7 +34,7 @@ services:
       restart_policy: {condition: any, delay: 5s}
       update_config: {order: stop-first, failure_action: rollback}
       resources:
-        limits: {memory: 512M}
+        limits: {memory: 256M, cpus: "1.0"}
 
   # --- Database --------------------------------------------------------------
   # One node holds every table, so a physical backup of it is a complete backup of
@@ -43,22 +43,94 @@ services:
   # "What this deployment is not"). Recovery is restore-from-S3, minutes not seconds.
   postgres:
     image: ${IMAGE_PREFIX}tech-office-postgres:${RELEASE_TAG}
+    # Tuned for the reference box: 6 cores / 12 threads, 32 GB, NVMe, sharing the
+    # machine with everything else in this file. deploy/README.md "Sizing" has the
+    # arithmetic; the env vars it derives live in deploy/.env.
     command:
       - postgres
       - -c
       - shared_preload_libraries=pg_textsearch,pg_stat_statements
+      # --- Memory ---------------------------------------------------------
       - -c
       - shared_buffers=${PG_SHARED_BUFFERS}
       - -c
       - effective_cache_size=${PG_EFFECTIVE_CACHE_SIZE}
       - -c
+      - work_mem=${PG_WORK_MEM:-16MB}
+      - -c
+      - maintenance_work_mem=512MB
+      - -c
+      - autovacuum_work_mem=256MB
+      - -c
       - max_connections=${PG_MAX_CONNECTIONS}
       - -c
-      - random_page_cost=1.5
+      - superuser_reserved_connections=5
+      # Free if the host has hugepages configured, silently ignored if not.
       - -c
-      - wal_compression=on
+      - huge_pages=try
+      # `docker stack deploy` ignores shm_size, so /dev/shm stays at 64 MB and
+      # parallel hash joins fail with "could not resize shared memory segment".
+      # SysV shared memory does not go through /dev/shm at all.
+      - -c
+      - dynamic_shared_memory_type=sysv
+      # --- Storage: NVMe, not spinning rust -------------------------------
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=32
+      - -c
+      - maintenance_io_concurrency=64
+      # PG18 asynchronous I/O — the single biggest reason to be on 18. io_uring
+      # would need the io_uring_* syscalls unblocked, and swarm ignores
+      # security_opt, so worker processes it is. Four for six cores.
+      - -c
+      - io_method=worker
+      - -c
+      - io_workers=4
+      - -c
+      - io_max_combine_limit=256kB
+      - -c
+      - io_combine_limit=256kB
+      # --- Parallelism: 6 cores, shared with the rest of the stack ---------
+      - -c
+      - max_worker_processes=12
+      - -c
+      - max_parallel_workers=6
+      - -c
+      - max_parallel_workers_per_gather=2
+      - -c
+      - max_parallel_maintenance_workers=4
+      # --- WAL and checkpoints --------------------------------------------
+      - -c
+      - wal_compression=zstd
+      - -c
+      - wal_buffers=64MB
+      - -c
+      - min_wal_size=2GB
+      - -c
+      - max_wal_size=8GB
+      - -c
+      - checkpoint_timeout=15min
+      # --- Autovacuum ------------------------------------------------------
+      - -c
+      - autovacuum_max_workers=4
+      # PG18 caps the scale factor with an absolute row count, so a large table
+      # is vacuumed every 5M dead rows instead of every 20% of a growing table.
+      - -c
+      - autovacuum_vacuum_max_threshold=5000000
+      - -c
+      - autovacuum_vacuum_cost_limit=2000
+      # --- Observability ---------------------------------------------------
+      - -c
+      - track_io_timing=on
+      - -c
+      - track_wal_io_timing=on
       - -c
       - log_min_duration_statement=1000
+      - -c
+      - log_autovacuum_min_duration=10s
+      - -c
+      - log_lock_failures=on
       # WAL archiving is what makes point-in-time recovery possible. If the archive
       # cannot be written Postgres retains the WAL and eventually fills its disk —
       # that is the correct failure mode, and PostgresArchiveFailing alerts on it.
@@ -93,6 +165,13 @@ services:
       restart_policy: {condition: any, delay: 10s}
       # stop-first: two postgres processes must never hold the same data directory.
       update_config: {order: stop-first, failure_action: pause}
+      resources:
+        # No CPU limit on purpose: postgres is the one service that must never be
+        # throttled, and every other service here is capped so it cannot starve it.
+        # The memory ceiling also caps the page cache charged to this cgroup, which
+        # is why effective_cache_size is set to match it.
+        limits: {memory: 10G}
+        reservations: {memory: 6G, cpus: "4.0"}
 
   # --- Application -----------------------------------------------------------
   backend:
@@ -100,6 +179,9 @@ services:
     command: ["server"]
     environment:
       SERVER_PORT: "18080"
+      # Soft heap ceiling under the 1500M hard limit: the GC works harder instead
+      # of the container being OOM-killed mid-request.
+      GOMEMLIMIT: 1200MiB
       DATABASE_URL: ${DATABASE_URL}
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -160,13 +242,16 @@ services:
       update_config: {order: start-first, parallelism: 1, delay: 15s, failure_action: rollback, monitor: 45s}
       rollback_config: {order: start-first, parallelism: 1}
       resources:
-        limits: {memory: 2G}
+        # Go 1.25 reads GOMAXPROCS from this cgroup quota, so 2 CPUs here means
+        # 2 there — 3 replicas cannot collectively outbid postgres for the 6 cores.
+        limits: {memory: 1500M, cpus: "2.0"}
         reservations: {memory: 512M}
 
   web:
     image: ${WEB_IMAGE_REF}
     environment:
       NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=640
       PORT: "13000"
       HOSTNAME: 0.0.0.0
     networks: [internal]
@@ -185,7 +270,7 @@ services:
       restart_policy: {condition: any, delay: 5s}
       update_config: {order: start-first, parallelism: 1, delay: 10s, failure_action: rollback}
       resources:
-        limits: {memory: 1G}
+        limits: {memory: 768M, cpus: "1.0"}
 
 networks:
   internal:

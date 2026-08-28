@@ -1290,6 +1290,22 @@ export function NotificationStreamProvider({
                 return;
               }
 
+              // The other voice_call_* types are plumbing for the call UI, not
+              // something to read: published silent and live-only, with a
+              // placeholder "Voice call" title and an empty body. The call
+              // surfaces - the system call screen, the in-app prompt, the channel
+              // banner - are what the user is meant to see. Enqueueing them here
+              // produces a ghost banner that flashes on every call signal and says
+              // nothing.
+              if (notificationType?.startsWith("voice_call_")) {
+                debugNotificationStream("skip live banner for a voice call signal", {
+                  notificationType,
+                  channelId: actionData.channelId,
+                  callId: actionData.callId,
+                });
+                return;
+              }
+
               if (shouldSuppressChatPopup) {
                 debugNotificationStream("suppress chat popup", {
                   channelId: actionData.channelId,

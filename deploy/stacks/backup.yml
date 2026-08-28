@@ -40,7 +40,7 @@ services:
         constraints: [node.labels.techoffice.db == true]
       restart_policy: {condition: any, delay: 30s}
       resources:
-        limits: {memory: 1G}
+        limits: {memory: 1G, cpus: "2.0"}
 
 volumes:
   pgdata: {}

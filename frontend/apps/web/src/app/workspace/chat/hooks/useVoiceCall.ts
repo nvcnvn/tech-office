@@ -194,6 +194,14 @@ export function useVoiceCall(
   // Ref to track the current call ID and joinedCallId inside event handler closures.
   const callIdRef = useRef<string | null>(null);
   const joinedCallIdRef = useRef<string | null>(null);
+  // The last call we know has ended. GetActiveVoiceCall answers the question
+  // "was there a call when this request was issued", so a refresh kicked off by
+  // an earlier signal - an incoming ring, a participant joining - lands after the
+  // terminal event and reports the call as still active. Without this it puts the
+  // call back, and nothing later takes it away again: no further event is coming
+  // for a call that has already ended, which is how the bar gets stuck on
+  // "Voice call in progress - join now" after the other side hung up.
+  const endedCallIdRef = useRef<string | null>(null);
 
   const state = call?.state ?? "idle";
 
@@ -201,6 +209,22 @@ export function useVoiceCall(
   // being recreated on every render.
   callIdRef.current = call?.id ?? null;
   joinedCallIdRef.current = joinedCallId;
+
+  // Every call loaded from the server lands here rather than in setCall directly,
+  // so a stale response cannot resurrect an ended call from any one caller.
+  const applyLoadedCall = useCallback(
+    (nextCall: VoiceCallSessionSummary | null) => {
+      if (
+        nextCall &&
+        (nextCall.state === "ended" || nextCall.id === endedCallIdRef.current)
+      ) {
+        setCall(null);
+        return;
+      }
+      setCall(nextCall);
+    },
+    [],
+  );
 
   const invalidateChannelVoiceState = useCallback(() => {
     if (!channelId) {
@@ -322,7 +346,7 @@ export function useVoiceCall(
             if (channelId) {
               void getActiveVoiceCall(channelId)
                 .then((response) => {
-                  setCall(
+                  applyLoadedCall(
                     response.hasActiveCall
                       ? toSessionSummary(response.call)
                       : null,
@@ -397,7 +421,7 @@ export function useVoiceCall(
         throw nextError;
       }
     },
-    [channelId, detachRemoteAudio, disconnectMedia],
+    [applyLoadedCall, channelId, detachRemoteAudio, disconnectMedia],
   );
 
   const connectMediaInBackground = useCallback(
@@ -493,7 +517,7 @@ export function useVoiceCall(
         if (cancelled) {
           return;
         }
-        setCall(
+        applyLoadedCall(
           response.hasActiveCall ? toSessionSummary(response.call) : null,
         );
         setError(null);
@@ -514,7 +538,7 @@ export function useVoiceCall(
     return () => {
       cancelled = true;
     };
-  }, [adoptAcceptedVoiceCall, channelId, enabled, reset]);
+  }, [adoptAcceptedVoiceCall, applyLoadedCall, channelId, enabled, reset]);
 
   useEffect(() => {
     if (!enabled || !channelId) {
@@ -552,7 +576,7 @@ export function useVoiceCall(
           if (cancelled) {
             return;
           }
-          setCall(
+          applyLoadedCall(
             response.hasActiveCall ? toSessionSummary(response.call) : null,
           );
           setError(null);
@@ -584,6 +608,7 @@ export function useVoiceCall(
           // the call that replaced it.
           return;
         }
+        endedCallIdRef.current = detail.callId ?? endedCallIdRef.current;
         setCall(null);
         setJoinedCallId(null);
         setError(null);
@@ -600,7 +625,13 @@ export function useVoiceCall(
       cancelled = true;
       window.removeEventListener(VOICE_CALL_EVENT_NAME, handleVoiceEvent);
     };
-  }, [channelId, disconnectMedia, enabled, invalidateChannelVoiceState]);
+  }, [
+    applyLoadedCall,
+    channelId,
+    disconnectMedia,
+    enabled,
+    invalidateChannelVoiceState,
+  ]);
 
   const startCall = useCallback(async () => {
     if (!enabled || !channelId) {
@@ -611,6 +642,7 @@ export function useVoiceCall(
     setConnectionState("connecting");
     setError(null);
     try {
+      endedCallIdRef.current = null;
       const response = await startVoiceCall({ channelId });
       const credentials = toJoinCredentials(response.joinCredentials);
       const nextCall = toSessionSummary(response.call);
@@ -728,7 +760,10 @@ export function useVoiceCall(
     try {
       const response = await leaveVoiceCall(call.id);
       const nextCall = toSessionSummary(response.call);
-      setCall(nextCall?.state === "ended" ? null : nextCall);
+      if (!nextCall || nextCall.state === "ended") {
+        endedCallIdRef.current = call.id;
+      }
+      applyLoadedCall(nextCall);
       setJoinedCallId(null);
       await disconnectMedia();
       invalidateChannelVoiceState();
@@ -748,6 +783,7 @@ export function useVoiceCall(
     setError(null);
     try {
       await endVoiceCall(call.id);
+      endedCallIdRef.current = call.id;
       setCall(null);
       setJoinedCallId(null);
       await disconnectMedia();

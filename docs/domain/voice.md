@@ -275,6 +275,25 @@ reports that call ended to the OS. Without it the system call screen survives th
 with a running timer and no audio, and the user cannot dismiss it from the app. It is
 mirrored centrally, from the one snapshot, rather than in each leave button.
 
+## Two client rules the call surfaces depend on
+
+**A loaded call never overrides a call known to have ended.** `GetActiveVoiceCall`
+answers "was there a call when this request was issued", so a refresh started by an
+earlier signal — an incoming ring, a participant joining — can land *after* the terminal
+event and report the call as still active. Both clients funnel every server-loaded call
+through one guard (`applyLoadedCall` on web, `applyLoadedVoiceCall` on mobile) that drops
+a call whose id is the last one seen to end. Without it a stale response resurrects an
+ended call and nothing later clears it — no further event is coming for a call that is
+already over — which is how the web bar got stuck on *"Voice call in progress — join
+now"* after the other side hung up.
+
+**`voice_call_started`, `voice_call_updated` and `voice_call_ended` are never drawn as
+notifications.** They are published silent and live-only with a placeholder `"Voice call"`
+title and an empty body: they exist to drive the call surfaces, not to be read. Both
+clients drop them before the generic toast/banner path (`mapNotificationToPopup` on web,
+the live-banner enqueue on mobile). `voice_call_incoming` is the only voice notification
+with a real title and body, and it is handled by the call surfaces too.
+
 ## Client surfaces
 
 - Web: `/workspace/voice`.

@@ -31,7 +31,7 @@ services:
       resources:
         # clamd holds the whole signature database in memory. Under ~2G it is killed
         # mid-scan and every upload fails validation.
-        limits: {memory: 3G}
+        limits: {memory: 2560M, cpus: "2.0"}
         reservations: {memory: 2G}
 
   gotenberg:
@@ -50,7 +50,7 @@ services:
         constraints: [node.labels.techoffice.processing == true]
       restart_policy: {condition: any, delay: 10s}
       resources:
-        limits: {memory: 2G}
+        limits: {memory: 1500M, cpus: "2.0"}
 
   whisper:
     image: fedirz/faster-whisper-server:latest-cpu
@@ -73,7 +73,9 @@ services:
         constraints: [node.labels.techoffice.processing == true]
       restart_policy: {condition: any, delay: 10s}
       resources:
-        limits: {memory: 4G}
+        # CPU whisper will take every core it is given. Capped so a single
+        # transcription cannot stall the database.
+        limits: {memory: 3G, cpus: "3.0"}
 
 volumes:
   clamav-db: {}
