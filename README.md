@@ -11,6 +11,21 @@ Small teams deserve first-class security and a beautiful UI/UX, but the current 
 
 We wanted a secure, simple, and beautifully designed alternative that keeps teams aligned without the bloat or the hefty price tag.
 
+## Contributing
+
+Contributions are very welcome. [`CONTRIBUTING.md`](CONTRIBUTING.md) takes you from a
+fresh clone to a running stack — prerequisites, the local development setup, how to run
+the web and mobile apps, and how to run the tests.
+
+The short version:
+
+```sh
+make infra-up             # PostgreSQL and friends, in Docker
+make voice-dev-backend    # backend on http://localhost:18080
+cd frontend && pnpm install && pnpm --filter web dev
+make check-servers        # confirm everything is up
+```
+
 ## Hosting & Support
 
 * **100% Open Source:** The source code is completely free to self-host. Everything you

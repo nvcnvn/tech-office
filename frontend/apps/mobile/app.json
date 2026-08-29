@@ -63,14 +63,16 @@
         "android.permission.SYSTEM_ALERT_WINDOW",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE"
-      ]
+      ],
+      "googleServicesFile": "./google-services.json"
     },
     "plugins": [
       "expo-router",
       "expo-apple-authentication",
       "expo-secure-store",
       "expo-local-authentication",
-      "./plugins/with-rnfirebase-app.js",
+      "@react-native-firebase/app",
+      "./plugins/with-firebase-notification-color.js",
       "./plugins/with-ios-dev-client-bootstrap.js",
       "./plugins/with-dev-local-network.js",
       [

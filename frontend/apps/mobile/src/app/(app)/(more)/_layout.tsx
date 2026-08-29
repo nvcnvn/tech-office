@@ -1,6 +1,7 @@
 import { Stack } from "expo-router/stack";
+import { labelColor } from "@/lib/platform-colors";
 import { useRouter } from "expo-router";
-import { PlatformColor, Pressable } from "react-native";
+import { Pressable } from "react-native";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { lightPalette } from "@tech-office/theme-tokens";
@@ -46,7 +47,7 @@ export default function MoreLayout() {
           headerShadowVisible: false,
           headerLargeTitleShadowVisible: false,
           headerBlurEffect: "regular",
-          headerTitleStyle: { color: PlatformColor("label") as unknown as string, fontWeight: "600" },
+          headerTitleStyle: { color: labelColor, fontWeight: "600" },
           headerBackButtonDisplayMode: "minimal",
         }}
       >

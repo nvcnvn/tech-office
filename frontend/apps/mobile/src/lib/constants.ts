@@ -5,12 +5,16 @@
  * development we infer the Mac host from the active Metro/dev-server URL.
  */
 
-import { NativeModules, Platform } from "react-native";
+import { NativeModules } from "react-native";
 import * as Constants from "expo-constants";
 
 const DEFAULT_API_PORT = "18080";
-const LOOPBACK_IOS = "http://localhost:18080";
-const LOOPBACK_ANDROID_EMULATOR = "http://10.0.2.2:18080";
+// Both platforms reach the host backend over localhost: iOS simulators share the
+// Mac's loopback, and Android devices/emulators get it from `adb reverse`, which
+// `pnpm start:android` sets up. (The old Android value here was 10.0.2.2, the
+// emulator-only alias for the host — on a physical device it routes nowhere and
+// every request hangs with no error.)
+const LOOPBACK_HOST = `http://localhost:${DEFAULT_API_PORT}`;
 const DEFAULT_WEB_URL = "https://transformar.work";
 
 function normalizeBaseUrl(value: string): string {
@@ -76,7 +80,7 @@ function getMetroHostUrl(): URL | null {
 }
 
 function getLocalDevFallback(): string {
-  return Platform.OS === "android" ? LOOPBACK_ANDROID_EMULATOR : LOOPBACK_IOS;
+  return LOOPBACK_HOST;
 }
 
 function isLoopbackHost(hostname: string): boolean {
@@ -98,6 +102,12 @@ function resolveApiBaseUrl(): string {
 }
 
 export const API_BASE_URL = resolveApiBaseUrl();
+
+// Surfacing this once at startup turns "the app just spins forever" into an
+// obvious wrong-host problem. Dev only; tree-shaken from production bundles.
+if (__DEV__) {
+  console.log(`[tech-office] API_BASE_URL = ${API_BASE_URL}`);
+}
 
 function resolveWebBaseUrl(): string {
   const explicitWebUrl = process.env.EXPO_PUBLIC_WEB_URL?.trim();
