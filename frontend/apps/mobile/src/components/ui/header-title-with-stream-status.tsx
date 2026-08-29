@@ -153,23 +153,16 @@ export function createTopLevelTabHeader(
   /** Set on tab roots that have no tab button, so they can be left. */
   back?: { label: string; href: string },
 ) {
-  const sideWidth =
-    actions.length === 0
-      ? 0
-      : actions.length * headerActionSize +
-        (actions.length - 1) * headerActionGap +
-        headerActionInset;
-
   return {
     title,
-    headerTitleAlign: "center" as const,
+    // Left-aligned: a centred title has to be balanced by a headerLeft spacer
+    // as wide as the action row, and three 44dp actions leave nothing for the
+    // title on a 360dp Android screen — it disappeared entirely on a Galaxy S21.
+    headerTitleAlign: "left" as const,
     headerTitle: () => <HeaderTitleWithStreamStatus title={title} />,
-    headerLeft: () =>
-      back ? (
-        <TopLevelBackButton label={back.label} href={back.href} />
-      ) : (
-        <View style={{ width: sideWidth }} />
-      ),
+    headerLeft: back
+      ? () => <TopLevelBackButton label={back.label} href={back.href} />
+      : undefined,
     headerRight: () =>
       actions.length > 0 ? <HeaderActionRow actions={actions} /> : null,
   };
@@ -180,7 +173,8 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    maxWidth: 220,
+    flexShrink: 1,
+    paddingLeft: headerActionInset,
   },
   badge: {
     flexDirection: "row",

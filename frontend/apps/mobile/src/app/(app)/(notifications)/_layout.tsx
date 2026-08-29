@@ -1,20 +1,12 @@
 import { Stack } from "expo-router/stack";
-import { labelColor } from "@/lib/platform-colors";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { tabRootStackScreenOptions } from "@/lib/stack-screen-options";
 
 export default function AlertsLayout() {
   return (
     <ErrorBoundary>
     <Stack
-      screenOptions={{
-        headerLargeTitle: false,
-        headerTransparent: true,
-        headerShadowVisible: false,
-        headerLargeTitleShadowVisible: false,
-        headerBlurEffect: "regular",
-        headerTitleStyle: { color: labelColor, fontWeight: "600" },
-        headerBackButtonDisplayMode: "minimal",
-      }}
+      screenOptions={tabRootStackScreenOptions}
     >
       <Stack.Screen
         name="index"

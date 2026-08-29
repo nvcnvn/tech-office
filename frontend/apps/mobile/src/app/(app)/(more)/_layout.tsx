@@ -1,8 +1,8 @@
 import { Stack } from "expo-router/stack";
-import { labelColor } from "@/lib/platform-colors";
 import { useRouter } from "expo-router";
 import { Pressable } from "react-native";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
+import { tabRootStackScreenOptions } from "@/lib/stack-screen-options";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { lightPalette } from "@tech-office/theme-tokens";
 
@@ -41,15 +41,7 @@ export default function MoreLayout() {
   return (
     <ErrorBoundary>
       <Stack
-        screenOptions={{
-          headerLargeTitle: false,
-          headerTransparent: true,
-          headerShadowVisible: false,
-          headerLargeTitleShadowVisible: false,
-          headerBlurEffect: "regular",
-          headerTitleStyle: { color: labelColor, fontWeight: "600" },
-          headerBackButtonDisplayMode: "minimal",
-        }}
+        screenOptions={tabRootStackScreenOptions}
       >
         <Stack.Screen
           name="index"

@@ -3,7 +3,7 @@
 Channel-scoped voice calls, voice messages, recordings and transcripts. Owned by
 `internal/voice`; contract in `rpc/v1/voice.proto` (`VoiceService`, 12 RPCs).
 
-**Status date: 2026-08-28.** Supersedes specs 032 and 037. Deeper reference:
+**Status date: 2026-08-29.** Supersedes specs 032 and 037. Deeper reference:
 `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`.
 
 ## Split of responsibility
@@ -293,6 +293,21 @@ Join / Later" discovery prompt nor the join affordance that prompt falls through
 Answering it opens the conversation behind the system UI, which is how the in-call bar and
 the transcript become reachable once the phone is unlocked; from that point the in-app
 banner is drawn again, because it is the surface that mutes, shows quality and leaves.
+
+**A call this device places or joins from inside the app is reported to the OS too.**
+Every in-app path that connects the media — placing a call, joining one already running,
+accepting from the tier-B prompt — goes through `connectCallWithNativePresentation` in
+`native-call.ts` rather than calling `voiceClient.connect` directly, and that reports an
+outgoing call to CallKit or Telecom before the media connects. On iOS this is not a
+nicety: the call module puts WebRTC into manual-audio mode at app launch and the audio
+unit is only ever enabled when CallKit activates the session for a call it knows about, so
+a call the app connected without reporting one published silence and played nothing. Both
+ends sat on a call that looked connected in the app, in the call records and in LiveKit's
+own participant list, and heard an empty line. Reporting it also gives the person who
+placed the call the same lock-screen controls as the person who answered one. A call the
+OS is already presenting — one answered from the lock screen — is not reported a second
+time; if the OS refuses the call the media still connects with LiveKit owning the audio
+session, which is correct on Android and logged so a silent iOS call can be traced to it.
 
 **Leaving from inside the app closes the system call.** The app has several ways to hang
 up — the global active-call bar, the channel's call banner, an unexpected LiveKit

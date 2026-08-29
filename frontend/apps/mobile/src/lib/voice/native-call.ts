@@ -36,7 +36,11 @@ import {
 } from "apis";
 import { joinVoiceCall, endVoiceCall, respondToVoiceCallInvite } from "apis";
 import { configureCallAudioSession, releaseCallAudioSession } from "./call-audio";
-import { voiceClient, toVoiceJoinCredentials } from "./voice-client";
+import {
+  voiceClient,
+  toVoiceJoinCredentials,
+  type VoiceJoinCredentials,
+} from "./voice-client";
 
 /** Metadata keys the backend sets on every wake. Mirrors callWakeEventKey in
  *  backend/internal/notification/call_wake.go. */
@@ -234,6 +238,88 @@ async function closeNativeCall(
   }
   voiceClient.setAudioSessionOwnedExternally(false);
   releaseCallAudioSession();
+}
+
+/**
+ * Joins a call from inside the app — placing one, or joining one already running — with
+ * the OS told about it.
+ *
+ * **Every in-app path that connects the media goes through here rather than calling
+ * `voiceClient.connect` directly**, because on iOS the call framework is not optional.
+ * The native module puts WebRTC into manual-audio mode at app launch and the audio unit
+ * is only ever enabled when CallKit activates the session for a call it knows about, so
+ * a call the app connects without reporting one publishes silence and plays nothing.
+ * Both ends sit on a call that looks connected everywhere else — in the app, in the
+ * server's records, in LiveKit's own participant list — and hear an empty line.
+ *
+ * Reporting it also gives the person who placed the call the same lock-screen controls
+ * as the person who answered one (FR-012).
+ */
+export async function connectCallWithNativePresentation(
+  credentials: VoiceJoinCredentials,
+  remoteParty: { id: string; displayName: string },
+): Promise<void> {
+  const serverCallId = credentials.activeCallId;
+  // A call the OS is already presenting — one answered from the lock screen — has its
+  // call object already. Reporting a second would put two calls on screen for one.
+  if (!serverCallId || trackedCalls.has(serverCallId)) {
+    await voiceClient.connect(credentials);
+    return;
+  }
+
+  let nativeId: string | undefined;
+  try {
+    nativeId = await Calls.startOutgoingCall(
+      { id: remoteParty.id, displayName: remoteParty.displayName },
+      { hasVideo: false },
+    );
+    // Both before the media connects, exactly as on the answer path: the framework has
+    // to own the session before WebRTC touches it.
+    configureCallAudioSession();
+    voiceClient.setAudioSessionOwnedExternally(true);
+    trackCall(serverCallId, {
+      nativeId,
+      // No wake produced this call, so nothing has sequenced it yet. Zero lets a later
+      // terminal wake, which always carries a higher sequence, end it.
+      sequence: 0,
+      // This device is in the call, which is what makes hanging up from the system UI
+      // end the call rather than decline an invitation that was never issued.
+      answeredHere: true,
+      channelId: credentials.activeChannelId ?? undefined,
+    });
+    log("reported an outgoing call to the OS", { serverCallId, nativeId });
+  } catch (error) {
+    // The OS refused. Connecting anyway is right on Android, where LiveKit's own audio
+    // session works; on iOS it is the silent-call case, and this log is what lets a
+    // field report be traced to it rather than to the network.
+    log("the OS refused to present this call - connecting without it", {
+      serverCallId,
+      error: String(error),
+    });
+    nativeId = undefined;
+    voiceClient.setAudioSessionOwnedExternally(false);
+  }
+
+  try {
+    await voiceClient.connect(credentials);
+  } catch (error) {
+    if (nativeId) await closeNativeCall(serverCallId, nativeId, "failed");
+    throw error;
+  }
+
+  if (nativeId) {
+    try {
+      // What moves the OS call from connecting to connected, so its own UI stops showing
+      // the call as still being placed.
+      await Calls.reportOutgoingCallConnected(nativeId);
+    } catch (error) {
+      log("failed to report the outgoing call connected", {
+        serverCallId,
+        nativeId,
+        error: String(error),
+      });
+    }
+  }
 }
 
 /**

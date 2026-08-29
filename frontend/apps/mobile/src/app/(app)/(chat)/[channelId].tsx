@@ -104,6 +104,7 @@ import {
 } from "@/lib/voice/voice-client";
 import {
   isNativeCallTierCapable,
+  connectCallWithNativePresentation,
   useNativeCallPresented,
 } from "@/lib/voice/native-call";
 import {
@@ -929,6 +930,22 @@ export default function ChannelScreen() {
     };
   }, [applyLoadedVoiceCall, channelId]);
 
+  const { data: channelData } = useQuery({
+    queryKey: ["channel", channelId],
+    queryFn: async () => {
+      const resp = await getChannel(channelId!);
+      return resp as GetChannelResponseShape;
+    },
+    enabled: !!channelId,
+    staleTime: 60_000,
+  });
+
+  const channelTitle =
+    channelData?.channel?.displayName ||
+    channelData?.channel?.titleSlug ||
+    channelId ||
+    "Voice call";
+
   const handleStartVoiceCall = useCallback(async () => {
     if (!channelId || voiceLoading) return;
     setVoiceLoading(true);
@@ -945,7 +962,10 @@ export default function ChannelScreen() {
         channelId,
       );
       if (credentials) {
-        await voiceClient.connect(credentials);
+        await connectCallWithNativePresentation(credentials, {
+          id: channelId,
+          displayName: channelTitle,
+        });
       }
     } catch (error) {
       setVoiceError(
@@ -954,7 +974,7 @@ export default function ChannelScreen() {
     } finally {
       setVoiceLoading(false);
     }
-  }, [channelId, voiceLoading]);
+  }, [channelId, channelTitle, voiceLoading]);
 
   const handleJoinVoiceCall = useCallback(async () => {
     if (!activeVoiceCall || voiceLoading) return;
@@ -971,7 +991,10 @@ export default function ChannelScreen() {
         channelId,
       );
       if (credentials) {
-        await voiceClient.connect(credentials);
+        await connectCallWithNativePresentation(credentials, {
+          id: channelId ?? activeVoiceCall.id,
+          displayName: channelTitle,
+        });
       }
     } catch (error) {
       setVoiceError(
@@ -980,7 +1003,7 @@ export default function ChannelScreen() {
     } finally {
       setVoiceLoading(false);
     }
-  }, [activeVoiceCall, voiceLoading]);
+  }, [activeVoiceCall, channelId, channelTitle, voiceLoading]);
 
   const handleAcceptIncomingVoiceCall = useCallback(async () => {
     if (!incomingVoiceCall || voiceLoading) return;
@@ -1017,7 +1040,10 @@ export default function ChannelScreen() {
       }
       if (credentials) {
         await voiceClient.disconnect();
-        await voiceClient.connect(credentials);
+        await connectCallWithNativePresentation(credentials, {
+          id: incomingVoiceCall.channelId,
+          displayName: channelTitle,
+        });
       }
       setIncomingVoiceCall(null);
     } catch (error) {
@@ -1027,7 +1053,7 @@ export default function ChannelScreen() {
     } finally {
       setVoiceLoading(false);
     }
-  }, [incomingVoiceCall, voiceLoading]);
+  }, [channelTitle, incomingVoiceCall, voiceLoading]);
 
   const handleDeclineIncomingVoiceCall = useCallback(async () => {
     if (!incomingVoiceCall || voiceLoading) return;
@@ -1111,20 +1137,6 @@ export default function ChannelScreen() {
   }, [globalIncomingVoiceCall?.callId, incomingVoiceCall]);
 
   // ── Channel info ─────────────────────────────────────────────────────────
-  const { data: channelData } = useQuery({
-    queryKey: ["channel", channelId],
-    queryFn: async () => {
-      const resp = await getChannel(channelId!);
-      return resp as GetChannelResponseShape;
-    },
-    enabled: !!channelId,
-    staleTime: 60_000,
-  });
-
-  const channelTitle =
-    channelData?.channel?.displayName ||
-    channelData?.channel?.titleSlug ||
-    channelId;
   const navigationContext = useMemo(() => {
     const contextualParams = parseNavigationContext({
       navParent,

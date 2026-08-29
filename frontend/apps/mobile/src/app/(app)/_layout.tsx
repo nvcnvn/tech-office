@@ -44,6 +44,7 @@ import {
   toVoiceJoinCredentials,
   type VoiceClientSnapshot,
 } from "@/lib/voice/voice-client";
+import { connectCallWithNativePresentation } from "@/lib/voice/native-call";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   lightPalette,
@@ -170,7 +171,10 @@ export default function AppLayout() {
 
       if (credentials) {
         await voiceClient.disconnect();
-        await voiceClient.connect(credentials);
+        await connectCallWithNativePresentation(credentials, {
+          id: incomingVoiceCall.channelId,
+          displayName: incomingVoiceCall.title,
+        });
       }
 
       clearIncomingVoiceCall(incomingVoiceCall.callId);

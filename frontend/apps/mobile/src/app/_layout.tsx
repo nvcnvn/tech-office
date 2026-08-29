@@ -232,7 +232,10 @@ export default function RootLayout() {
             <NativeCallIntegration />
             <CanonicalUrlListener />
             <DevRouteLogger />
-            <StatusBar style="auto" />
+            {/* Every screen is hardcoded to lightPalette, so "auto" paints white
+                status bar icons onto a white header whenever the OS is in dark
+                mode — the clock and battery vanish. */}
+            <StatusBar style="dark" />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
               <Stack.Screen name="canonical-signin" />

@@ -4,7 +4,7 @@ The delivery backbone every other domain publishes into, plus the presence signa
 decides how something gets delivered. Owned by `internal/notification`; contract in
 `rpc/v1/notification.proto` (`NotificationService`, 19 RPCs + one server-streaming RPC).
 
-**Status date: 2026-08-28.** Supersedes specs 007, 008, 012, 019, 021, 033, 037. Deeper
+**Status date: 2026-08-29.** Supersedes specs 007, 008, 012, 019, 021, 033, 037. Deeper
 references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 `NOTIFICATION-RESCUE-PUSH-DESIGN.md`, `NOTIFICATION-RULES.md`, `FCM-SETUP.md`.
 
@@ -154,7 +154,16 @@ platforms:**
 - **Android** — a high-priority **data-only** FCM message. A `notification` message lets
   the system draw a tray notification and may not run the app's handler on a killed app;
   data-only always dispatches to the messaging service, which is what earns the temporary
-  Doze allowlist and the background foreground-service-start exemption.
+  Doze allowlist and the background foreground-service-start exemption. Android delivers
+  `com.google.firebase.MESSAGING_EVENT` to exactly **one** service, so the app's manifest
+  must leave `expo-callkit-telecom`'s the only one declared — it is what reports the call
+  to Telecom before JavaScript is running, and it delegates every non-call message onward
+  by extending expo-notifications' service. Both other claimants are stripped at prebuild:
+  the module's own config plugin removes expo-notifications', and
+  `apps/mobile/plugins/with-firebase-notification-color.js` removes
+  `@react-native-firebase/messaging`'s, which merges in first and would otherwise win.
+  With that service present, an Android device rings on neither tier: the backend routes
+  it tier A, and the wake is swallowed before Telecom sees it.
 
 **Tiers.** The dispatcher chooses exactly one transport per device and never both:
 *tier A* is the native path above; *tier B* is the high-priority alert ring this app
