@@ -10,7 +10,7 @@ export default function AlertsLayout() {
     >
       <Stack.Screen
         name="index"
-        options={{ title: "Alerts", headerLargeTitle: true, headerLargeStyle: { backgroundColor: "transparent" } }}
+        options={{ title: "Alerts" }}
       />
     </Stack>
     </ErrorBoundary>

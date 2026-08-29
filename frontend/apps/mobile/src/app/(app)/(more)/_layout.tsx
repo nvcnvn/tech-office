@@ -45,14 +45,14 @@ export default function MoreLayout() {
       >
         <Stack.Screen
           name="index"
-          options={{ title: "More", headerLargeTitle: true, headerLargeStyle: { backgroundColor: "transparent" } }}
+          options={{ title: "More" }}
         />
         <Stack.Screen name="search" options={{ headerShown: false }} />
         <Stack.Screen name="profile" options={{ title: "Profile", ...childBackOptions }} />
         <Stack.Screen name="settings" options={{ title: "Settings", ...childBackOptions }} />
         <Stack.Screen name="navigation-debug" options={{ title: "Navigation Debug", ...childBackOptions }} />
         <Stack.Screen name="docs/index" options={{ title: "Documents", ...childBackOptions }} />
-        <Stack.Screen name="docs/[slug]" options={{ headerLargeTitle: false, ...childBackOptions }} />
+        <Stack.Screen name="docs/[slug]" options={{ ...childBackOptions }} />
         <Stack.Screen name="files/index" options={{ title: "Files", ...childBackOptions }} />
       </Stack>
     </ErrorBoundary>

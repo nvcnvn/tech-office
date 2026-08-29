@@ -9,11 +9,9 @@ import { NativeModules } from "react-native";
 import * as Constants from "expo-constants";
 
 const DEFAULT_API_PORT = "18080";
-// Both platforms reach the host backend over localhost: iOS simulators share the
-// Mac's loopback, and Android devices/emulators get it from `adb reverse`, which
-// `pnpm start:android` sets up. (The old Android value here was 10.0.2.2, the
-// emulator-only alias for the host — on a physical device it routes nowhere and
-// every request hangs with no error.)
+// Last resort only. `pnpm start` puts the Mac's LAN IP in EXPO_PUBLIC_API_URL for
+// both platforms, and the Metro host below covers a dev client started by hand;
+// loopback is right only for an iOS simulator, which shares the Mac's network.
 const LOOPBACK_HOST = `http://localhost:${DEFAULT_API_PORT}`;
 const DEFAULT_WEB_URL = "https://transformar.work";
 

@@ -10,7 +10,7 @@ export default function TodayLayout() {
     >
       <Stack.Screen
         name="index"
-        options={{ title: "Today", headerLargeTitle: true, headerLargeStyle: { backgroundColor: "transparent" } }}
+        options={{ title: "Today" }}
       />
     </Stack>
     </ErrorBoundary>

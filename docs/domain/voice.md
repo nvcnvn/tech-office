@@ -356,7 +356,15 @@ with a real title and body, and it is handled by the call surfaces too.
     join credentials with the shared `toVoiceJoinCredentials`.
   - `call-audio.ts` — the audio session belongs to CallKit/Telecom; LiveKit carries media
     only. On iOS audio starts in the framework's activation callback; on Android routing
-    is left to Telecom and `setCommunicationDevice`/`startBluetoothSco` are never called.
+    is left to Telecom and `setCommunicationDevice`/`startBluetoothSco` are never called. On
+    Android there is a native prerequisite behind this: `@livekit/react-native` builds its
+    WebRTC audio device module and audio-record samples dispatcher in
+    `LiveKitReactNative.setup()`, which must run in `Application.onCreate` before React
+    Native starts. Nothing in the SDK or its upstream Expo plugin does that for the
+    version pinned here, and `android/` is prebuild output, so
+    `plugins/with-livekit-android-setup.js` patches `MainApplication.kt` to call it.
+    Without it answering a call throws `audioRecordSamplesDispatcher is not initialized`
+    the moment the microphone is touched — iOS is unaffected.
   - `voice-notifications.ts` and `incoming-voice-call-prompt.tsx` — the tier-B fallback
     ring, for devices that cannot run the native tier.
 - Client: `packages/apis/src/voice.ts` (`voiceCallFailureKind` distinguishes busy,

@@ -75,6 +75,7 @@
       "./plugins/with-firebase-notification-color.js",
       "./plugins/with-ios-dev-client-bootstrap.js",
       "./plugins/with-dev-local-network.js",
+      "./plugins/with-livekit-android-setup.js",
       [
         "expo-notifications",
         {

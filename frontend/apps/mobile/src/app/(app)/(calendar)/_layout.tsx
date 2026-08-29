@@ -10,11 +10,7 @@ export default function CalendarLayout() {
     >
       <Stack.Screen
         name="index"
-        options={{ title: "Schedule", headerLargeTitle: true, headerLargeStyle: { backgroundColor: "transparent" } }}
-      />
-      <Stack.Screen
-        name="[eventId]"
-        options={{ headerLargeTitle: false }}
+        options={{ title: "Schedule" }}
       />
       <Stack.Screen
         name="create"

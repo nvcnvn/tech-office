@@ -29,7 +29,6 @@ export async function ensureVoiceCallNotificationChannel(): Promise<void> {
   await Notifications.setNotificationChannelAsync(VOICE_CALL_NOTIFICATION_CHANNEL_ID, {
     name: "Voice calls",
     importance: Notifications.AndroidImportance.MAX,
-    sound: "default",
     enableVibrate: true,
     vibrationPattern: [0, 250, 200, 250, 200, 450],
     lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,

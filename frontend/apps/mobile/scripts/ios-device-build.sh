@@ -543,7 +543,7 @@ if [[ "$LAUNCH_APP" -eq 1 ]]; then
 fi
 
 if [[ "$CONFIGURATION" == "Debug" ]]; then
-  echo "Debug app is installed. Start Metro with: pnpm start:ios"
+  echo "Debug app is installed. Start Metro with: pnpm start"
 else
   echo "Embedded app is installed. Metro is not required for launch."
 fi

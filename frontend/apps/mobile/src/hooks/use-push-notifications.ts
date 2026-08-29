@@ -294,7 +294,6 @@ export function usePushNotifications() {
           await Notifications.setNotificationChannelAsync("default", {
             name: "default",
             importance: Notifications.AndroidImportance.MAX,
-            sound: "default",
             enableVibrate: true,
             vibrationPattern: [0, 250, 200, 250],
           });

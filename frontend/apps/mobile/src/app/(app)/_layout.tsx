@@ -81,6 +81,12 @@ function TabIcon({
   );
 }
 
+// Chat is the tab people come back to all day; Today goes stale by lunchtime.
+// Without this, React Navigation falls back to file-system order.
+export const unstable_settings = {
+  initialRouteName: "(chat)",
+};
+
 export default function AppLayout() {
   const auth = React.use(AuthContext);
   const router = useRouter();

@@ -1,6 +1,8 @@
 package com.devguards.TechOffice
 
 import android.app.Application
+import com.livekit.reactnative.audio.AudioType
+import com.livekit.reactnative.LiveKitReactNative
 import android.content.res.Configuration
 
 import com.facebook.react.PackageList
@@ -34,6 +36,7 @@ class MainApplication : Application(), ReactApplication {
     } catch (e: IllegalArgumentException) {
       ReleaseLevel.STABLE
     }
+    LiveKitReactNative.setup(this, AudioType.CommunicationAudioType())
     loadReactNative(this)
     ApplicationLifecycleDispatcher.onApplicationCreate(this)
   }

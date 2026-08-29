@@ -91,40 +91,35 @@ start whichever one is missing.
 
 ## Running the mobile app
 
-The mobile app talks to the backend on port 18080. How it finds that port differs by
-platform, and this is the single most common source of "the app just spins forever".
-
-### Android (device or emulator)
+The mobile app talks to the backend on port 18080, and finding that port is the single
+most common source of "the app just spins forever". Both platforms resolve it the same
+way: `scripts/with-lan-ip.sh` looks up this Mac's LAN IPv4 and exports it as both the
+Metro host and `EXPO_PUBLIC_API_URL`, so the device reaches Metro and the API on
+`http://<lan-ip>:...`. Your Mac and the device have to be on the same network.
 
 ```sh
 cd frontend/apps/mobile
-pnpm start:android
+pnpm start
 ```
 
-That script forwards both ports over USB with `adb reverse` (18082 for Metro, 18080 for
-the API), points the app at `http://localhost:18080`, warns you if no backend answers,
-and starts Metro. It works the same on a physical device and an emulator, needs no LAN
-connectivity, and never triggers a macOS firewall prompt.
+One command for Android and iOS, device or emulator. It warns you if no backend answers
+before starting Metro. To override the resolved host:
+
+```sh
+METRO_HOST=192.168.1.100 pnpm start
+EXPO_PUBLIC_API_URL=http://10.0.0.5:18080 pnpm start
+```
 
 To build and install the native app first:
 
 ```sh
-pnpm android
+pnpm android      # or: pnpm ios
+pnpm ios:device   # physical iPhone, with signing and launch
 ```
 
 If `adb devices` shows your phone as `unauthorized`, accept the "Allow USB debugging?"
 prompt on the device. If it shows nothing at all, enable Developer options → USB
 debugging, and check you are using a data cable rather than a charge-only one.
-
-### iOS (simulator or device)
-
-```sh
-cd frontend/apps/mobile
-pnpm start:ios
-```
-
-This one resolves your Mac's LAN IP and points the app at `http://<lan-ip>:18080`, so
-your Mac and the device must be on the same network.
 
 ### When the app cannot reach the backend
 

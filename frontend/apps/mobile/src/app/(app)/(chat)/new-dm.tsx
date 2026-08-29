@@ -50,7 +50,6 @@ export default function NewDmScreen() {
       <Stack.Screen
         options={{
           title: "New Message",
-          headerLargeTitle: false,
           headerLeft: () => (
             <Pressable
               testID="new-dm-cancel-button"

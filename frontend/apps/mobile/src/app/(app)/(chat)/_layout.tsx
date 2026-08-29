@@ -10,15 +10,11 @@ export default function ChatLayout() {
     >
       <Stack.Screen
         name="index"
-        options={{ title: "Chat", headerLargeTitle: true, headerLargeStyle: { backgroundColor: "transparent" } }}
-      />
-      <Stack.Screen
-        name="[channelId]"
-        options={{ headerLargeTitle: false }}
+        options={{ title: "Chat" }}
       />
       <Stack.Screen
         name="thread/[messageId]"
-        options={{ headerLargeTitle: false, title: "Thread" }}
+        options={{ title: "Thread" }}
       />
       <Stack.Screen
         name="new-channel"

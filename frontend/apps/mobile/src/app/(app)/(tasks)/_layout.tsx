@@ -10,23 +10,23 @@ export default function TasksLayout() {
     >
       <Stack.Screen
         name="index"
-        options={{ title: "My Tasks", headerLargeTitle: true, headerLargeStyle: { backgroundColor: "transparent" } }}
+        options={{ title: "My Tasks" }}
       />
       <Stack.Screen
         name="[projectId]/index"
-        options={{ headerLargeTitle: false, title: "Tasks" }}
+        options={{ title: "Tasks" }}
       />
       <Stack.Screen
         name="[projectId]/task/[taskId]"
-        options={{ headerLargeTitle: false, title: "Live Task" }}
+        options={{ title: "Live Task" }}
       />
       <Stack.Screen
         name="[projectId]/settings"
-        options={{ headerLargeTitle: false, title: "Project Settings" }}
+        options={{ title: "Project Settings" }}
       />
       <Stack.Screen
         name="rituals/[definitionId]"
-        options={{ headerLargeTitle: false, title: "Ritual Template" }}
+        options={{ title: "Ritual Template" }}
       />
     </Stack>
     </ErrorBoundary>
