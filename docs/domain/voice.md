@@ -274,10 +274,13 @@ call dropped, the backend was never told anyone answered, and the call rang out 
 phone that cannot read its token still cannot take the call.
 
 The client tracks each presented call in module state, which does not survive a JavaScript
-reload while the OS call does. Answering or hanging up a call the module has forgotten
-therefore rebuilds what it knows from `getActiveCallSession()` — the OS session carries the
-wake payload verbatim, including the invitation id — instead of failing the answer or
-leaving the caller ringing.
+reload while the OS call does. **A hang-up is resolved from the session the OS hands to the
+ended event**, not from that state: the session carries the wake payload verbatim,
+including the invitation id, so the workspace call is named even when the module has
+forgotten it. Getting this wrong was not a degraded hang-up but a silent one — the server
+was told nothing and the other party sat in a call the person had already left until the
+ring deadline swept it. Answering has no such session on its event and still rebuilds from
+`getActiveCallSession()`.
 
 **Only one incoming surface is ever drawn.** A device that registered a VoIP token (iOS)
 or runs Telecom (Android) reports itself native-call capable to both the backend and the

@@ -173,7 +173,15 @@ the caller's display name and the workspace name. That one field is what lets a 
 declining from its lock screen decline the *invitation* rather than end the call: ending
 records the call as `cancelled`, as though the caller had hung up, and leaves the
 persistent `voice_call_incoming` notification unacknowledged so it replays as a stale
-prompt on the next reconnect. Terminal wakes carry the identity fields only.
+prompt on the next reconnect.
+
+A terminal wake carries the caller's name and id as well, and no invitation, channel or
+ring deadline — there is nothing left to ring for. Naming the caller is not decoration:
+the client module reports *every* wake to the OS as a new incoming call before JavaScript
+runs, so a terminal wake always flashes a call on screen for the moment it takes the
+client to end it. Named, that flash reads as the call that just ended; unnamed, the OS
+falls back to the handle, which is the call's own UUID, and the user sees an unknown
+number calling at the moment they hang up.
 
 Provider I/O happens on a background sender, not on the caller's goroutine, so it never
 sits inside a request transaction. Before sending an `incoming` wake the sender confirms

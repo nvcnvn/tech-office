@@ -431,15 +431,29 @@ async function handleAnswered(nativeId: string, requestId: string): Promise<void
 }
 
 /** The user hung up or declined from the system UI. */
-async function handleEnded(nativeId: string): Promise<void> {
-  // Recovered the same way as an answer: without it, hanging up a call this module has
-  // forgotten tells the server nothing and the caller rings until the deadline sweep.
-  const serverCallId = serverCallIdFor(nativeId) ?? (await recoverTrackedCall(nativeId));
+async function handleEnded(nativeId: string, session: Calls.CallSession): Promise<void> {
+  // The OS hands its own session to this event, and that is what names the workspace
+  // call — not a lookup through module state, which a JavaScript reload empties and a
+  // stray call from a later wake can point at the wrong entry. Getting it wrong is not a
+  // degraded hang-up but a silent one: the server is told nothing and the caller sits in
+  // a call the other person has already left, until the ring deadline sweeps it.
+  const incoming = session.incomingCallEvent;
+  const serverCallId = incoming?.serverCallId ?? serverCallIdFor(nativeId);
   if (!serverCallId) {
+    log("ended a call with no workspace call id to report", { nativeId });
     releaseCallAudioSession();
     return;
   }
-  const tracked = trackedCalls.get(serverCallId);
+  // Module state is the better source when it has the call — it knows whether this
+  // device answered — but the session carries the same wake payload when it does not.
+  const wake = incoming ? readWakeMetadata(incoming.metadata as Record<string, unknown> | undefined) : undefined;
+  const tracked = trackedCalls.get(serverCallId) ?? {
+    nativeId,
+    sequence: wake?.sequence ?? 0,
+    answeredHere: session.status === "connected",
+    channelId: wake?.channelId,
+    invitationId: wake?.invitationId,
+  };
   untrackCall(serverCallId);
   releaseCallAudioSession();
   if (voiceClient.getSnapshot().activeCallId === serverCallId) {
@@ -502,8 +516,8 @@ export function startNativeCallIntegration(options: {
     Calls.addCallAnsweredListener(({ id, requestId }) => {
       void handleAnswered(id, requestId);
     }),
-    Calls.addCallEndedListener(({ id }) => {
-      void handleEnded(id);
+    Calls.addCallEndedListener(({ id, session }) => {
+      void handleEnded(id, session);
     }),
     // The lock-screen mute button must actually mute. A system control that changes the
     // OS's idea of the call without changing the media is worse than no control at all:

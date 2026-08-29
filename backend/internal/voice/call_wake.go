@@ -58,6 +58,14 @@ func (l *Logic) emitTerminalCallWake(ctx context.Context, tx database.DBTX, orgI
 		return
 	}
 
+	// The caller is named on a terminal wake too, even though nothing about the call is
+	// left to display. The client module reports every wake to the OS as a new incoming
+	// call before JavaScript runs, so a terminal wake always flashes a call on screen for
+	// the moment it takes the client to end it. Named, that flash reads as the call that
+	// just ended; unnamed, the OS falls back to the handle — the call's own UUID — and the
+	// user sees a stranger calling them at the moment they hang up.
+	callerName := l.voiceNotificationEmployeeName(ctx, tx, orgID, call.InitiatorEmployeeID)
+
 	for _, target := range targets {
 		if _, err := l.CallWakeDispatcher.DispatchCallWake(ctx, tx, &notification.CallWakeRequest{
 			OrganizationID:          orgID,
@@ -66,6 +74,8 @@ func (l *Logic) emitTerminalCallWake(ctx context.Context, tx database.DBTX, orgI
 			Event:                   event,
 			CallID:                  call.ID,
 			CallStartedAt:           call.StartedAt.Time,
+			CallerDisplayName:       callerName,
+			CallerEmployeeID:        call.InitiatorEmployeeID,
 			ExcludeDeviceIdentifier: actingDeviceIdentifier,
 		}); err != nil {
 			slog.WarnContext(ctx, "failed to dispatch terminal call wake",

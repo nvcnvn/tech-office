@@ -41,7 +41,9 @@ const callWakeSendBuffer = 256
 //
 // Only CallerDisplayName and WorkspaceName are human-readable: the lock screen shows
 // who is calling and which workspace, and nothing about the conversation (FR-008).
-// Terminal events carry the identity fields only.
+// Terminal events carry the caller's identity too, because the client module reports even
+// those to the OS as an incoming call before JavaScript can end them — an unnamed one
+// flashes the call's own UUID at the user as though a stranger were calling.
 //
 // MUST align with the CallWakePayload type in frontend/packages/apis/src/push-tokens.ts.
 type CallWakePayload struct {
