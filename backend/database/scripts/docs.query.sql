@@ -50,9 +50,12 @@ SET is_deleted = TRUE, updated_at = @updated_at
 WHERE organization_id = @organization_id AND id = @id;
 
 -- name: ListRootDocuments :many
+-- Workspace listing: task_description and project_brief documents are owned by a task or
+-- a project and are reached through it, so they must never appear in the docs tree.
 SELECT * FROM docs.document
 WHERE organization_id = @organization_id 
   AND parent_document_id IS NULL 
+  AND document_type = 'workspace_doc'
   AND is_deleted = FALSE
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor'))
@@ -60,9 +63,11 @@ ORDER BY id DESC
 LIMIT @doc_limit;
 
 -- name: ListChildDocuments :many
+-- Same workspace-listing filter as ListRootDocuments.
 SELECT * FROM docs.document
 WHERE organization_id = @organization_id 
   AND parent_document_id = @parent_document_id
+  AND document_type = 'workspace_doc'
   AND is_deleted = FALSE
   AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status'))
   AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor'))

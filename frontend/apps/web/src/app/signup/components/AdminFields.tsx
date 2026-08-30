@@ -4,7 +4,7 @@ import { TextField, Stack, IconButton, InputAdornment } from '@mui/material';
 import { Visibility, VisibilityOff } from '@mui/icons-material';
 import { useState } from 'react';
 import { UseFormRegister, FieldErrors } from 'react-hook-form';
-import { SignupFormData } from '../../../lib/validations/signup';
+import { SignupFormData } from '@tech-office/validations';
 import { PasswordStrength } from './PasswordStrength';
 
 interface AdminFieldsProps {

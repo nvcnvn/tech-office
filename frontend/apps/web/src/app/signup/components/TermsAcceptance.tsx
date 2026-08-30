@@ -2,27 +2,26 @@
 
 import Link from 'next/link';
 import { Checkbox, FormControl, FormControlLabel, FormHelperText, Typography } from '@mui/material';
-import type { FieldErrors, UseFormRegister, UseFormTrigger } from 'react-hook-form';
+import type { FieldErrors, UseFormRegister } from 'react-hook-form';
 import { PRIVACY_POLICY_PATH, TERMS_PATH } from 'apis';
 
-import type { SignupFormData } from '../../../lib/validations/signup';
+import type { SignupFormData } from '@tech-office/validations';
 
 /**
  * Terms acknowledgement for the signup screen (Feature 036, FR-010).
  *
  * Both documents are linked, and both open in a new tab, so reading them does not
  * discard a half-filled form. The checkbox is unticked by default and the schema
- * requires it to be `true`, which is what keeps the submit button disabled — an
- * account cannot be created without an explicit acknowledgement.
+ * requires it to be `true`, so submitting without ticking it fails validation and
+ * surfaces the message below — an account cannot be created without an explicit
+ * acknowledgement.
  */
 export function TermsAcceptance({
 	register,
 	errors,
-	trigger,
 }: {
 	register: UseFormRegister<SignupFormData>;
 	errors: FieldErrors<SignupFormData>;
-	trigger: UseFormTrigger<SignupFormData>;
 }) {
 	const error = errors.acceptedTerms;
 
@@ -32,14 +31,6 @@ export function TermsAcceptance({
 				control={
 					<Checkbox
 						{...register('acceptedTerms')}
-						// The form validates on blur, and a checkbox is clicked rather
-						// than tabbed through — without this, ticking the box left the
-						// submit button disabled until the person happened to click
-						// somewhere else, which reads as the box not having worked.
-						onChange={(event) => {
-							void register('acceptedTerms').onChange(event);
-							void trigger('acceptedTerms');
-						}}
 						size="small"
 						sx={{ pt: 0.25 }}
 					/>

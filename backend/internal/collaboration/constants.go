@@ -314,17 +314,20 @@ const (
 	RecurrenceTypeCustomInterval = "custom_interval"
 )
 
-// Ritual notification type constants.
+// Ritual notification type constants. Aliases of the notification package's own
+// definitions, which are the single list the database CHECK is asserted against.
+//
+// There is deliberately no ritual_instance_assigned / _overdue / _missed here: the
+// per-instance assignment notification was replaced by the ritual_instances_scheduled
+// summary, and nothing sweeps a ritual into an overdue or missed state — overdue is
+// derived when an evidence write triggers state reconciliation, not published.
 const (
-	NotificationTypeRitualInstanceAssigned = "ritual_instance_assigned"
-	NotificationTypeEvidenceSubmitted      = "evidence_submitted"
-	NotificationTypeEvidenceApproved       = "evidence_approved"
-	NotificationTypeEvidenceRejected       = "evidence_rejected"
-	NotificationTypeRitualInstanceOverdue  = "ritual_instance_overdue"
-	NotificationTypeRitualInstanceMissed   = "ritual_instance_missed"
+	NotificationTypeEvidenceSubmitted = notification.NotificationTypeEvidenceSubmitted
+	NotificationTypeEvidenceApproved  = notification.NotificationTypeEvidenceApproved
+	NotificationTypeEvidenceRejected  = notification.NotificationTypeEvidenceRejected
 	// NotificationTypeRitualInstancesScheduled is sent once per assignee after a bulk
-	// generation run completes. Replaces per-instance ritual_instance_assigned notifications
-	// to prevent notification floods when a scheduler run creates many instances.
+	// generation run completes, so a scheduler run that creates many instances produces
+	// one notification per person rather than one per instance.
 	NotificationTypeRitualInstancesScheduled = notification.NotificationTypeRitualInstancesScheduled
 )
 

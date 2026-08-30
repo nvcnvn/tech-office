@@ -27,6 +27,7 @@
     "@react-oauth/google": "^0.13.5",
     "@tanstack/react-query": "^5.90.6",
     "@tech-office/links": "workspace:*",
+    "@tech-office/validations": "workspace:*",
     "@tech-office/notifications": "workspace:*",
     "@tiptap/core": "^2.27.0",
     "@tiptap/extension-code-block-lowlight": "^2.27.1",

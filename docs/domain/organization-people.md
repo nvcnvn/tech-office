@@ -58,7 +58,14 @@ The rules are mirrored client-side in `packages/apis/src/organization.ts`
 (`deriveSubdomain`, `isValidSubdomain`, `normalizeSubdomain`, `SUBDOMAIN_MIN_LENGTH`,
 `SUBDOMAIN_MAX_LENGTH`) so a form can validate and show the derived address without a round
 trip. The server remains the authority; the Go table test in `subdomain_test.go` is the
-reference the TypeScript copy must match.
+reference the TypeScript copy must match. Nothing enforces that the two stay in step — the
+TypeScript copy was checked against the table by hand, once.
+
+**Resolving which workspace a web request is for** is `extractOrganization` in
+`apps/web/src/app/config/auth.ts`: the hostname's leading label if there is one, otherwise
+`?org=`. A hostname that is an IP literal is not a subdomain, and is rejected before the
+split — a dev server on `127.0.0.1` used to resolve the tenant as `127`, and because
+hostname wins over `?org=` that could not then be corrected by hand.
 
 ### Registration
 
@@ -90,6 +97,12 @@ employee.
 
 `date_of_birth` and `phone_number` are not just profile data: PIN validation rejects a PIN
 derived from either (see [auth-identity.md](auth-identity.md#3-pin-org-managed-worker-accounts)).
+
+**One row per (organization, person).** A person in two workspaces has two employee rows,
+and `AcceptInvitation` creates whichever one this organization is missing — keyed on
+whether the row exists here, not on whether the user is new. Keyed the other way it
+created nothing for an existing user, and the role assignment that follows then failed on
+`fk_employee_role_employee`, so invite→accept could never produce a second membership.
 
 **The row survives its person.** Deleting an account does not delete the employee row: it
 strips it to a de-identified tombstone (`given_name` → `'Deleted'`, `family_name` →

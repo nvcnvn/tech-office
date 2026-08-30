@@ -20,16 +20,6 @@ func appendUniqueRecipient(recipientIDs []string, seen map[string]struct{}, empl
 	return append(recipientIDs, key)
 }
 
-// notifyRitualInstanceAssigned sends a notification when a single ritual instance is assigned
-// outside of a bulk generation run (e.g. manual assignment or rescheduling).
-func (l *logicImpl) notifyRitualInstanceAssigned(ctx context.Context, tx database.DBTX, orgID, taskID, actorID dbuuid.UUID, taskTitle string) {
-	l.notifyTaskWatchers(ctx, tx, orgID, taskID, actorID,
-		NotificationTypeRitualInstanceAssigned, 2, false,
-		"Ritual Instance Assigned",
-		fmt.Sprintf("You have been assigned to ritual task: %s", taskTitle),
-	)
-}
-
 // notifyRitualInstancesScheduled sends a single summary notification to an employee after a
 // bulk ritual generation run has assigned instanceCount new instances to them.
 // It bypasses the task-subscription fanout and goes directly to the target employee.
@@ -209,23 +199,5 @@ func (l *logicImpl) notifyEvidenceRejected(ctx context.Context, tx database.DBTX
 		NotificationTypeEvidenceRejected, 2, false,
 		"Evidence Rejected",
 		fmt.Sprintf("Evidence has been rejected for: %s", taskTitle),
-	)
-}
-
-// notifyRitualInstanceOverdue sends a notification when a ritual instance becomes overdue.
-func (l *logicImpl) notifyRitualInstanceOverdue(ctx context.Context, tx database.DBTX, orgID, taskID, actorID dbuuid.UUID, taskTitle string) {
-	l.notifyTaskWatchers(ctx, tx, orgID, taskID, actorID,
-		NotificationTypeRitualInstanceOverdue, 3, false,
-		"Ritual Instance Overdue",
-		fmt.Sprintf("Ritual task is overdue: %s", taskTitle),
-	)
-}
-
-// notifyRitualInstanceMissed sends a notification when a ritual instance is missed.
-func (l *logicImpl) notifyRitualInstanceMissed(ctx context.Context, tx database.DBTX, orgID, taskID, actorID dbuuid.UUID, taskTitle string) {
-	l.notifyTaskWatchers(ctx, tx, orgID, taskID, actorID,
-		NotificationTypeRitualInstanceMissed, 4, false,
-		"Ritual Instance Missed",
-		fmt.Sprintf("Ritual task has been missed: %s", taskTitle),
 	)
 }

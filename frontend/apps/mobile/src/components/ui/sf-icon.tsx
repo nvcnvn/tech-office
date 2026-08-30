@@ -59,6 +59,7 @@ const SF_TO_IONICONS: Record<string, IoniconsName> = {
   "phone.down.fill": "call",
   mic: "mic-outline",
   "mic.fill": "mic",
+  "mic.slash.fill": "mic-off",
   "play.fill": "play",
   "pause.fill": "pause",
   "stop.fill": "stop-circle",

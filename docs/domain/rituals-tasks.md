@@ -15,6 +15,11 @@ code and migration are both present).
 the task identifier prefix), `visibility` (`public | private`), `next_task_number`,
 denormalised `member_count` / `task_count`.
 
+Both counters are maintained by the writes that change them, and `CreateProject` returns
+the row *after* adding the creator as owner — the web project list renders the new card
+straight from that response, so a pre-increment copy showed a project with an owner as
+`0 members`.
+
 `collaboration_mode IN ('standard','ritual','mixed')` is a **UI display hint**, not an
 enforcement — it tells the client whether to lead with the board or with today's rituals.
 
@@ -212,6 +217,12 @@ evidence snapshot, in this precedence order:
 gps_checkin`, `is_required`, `approval_mode IN ('manual','auto_approve')` with
 `auto_approve_config` JSONB, and an optional `deadline_offset_hours`.
 
+Auto-approve is one rule for both types that offer it: the submission's GPS coordinates
+against the requirement's geofence (`evaluateAutoApprove`). It applies to `photo` as well
+as `gps_checkin` because a photo submission carries the phone's location alongside the
+image — the mobile client requests it before uploading — so "the proof was taken on site"
+is decidable for both.
+
 `collaboration.evidence_submission` — per task instance: the chosen `evidence_type`, plus
 `file_id` / `text_content` / `link_url` depending on type, `device_timestamp` **and**
 `server_timestamp` (both, so client clock skew is visible), GPS latitude/longitude/accuracy
@@ -225,8 +236,10 @@ RPCs: `SubmitEvidence`, `ApproveEvidence`, `RejectEvidence`, `ListEvidenceSubmis
 ## Compliance and health
 
 - `GetOperationalHealth` — project-level summary plus a per-definition breakdown.
-- `GetRitualComplianceSummary` — per-employee compliance over a date range.
-- `ExportRitualComplianceCSV` — the same data as CSV.
+- `GetRitualComplianceSummary` — per-employee compliance over a date range. The query
+  joins `organization.employee` for the name: every reader of this data is a person
+  deciding who needs following up, and the Health tab used to print a UUID fragment.
+- `ExportRitualComplianceCSV` — the same data as CSV, name column first.
 - `GetAssignedWorkSummary` — "what's on my plate": due-today and overdue counts plus up to
   20 items bucketed by urgency. Backs the context rail; see
   [workspace-navigation.md](workspace-navigation.md#context-rail).
@@ -272,29 +285,20 @@ per-instance flood — generating 30 days of a daily ritual used to mean 30 noti
 
 ## Known drift
 
-**D3 — nothing ever marks a ritual overdue or missed.**
+**Nothing ever marks a ritual overdue or missed.** `overdue` is only *derived*, and only
+when an evidence write triggers `reconcileRitualTaskState`. An instance whose deadline
+passes with **no** evidence activity is never reconciled: it stays in `todo`, nobody is
+notified, and it shows as overdue only where a query computes urgency at read time
+(`GetAssignedWorkSummary`, health reports). `missed` is a valid `state_category` and a
+`StateCategory` enum value, but no transition anywhere writes it.
 
-- `notifyRitualInstanceOverdue` (`ritual_notification_logic.go:216`) has **no callers**.
-- `notifyRitualInstanceAssigned` (`ritual_notification_logic.go:23`) also has no callers —
-  correct, since `ritual_instances_scheduled` replaced it, but the function was left behind.
-- `NotificationTypeRitualInstanceMissed` is declared and never published. There is no
-  `missed` transition anywhere in the code, though `missed` is a valid `state_category`,
-  a valid notification type in the DB CHECK, and a `StateCategory` enum value.
-- `overdue` is only *derived*, and only when an evidence write triggers
-  `reconcileRitualTaskState`. An instance whose deadline passes with **no** evidence
-  activity is never reconciled: it stays in `todo`, nobody is notified, and it shows as
-  overdue only where a query computes urgency at read time
-  (`GetAssignedWorkSummary`, health reports).
-
-If overdue/missed are meant to be real states with notifications, they need a sweep of
-their own. The 034 sweep only generates; it does not reconcile. Fixing this is the natural
-companion change to 034 and would reuse the same one-job-for-the-platform shape.
-
-**D2 (from the notification side) lands here too.** The ritual notification type constants
-are duplicated in `internal/collaboration/constants.go:319-330` rather than living in the
-notification package, which is how they came to be missing from
-`IsValidNotificationType`. See
-[notifications-presence.md](notifications-presence.md#known-drift).
+The notification types that would have announced those transitions —
+`ritual_instance_overdue`, `ritual_instance_missed`, and the per-instance
+`ritual_instance_assigned` that `ritual_instances_scheduled` replaced — used to sit in the
+code and the DB CHECK with no caller. `20260830000001_drift_register_fixes.up.sql` removed
+all three so the CHECK describes what the product can actually produce. If overdue and
+missed are ever made real states, they need a sweep of their own plus their notification
+types put back in both places; the 034 sweep only generates, it does not reconcile.
 
 **Spec reading order.** Rituals accumulated across five specs; if you must read them, the
 useful order is 022 (model) → 023 (lazy resources + schedule change) → 028 (submission

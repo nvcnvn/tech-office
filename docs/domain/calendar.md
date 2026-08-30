@@ -93,6 +93,13 @@ in batches of 100, publishes a notification per row and marks it `sent`. It is s
 re-run after a crash. `FirePendingReminders` is exported so integration tests can drive one
 poll without a flows worker.
 
+The reminder publishes at **priority 0** — deliver always, including to an absent user.
+That is the whole point of a reminder, and any higher number is a policy that suppresses
+it for exactly the person it is for. `ListPendingRemindersGlobal` joins `calendar.event`
+so the body names the event (`"<title> starts in N minutes"`): on a lock screen the body
+is all the user sees, and the `navigation_target` that lands them on the right event only
+helps after they have decided to tap.
+
 Like the ritual sweep, registration alone does nothing — `flows.ScheduleTx` in
 `cmd/server.go` under schedule ID `calendar_reminder_poll` is what makes it run. That
 bootstrap was missing from the original implementation, so reminders had never fired in
@@ -127,23 +134,6 @@ domain `calendar`.
 `calendar_overlay_test.go`, `calendar_notification_test.go`.
 
 ## Known drift
-
-**D9 — event reminders use the wrong priority.**
-`internal/calendar/reminder_workflow.go:73` publishes with `Priority: 2, // high`. On this
-system's scale, 2 does not mean high — it means **"deliver when online only"**
-(`0` = always, `1` = default/when not offline, `2` = online only, `4` = silent). A reminder
-is precisely the notification an absent user needs, so this suppresses push exactly when it
-matters. The comment suggests the author read the number as a severity rather than a
-delivery policy. `1`, or `0` for events the org treats as mandatory, is what the intent
-implies.
-
-**Reminder text carries no event identity.** The same call publishes
-`Title: "Event Reminder"` and `Message: "You have an upcoming event in N minutes"` — no
-event title. The `navigation_target` is correct, so tapping the notification lands on the
-right event, but the notification itself is not self-describing. This is the case
-`AGENTS.md`'s payload guardrail was written for ("human-readable title/message text plus
-route-critical fields"), and `calendar_notification_test.go` does not assert on the message
-body.
 
 **Calendar cannot be domain-muted.** `notification.personal_preference.muted_domains` omits
 `calendar` from its CHECK — see

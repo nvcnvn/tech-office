@@ -26,6 +26,7 @@ interface ActiveVoiceCallBarProps {
   leaving?: boolean;
   onReturn: () => void;
   onLeave: () => void;
+  onToggleMute: () => void;
 }
 
 function connectionLabel(
@@ -54,6 +55,7 @@ export function ActiveVoiceCallBar({
   leaving = false,
   onReturn,
   onLeave,
+  onToggleMute,
 }: ActiveVoiceCallBarProps) {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
@@ -104,6 +106,31 @@ export function ActiveVoiceCallBar({
         {isBusy && !leaving ? (
           <ActivityIndicator size="small" color="#16a34a" />
         ) : null}
+        {/*
+          Mute has to be reachable here, not only from the system call screen. On a
+          device the OS does not ring for there is no system call UI at all, so without
+          this button the user cannot mute the call anywhere. voiceClient is the single
+          owner of the state, and native-call.ts mirrors it into the OS call object, so
+          both surfaces agree about whether the microphone is open.
+        */}
+        <Pressable
+          testID="active-voice-call-mute-button"
+          onPress={(event) => {
+            event.stopPropagation();
+            onToggleMute();
+          }}
+          accessibilityRole="button"
+          accessibilityState={{ selected: isMuted }}
+          accessibilityLabel={isMuted ? "Unmute microphone" : "Mute microphone"}
+          hitSlop={8}
+          style={({ pressed }) => [styles.roundButton, pressed && styles.pressed]}
+        >
+          <SFIcon
+            name={isMuted ? "mic.slash.fill" : "mic.fill"}
+            size={17}
+            color={isMuted ? palette.error.main : palette.text.secondary}
+          />
+        </Pressable>
         <Pressable
           testID="active-voice-call-leave-button"
           onPress={(event) => {
@@ -115,7 +142,7 @@ export function ActiveVoiceCallBar({
           accessibilityLabel="Leave active voice call"
           hitSlop={8}
           style={({ pressed }) => [
-            styles.leaveButton,
+            styles.roundButton,
             pressed && styles.pressed,
             leaving && styles.disabled,
           ]}
@@ -168,7 +195,7 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.caption.fontSize,
     fontWeight: "600",
   },
-  leaveButton: {
+  roundButton: {
     width: 36,
     height: 36,
     borderRadius: radius.full,

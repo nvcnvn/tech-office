@@ -21,7 +21,6 @@ export function SignupForm() {
 		handleSubmit,
 		formState,
 		watch,
-		trigger,
 		isSubmitting,
 		submitError,
 		submitSuccess,
@@ -82,14 +81,20 @@ export function SignupForm() {
 							passwordValue={passwordValue}
 						/>
 
-						<TermsAcceptance register={register} errors={formState.errors} trigger={trigger} />
+						<TermsAcceptance register={register} errors={formState.errors} />
 
 						<Button
 							type="submit"
 							fullWidth
 							variant="contained"
 							size="large"
-							disabled={isSubmitting || !formState.isValid}
+							// Deliberately not gated on formState.isValid. The form validates
+							// on blur, so isValid lagged a field the user had just typed and
+							// not yet left: they typed the last field, clicked, nothing
+							// happened, and they had to click again. handleSubmit validates
+							// the whole form and shows the errors, which is the same
+							// protection without the dead first click.
+							disabled={isSubmitting}
 							sx={{ mt: 3 }}
 							startIcon={isSubmitting ? <CircularProgress size={20} /> : null}
 						>

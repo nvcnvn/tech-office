@@ -315,7 +315,7 @@ func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 			return nil, fmt.Errorf("count remaining voice participants: %w", err)
 		}
 		if remaining == 0 {
-			endedOutcome = endOutcomeFor(call)
+			endedOutcome = endOutcomeFor(call, employeeID)
 			call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "final_participant_left", actingDeviceIdentifier)
 			if err != nil {
 				return nil, err
@@ -355,7 +355,7 @@ func (l *Logic) EndVoiceCall(ctx context.Context, tx database.DBTX, orgID, emplo
 	if err := l.authorize(ctx, tx, orgID, employeeID, call.ChannelID); err != nil {
 		return nil, err
 	}
-	endedOutcome := endOutcomeFor(call)
+	endedOutcome := endOutcomeFor(call, employeeID)
 	call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "ended_by_user", actingDeviceIdentifier)
 	if err != nil {
 		return nil, err
@@ -1523,9 +1523,16 @@ func timestampOrNil(value pgtype.Timestamptz) *timestamppb.Timestamp {
 	return timestamppb.New(value.Time)
 }
 
-func endOutcomeFor(call *database.VoiceCallSession) string {
+// endOutcomeFor decides what an ended call is recorded as. An unanswered call ended by
+// its initiator is a cancel; the same call ended by anyone else is a decline. Without the
+// second case both the system call UI's Decline and the caller giving up landed on
+// "cancelled", and the call record could not tell the two apart.
+func endOutcomeFor(call *database.VoiceCallSession, endedBy dbuuid.UUID) string {
 	if call.AnsweredAt.Valid || call.State == CallStateActive {
 		return CallOutcomeCompleted
+	}
+	if endedBy != dbuuid.UUID(call.InitiatorEmployeeID) {
+		return CallOutcomeDeclined
 	}
 	return CallOutcomeCancelled
 }

@@ -3,7 +3,7 @@
 // T028: OrgSelector Component
 // Extracts organization subdomain from hostname or query params and validates it
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
 	TextField,
 	Alert,
@@ -40,6 +40,13 @@ export function OrgSelector({ initialSubdomain, onChange, error: externalError }
 	const [error, setError] = useState<string>('');
 	const [autoValidated, setAutoValidated] = useState<boolean>(false);
 
+	// onChange is typically an inline arrow from the parent, so it is a new function on
+	// every parent render. Holding it in a ref keeps validateSubdomain — and with it the
+	// mount effect below — stable; when the effect depended on the callback identity it
+	// re-ran on every parent render and overwrote whatever the user had typed.
+	const onChangeRef = useRef(onChange);
+	onChangeRef.current = onChange;
+
 	/**
 	 * Validate subdomain with backend API
 	 */
@@ -60,7 +67,7 @@ export function OrgSelector({ initialSubdomain, onChange, error: externalError }
 			setAutoValidated(true);
 
 			// Notify parent component
-			onChange(org.id, org);
+			onChangeRef.current(org.id, org);
 		} catch (err) {
 			const errorMessage = err instanceof Error ? err.message : 'Failed to validate organization';
 			setError(errorMessage);
@@ -68,7 +75,7 @@ export function OrgSelector({ initialSubdomain, onChange, error: externalError }
 		} finally {
 			setLoading(false);
 		}
-	}, [onChange]);
+	}, []);
 
 	// Extract subdomain from URL on mount
 	useEffect(() => {

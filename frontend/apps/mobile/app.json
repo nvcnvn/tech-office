@@ -21,7 +21,6 @@
         "NSMicrophoneUsageDescription": "Tech Office uses your microphone for voice calls and voice messages with your colleagues.",
         "NSCameraUsageDescription": "Tech Office uses your camera to take photos to attach to messages, tasks and job records.",
         "NSPhotoLibraryUsageDescription": "Tech Office needs access to your photos so you can attach them to messages, tasks and job records.",
-        "NSFaceIDUsageDescription": "Tech Office uses Face ID so you can sign in without typing your PIN each time.",
         "NSLocationWhenInUseUsageDescription": "Tech Office uses your location to confirm you are at the job site when you check in or complete a task. It is only used while the app is open.",
         "ITSAppUsesNonExemptEncryption": false
       },
@@ -52,8 +51,6 @@
       ],
       "package": "com.devguards.TechOffice",
       "permissions": [
-        "android.permission.USE_BIOMETRIC",
-        "android.permission.USE_FINGERPRINT",
         "android.permission.RECORD_AUDIO",
         "android.permission.ACCESS_COARSE_LOCATION",
         "android.permission.ACCESS_FINE_LOCATION",
@@ -70,7 +67,6 @@
       "expo-router",
       "expo-apple-authentication",
       "expo-secure-store",
-      "expo-local-authentication",
       "@react-native-firebase/app",
       "./plugins/with-firebase-notification-color.js",
       "./plugins/with-ios-dev-client-bootstrap.js",

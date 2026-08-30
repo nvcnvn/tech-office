@@ -366,9 +366,13 @@ SET status = 'cancelled'
 WHERE organization_id = $1 AND event_id = $2 AND status = 'pending';
 
 -- lint:cross-tenant scheduler sweep over every organization's due reminders; runs on AdminPool
+-- The event title is joined in because a reminder that does not name the event it is for
+-- is unactionable on a lock screen, where the notification body is all the user sees.
 -- name: ListPendingRemindersGlobal :many
-SELECT * FROM calendar.event_reminder
-WHERE status = 'pending'
-  AND fire_at <= $1
-ORDER BY fire_at ASC
+SELECT r.*, e.title AS event_title
+FROM calendar.event_reminder r
+JOIN calendar.event e ON (e.organization_id, e.id) = (r.organization_id, r.event_id)
+WHERE r.status = 'pending'
+  AND r.fire_at <= $1
+ORDER BY r.fire_at ASC
 LIMIT $2;

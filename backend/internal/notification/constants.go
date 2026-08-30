@@ -5,7 +5,7 @@
 // - API contract: NotificationEvent.notification_type field
 //
 // When adding/removing values:
-// 1. Update database CHECK constraint in backend/database/scripts/schema.sql
+// 1. Update the database CHECK constraint with a migration in backend/database/migrations/
 // 2. Update these Go constants
 // 3. Update frontend TypeScript types in packages/apis/src/notifications.ts
 // 4. Submit all changes in single PR with alignment verification
@@ -51,6 +51,14 @@ const (
 	// bulk generation run. It summarises all instances created in that run, replacing the
 	// previous per-instance ritual_instance_assigned flood.
 	NotificationTypeRitualInstancesScheduled = "ritual_instances_scheduled"
+
+	// Evidence notifications are published by internal/collaboration when a ritual's
+	// evidence requirement is submitted for review, approved or rejected. They live here
+	// rather than in collaboration because this list is the contract the database CHECK
+	// on notification.notification.notification_type is asserted against.
+	NotificationTypeEvidenceSubmitted = "evidence_submitted"
+	NotificationTypeEvidenceApproved  = "evidence_approved"
+	NotificationTypeEvidenceRejected  = "evidence_rejected"
 
 	// NotificationTypeAccountRemovalRequested reaches an organization's owners when
 	// an admin-provisioned worker asks in-app to be removed (Feature 036, FR-007c).
@@ -187,7 +195,12 @@ func IsValidNotificationType(notifType string) bool {
 		NotificationTypeCalendarEventChange,
 		NotificationTypeCalendarEventReminder,
 		NotificationTypeCalendarCheckInMissed,
-		NotificationTypeCalendarEventDigest:
+		NotificationTypeCalendarEventDigest,
+		NotificationTypeRitualInstancesScheduled,
+		NotificationTypeEvidenceSubmitted,
+		NotificationTypeEvidenceApproved,
+		NotificationTypeEvidenceRejected,
+		NotificationTypeAccountRemovalRequested:
 		return true
 	default:
 		return false
@@ -221,6 +234,11 @@ func AllNotificationTypes() []string {
 		NotificationTypeCalendarEventReminder,
 		NotificationTypeCalendarCheckInMissed,
 		NotificationTypeCalendarEventDigest,
+		NotificationTypeRitualInstancesScheduled,
+		NotificationTypeEvidenceSubmitted,
+		NotificationTypeEvidenceApproved,
+		NotificationTypeEvidenceRejected,
+		NotificationTypeAccountRemovalRequested,
 	}
 }
 

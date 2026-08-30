@@ -3,7 +3,7 @@
 import { Box, LinearProgress, Typography, Chip } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import { calculatePasswordStrength, getPasswordValidationDetails } from '../../../lib/validations/password';
+import { calculatePasswordStrength, getPasswordValidationDetails, PASSWORD_MIN_LENGTH } from '@tech-office/validations';
 
 interface PasswordStrengthProps {
 	password: string;
@@ -53,7 +53,7 @@ export function PasswordStrength({ password }: PasswordStrengthProps) {
 				<Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
 					<ChecklistItem
 						met={details.minLength}
-						label="At least 16 characters"
+						label={`At least ${PASSWORD_MIN_LENGTH} characters`}
 					/>
 					<ChecklistItem
 						met={details.hasNumber}

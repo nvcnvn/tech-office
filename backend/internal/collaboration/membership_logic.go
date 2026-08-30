@@ -87,7 +87,7 @@ func (l *logicImpl) AddProjectMember(
 	}
 
 	// Increment member count
-	err = l.Queries.IncrementProjectMemberCount(ctx, tx, &database.IncrementProjectMemberCountParams{
+	_, err = l.Queries.IncrementProjectMemberCount(ctx, tx, &database.IncrementProjectMemberCountParams{
 		OrganizationID: orgID,
 		ID:             projectID,
 		MemberCount:    1,
@@ -169,7 +169,7 @@ func (l *logicImpl) RemoveProjectMember(
 	}
 
 	// Decrement member count (using increment with -1)
-	err = l.Queries.IncrementProjectMemberCount(ctx, tx, &database.IncrementProjectMemberCountParams{
+	_, err = l.Queries.IncrementProjectMemberCount(ctx, tx, &database.IncrementProjectMemberCountParams{
 		OrganizationID: orgID,
 		ID:             projectID,
 		MemberCount:    -1,

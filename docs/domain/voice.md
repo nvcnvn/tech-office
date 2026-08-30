@@ -134,6 +134,13 @@ Because outcome is *inferred* on `room_finished`, a call that no one answered en
 `missed` without any client action. Since spec 037 the ring timeout sweep usually gets
 there first for a call nobody joined.
 
+For a call ended through `EndVoiceCall` or a final participant leaving, `endOutcomeFor`
+decides: answered or active → `completed`; otherwise `cancelled` if the initiator ended it
+and `declined` if anyone else did. Who ended it is the only thing that separates the two,
+and the request carries no flag saying which — `ended_by_employee_id` against
+`initiator_employee_id` is the whole rule. Without it a decline through the no-invitation
+path was indistinguishable from the caller giving up.
+
 ## Chat integration
 
 A call writes system messages into its channel: `chat.message` with
@@ -159,8 +166,9 @@ Posting produces a `chat.message` with `message_kind = 'voice'`.
   `recording_policy IN ('not_allowed','allowed','required')`, defaulting to `not_allowed`.
 - **Transcript** — `TranscriptionWorker` (`internal/voice/transcription.go`) pulls the
   recording, calls an **OpenAI Whisper-compatible API**, and stores WebVTT in R2 as a
-  `files.file_metadata` row. It is a no-op unless `TranscriptionEnabled` and a Whisper API
-  key are both set.
+  `files.file_metadata` row with `upload_context = 'voice_transcript'`, one of the six
+  values the column's CHECK accepts (see [files.md](files.md)). It is a no-op unless
+  `TranscriptionEnabled` and a Whisper API key are both set.
 
 ## Configuration
 
@@ -293,7 +301,14 @@ Join / Later" discovery prompt nor the join affordance that prompt falls through
 Answering it opens the conversation behind the system UI, which is how the in-call bar and
 the transcript become reachable once the phone is unlocked; from that point the in-app
 banner is drawn again, because it is the surface that shows connection quality, reports
-mute state and leaves the call. Muting itself is only ever done from the OS call UI.
+mute state and leaves the call.
+
+**Mute is reachable in the app, not only from the OS.** Both the channel's call banner and
+the global return bar carry a microphone toggle; both call `voiceClient.setMuted`, which
+is the single owner of the state, and `native-call.ts` mirrors every change into the OS
+call object so the lock screen and the app cannot disagree. It has to be in the app
+because a fallback tier-B device — one the OS does not ring for — has no system call UI at
+all, and without an in-app control the user there could not mute anywhere.
 
 **Only one in-app in-call surface is drawn at a time.** The global active-call bar above
 the tab navigator is a *return* affordance: it exists to say the call is still running on a
@@ -303,9 +318,10 @@ call belongs to is the open route — `_layout.tsx` compares the pathname agains
 the channel already carries its own call banner. Stacking the two under the operating
 system's own call chip put three rows of the same call on one screen, which is what the
 person answering from the lock screen saw as soon as the conversation opened behind the
-system UI. The mute state the return bar reports travels with the suppression: the
-channel's call banner appends **Muted** to its status line while the media is connected, so
-the state set from the lock screen is still visible where the bar is not.
+system UI. The mute state and control travel with the suppression: the
+channel's call banner appends **Muted** to its status line and carries its own microphone
+toggle while the media is connected, so the state set from the lock screen is both visible
+and changeable where the bar is not.
 
 **One owner for a conversation's call state.** `useChannelVoiceCall` in
 `apps/mobile/src/hooks/use-channel-voice-call.ts` holds every piece of it, and the pure
@@ -421,13 +437,20 @@ refused. The rest is the manual device matrix in
 
 ## Known drift
 
-**D1 — voice transcripts violate a database CHECK.**
-`internal/voice/transcription.go:132` writes `files.file_metadata` with
-`UploadContext: "voice_transcript"`, but the column's constraint is still
-`CHECK (upload_context IN ('chat','avatar','docs','project'))` — unchanged since the
-initial migration. The insert is inside the transcript-persist transaction, so every
-transcript fails at `persist_failed` and the artefact never reaches `ready`. Integration
-tests do not catch it because transcription is disabled without a Whisper key. Fixing it
-means either widening the constraint (also covering `'calendar'`, already accepted by
-`files.IsValidUploadContext`) or reusing an existing context value. Same root cause as the
-files-side half of D1 — see [files.md](files.md#known-drift).
+**Spec 037's FR-021 (system recent-calls surface) is not implemented.** Jetpack Telecom's
+unified call history and `isLogExcluded` require Android 16.1 (SDK 36.1), far above the
+epic's API 26 floor. FR-021 is a MAY; revisit when the 16.1 install base justifies it.
+
+**An unreachable callee gets no missed-call trail.** A direct call to a callee with no push
+token and no live connection is refused with `VOICE_CALLEE_UNREACHABLE` *before* the call
+session is created, so no call record and no missed-call system message is written — the
+callee never learns anyone tried. This satisfies FR-006/SC-006 (an immediate verdict
+instead of a 45-second ring) at the cost of the trail an offline callee used to get.
+Whether they should still see a missed call is an open product decision, not an oversight.
+
+**`PUBLIC_LIVEKIT_URL` goes stale silently.** A developer's local `backend/.env` pins a LAN
+IP and the file is gitignored, so it rots whenever the machine changes network. Clients
+then receive join credentials aimed at an unreachable host and the call connects with no
+audio — the same symptom as an audio-session bug, with a completely different cause.
+`TestVoiceLiveKitConnectivity` is the test that catches it; treat its failure as a config
+problem before suspecting code.

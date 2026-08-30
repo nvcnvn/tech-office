@@ -1,12 +1,21 @@
 import { z } from 'zod';
 
 /**
- * Password validation schema
- * Enforces minimum length and character composition requirements
+ * Password rules, shared by every client.
+ *
+ * The bounds mirror `iam.MinPasswordLength` / `iam.MaxPasswordLength` in
+ * backend/internal/iam/constants.go, which is the authority: the API accepts 8–72
+ * characters (72 is bcrypt's limit). The web signup form used to demand 16 while the
+ * mobile owner signup asked for 8, so the same product stated two different rules
+ * depending on the device, and the stricter one was the first thing a new owner hit.
  */
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 72;
+
 export const passwordSchema = z
     .string()
-    .min(16, 'Password must be at least 16 characters')
+    .min(PASSWORD_MIN_LENGTH, `Password must be at least ${PASSWORD_MIN_LENGTH} characters`)
+    .max(PASSWORD_MAX_LENGTH, `Password must be ${PASSWORD_MAX_LENGTH} characters or less`)
     .regex(/[0-9]/, 'Password must contain at least one number')
     .regex(/[a-zA-Z]/, 'Password must contain at least one letter');
 
@@ -16,12 +25,16 @@ export const passwordSchema = z
 export type PasswordStrength = 'weak' | 'medium' | 'strong';
 
 /**
- * Calculate password strength for visual indicator
+ * Calculate password strength for visual indicator.
+ *
+ * Strength is advice, not a gate: the minimum above is what the form enforces, and a
+ * password that only just clears it is honestly reported as weak.
+ *
  * @param password - Password to evaluate
  * @returns Strength level
  */
 export function calculatePasswordStrength(password: string): PasswordStrength {
-    if (password.length < 16) return 'weak';
+    if (password.length < PASSWORD_MIN_LENGTH) return 'weak';
 
     const hasNumber = /[0-9]/.test(password);
     const hasLetter = /[a-zA-Z]/.test(password);
@@ -37,8 +50,8 @@ export function calculatePasswordStrength(password: string): PasswordStrength {
         hasSpecial,
     ].filter(Boolean).length;
 
-    if (criteriaCount >= 4 && password.length >= 20) return 'strong';
-    if (criteriaCount >= 3 && password.length >= 16) return 'medium';
+    if (criteriaCount >= 4 && password.length >= 16) return 'strong';
+    if (criteriaCount >= 3 && password.length >= 12) return 'medium';
     return 'weak';
 }
 
@@ -49,7 +62,7 @@ export function calculatePasswordStrength(password: string): PasswordStrength {
  */
 export function getPasswordValidationDetails(password: string) {
     return {
-        minLength: password.length >= 16,
+        minLength: password.length >= PASSWORD_MIN_LENGTH,
         hasNumber: /[0-9]/.test(password),
         hasLetter: /[a-zA-Z]/.test(password),
         hasLowercase: /[a-z]/.test(password),

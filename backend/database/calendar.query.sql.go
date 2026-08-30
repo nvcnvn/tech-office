@@ -1193,10 +1193,12 @@ func (q *Queries) ListEventsForOrg(ctx context.Context, db DBTX, arg *ListEvents
 }
 
 const listPendingRemindersGlobal = `-- name: ListPendingRemindersGlobal :many
-SELECT id, organization_id, event_id, attendee_employee_id, reminder_offset_minutes, fire_at, status, created_at FROM calendar.event_reminder
-WHERE status = 'pending'
-  AND fire_at <= $1
-ORDER BY fire_at ASC
+SELECT r.id, r.organization_id, r.event_id, r.attendee_employee_id, r.reminder_offset_minutes, r.fire_at, r.status, r.created_at, e.title AS event_title
+FROM calendar.event_reminder r
+JOIN calendar.event e ON (e.organization_id, e.id) = (r.organization_id, r.event_id)
+WHERE r.status = 'pending'
+  AND r.fire_at <= $1
+ORDER BY r.fire_at ASC
 LIMIT $2
 `
 
@@ -1205,16 +1207,30 @@ type ListPendingRemindersGlobalParams struct {
 	Limit  int32              `json:"limit"`
 }
 
+type ListPendingRemindersGlobalRow struct {
+	ID                    dbuuid.UUID        `json:"id"`
+	OrganizationID        dbuuid.UUID        `json:"organization_id"`
+	EventID               dbuuid.UUID        `json:"event_id"`
+	AttendeeEmployeeID    dbuuid.UUID        `json:"attendee_employee_id"`
+	ReminderOffsetMinutes int32              `json:"reminder_offset_minutes"`
+	FireAt                pgtype.Timestamptz `json:"fire_at"`
+	Status                string             `json:"status"`
+	CreatedAt             pgtype.Timestamptz `json:"created_at"`
+	EventTitle            string             `json:"event_title"`
+}
+
 // lint:cross-tenant scheduler sweep over every organization's due reminders; runs on AdminPool
-func (q *Queries) ListPendingRemindersGlobal(ctx context.Context, db DBTX, arg *ListPendingRemindersGlobalParams) ([]*CalendarEventReminder, error) {
+// The event title is joined in because a reminder that does not name the event it is for
+// is unactionable on a lock screen, where the notification body is all the user sees.
+func (q *Queries) ListPendingRemindersGlobal(ctx context.Context, db DBTX, arg *ListPendingRemindersGlobalParams) ([]*ListPendingRemindersGlobalRow, error) {
 	rows, err := db.Query(ctx, listPendingRemindersGlobal, arg.FireAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*CalendarEventReminder
+	var items []*ListPendingRemindersGlobalRow
 	for rows.Next() {
-		var i CalendarEventReminder
+		var i ListPendingRemindersGlobalRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OrganizationID,
@@ -1224,6 +1240,7 @@ func (q *Queries) ListPendingRemindersGlobal(ctx context.Context, db DBTX, arg *
 			&i.FireAt,
 			&i.Status,
 			&i.CreatedAt,
+			&i.EventTitle,
 		); err != nil {
 			return nil, err
 		}

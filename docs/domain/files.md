@@ -128,24 +128,14 @@ so a file you cannot download never appears in results.
 
 ## Known drift
 
-**D1 — `upload_context` is out of sync across three layers.**
+None. `upload_context` was widened by
+`20260830000001_drift_register_fixes.up.sql` to the six values
+`internal/files/constants.go` and the code actually write — `chat`, `avatar`, `docs`,
+`project`, `calendar`, `voice_transcript`. `voice_transcript` is written by
+`internal/voice/transcription.go`; `calendar` is accepted by `IsValidUploadContext` but
+nothing in the repo writes it, because the calendar domain stores `evidence_file_ids` /
+`file_ids` referencing files uploaded through other contexts.
 
-| Layer | Accepted values |
-|---|---|
-| DB CHECK (`schema.sql` and the init migration, never widened) | `chat`, `avatar`, `docs`, `project` |
-| `internal/files/constants.go` (`IsValidUploadContext`) | `chat`, `avatar`, `docs`, `project`, **`calendar`** |
-| actually written by code | the four, plus **`voice_transcript`** (`internal/voice/transcription.go:132`) |
-
-Two consequences:
-
-- Voice transcripts fail to persist — see [voice.md](voice.md#known-drift).
-- A client passing `upload_context: "calendar"` to `FileService` passes application
-  validation and then hits a constraint violation. `UploadContextCalendar` is otherwise
-  dead: nothing in the repo writes it, and the calendar domain stores
-  `evidence_file_ids` / `file_ids` referencing files uploaded through other contexts.
-
-The fix is one migration widening the CHECK to match `ValidUploadContexts()` **plus**
-`voice_transcript`, and a `files_validation_test.go` case asserting every value in
-`ValidUploadContexts()` actually inserts. Note that `context_type` on
-`files.file_access_rule` is a *different* enum and is already broader
-(`calendar_event`, `support_ticket`, `crm_deal`) — do not conflate the two.
+Note that `context_type` on `files.file_access_rule` is a *different* enum with its own
+broader value set (`calendar_event`, `support_ticket`, `crm_deal`) — do not conflate the
+two.

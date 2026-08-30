@@ -66,10 +66,15 @@ func TestPresencePingPong(t *testing.T) {
 			w.setConnectionLastPongAt(connID, responsiveWindow+5*time.Second)
 
 			notifID := w.publishPersistentNotification(gone.ID, "unresponsive recipient")
-			status, reason, _ := w.queryFallbackState(w.recipientRowID(notifID, gone.ID))
+			_, reason, dueAt := w.queryFallbackState(w.recipientRowID(notifID, gone.ID))
 
-			assert.NotEqual(t, "queued", status, "an unreachable recipient must not wait out the rescue window")
-			assert.NotEqual(t, notification.FallbackReasonRecipientOnline, reason)
+			// The contract is the due time, not the status: the row is handed to the
+			// rescue push worker due immediately, where a reachable recipient's row is
+			// due a rescue window later. Asserting on fallback_status instead would be
+			// racing that worker's next tick.
+			assert.WithinDuration(t, time.Now(), dueAt.Time, 5*time.Second,
+				"an unreachable recipient must not wait out the rescue window")
+			assert.Equal(t, notification.FallbackReasonConnectionUnresponsive, reason)
 		})
 
 		t.Run("the fallback reason records connection_unresponsive, not a policy skip", func(t *testing.T) {
@@ -93,10 +98,11 @@ func TestPresencePingPong(t *testing.T) {
 			absent := w.withEmployee()
 
 			notifID := w.publishPersistentNotification(absent.ID, "no connection")
-			status, _, _ := w.queryFallbackState(w.recipientRowID(notifID, absent.ID))
+			_, _, dueAt := w.queryFallbackState(w.recipientRowID(notifID, absent.ID))
 			reasons := w.deliveryAttemptReasons(w.recipientRowID(notifID, absent.ID))
 
-			assert.NotEqual(t, "queued", status)
+			assert.WithinDuration(t, time.Now(), dueAt.Time, 5*time.Second,
+				"an absent recipient must not wait out the rescue window either")
 			assert.Contains(t, reasons, notification.FallbackReasonConnectionUnresponsive)
 		})
 	})

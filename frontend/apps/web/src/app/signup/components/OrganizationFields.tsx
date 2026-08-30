@@ -2,7 +2,7 @@
 
 import { TextField, Stack, InputAdornment } from '@mui/material';
 import { UseFormRegister, FieldErrors } from 'react-hook-form';
-import { SignupFormData } from '../../../lib/validations/signup';
+import { SignupFormData } from '@tech-office/validations';
 import { SubdomainCheck } from './SubdomainCheck';
 
 interface OrganizationFieldsProps {

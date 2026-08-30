@@ -1106,6 +1106,7 @@ const listChildDocuments = `-- name: ListChildDocuments :many
 SELECT id, organization_id, title, slug, document_type, parent_document_id, depth, path, content_json, content_text, status, visibility, owner_employee_id, child_count, version_count, follower_count, is_deleted, updated_at FROM docs.document
 WHERE organization_id = $1 
   AND parent_document_id = $2
+  AND document_type = 'workspace_doc'
   AND is_deleted = FALSE
   AND ($3::text IS NULL OR status = $3)
   AND ($4::uuid IS NULL OR id < $4)
@@ -1121,6 +1122,7 @@ type ListChildDocumentsParams struct {
 	DocLimit         int32           `json:"doc_limit"`
 }
 
+// Same workspace-listing filter as ListRootDocuments.
 func (q *Queries) ListChildDocuments(ctx context.Context, db DBTX, arg *ListChildDocumentsParams) ([]*DocsDocument, error) {
 	rows, err := db.Query(ctx, listChildDocuments,
 		arg.OrganizationID,
@@ -1508,6 +1510,7 @@ const listRootDocuments = `-- name: ListRootDocuments :many
 SELECT id, organization_id, title, slug, document_type, parent_document_id, depth, path, content_json, content_text, status, visibility, owner_employee_id, child_count, version_count, follower_count, is_deleted, updated_at FROM docs.document
 WHERE organization_id = $1 
   AND parent_document_id IS NULL 
+  AND document_type = 'workspace_doc'
   AND is_deleted = FALSE
   AND ($2::text IS NULL OR status = $2)
   AND ($3::uuid IS NULL OR id < $3)
@@ -1522,6 +1525,8 @@ type ListRootDocumentsParams struct {
 	DocLimit       int32           `json:"doc_limit"`
 }
 
+// Workspace listing: task_description and project_brief documents are owned by a task or
+// a project and are reached through it, so they must never appear in the docs tree.
 func (q *Queries) ListRootDocuments(ctx context.Context, db DBTX, arg *ListRootDocumentsParams) ([]*DocsDocument, error) {
 	rows, err := db.Query(ctx, listRootDocuments,
 		arg.OrganizationID,

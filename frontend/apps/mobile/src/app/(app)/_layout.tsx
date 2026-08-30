@@ -322,6 +322,7 @@ export default function AppLayout() {
           leaving={activeVoiceLeaving}
           onReturn={handleReturnToActiveVoiceCall}
           onLeave={() => void handleLeaveActiveVoiceCall()}
+          onToggleMute={() => void voiceClient.setMuted(!voiceSnapshot.isMuted)}
         />
       ) : null}
       <Tabs

@@ -12,7 +12,7 @@ import (
 )
 
 const getOrganizationByID = `-- name: GetOrganizationByID :one
-SELECT id, company_name, subdomain, project_id, app_id, client_id, status, updated_at
+SELECT id, company_name, subdomain, client_id, status, updated_at
 FROM public.organization
 WHERE id = $1
 `
@@ -25,8 +25,6 @@ func (q *Queries) GetOrganizationByID(ctx context.Context, db DBTX, id dbuuid.UU
 		&i.ID,
 		&i.CompanyName,
 		&i.Subdomain,
-		&i.ProjectID,
-		&i.AppID,
 		&i.ClientID,
 		&i.Status,
 		&i.UpdatedAt,
@@ -35,7 +33,7 @@ func (q *Queries) GetOrganizationByID(ctx context.Context, db DBTX, id dbuuid.UU
 }
 
 const getOrganizationBySubdomain = `-- name: GetOrganizationBySubdomain :one
-SELECT id, company_name, subdomain, project_id, app_id, client_id, status, updated_at
+SELECT id, company_name, subdomain, client_id, status, updated_at
 FROM public.organization
 WHERE subdomain = $1
 LIMIT 1
@@ -51,8 +49,6 @@ func (q *Queries) GetOrganizationBySubdomain(ctx context.Context, db DBTX, subdo
 		&i.ID,
 		&i.CompanyName,
 		&i.Subdomain,
-		&i.ProjectID,
-		&i.AppID,
 		&i.ClientID,
 		&i.Status,
 		&i.UpdatedAt,

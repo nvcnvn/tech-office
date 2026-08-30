@@ -2,7 +2,7 @@
 
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { signupFormSchema, SignupFormData } from '../validations/signup';
+import { signupFormSchema, SignupFormData } from '@tech-office/validations';
 import { registerOrganization, TERMS_VERSION } from 'apis';
 import { useState } from 'react';
 
@@ -11,7 +11,6 @@ interface UseSignupFormResult {
 	handleSubmit: ReturnType<typeof useForm<SignupFormData>>['handleSubmit'];
 	formState: ReturnType<typeof useForm<SignupFormData>>['formState'];
 	watch: ReturnType<typeof useForm<SignupFormData>>['watch'];
-	trigger: ReturnType<typeof useForm<SignupFormData>>['trigger'];
 	isSubmitting: boolean;
 	submitError: Error | null;
 	submitSuccess: boolean;
@@ -32,7 +31,6 @@ export function useSignupForm(): UseSignupFormResult {
 		handleSubmit,
 		formState,
 		watch,
-		trigger,
 	} = useForm<SignupFormData>({
 		resolver: zodResolver(signupFormSchema),
 		mode: 'onBlur', // Validate on blur for better UX
@@ -77,7 +75,6 @@ export function useSignupForm(): UseSignupFormResult {
 		handleSubmit,
 		formState,
 		watch,
-		trigger,
 		isSubmitting,
 		submitError,
 		submitSuccess,

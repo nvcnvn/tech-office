@@ -9,6 +9,8 @@ export { emailSchema, extractEmailDomain } from './email';
 // Password validation
 export {
     passwordSchema,
+    PASSWORD_MIN_LENGTH,
+    PASSWORD_MAX_LENGTH,
     calculatePasswordStrength,
     getPasswordValidationDetails,
     type PasswordStrength,

@@ -25,8 +25,10 @@ comments, cross-document section embeds, and live collaborative editing presence
 
 - **Identity** — `title`, `slug` in the form `{title-slug}-{base62-uuid}` (unique per org)
 - **Type** — `workspace_doc | task_description | project_brief`. `task_description`
-  documents belong to a task (see [rituals-tasks.md](rituals-tasks.md#tasks)) but are **not**
-  filtered out of the workspace docs list — see [Known drift](#known-drift).
+  documents belong to a task (see [rituals-tasks.md](rituals-tasks.md#tasks)) and
+  `project_brief` documents to a project; both are reached through their owner, and
+  `ListRootDocuments` / `ListChildDocuments` filter on `document_type = 'workspace_doc'`
+  so neither appears in the workspace docs tree.
 - **Hierarchy** — `parent_document_id`, `depth` ≤ 10, `path uuid[]` materialised ancestor
   path
 - **Content** — `content_json` (TipTap/ProseMirror JSON) and `content_text` (plain-text
@@ -129,15 +131,7 @@ followers.
 
 ## Known drift
 
-**D10 — `document_type` is never filtered from the document list.** `ListRootDocuments` and
-`ListChildDocuments` (`database/docs.query.sql.go`) select on `organization_id`,
-`parent_document_id`, `is_deleted` and `status` only. `documentLogicImpl.ListDocuments`
-passes no type filter either, so every task's `task_description` document appears in
-`/workspace/docs` alongside real `workspace_doc` pages, titled `Task: <task title>`. Adding
-`AND document_type = 'workspace_doc'` to both queries is the fix; nothing in the client
-depends on the current behaviour.
-
-Two clarifications that read as drift but are not:
+Two things that read as drift but are not:
 
 - `DocumentFollowerService` looks like it should own a table; it does not, by design.
   Following lives in the notification domain.

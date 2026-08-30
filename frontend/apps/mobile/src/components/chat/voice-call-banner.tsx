@@ -38,6 +38,7 @@ interface VoiceCallBannerProps {
   onStart: () => void;
   onJoin: () => void;
   onLeave: () => void;
+  onToggleMute: () => void;
 }
 
 function stateLabel(
@@ -79,6 +80,7 @@ export function VoiceCallBanner({
   onStart,
   onJoin,
   onLeave,
+  onToggleMute,
 }: VoiceCallBannerProps) {
   // Any call action in flight blocks the others — firing two at once is what produced
   // the contorted guards this replaces — but only the action actually running spins.
@@ -158,6 +160,28 @@ export function VoiceCallBanner({
         ) : null}
       </View>
       <View style={styles.actions}>
+        {/*
+          Mute belongs on this banner and not only on the system call screen: a device
+          the OS does not ring for has no system call UI, so this is the only mute the
+          user has. voiceClient owns the state and native-call.ts mirrors it into the OS
+          call object, so the two surfaces cannot disagree.
+        */}
+        {mediaConnected ? (
+          <Pressable
+            testID="voice-call-mute-button"
+            onPress={onToggleMute}
+            accessibilityRole="button"
+            accessibilityState={{ selected: isMuted }}
+            accessibilityLabel={isMuted ? "Unmute microphone" : "Mute microphone"}
+            style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+          >
+            <SFIcon
+              name={isMuted ? "mic.slash.fill" : "mic.fill"}
+              size={18}
+              color={isMuted ? lightPalette.error.main : lightPalette.text.secondary}
+            />
+          </Pressable>
+        ) : null}
         {canLeave ? (
           <Pressable
             testID="voice-call-leave-button"

@@ -210,15 +210,10 @@ func (s *organizationLogicImpl) RegisterOrganizationWithAdmin(
 		Time:  time.Now(),
 		Valid: true,
 	}
-	organizationProjectUUID := dbuuid.Must()
-	appID := dbuuid.Must()
-
 	// Step 1: Create organization record
 	organizationRecord := database.Organization{
 		ID:          dbuuid.Must(),
 		CompanyName: req.CompanyName,
-		ProjectID:   organizationProjectUUID,
-		AppID:       appID,
 		Status:      OrganizationStatusActive,
 		Subdomain:   subdomain,
 		UpdatedAt:   now,

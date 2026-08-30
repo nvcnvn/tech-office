@@ -70,9 +70,14 @@ func (w *CalendarReminderWorkflow) FirePendingReminders(ctx context.Context) (*C
 			OrganizationId:   r.OrganizationID.String(),
 			SourceDomain:     SourceDomainCalendar,
 			NotificationType: NotificationTypeCalendarEventReminder,
-			Priority:         2, // high
-			Title:            "Event Reminder",
-			Message:          fmt.Sprintf("You have an upcoming event in %d minutes", r.ReminderOffsetMinutes),
+			// Priority 0 = deliver always. A reminder exists precisely for the person who
+			// is not looking at the app: at priority 2 ("deliver when online only") it was
+			// suppressed for exactly the absent user it is meant to reach.
+			Priority: 0,
+			Title:    "Event Reminder",
+			// The title has to be in the body: on a lock screen this line is all the user
+			// sees, and "an upcoming event" does not say which one.
+			Message: fmt.Sprintf("%s starts in %d minutes", r.EventTitle, r.ReminderOffsetMinutes),
 			PolicyKey:        PolicyKeyCalendarEventReminder,
 			DeliveryClass:    "persistent",
 			SourceCategory:   "system",

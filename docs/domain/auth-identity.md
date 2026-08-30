@@ -44,6 +44,13 @@ all sessions. `RequestPasswordReset` / `ResetPassword` use `iam.password_reset_t
 a 1-hour expiry, delivered by AWS SES (`internal/iam/email_sender_ses.go`; falls back to
 logging when SES is unconfigured).
 
+`iam.MinPasswordLength` / `MaxPasswordLength` (8 and 72, bcrypt's ceiling) are the rule,
+and every client states the same one: `frontend/packages/validations` holds the single
+`passwordSchema` that the web signup form and the mobile owner signup both use. They used
+to disagree — web demanded 16, mobile 8 — so the same product asked for two different
+passwords depending on the device, and the web form's stricter rule appeared nowhere in
+the API contract.
+
 ### 2. SSO (Google, Apple) — direct, no Zitadel
 
 `ExchangeToken` takes a provider ID token, verifies it against the provider's JWKS
@@ -131,7 +138,9 @@ Two paths:
 
 - **Invitation** — `InviteUser` writes `iam.invitation` (7-day expiry, statuses
   `pending | accepted | cancelled | expired`) and emails a link. `AcceptInvitation` creates
-  the `iam.identity` + `organization.employee` and assigns the default role.
+  the `iam.identity` + `organization.employee` this organization is missing — including
+  for a user who already exists in another workspace, which is what makes a second
+  membership possible — and assigns the default role.
   `ListInvitations` / `CancelInvitation` for administration.
 - **Import** — `PreviewEmployeeImport` then `ExecuteEmployeeImport` for CSV/Excel bulk
   onboarding. See [organization-people.md](organization-people.md).
@@ -253,28 +262,20 @@ PIN → teammate). All three run under `make test-mobile`.
 
 ## Known drift
 
-**D4 — spec 024 says passkey; the code says PIN.** There is no WebAuthn, no passkey, and
-no `navigator.credentials` anywhere in the repo. Feature 024 shipped as PIN authentication
-with escalating lockout. Two artefacts of the abandoned half remain:
+**Spec 024 says passkey; the code says PIN.** There is no WebAuthn, no passkey, and no
+`navigator.credentials` anywhere in the repo. Feature 024 shipped as PIN authentication
+with escalating lockout. One artefact of the abandoned half remains:
+`iam.credential.credential_type` allows `'biometric'` and `iam.CredentialTypeBiometric` is
+declared, but nothing ever writes or reads it. (`expo-local-authentication` and the Face ID
+/ fingerprint permissions it needed are gone from the mobile app; the hook that used it was
+deleted in 035.) Read spec 024 for intent only; the file name and title are misleading.
 
-- `iam.credential.credential_type` allows `'biometric'`, and
-  `iam.CredentialTypeBiometric` is declared, but nothing ever writes or reads it.
-- `apps/mobile/src/hooks/use-biometrics.ts` was deleted in feature 035; the
-  `expo-local-authentication` dependency it wrapped is still in
-  `apps/mobile/package.json` and is now imported by nothing. Removing it forces a native
-  rebuild, so it was left for a change that is already rebuilding.
-
-Read spec 024 for intent only; the file name and title are misleading.
-
-**D6 — Zitadel residue.** Spec 002 describes the Zitadel integration that feature 018
-removed. The removal is complete in behaviour but left three traces:
-
-- a stale doc comment in `apps/web/src/app/signin/components/LoginForm.tsx`
-  ("Uses @zitadel/react via custom auth hooks") — the file does not;
-- generated declaration files under `frontend/packages/apis/dst/` referencing
-  `ZitadelAuthService` (build output, not source);
-- `public.organization.project_id` and `app_id`, both still `NOT NULL`, commented as links
-  to the "legacy external auth project". Every org creation must still populate them.
+**Spec 002 describes Zitadel, which feature 018 removed.** The removal is now complete:
+`LoginForm.tsx` (the last file that still named Zitadel, and which nothing rendered) is
+deleted, and `public.organization.project_id` / `app_id` were dropped by
+`20260830000001_drift_register_fixes.up.sql`. `frontend/packages/apis/dst/` may still hold
+compiled `ZitadelAuthService` output on a machine that built before 018 — it is gitignored
+build output, cleared by a rebuild, not source.
 
 **SSO audience validation is opt-in.** With `GOOGLE_CLIENT_IDS`/`APPLE_CLIENT_IDS` unset
 the server accepts any Google- or Apple-signed ID token regardless of which application it

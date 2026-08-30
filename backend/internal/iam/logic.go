@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -498,7 +499,6 @@ func (l *iamLogicImpl) AcceptInvitationWithToken(ctx context.Context, tx databas
 	now := pgtype.Timestamptz{Time: time.Now(), Valid: true}
 
 	// Find or create user
-	isNewUser := false
 	var preCreatedEmployee *database.GetEmployeeByOrgEmailRow
 	user, err := l.queries.GetUserByEmail(ctx, tx, pgtype.Text{String: invitation.Email, Valid: invitation.Email != ""})
 	if err != nil {
@@ -576,8 +576,6 @@ func (l *iamLogicImpl) AcceptInvitationWithToken(ctx context.Context, tx databas
 				return nil, dbuuid.UUID{}, fmt.Errorf("failed to create password credential: %w", err)
 			}
 		}
-
-		isNewUser = true
 	}
 
 	// Ensure iam.identity and organization.employee records exist for this org.
@@ -605,10 +603,22 @@ func (l *iamLogicImpl) AcceptInvitationWithToken(ctx context.Context, tx databas
 		IsActive:       true,
 		UpdatedAt:      now,
 	}
-	if isNewUser && preCreatedEmployee == nil {
+	// Keyed on whether this organization already has an employee row for the user, not on
+	// whether the user is new. An existing user accepting an invitation to a *second*
+	// organization has no row there, and the role assignment below fails on
+	// fk_employee_role_employee without one — which is what stopped invite→accept from
+	// ever producing a second organization membership.
+	_, employeeErr := l.queries.GetEmployeeByID(ctx, tx, &database.GetEmployeeByIDParams{
+		ID:             user.ID,
+		OrganizationID: invitation.OrganizationID,
+	})
+	switch {
+	case errors.Is(employeeErr, pgx.ErrNoRows):
 		if createErr := dbcrud.Create(ctx, tx, &employeeRecord); createErr != nil {
 			return nil, dbuuid.UUID{}, fmt.Errorf("failed to create employee record: %w", createErr)
 		}
+	case employeeErr != nil:
+		return nil, dbuuid.UUID{}, fmt.Errorf("failed to check employee record: %w", employeeErr)
 	}
 
 	// Assign the invitation's role to the employee

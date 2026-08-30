@@ -99,6 +99,8 @@ export interface ChannelVoiceCall {
   answer: () => Promise<void>;
   /** Always tells the caller: declines the invitation, or ends a call that has none. */
   decline: () => Promise<void>;
+  /** Flips the microphone. Mirrored into the OS call object by native-call.ts. */
+  toggleMute: () => Promise<void>;
   dismiss: () => void;
   /**
    * Feed every `voice_call_*` stream event for this channel here. Returns which kind it
@@ -309,6 +311,13 @@ export function useChannelVoiceCall(options: {
     [clearIncoming, incoming, onCallSettled, run, state.call],
   );
 
+  // Not wrapped in run(): muting is local media, it has no server round-trip to fail,
+  // and putting it in the shared pending slot would grey out the leave button.
+  const toggleMute = useCallback(
+    () => voiceClient.setMuted(!snapshot.isMuted),
+    [snapshot.isMuted],
+  );
+
   const leave = useCallback(
     () =>
       run("leaving", "Unable to leave voice call.", async () => {
@@ -367,6 +376,7 @@ export function useChannelVoiceCall(options: {
       leave,
       answer,
       decline,
+      toggleMute,
       dismiss,
       applyStreamEvent,
     }),
@@ -380,6 +390,7 @@ export function useChannelVoiceCall(options: {
       leave,
       snapshot,
       start,
+      toggleMute,
       state.call,
       state.dismissedCallId,
       state.error,

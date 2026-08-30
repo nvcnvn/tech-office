@@ -123,7 +123,12 @@ worker tick (1 s) later than the commit.
 `recipient_online`, `suppressed_by_preference`, `sse_receipt_confirmed`,
 `acknowledged_before_fallback`, `connection_unresponsive`, `provider_error`,
 `delivery_error`, and — for call wakes only — `no_call_wake_target`,
-`native_tier_unavailable`, `call_already_ended`.
+`native_tier_unavailable`, `call_already_ended`, `acting_device_excluded`.
+
+Because the send is always the worker's, `fallback_status` reads `queued` for a moment
+even for a recipient nobody can reach live. The immediacy lives in `fallback_due_at` —
+now for an unreachable recipient, a rescue window later for a reachable one — so that,
+and not the status, is what `presence_ping_pong_test.go` asserts on.
 
 ### Call wakes
 
@@ -344,10 +349,17 @@ than inferring from loose IDs.
 
 ## Notification types
 
-32 values in the DB CHECK, grouped: chat (`message`, `mention`, `reply`, `typing`,
-`reaction`), voice (4), task (6), docs (3), ritual/evidence (7), calendar (6), and
+29 values, grouped: chat (`message`, `mention`, `reply`, `typing`, `reaction`), voice (4),
+task (6), docs (3), ritual/evidence (4 — `evidence_submitted`, `evidence_approved`,
+`evidence_rejected`, `ritual_instances_scheduled`), calendar (6), and
 `account_removal_requested`. Source domains: `chat`, `crm`, `projects`, `hr`, `support`,
 `finance`, `docs`, `system`, `calendar`.
+
+`notification.AllNotificationTypes()` and the DB CHECK are one list in two places, and
+`TestNotificationTypeCheckMatchesGoConstants` reads the constraint out of the live schema
+and asserts they are equal. Before that guard the two had drifted by seven values, because
+the contract test that was supposed to catch it iterated the Go list and validated it
+against the Go validator.
 
 `account_removal_requested` is published on `system` by `internal/compliance` when an
 admin-provisioned worker asks to be removed from a workspace; it reaches that
@@ -356,8 +368,8 @@ transaction rather than being best-effort: a removal request nobody hears about 
 off-app dead end both app stores reject, so a failure to notify rolls the request back.
 See [compliance-safety.md](compliance-safety.md).
 
-Adding a type means changing four places in one PR (Constitution VIII): the DB CHECK,
-`internal/notification/constants.go`, the proto, and
+Adding a type means changing four places in one PR (Constitution VIII): the DB CHECK (as a
+migration), `internal/notification/constants.go`, the proto, and
 `frontend/packages/apis/src/notification.ts` — plus the two `Record<NotificationType, …>`
 maps in `frontend/packages/notifications/src/utils.ts`, which the union makes exhaustive.
 Those maps are why the union matters beyond type-checking: a type missing from them falls
@@ -389,37 +401,13 @@ subscription sync), `notification_delivery_consistency_test.go`,
 
 ## Known drift
 
-**D2 — the Go notification-type list is a subset of what the system emits.**
-`IsValidNotificationType` and `AllNotificationTypes` in
-`internal/notification/constants.go` list 24 types. The DB CHECK allows 31. The seven
-missing ones are exactly the ritual/evidence family — `ritual_instance_assigned`,
-`evidence_submitted`, `evidence_approved`, `evidence_rejected`, `ritual_instance_overdue`,
-`ritual_instance_missed`, `ritual_instances_scheduled` — and `internal/collaboration`
-publishes several of them today with its own duplicate constants in
-`internal/collaboration/constants.go:319-330`. `NotificationTypeRitualInstancesScheduled`
-is even declared in the notification package but omitted from both functions.
-
-Nothing breaks at runtime, because `IsValidNotificationType` is only called from
-`integration/notification_v2_contract_test.go` — and that test iterates
-`AllNotificationTypes()`, so it validates the truncated list against itself and passes. The
-contract test is therefore not testing what its name claims. Fixing it means moving the
-ritual constants into the notification package and asserting against the database CHECK
-rather than the Go slice.
-
-**D9 — the clients listen for SSE event types the backend never sends.**
+**The clients listen for SSE event types the backend never sends.**
 The server emits exactly three `EventType` values: `notification`, `ping` and
 `connection_established`. Mobile subscribes to and branches on `chat_message` and
 `chat_reaction` in `hooks/use-sse.ts` and three chat screens. Nothing breaks, because every
 real event arrives as `notification` and the reaction branch has an
 `event.notificationType === "reaction"` fallback beside the dead `type === "chat_reaction"`
 check — but the vocabulary is fiction and reads as though a second event family exists.
-
-**D7 — mobile handles notification types the backend cannot emit.**
-`apps/mobile/src/lib/linking.ts` branches on `thread_reply`, `message_reply`,
-`mention_reply` and `thread_mention` in two places. None appear in the DB CHECK, the Go
-constants or the proto. Either they are leftovers from an earlier naming scheme, or the
-threading route is silently falling through to the generic branch. Worth resolving before
-adding more route logic.
 
 **`muted_domains` omits `calendar`.** `notification.personal_preference.muted_domains` has
 `CHECK (muted_domains <@ ARRAY['chat','projects','docs','crm','hr','support','finance','system'])`

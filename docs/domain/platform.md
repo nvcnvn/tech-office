@@ -258,7 +258,7 @@ principle II.
 
 ## Known drift
 
-**D8 — schema.sql leads migrations. Resolved.** `schema.sql` used to be hand-written
+**schema.sql no longer leads the migrations.** `schema.sql` used to be hand-written
 alongside the migrations, so the two could disagree: permission rows were added to it
 before a migration existed for them, and live databases were missing seven `collab.*` /
 `calendar.*` permissions until

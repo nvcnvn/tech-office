@@ -109,6 +109,7 @@ func (l *logicImpl) GetRitualComplianceSummary(
 
 		resp.EmployeeSummaries = append(resp.EmployeeSummaries, &rpcv1.EmployeeComplianceSummary{
 			EmployeeId:      r.EmployeeID.String(),
+			EmployeeName:    r.EmployeeName,
 			TotalAssigned:   r.TotalAssigned,
 			CompletedOnTime: r.CompletedOnTime,
 			CompletedLate:   r.CompletedLate,
@@ -142,6 +143,7 @@ func (l *logicImpl) ExportRitualComplianceCSV(
 
 	// Header
 	if err := w.Write([]string{
+		"Employee",
 		"Employee ID",
 		"Total Assigned",
 		"Completed On Time",
@@ -159,6 +161,7 @@ func (l *logicImpl) ExportRitualComplianceCSV(
 		}
 
 		if err := w.Write([]string{
+			r.EmployeeName,
 			r.EmployeeID.String(),
 			fmt.Sprintf("%d", r.TotalAssigned),
 			fmt.Sprintf("%d", r.CompletedOnTime),

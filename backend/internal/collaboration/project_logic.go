@@ -156,8 +156,11 @@ func (l *logicImpl) CreateProject(
 		return nil, nil, nil, fmt.Errorf("failed to add creator as owner: %w", err)
 	}
 
-	// Increment member count
-	err = l.Queries.IncrementProjectMemberCount(ctx, tx, &database.IncrementProjectMemberCountParams{
+	// Increment member count. The updated row replaces the copy read before the creator
+	// was added, so the response carries the count the database now holds — the caller
+	// renders the new project card straight from this response, and reporting the
+	// pre-increment 0 members made a project with an owner look empty.
+	updatedProject, err := l.Queries.IncrementProjectMemberCount(ctx, tx, &database.IncrementProjectMemberCountParams{
 		OrganizationID: orgID,
 		ID:             projectID,
 		MemberCount:    1,
@@ -167,6 +170,8 @@ func (l *logicImpl) CreateProject(
 		slog.ErrorContext(ctx, "failed to increment member count",
 			"error", err,
 		)
+	} else {
+		project = updatedProject
 	}
 
 	slog.InfoContext(ctx, "project created successfully",

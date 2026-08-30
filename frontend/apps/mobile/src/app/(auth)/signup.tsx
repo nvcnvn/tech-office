@@ -53,9 +53,9 @@ import {
   rememberAuthSubdomain,
 } from "@/lib/auth-subdomain-storage";
 import { beginOnboarding } from "@/lib/onboarding-progress";
-
-/** Matches the backend bcrypt minimum. Stated before submit, not discovered on rejection. */
-const PASSWORD_MIN_LENGTH = 8;
+// One definition, shared with the web signup form and mirroring iam.MinPasswordLength.
+// Stated before submit, not discovered on rejection.
+import { PASSWORD_MIN_LENGTH } from "@tech-office/validations";
 
 /** Split a person's full name the way the API wants it. */
 function splitName(fullName: string): { givenName: string; familyName: string } {

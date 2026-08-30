@@ -424,11 +424,7 @@ export function resolveNotificationPayloadHref(
       parentMessageId &&
       (
         (target?.action || actionData?.action) === "view_thread" ||
-        notificationType === "reply" ||
-        notificationType === "thread_reply" ||
-        notificationType === "message_reply" ||
-        notificationType === "mention_reply" ||
-        notificationType === "thread_mention"
+        notificationType === "reply"
       )
     ) {
       return `/(app)/(chat)/thread/${parentMessageId}`;
@@ -470,11 +466,7 @@ export function resolveNotificationPayloadHref(
       parentMessageId &&
       (
         (target?.action || actionData?.action) === "view_thread" ||
-        notificationType === "reply" ||
-        notificationType === "thread_reply" ||
-        notificationType === "message_reply" ||
-        notificationType === "mention_reply" ||
-        notificationType === "thread_mention"
+        notificationType === "reply"
       )
     ) {
       return `/(app)/(chat)/thread/${parentMessageId}`;

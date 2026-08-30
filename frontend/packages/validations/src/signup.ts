@@ -23,6 +23,12 @@ export const signupFormSchema = z.object({
         .string()
         .min(1, 'Last name is required')
         .max(100, 'Last name must be 100 characters or less'),
+    // Feature 036 (FR-010): an account cannot be created without an explicit
+    // acknowledgement. Requiring `true` rather than a boolean means a form that gates
+    // on the schema keeps the submit path closed until it is ticked.
+    acceptedTerms: z.literal(true, {
+        message: 'You must accept the terms of service and privacy policy',
+    }),
 });
 
 /**

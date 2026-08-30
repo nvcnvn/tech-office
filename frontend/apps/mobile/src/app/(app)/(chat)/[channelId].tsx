@@ -2019,6 +2019,7 @@ export default function ChannelScreen() {
                 onStart={() => void voice.start()}
                 onJoin={() => void voice.join()}
                 onLeave={() => void voice.leave()}
+                onToggleMute={() => void voice.toggleMute()}
               />
             );
           }

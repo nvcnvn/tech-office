@@ -3099,7 +3099,7 @@ type FilesFileMetadatum struct {
 	StorageKey string `json:"storage_key"`
 	SizeBytes  int64  `json:"size_bytes"`
 	MimeType   string `json:"mime_type"`
-	// Upload source context: chat, avatar, docs, project. MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts
+	// Upload source context: chat, avatar, docs, project, calendar, voice_transcript. MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts
 	UploadContext        string      `json:"upload_context"`
 	UploadedByEmployeeID dbuuid.UUID `json:"uploaded_by_employee_id"`
 	// File type validation status: pending (not yet validated), verified (type matches), warning (type mismatch but allowed), failed (validation error), skipped (no validation performed), dangerous (virus detected). MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts
@@ -4575,7 +4575,7 @@ type NotificationNotification struct {
 	OrganizationID dbuuid.UUID `json:"organization_id"`
 	// Backend service that published notification: chat, crm, projects, hr, support, finance, system. MUST align with backend constants in internal/notification/constants.go and frontend TypeScript types in packages/apis/src/notifications.ts
 	SourceDomain string `json:"source_domain"`
-	// Type of notification. Allowed values: message, mention, reply, typing, reaction. MUST align with backend constants in internal/notification/constants.go and frontend TypeScript types in packages/apis/src/notifications.ts
+	// What happened. MUST equal notification.AllNotificationTypes() in backend/internal/notification/constants.go — TestNotificationTypeCheckMatchesGoConstants asserts it.
 	NotificationType    string      `json:"notification_type"`
 	PublishingServiceID pgtype.Text `json:"publishing_service_id"`
 	Title               string      `json:"title"`
@@ -5225,8 +5225,6 @@ type Organization struct {
 	ID          dbuuid.UUID `json:"id"`
 	CompanyName string      `json:"company_name"`
 	Subdomain   string      `json:"subdomain"`
-	ProjectID   dbuuid.UUID `json:"project_id"`
-	AppID       dbuuid.UUID `json:"app_id"`
 	ClientID    pgtype.Text `json:"client_id"`
 	// Organization lifecycle status: active, suspended, deleted. MUST align with backend constants in internal/organization/constants.go and frontend TypeScript types in packages/apis/src/organization.ts
 	Status    string             `json:"status"`
@@ -5242,8 +5240,6 @@ func (s *Organization) Fields() ([]string, []any) {
 			"id",
 			"company_name",
 			"subdomain",
-			"project_id",
-			"app_id",
 			"client_id",
 			"status",
 			"updated_at",
@@ -5251,8 +5247,6 @@ func (s *Organization) Fields() ([]string, []any) {
 			&s.ID,
 			&s.CompanyName,
 			&s.Subdomain,
-			&s.ProjectID,
-			&s.AppID,
 			&s.ClientID,
 			&s.Status,
 			&s.UpdatedAt,
@@ -5264,8 +5258,6 @@ func (s *Organization) FieldsMap() map[string]any {
 		"id":           &s.ID,
 		"company_name": &s.CompanyName,
 		"subdomain":    &s.Subdomain,
-		"project_id":   &s.ProjectID,
-		"app_id":       &s.AppID,
 		"client_id":    &s.ClientID,
 		"status":       &s.Status,
 		"updated_at":   &s.UpdatedAt,

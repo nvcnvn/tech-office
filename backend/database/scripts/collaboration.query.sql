@@ -58,10 +58,13 @@ SET next_task_number = next_task_number + 1, updated_at = $3
 WHERE organization_id = $1 AND id = $2
 RETURNING key, next_task_number;
 
--- name: IncrementProjectMemberCount :exec
+-- Returns the updated row so a caller that already holds a pre-increment copy of the
+-- project can answer with the count the database now has, instead of the stale one.
+-- name: IncrementProjectMemberCount :one
 UPDATE collaboration.project
 SET member_count = member_count + $3, updated_at = $4
-WHERE organization_id = $1 AND id = $2;
+WHERE organization_id = $1 AND id = $2
+RETURNING *;
 
 -- name: IncrementProjectTaskCount :exec
 UPDATE collaboration.project
@@ -893,8 +896,12 @@ WHERE t.organization_id = @organization_id
 GROUP BY t.ritual_definition_id, rd.name;
 
 -- name: GetEmployeeComplianceSummary :many
+-- The employee name is joined in because every consumer — the Health tab table and the
+-- CSV export — is read by a person deciding who needs following up, and a UUID does not
+-- identify anyone.
 SELECT
   ta.employee_id,
+  (emp.given_name || ' ' || emp.family_name)::text AS employee_name,
   COUNT(*)::int AS total_assigned,
   COUNT(*) FILTER (WHERE ps.category = 'verified' AND t.completion_deadline >= t.updated_at)::int AS completed_on_time,
   COUNT(*) FILTER (WHERE ps.category = 'verified' AND t.completion_deadline < t.updated_at)::int AS completed_late,
@@ -902,6 +909,7 @@ SELECT
 FROM collaboration.task t
 JOIN collaboration.task_assignee ta ON (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
 JOIN collaboration.project_state ps ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+JOIN organization.employee emp ON (emp.organization_id, emp.id) = (ta.organization_id, ta.employee_id)
 WHERE t.organization_id = @organization_id
   AND t.project_id = @project_id
   AND t.task_kind = 'ritual_instance'
@@ -909,7 +917,7 @@ WHERE t.organization_id = @organization_id
   AND t.scheduled_date >= @start_date
   AND t.scheduled_date <= @end_date
   AND ta.role = 'assignee'
-GROUP BY ta.employee_id;
+GROUP BY ta.employee_id, emp.given_name, emp.family_name;
 
 -- name: GetProjectRitualSummary :one
 SELECT

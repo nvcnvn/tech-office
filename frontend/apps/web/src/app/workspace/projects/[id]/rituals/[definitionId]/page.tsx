@@ -65,7 +65,7 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { useRequireAuth } from '@/lib/auth/hooks';
 import { useThemeColors } from '@/theme/useThemeColors';
-import { getProject, autocompleteEmployees, autocompleteDepartments, type Project, type EmployeeSuggestion, type DepartmentSuggestion } from 'apis';
+import { getProject, autocompleteEmployees, autocompleteDepartments, getEmployeeCards, type Project, type EmployeeSuggestion, type DepartmentSuggestion } from 'apis';
 import {
 	getRitualDefinition,
 	createRitualDefinition,
@@ -345,7 +345,11 @@ function newDraft(): DraftEvidenceRequirement {
 	};
 }
 
-/** Evidence types that support auto-approve */
+/**
+ * Evidence types that support auto-approve. Approval is decided by one rule for both —
+ * the submission's GPS coordinates against the requirement's geofence — because a photo
+ * submission carries the phone's location alongside the image.
+ */
 const AUTO_APPROVABLE_TYPES: EvidenceType[] = ['photo', 'gps_checkin'];
 
 interface EvidenceRequirementEditorProps {
@@ -603,7 +607,7 @@ function EvidenceRequirementEditor({ ritualDefinitionId, initial, onChange }: Ev
 											label={<Typography variant="body2">Required for completion</Typography>}
 										/>
 
-										{/* Auto-approve GPS toggle — only for photo or gps_checkin */}
+										{/* Auto-approve toggle — only for photo or gps_checkin */}
 										{AUTO_APPROVABLE_TYPES.includes(item.evidenceTypes[0]) && (
 											<Box>
 												<FormControlLabel
@@ -618,7 +622,7 @@ function EvidenceRequirementEditor({ ritualDefinitionId, initial, onChange }: Ev
 													label={
 														<Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
 															<GpsFixedIcon fontSize="small" sx={{ opacity: 0.7, fontSize: '1rem' }} />
-															<Typography variant="body2">Auto-approve via GPS check-in</Typography>
+															<Typography variant="body2">Auto-approve inside the geofence</Typography>
 														</Box>
 													}
 												/>
@@ -888,8 +892,9 @@ interface AssigneePickerProps {
 
 function getEmployeeLabel(emp: EmployeeSuggestion): string {
 	const full = `${emp.givenName} ${emp.familyName}`.trim();
-	// Placeholder objects created from bare UUIDs have familyName='…'
-	return full && emp.familyName !== '…' ? full : emp.id.slice(0, 8);
+	// An employee the lookup could not resolve — deactivated, or removed from the org —
+	// says so rather than showing a UUID fragment nobody can act on.
+	return full || 'Unknown employee';
 }
 
 function AssigneePicker({ value, onChange }: AssigneePickerProps) {
@@ -1196,15 +1201,22 @@ export default function RitualDefinitionPage() {
 					setDayOfMonth(defDayOfMonth);
 					setCompletionWindowHours(defResp.completionWindowHours);
 					setTimezone(defResp.timezone);
-					// Load existing assignees as placeholder objects (names resolved on re-search)
+					// Resolve the saved assignee IDs to people. Rendering the raw UUID while
+					// waiting for a re-search meant the chips showed a fragment of a UUID
+					// to whoever opened the ritual.
 					if (defResp.defaultAssigneeIds.length > 0) {
+						const cards = await getEmployeeCards(defResp.defaultAssigneeIds);
+						const byId = new Map(cards.map((c) => [c.id, c]));
 						setSelectedAssignees(
-							defResp.defaultAssigneeIds.map((id) => ({
-								id,
-								givenName: id.slice(0, 8),
-								familyName: '…',
-								email: '',
-							}))
+							defResp.defaultAssigneeIds.map((id) => {
+								const card = byId.get(id);
+								return {
+									id,
+									givenName: card?.givenName ?? '',
+									familyName: card?.familyName ?? '',
+									email: card?.email ?? '',
+								};
+							})
 						);
 					}
 					// Load existing department pools

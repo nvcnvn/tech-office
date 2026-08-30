@@ -1906,7 +1906,7 @@ CREATE TABLE files.file_metadata (
     is_deleted boolean DEFAULT false NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT file_metadata_size_bytes_check CHECK ((size_bytes > 0)),
-    CONSTRAINT file_metadata_upload_context_check CHECK ((upload_context = ANY (ARRAY['chat'::text, 'avatar'::text, 'docs'::text, 'project'::text]))),
+    CONSTRAINT file_metadata_upload_context_check CHECK ((upload_context = ANY (ARRAY['chat'::text, 'avatar'::text, 'docs'::text, 'project'::text, 'calendar'::text, 'voice_transcript'::text]))),
     CONSTRAINT file_metadata_validation_status_check CHECK ((validation_status = ANY (ARRAY['pending'::text, 'verified'::text, 'warning'::text, 'failed'::text, 'skipped'::text, 'dangerous'::text])))
 );
 
@@ -1929,7 +1929,7 @@ COMMENT ON COLUMN files.file_metadata.storage_key IS 'R2 object key format: org-
 -- Name: COLUMN file_metadata.upload_context; Type: COMMENT; Schema: files; Owner: -
 --
 
-COMMENT ON COLUMN files.file_metadata.upload_context IS 'Upload source context: chat, avatar, docs, project. MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts';
+COMMENT ON COLUMN files.file_metadata.upload_context IS 'Upload source context: chat, avatar, docs, project, calendar, voice_transcript. MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts';
 
 
 --
@@ -2882,7 +2882,7 @@ CREATE TABLE notification.notification (
     source_category text DEFAULT 'activity'::text NOT NULL,
     updated_at timestamp with time zone DEFAULT now(),
     CONSTRAINT notification_delivery_class_valid CHECK ((delivery_class = ANY (ARRAY['persistent'::text, 'live_only'::text]))),
-    CONSTRAINT notification_notification_type_valid CHECK ((notification_type = ANY (ARRAY['message'::text, 'mention'::text, 'reply'::text, 'typing'::text, 'reaction'::text, 'voice_call_incoming'::text, 'voice_call_started'::text, 'voice_call_updated'::text, 'voice_call_ended'::text, 'task_assigned'::text, 'task_status_changed'::text, 'task_commented'::text, 'task_mentioned'::text, 'task_description_modified'::text, 'task_updated'::text, 'doc_updated'::text, 'doc_commented'::text, 'doc_mentioned'::text, 'ritual_instance_assigned'::text, 'evidence_submitted'::text, 'evidence_approved'::text, 'evidence_rejected'::text, 'ritual_instance_overdue'::text, 'ritual_instance_missed'::text, 'ritual_instances_scheduled'::text, 'calendar_event_invite'::text, 'calendar_event_cancel'::text, 'calendar_event_change'::text, 'calendar_event_reminder'::text, 'calendar_check_in_missed'::text, 'calendar_event_digest'::text, 'account_removal_requested'::text]))),
+    CONSTRAINT notification_notification_type_valid CHECK ((notification_type = ANY (ARRAY['message'::text, 'mention'::text, 'reply'::text, 'typing'::text, 'reaction'::text, 'voice_call_incoming'::text, 'voice_call_started'::text, 'voice_call_updated'::text, 'voice_call_ended'::text, 'task_assigned'::text, 'task_status_changed'::text, 'task_commented'::text, 'task_mentioned'::text, 'task_description_modified'::text, 'task_updated'::text, 'doc_updated'::text, 'doc_commented'::text, 'doc_mentioned'::text, 'evidence_submitted'::text, 'evidence_approved'::text, 'evidence_rejected'::text, 'ritual_instances_scheduled'::text, 'calendar_event_invite'::text, 'calendar_event_cancel'::text, 'calendar_event_change'::text, 'calendar_event_reminder'::text, 'calendar_check_in_missed'::text, 'calendar_event_digest'::text, 'account_removal_requested'::text]))),
     CONSTRAINT notification_policy_key_valid CHECK ((policy_key = ANY (ARRAY['persistent_default'::text, 'chat_message'::text, 'chat_mention'::text, 'chat_reply'::text, 'chat_typing_live'::text, 'chat_reaction_live'::text, 'chat_voice_call_incoming'::text, 'chat_voice_call_live'::text, 'chat_voice_call_record'::text, 'task_assignment'::text, 'task_comment'::text, 'task_mention'::text, 'task_status'::text, 'task_description_modified'::text, 'task_update'::text, 'document_update'::text, 'document_comment'::text, 'document_mention'::text, 'calendar_event_invite'::text, 'calendar_event_cancel'::text, 'calendar_event_change'::text, 'calendar_event_reminder'::text, 'calendar_check_in_missed'::text, 'calendar_event_digest'::text]))),
     CONSTRAINT notification_priority_check CHECK ((priority = ANY (ARRAY[0, 1, 2, 4]))),
     CONSTRAINT notification_source_category_valid CHECK ((source_category = ANY (ARRAY['activity'::text, 'mention'::text, 'system'::text]))),
@@ -2908,7 +2908,7 @@ COMMENT ON COLUMN notification.notification.source_domain IS 'Backend service th
 -- Name: COLUMN notification.notification_type; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.notification.notification_type IS 'Type of notification. Allowed values: message, mention, reply, typing, reaction. MUST align with backend constants in internal/notification/constants.go and frontend TypeScript types in packages/apis/src/notifications.ts';
+COMMENT ON COLUMN notification.notification.notification_type IS 'What happened. MUST equal notification.AllNotificationTypes() in backend/internal/notification/constants.go — TestNotificationTypeCheckMatchesGoConstants asserts it.';
 
 
 --
@@ -3492,8 +3492,6 @@ CREATE TABLE public.organization (
     id uuid DEFAULT uuidv7() NOT NULL,
     company_name text NOT NULL,
     subdomain character varying(63) NOT NULL,
-    project_id uuid NOT NULL,
-    app_id uuid NOT NULL,
     client_id text,
     status text DEFAULT 'active'::text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -4818,14 +4816,6 @@ ALTER TABLE ONLY public.default_role
 
 
 --
--- Name: organization organization_id_app_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.organization
-    ADD CONSTRAINT organization_id_app_id_key UNIQUE (id, app_id);
-
-
---
 -- Name: organization organization_id_client_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4839,14 +4829,6 @@ ALTER TABLE ONLY public.organization
 
 ALTER TABLE ONLY public.organization
     ADD CONSTRAINT organization_id_company_name_key UNIQUE (id, company_name);
-
-
---
--- Name: organization organization_id_project_id_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.organization
-    ADD CONSTRAINT organization_id_project_id_key UNIQUE (id, project_id);
 
 
 --

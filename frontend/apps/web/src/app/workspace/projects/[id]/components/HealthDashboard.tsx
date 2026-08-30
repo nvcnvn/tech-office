@@ -425,7 +425,7 @@ export default function HealthDashboard() {
 										key={emp.employeeId}
 										data-testid={`employee-compliance-row-${emp.employeeId}`}
 									>
-										<TableCell>{emp.employeeName || emp.employeeId.slice(0, 8)}</TableCell>
+										<TableCell>{emp.employeeName || 'Unknown employee'}</TableCell>
 										<TableCell align="right">{emp.totalAssigned}</TableCell>
 										<TableCell align="right">{emp.completedOnTime + emp.completedLate}</TableCell>
 										<TableCell align="right">{emp.missedCount}</TableCell>

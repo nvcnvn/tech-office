@@ -1484,6 +1484,7 @@ func (q *Queries) GetCustomFieldValue(ctx context.Context, db DBTX, arg *GetCust
 const getEmployeeComplianceSummary = `-- name: GetEmployeeComplianceSummary :many
 SELECT
   ta.employee_id,
+  (emp.given_name || ' ' || emp.family_name)::text AS employee_name,
   COUNT(*)::int AS total_assigned,
   COUNT(*) FILTER (WHERE ps.category = 'verified' AND t.completion_deadline >= t.updated_at)::int AS completed_on_time,
   COUNT(*) FILTER (WHERE ps.category = 'verified' AND t.completion_deadline < t.updated_at)::int AS completed_late,
@@ -1491,6 +1492,7 @@ SELECT
 FROM collaboration.task t
 JOIN collaboration.task_assignee ta ON (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
 JOIN collaboration.project_state ps ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+JOIN organization.employee emp ON (emp.organization_id, emp.id) = (ta.organization_id, ta.employee_id)
 WHERE t.organization_id = $1
   AND t.project_id = $2
   AND t.task_kind = 'ritual_instance'
@@ -1498,7 +1500,7 @@ WHERE t.organization_id = $1
   AND t.scheduled_date >= $3
   AND t.scheduled_date <= $4
   AND ta.role = 'assignee'
-GROUP BY ta.employee_id
+GROUP BY ta.employee_id, emp.given_name, emp.family_name
 `
 
 type GetEmployeeComplianceSummaryParams struct {
@@ -1510,12 +1512,16 @@ type GetEmployeeComplianceSummaryParams struct {
 
 type GetEmployeeComplianceSummaryRow struct {
 	EmployeeID      dbuuid.UUID `json:"employee_id"`
+	EmployeeName    string      `json:"employee_name"`
 	TotalAssigned   int32       `json:"total_assigned"`
 	CompletedOnTime int32       `json:"completed_on_time"`
 	CompletedLate   int32       `json:"completed_late"`
 	Missed          int32       `json:"missed"`
 }
 
+// The employee name is joined in because every consumer — the Health tab table and the
+// CSV export — is read by a person deciding who needs following up, and a UUID does not
+// identify anyone.
 func (q *Queries) GetEmployeeComplianceSummary(ctx context.Context, db DBTX, arg *GetEmployeeComplianceSummaryParams) ([]*GetEmployeeComplianceSummaryRow, error) {
 	rows, err := db.Query(ctx, getEmployeeComplianceSummary,
 		arg.OrganizationID,
@@ -1532,6 +1538,7 @@ func (q *Queries) GetEmployeeComplianceSummary(ctx context.Context, db DBTX, arg
 		var i GetEmployeeComplianceSummaryRow
 		if err := rows.Scan(
 			&i.EmployeeID,
+			&i.EmployeeName,
 			&i.TotalAssigned,
 			&i.CompletedOnTime,
 			&i.CompletedLate,
@@ -2499,10 +2506,11 @@ func (q *Queries) GetWorkflowRule(ctx context.Context, db DBTX, arg *GetWorkflow
 	return &i, err
 }
 
-const incrementProjectMemberCount = `-- name: IncrementProjectMemberCount :exec
+const incrementProjectMemberCount = `-- name: IncrementProjectMemberCount :one
 UPDATE collaboration.project
 SET member_count = member_count + $3, updated_at = $4
 WHERE organization_id = $1 AND id = $2
+RETURNING id, organization_id, name, key, description, next_task_number, visibility, is_archived, owner_employee_id, member_count, task_count, updated_at, collaboration_mode
 `
 
 type IncrementProjectMemberCountParams struct {
@@ -2512,14 +2520,32 @@ type IncrementProjectMemberCountParams struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) IncrementProjectMemberCount(ctx context.Context, db DBTX, arg *IncrementProjectMemberCountParams) error {
-	_, err := db.Exec(ctx, incrementProjectMemberCount,
+// Returns the updated row so a caller that already holds a pre-increment copy of the
+// project can answer with the count the database now has, instead of the stale one.
+func (q *Queries) IncrementProjectMemberCount(ctx context.Context, db DBTX, arg *IncrementProjectMemberCountParams) (*CollaborationProject, error) {
+	row := db.QueryRow(ctx, incrementProjectMemberCount,
 		arg.OrganizationID,
 		arg.ID,
 		arg.MemberCount,
 		arg.UpdatedAt,
 	)
-	return err
+	var i CollaborationProject
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Name,
+		&i.Key,
+		&i.Description,
+		&i.NextTaskNumber,
+		&i.Visibility,
+		&i.IsArchived,
+		&i.OwnerEmployeeID,
+		&i.MemberCount,
+		&i.TaskCount,
+		&i.UpdatedAt,
+		&i.CollaborationMode,
+	)
+	return &i, err
 }
 
 const incrementProjectTaskCount = `-- name: IncrementProjectTaskCount :exec
