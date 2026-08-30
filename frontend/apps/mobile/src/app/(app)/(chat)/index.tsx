@@ -330,7 +330,7 @@ export default function ChatIndexScreen() {
       key: "new-dm",
       testID: chatIcons.newDM.testID,
       accessibilityLabel: chatIcons.newDM.label,
-      onPress: () => router.push("/(app)/(chat)/new-dm"),
+      onPress: () => router.push("/(app)/(chat)/search"),
       icon: (
         <SFIcon
           name={chatIcons.newDM.name}
@@ -440,15 +440,30 @@ export default function ChatIndexScreen() {
         options={chatHeader}
       />
       {sections.length === 0 ? (
-        <EmptyState
-          sfSymbol="bubble.left.and.text.bubble.right"
-          title="No messages yet"
-          subtitle="Start a conversation with your team!"
-          action={{
-            label: "Start Chat",
-            onPress: () => router.push("/(app)/(chat)/new-dm"),
-          }}
-        />
+        // Same ScrollView shell as the populated list: a bare View gets no
+        // `contentInsetAdjustmentBehavior` inset under the transparent iOS
+        // header and cannot scroll, so on a short screen (iPhone SE) the empty
+        // state sat against the header with no way to reach what overflowed —
+        // and lost the search pill and pull-to-refresh entirely.
+        <ScrollView
+          contentInsetAdjustmentBehavior="automatic"
+          style={styles.container}
+          refreshControl={
+            <RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />
+          }
+          contentContainerStyle={styles.emptyScrollContent}
+        >
+          <SearchPill />
+          <EmptyState
+            sfSymbol="bubble.left.and.text.bubble.right"
+            title="No messages yet"
+            subtitle="Start a conversation with your team!"
+            action={{
+              label: "Start Chat",
+              onPress: () => router.push("/(app)/(chat)/search"),
+            }}
+          />
+        </ScrollView>
       ) : (
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
@@ -514,6 +529,10 @@ const styles = StyleSheet.create({
   loadingScrollContent: {
     flexGrow: 1,
     paddingBottom: mobileLayout.itemGap,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    paddingBottom: spacing[4],
   },
   row: {
     flexDirection: "row",

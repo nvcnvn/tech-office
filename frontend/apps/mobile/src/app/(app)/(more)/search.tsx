@@ -8,33 +8,41 @@
  * - After 2+ chars: flat ranked list with domain badge on every row
  * - Tap → navigate directly (Person → DM, Channel → channel, Task → detail, Event → detail)
  * - "Clear recent" footer action
+ *
+ * The bar and rows come from components/ui/search-bar so chat search and this
+ * screen stay the same product.
  */
 
 import React, { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
-  TextInput,
   ScrollView,
   Pressable,
+  ActivityIndicator,
   StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { SFIcon } from "@/components/ui/sf-icon";
 import { withNavigationContext } from "@/lib/mobile-navigation";
-import { searchAll } from "apis";
+import { createOrGetDirectMessage, searchAll } from "apis";
 import { useMMKVString } from "react-native-mmkv";
 import { SkeletonList } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/common/user-avatar";
 import {
-  border,
+  SearchBar,
+  SearchIconCircle,
+  SearchResultRow,
+  SearchResultsCard,
+  SearchSectionHeader,
+  searchLayout,
+} from "@/components/ui/search-bar";
+import { SFIcon } from "@/components/ui/sf-icon";
+import {
   lightPalette,
   mobileLayout,
   mobileTypography,
-  opacity,
-  radius,
-  spacing,
 } from "@tech-office/theme-tokens";
 
 // ── Recent items storage ────────────────────────────────────────────────────
@@ -95,6 +103,7 @@ function useRecentItems() {
 export default function SearchScreen() {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [openingDMFor, setOpeningDMFor] = useState<string | null>(null);
   const { items: recentItems, addRecent, clearRecents } = useRecentItems();
 
   const { data, isLoading, isFetching } = useQuery({
@@ -160,21 +169,40 @@ export default function SearchScreen() {
     return flat;
   }, [data]);
 
+  const openChat = useCallback(
+    (channelId: string) => {
+      router.push(
+        withNavigationContext(`/(app)/(chat)/${channelId}`, {
+          fallbackHref: "/(app)/(more)",
+          ownerTab: "more",
+          backLabel: "Search",
+        }) as never,
+      );
+    },
+    [router],
+  );
+
   const handleItemPress = useCallback(
-    (item: SearchResult) => {
+    async (item: SearchResult) => {
       addRecent(item);
       switch (item.type) {
-        case "employee":
-          // Navigate to DM with person
+        case "employee": {
+          // Tapping a person opens (or creates) the DM with them. This used to
+          // be a no-op, so people rows in global search did nothing.
+          if (openingDMFor) return;
+          setOpeningDMFor(item.id);
+          try {
+            const result = await createOrGetDirectMessage(item.id);
+            openChat(result.channel.id);
+          } catch {
+            // silently handle error
+          } finally {
+            setOpeningDMFor(null);
+          }
           break;
+        }
         case "channel":
-          router.push(
-            withNavigationContext(`/(app)/(chat)/${item.id}`, {
-              fallbackHref: "/(app)/(more)",
-              ownerTab: "more",
-              backLabel: "Search",
-            }) as never,
-          );
+          openChat(item.id);
           break;
         case "task":
           router.push(
@@ -198,7 +226,7 @@ export default function SearchScreen() {
           break;
       }
     },
-    [addRecent, router],
+    [addRecent, openChat, openingDMFor, router],
   );
 
   const showRecents = query.length < 2;
@@ -206,33 +234,15 @@ export default function SearchScreen() {
   const isEmpty = query.length >= 2 && !isLoading && results.length === 0;
 
   return (
-    <SafeAreaView style={styles.container} edges={["top"]}>
-      {/* Search bar */}
-      <View style={styles.searchBar}>
-        <View style={styles.inputRow}>
-          <SFIcon name="magnifyingglass" size={18} color={lightPalette.text.secondary} />
-          <TextInput
-            testID="global-search-input"
-            style={styles.input}
-            placeholder="Search people, tasks, chats\u2026"
-            placeholderTextColor={lightPalette.text.secondary}
-            autoCapitalize="none"
-            autoFocus
-            value={query}
-            onChangeText={setQuery}
-            returnKeyType="search"
-            clearButtonMode="while-editing"
-          />
-        </View>
-        <Pressable
-          testID="search-cancel-button"
-          onPress={() => router.back()}
-          hitSlop={12}
-          style={styles.cancelBtn}
-        >
-          <Text style={styles.cancelText}>Cancel</Text>
-        </Pressable>
-      </View>
+    <SafeAreaView style={searchLayout.screen} edges={["top"]}>
+      <SearchBar
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search people, tasks, chats…"
+        onCancel={() => router.back()}
+        inputTestID="global-search-input"
+        cancelTestID="search-cancel-button"
+      />
 
       {/* Loading */}
       {(isLoading || isFetching) && query.length >= 2 && (
@@ -241,55 +251,45 @@ export default function SearchScreen() {
 
       {/* Empty search result */}
       {isEmpty && (
-        <View style={styles.emptyContainer}>
+        <View style={searchLayout.emptyContainer}>
           <SFIcon name="magnifyingglass" size={40} color={lightPalette.text.disabled} />
-          <Text style={styles.emptyText}>No results for "{query}"</Text>
+          <Text style={searchLayout.emptyText}>No results for "{query}"</Text>
         </View>
       )}
 
       {/* Results / Recents list */}
       {!isLoading && !isEmpty && (
-        <ScrollView keyboardShouldPersistTaps="handled">
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.scrollContent}
+        >
           {displayItems.length > 0 && (
             <>
-              <View style={styles.listHeader}>
-                <Text style={styles.listHeaderText}>
-                  {showRecents ? "Recent" : "Results"}
-                </Text>
-              </View>
-              <View style={styles.resultsCard}>
+              <SearchSectionHeader title={showRecents ? "Recent" : "Results"} />
+              <SearchResultsCard>
                 {displayItems.map((item, index) => (
-                  <React.Fragment key={`${item.type}-${item.id}-${index}`}>
-                    {index > 0 && <View style={styles.cardSeparator} />}
-                    <Pressable
-                      onPress={() => handleItemPress(item)}
-                      style={({ pressed }) => [
-                        styles.resultRow,
-                        pressed && styles.resultRowPressed,
-                      ]}
-                    >
-                      <View style={[styles.iconCircle, { backgroundColor: `${item.tint}15` }]}>
-                        <SFIcon name={item.sfIcon} size={20} color={item.tint} />
-                      </View>
-                      <View style={styles.resultContent}>
-                        <Text style={styles.resultTitle} numberOfLines={1}>
-                          {item.title}
-                        </Text>
-                        {item.subtitle && (
-                          <Text style={styles.resultSubtitle} numberOfLines={1}>
-                            {item.subtitle}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={[styles.domainBadge, { backgroundColor: `${item.tint}15` }]}>
-                        <Text style={[styles.domainBadgeText, { color: item.tint }]}>
-                          {item.domain}
-                        </Text>
-                      </View>
-                    </Pressable>
-                  </React.Fragment>
+                  <SearchResultRow
+                    key={`${item.type}-${item.id}-${index}`}
+                    leading={
+                      item.type === "employee" ? (
+                        <UserAvatar name={item.title} size={36} color={item.tint} />
+                      ) : (
+                        <SearchIconCircle sfSymbol={item.sfIcon} tint={item.tint} />
+                      )
+                    }
+                    title={item.title}
+                    subtitle={item.subtitle}
+                    badge={{ label: item.domain, tint: item.tint }}
+                    trailing={
+                      openingDMFor === item.id ? (
+                        <ActivityIndicator size="small" />
+                      ) : undefined
+                    }
+                    disabled={openingDMFor !== null}
+                    onPress={() => void handleItemPress(item)}
+                  />
                 ))}
-              </View>
+              </SearchResultsCard>
               {showRecents && recentItems.length > 0 && (
                 <Pressable onPress={clearRecents} style={styles.clearBtn}>
                   <Text style={styles.clearBtnText}>Clear recent</Text>
@@ -298,8 +298,8 @@ export default function SearchScreen() {
             </>
           )}
           {displayItems.length === 0 && showRecents && (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyHint}>Type 2+ letters to search</Text>
+            <View style={searchLayout.emptyContainer}>
+              <Text style={searchLayout.emptyText}>Type 2+ letters to search</Text>
             </View>
           )}
         </ScrollView>
@@ -309,126 +309,9 @@ export default function SearchScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: lightPalette.background.default,
-  },
-  searchBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: mobileLayout.screenPadding,
-    paddingVertical: 8,
-    gap: mobileLayout.iconTextGap,
-    borderBottomWidth: border.hairline,
-    borderBottomColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
-  },
-  inputRow: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: lightPalette.background.default,
-    borderRadius: radius.sm,
-    paddingHorizontal: 12,
-    gap: 8,
-    height: 40,
-  },
-  input: {
-    flex: 1,
-    fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
-    padding: 0,
-  },
-  cancelBtn: {
-    paddingHorizontal: 4,
-    paddingVertical: 8,
-  },
-  cancelText: {
-    fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.primary.main,
-    fontWeight: "500" as const,
-  },
-  listHeader: {
-    paddingHorizontal: mobileLayout.screenPadding,
-    paddingTop: spacing[1.5],
-    paddingBottom: mobileLayout.itemGap,
-  },
-  listHeaderText: {
-    fontSize: mobileTypography.caption.fontSize as number,
-    fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  resultRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: mobileLayout.cardPadding,
-    paddingVertical: 12,
-    minHeight: mobileLayout.compactRowHeight,
-    gap: mobileLayout.iconTextGap,
-    backgroundColor: lightPalette.background.paper,
-  },
-  resultRowPressed: {
-    opacity: opacity.pressed,
-  },
-  resultsCard: {
-    marginHorizontal: mobileLayout.screenPadding,
-    borderRadius: radius.md,
-    borderCurve: "continuous",
-    overflow: "hidden",
-    backgroundColor: lightPalette.background.paper,
-    borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-  },
-  cardSeparator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
-    marginHorizontal: mobileLayout.cardPadding,
-  },
-  iconCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  resultContent: {
-    flex: 1,
-    gap: 1,
-  },
-  resultTitle: {
-    fontSize: mobileTypography.listPrimary.fontSize as number,
-    fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.text.primary,
-  },
-  resultSubtitle: {
-    fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
-  },
-  domainBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.sm,
-  },
-  domainBadgeText: {
-    fontSize: mobileTypography.caption.fontSize as number,
-    fontWeight: "600" as const,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: mobileLayout.cardPadding * 2,
-    gap: spacing[1.5],
-  },
-  emptyText: {
-    fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.secondary,
-  },
-  emptyHint: {
-    fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.secondary,
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: mobileLayout.screenPadding,
   },
   clearBtn: {
     alignItems: "center",

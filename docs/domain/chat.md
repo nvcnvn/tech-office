@@ -141,8 +141,11 @@ channel is *about* (linked task/project, recent activity) alongside the message 
 
 - Web: `/workspace/chat` with `components/`, `hooks/`, `utils/`.
 - Mobile: `app/(app)/(chat)/` — channel list, `[channelId]`, `thread/[messageId]`,
-  `new-channel`, `new-dm`, `search`; plus `app/(shared)/resource/chat/` for deep-link
-  entry.
+  `new-channel`, `search`; plus `app/(shared)/resource/chat/` for deep-link
+  entry. `search` is the single people-and-channels modal behind the header
+  "New Message" action, the empty-state "Start Chat" button and the in-channel
+  magnifier; it shares its bar and result rows with global search
+  (`components/ui/search-bar.tsx`).
 - Clients: `packages/apis/src/chat.ts`, `chat-files.ts`, `chat-reactions.ts`;
   `apps/mobile/src/lib/chat-stream-events.ts` for live event handling.
 

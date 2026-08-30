@@ -21,10 +21,6 @@ export default function ChatLayout() {
         options={{ title: "New Channel", presentation: "modal" }}
       />
       <Stack.Screen
-        name="new-dm"
-        options={{ title: "New Message", presentation: "modal" }}
-      />
-      <Stack.Screen
         name="search"
         options={{ presentation: "modal", headerShown: false }}
       />
