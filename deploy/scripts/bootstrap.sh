@@ -72,7 +72,7 @@ fi
 
 # Optional credential files. Placeholders keep the swarm secret mounts valid; the
 # scripts detect them and leave the corresponding feature switched off.
-for f in fcm.json apns.p8 tls.crt tls.key; do
+for f in fcm.json apns.p8 tls.crt tls.key tls2.crt tls2.key; do
 	[ -s "$DEPLOY_DIR/secrets/$f" ] || echo "PLACEHOLDER — replace with the real $f" >"$DEPLOY_DIR/secrets/$f"
 done
 if [ "$TLS_MODE" = "file" ]; then

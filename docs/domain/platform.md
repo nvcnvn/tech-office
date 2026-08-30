@@ -190,7 +190,11 @@ translate it back to Kubernetes themselves.
 
 **Shape.** 1–7 machines, placement by node label
 (`techoffice.{edge,db,app,voice,processing,obs}`), Traefik terminating TLS in front of
-web, backend and the LiveKit signalling socket, and one PostgreSQL instance. WebRTC media bypasses the proxy entirely, because ICE needs the client's real
+web, backend and the LiveKit signalling socket, and one PostgreSQL instance. TLS is
+either ACME (`TLS_MODE=acme`, HTTP-01) or operator-supplied (`TLS_MODE=file`); the file
+mode takes up to two certificate pairs — `secrets/tls.*` as the default store and an
+optional `secrets/tls2.*` selected by SNI — because `WEB_DOMAIN` and `API_DOMAIN` are
+not always on one registrable domain. WebRTC media bypasses the proxy entirely, because ICE needs the client's real
 address: `LIVEKIT_TRANSPORT=mux` publishes one muxed UDP port in host mode, and
 `LIVEKIT_TRANSPORT=host` puts LiveKit on the voice node's own network stack so it can
 own a real UDP range. Stack files are split by

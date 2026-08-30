@@ -407,8 +407,15 @@ deploy/scripts/provision-openobserve.sh          # (re)create the alert set
 
 **TLS.** `TLS_MODE=acme` (default) has Traefik obtain Let's Encrypt certificates over
 HTTP-01, which needs port 80 reachable from the internet. For a LAN-only or air-gapped
-deployment set `TLS_MODE=file` and put your certificate and key in
-`deploy/secrets/tls.crt` and `deploy/secrets/tls.key`.
+deployment — or one behind a CDN that supplies its own origin certificate — set
+`TLS_MODE=file` and put your certificate and key in `deploy/secrets/tls.crt` and
+`deploy/secrets/tls.key`.
+
+That certificate has to cover `WEB_DOMAIN`, `API_DOMAIN` and `MEDIA_DOMAIN`. When those
+are not all on one registrable domain, a single certificate often cannot: put the second
+one in `deploy/secrets/tls2.crt` and `tls2.key` and Traefik selects between them by SNI,
+with `tls.crt` remaining the default for anything neither matches. Leave `tls2.*` as the
+placeholder `bootstrap.sh` writes if one certificate is enough.
 
 **LiveKit addressing.** Clients need an address they can actually send media to.
 Internet-facing: leave `LIVEKIT_NODE_IP` empty and LiveKit discovers its public address

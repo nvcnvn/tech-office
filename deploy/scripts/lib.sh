@@ -122,6 +122,21 @@ render_configs() {
 		        certFile: /run/secrets/tls.crt
 		        keyFile: /run/secrets/tls.key
 		EOF
+		# A second certificate, for the common case where WEB_DOMAIN and
+		# API_DOMAIN/MEDIA_DOMAIN sit on different registrable domains and no single
+		# certificate covers all three. Traefik picks between them by SNI; tls.crt
+		# stays the default for anything neither one matches. Optional: bootstrap.sh
+		# leaves a placeholder here, and a placeholder is not offered to Traefik
+		# because it would fail to parse as a certificate.
+		if ! grep -q PLACEHOLDER "$DEPLOY_DIR/secrets/tls2.crt" 2>/dev/null; then
+			cat >>"$DEPLOY_DIR/config/traefik/dynamic/tls.yml" <<-EOF
+			  certificates:
+			    - certFile: /run/secrets/tls.crt
+			      keyFile: /run/secrets/tls.key
+			    - certFile: /run/secrets/tls2.crt
+			      keyFile: /run/secrets/tls2.key
+			EOF
+		fi
 	else
 		printf '# Certificates come from the ACME resolver (TLS_MODE=acme).\ntls: {}\n' \
 			>"$DEPLOY_DIR/config/traefik/dynamic/tls.yml"

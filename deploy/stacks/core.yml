@@ -25,7 +25,7 @@ services:
       - {source: traefik_static, target: /etc/traefik/traefik.yml}
       - {source: traefik_routes, target: /etc/traefik/dynamic/routes.yml}
       - {source: traefik_tls, target: /etc/traefik/dynamic/tls.yml}
-    secrets: [tls.crt, tls.key]
+    secrets: [tls.crt, tls.key, tls2.crt, tls2.key]
     logging: *logging
     deploy:
       replicas: 1
@@ -321,3 +321,12 @@ secrets:
   tls.key:
     name: techoffice_tlskey_${SECRET_VERSION}
     file: ../secrets/tls.key
+  # Second certificate for a deployment whose web and api hostnames are on
+  # different registrable domains. A placeholder here means "only one certificate";
+  # lib.sh leaves it out of the Traefik configuration in that case.
+  tls2.crt:
+    name: techoffice_tls2crt_${SECRET_VERSION}
+    file: ../secrets/tls2.crt
+  tls2.key:
+    name: techoffice_tls2key_${SECRET_VERSION}
+    file: ../secrets/tls2.key
