@@ -25,7 +25,6 @@ import { getTabLabel, getTabRootHref, withNavigationContext } from "@/lib/mobile
 import { startNativeCallIntegration } from "@/lib/voice/native-call";
 import { buildWebUrl, WEB_BASE_URL, WEB_HOSTNAME } from "@/lib/constants";
 import { NotificationStreamProvider } from "@/providers/notification-stream-provider";
-import { MMKV } from "react-native-mmkv";
 import * as SplashScreen from "expo-splash-screen";
 import * as Notifications from "expo-notifications";
 import * as Updates from "expo-updates";
@@ -34,12 +33,11 @@ import { getUnreadCount } from "apis";
 // Keep the splash screen visible until we explicitly hide it (T11.5)
 SplashScreen.preventAutoHideAsync();
 
-// Apply persisted theme preference on startup (T8.5)
-const settingsStorage = new MMKV({ id: "app-settings" });
-const storedTheme = settingsStorage.getString("color_scheme");
-if (storedTheme === "dark" || storedTheme === "light") {
-  Appearance.setColorScheme(storedTheme);
-}
+// Every screen is painted from lightPalette, so the app is a light-mode app.
+// Pinning the color scheme is what keeps the pieces we do not paint — Switch,
+// TextInput carets, the keyboard, native pickers — from turning dark against it
+// on a phone whose OS is in dark mode.
+Appearance.setColorScheme("light");
 
 function QueryPersistenceSetup({ children }: { children: React.ReactNode }) {
   useEffect(() => {

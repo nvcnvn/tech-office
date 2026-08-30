@@ -5,7 +5,6 @@
 import React from "react";
 import {
   Alert,
-  Appearance,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,10 +12,10 @@ import {
   Text,
   View,
 } from "react-native";
+import Constants from "expo-constants";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { openBrowserAsync } from "expo-web-browser";
-import { MMKV } from "react-native-mmkv";
 import {
   ABUSE_CONTACT_EMAIL,
   PRIVACY_POLICY_PATH,
@@ -25,10 +24,15 @@ import {
   type AccountRemovalPath,
 } from "apis";
 import { Linking } from "react-native";
-import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { AuthContext } from "@/hooks/use-auth";
+import { useCurrentMembership } from "@/hooks/use-current-membership";
+import { useUserProfile } from "@/hooks/use-user-profile";
+import {
+  getInAppAlertsEnabled,
+  setInAppAlertsEnabled,
+} from "@/lib/app-settings";
 import { buildWebUrl } from "@/lib/constants";
 import {
   lightPalette,
@@ -40,19 +44,20 @@ import {
   spacing,
 } from "@tech-office/theme-tokens";
 
-const settingsStorage = new MMKV({ id: "app-settings" });
-const THEME_KEY = "color_scheme";
-const NOTIFICATIONS_KEY = "notifications_enabled";
+// There is deliberately no Dark Mode switch. Every screen in this app is
+// painted from lightPalette, so the old toggle only darkened the native
+// controls sitting on top of a light UI. It will come back with the theme, not
+// before it.
 
-function getInitialDarkMode(): boolean {
-  const stored = settingsStorage.getString(THEME_KEY);
-  if (stored === "dark") return true;
-  if (stored === "light") return false;
-  return Appearance.getColorScheme() === "dark";
-}
-
-function getInitialNotificationsEnabled(): boolean {
-  return settingsStorage.getBoolean(NOTIFICATIONS_KEY) ?? true;
+/**
+ * The version a support conversation can act on. Read from the app manifest
+ * rather than retyped in this file, where the old hardcoded "v0.1.0" would have
+ * gone on claiming 0.1.0 for every release after it.
+ */
+function appVersionLabel(): string {
+  const version = Constants.expoConfig?.version ?? "unknown";
+  const runtime = Constants.expoConfig?.runtimeVersion;
+  return typeof runtime === "string" ? `${version} (${runtime})` : version;
 }
 
 function SettingSectionLabel({ label }: { label: string }) {
@@ -103,7 +108,11 @@ function SettingRow({
         ) : null}
       </View>
 
-      {trailing ? <View style={styles.rowTrailing}>{trailing}</View> : null}
+      {trailing ? (
+        <View style={styles.rowTrailing}>{trailing}</View>
+      ) : onPress ? (
+        <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+      ) : null}
     </Pressable>
   );
 }
@@ -111,9 +120,13 @@ function SettingRow({
 export default function SettingsScreen() {
   const auth = React.use(AuthContext);
   const router = useRouter();
-  const [darkMode, setDarkMode] = React.useState(getInitialDarkMode);
+  const { membership } = useCurrentMembership();
+  const user = useUserProfile(auth?.employeeId);
+  const displayName =
+    user?.displayName ||
+    [user?.givenName, user?.familyName].filter(Boolean).join(" ");
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(
-    getInitialNotificationsEnabled,
+    getInAppAlertsEnabled,
   );
   // Which of the two account-ending paths this person gets. Asked of the server
   // rather than inferred, so mobile and web cannot disagree about it (FR-007b).
@@ -141,17 +154,9 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleThemeToggle = (value: boolean) => {
-    setDarkMode(value);
-    const scheme = value ? "dark" : "light";
-    settingsStorage.set(THEME_KEY, scheme);
-    Appearance.setColorScheme(scheme);
-    runSelectionHaptic();
-  };
-
   const handleNotificationsToggle = (value: boolean) => {
     setNotificationsEnabled(value);
-    settingsStorage.set(NOTIFICATIONS_KEY, value);
+    setInAppAlertsEnabled(value);
     runSelectionHaptic();
   };
 
@@ -188,39 +193,19 @@ export default function SettingsScreen() {
         <View style={styles.identityBlock}>
           <Text style={styles.identityLabel}>Signed in as</Text>
           <Text selectable style={styles.identityValue}>
-            {auth?.employeeId ?? "Unknown user"}
+            {displayName || "Unknown user"}
           </Text>
           <Text selectable style={styles.identityMeta}>
-            {auth?.organizationId ?? "No organization selected"}
+            {membership?.organizationName ?? "No organization selected"}
           </Text>
         </View>
       </Card>
 
       <View style={styles.section}>
-        <SettingSectionLabel label="Appearance" />
-        <Card padding={0} style={styles.groupCard}>
-          <SettingRow
-            testID="setting-dark-mode"
-            icon="moon.fill"
-            title="Dark Mode"
-            subtitle="Use the darker color scheme across the app."
-            trailing={
-              <Switch
-                value={darkMode}
-                onValueChange={handleThemeToggle}
-                trackColor={{ false: "#d5dbe3", true: lightPalette.primary.light }}
-                thumbColor={darkMode ? lightPalette.primary.main : "#ffffff"}
-              />
-            }
-            onPress={() => handleThemeToggle(!darkMode)}
-          />
-        </Card>
-      </View>
-
-      <View style={styles.section}>
         <SettingSectionLabel label="Notifications" />
         <Card padding={0} style={styles.groupCard}>
           <SettingRow
+            testID="setting-in-app-alerts"
             icon="bell.fill"
             title="In-App Alerts"
             subtitle="Show live notification banners while you are using the app."
@@ -300,6 +285,7 @@ export default function SettingsScreen() {
             />
           ) : null}
           <SettingRow
+            testID="setting-sign-out"
             icon={profileIcons.signOut.name}
             title="Sign Out"
             subtitle="Remove your session from this device."
@@ -312,16 +298,15 @@ export default function SettingsScreen() {
       <Card style={styles.infoCard}>
         <View style={styles.infoRow}>
           <SFIcon name="info.circle" size={16} color={lightPalette.text.secondary} />
-          <Text selectable style={styles.infoText}>Tech Office v0.1.0</Text>
+          <Text selectable style={styles.infoText} testID="settings-app-version">
+            Tech Office {appVersionLabel()}
+          </Text>
         </View>
         <Text selectable style={styles.infoCaption}>
-          Theme and alert preferences are stored on this device.
+          Alert preferences are stored on this device. Tell support this version
+          number if something here misbehaves.
         </Text>
       </Card>
-
-      <View style={styles.footerAction}>
-        <Button label="Sign Out" variant="destructive" onPress={handleSignOut} />
-      </View>
     </ScrollView>
   );
 }
@@ -463,8 +448,5 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
     color: lightPalette.text.secondary,
-  },
-  footerAction: {
-    paddingTop: spacing[1],
   },
 });

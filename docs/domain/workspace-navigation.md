@@ -88,6 +88,13 @@ failing domain does not empty the page:
 | Channels | `ChatService.SearchChannels` |
 | Messages | `ChatService.SearchMessages` |
 
+Because those four are all that come back, the mobile screen renders and routes exactly
+four row kinds. Person rows open (or create) the DM via `CreateOrGetDirectMessage` and
+surface a failure rather than swallowing it; Channel rows open the channel; Message rows
+open the channel they were posted in with `highlightedMessageId` set — they used to be
+inert; Department rows are informational, because mobile has no department screen. Task,
+Event and Document rows were configured with tap handlers that nothing could ever reach.
+
 Matching is PostgreSQL trigram (fuzzy) and PGroonga (multilingual full text), with language
 detection via `lingua-go` in `internal/organization/language_detector.go`. Autocomplete has
 its own narrower RPCs (`AutocompleteEmployees`, `AutocompleteDepartments`,
@@ -128,6 +135,10 @@ context rather than taking IDs.
 Design tokens live in `frontend/packages/theme-tokens` and are shared by web and mobile.
 Client: `packages/apis/src/preference.ts`, `theme-storage.ts`.
 
+**Only the web app participates.** `theme-tokens` exports a `darkPalette`, but every
+mobile screen imports `lightPalette` by name, and mobile never calls `PreferenceService`
+for theme at all. See [D30](#known-drift).
+
 ## Web application
 
 Next.js App Router, MUI v7, in `apps/web/src/app`:
@@ -163,8 +174,7 @@ Expo Router in `apps/mobile/src/app`, five route groups:
   incomplete step so an interrupted owner resumes there. See
   [auth-identity.md](auth-identity.md#client-surfaces).
 - `(app)` — the tab hierarchy. **Four tabs are on the bar: `(chat)`, `(today)`, `(tasks)`
-  (labelled "My Work"), `(more)`** (docs, files, profile, settings, search,
-  navigation-debug). `(calendar)` and `(notifications)` are still full route groups —
+  (labelled "My Work"), `(more)`.** `(calendar)` and `(notifications)` are still full route groups —
   registered with `href: null` so deep links, push taps and canonical links resolve — but
   they own no tab slot: Schedule opens from the Today header, Alerts from the bell in the
   Chat header, which carries the `GetUnreadCount` badge.
@@ -177,10 +187,30 @@ Expo Router in `apps/mobile/src/app`, five route groups:
     screen while `GetTermsStatus` says this person has not accepted the version currently
     being served. It fails open on a network error, so a blip does not lock somebody out
     of their work.
-  - `(more)/settings` carries the Safety, Legal and Account sections — blocked people,
-    abuse contact, the two published documents, and whichever of `delete-account` or
-    `request-removal` this person's path is, asked of the server rather than inferred.
-    See [compliance-safety.md](compliance-safety.md).
+  - `(more)` is the menu tab. Its index lists two labelled groups — **Workspace**
+    (Documents, Files) and **App** (Settings, and a Help row that opens the web guide
+    site in the system browser) — plus a Sign Out row. Search is deliberately not listed;
+    it is reached from the `SearchPill` at the top of the other tabs. A **Developer**
+    group holding `navigation-debug` appears only under `__DEV__`, and the screen itself
+    returns a `Redirect` outside development, so the harness cannot surface in a shipped
+    build even through a deep link.
+  - `(more)/profile` is editable: it changes the display name through
+    `IAMService.UpdateProfile` and writes the result into the `userProfile` query cache,
+    which is where every other screen reads the name from. Email, department,
+    organization and role are shown as read-only, in words — the screen used to print the
+    employee and organization UUIDs instead.
+  - `(more)/settings` carries the Notifications, Safety, Legal and Account sections —
+    the in-app alert toggle, blocked people, abuse contact, the two published documents,
+    and whichever of `delete-account` or `request-removal` this person's path is, asked of
+    the server rather than inferred. See [compliance-safety.md](compliance-safety.md).
+    **There is no Dark Mode switch on mobile.** Every mobile screen paints from
+    `lightPalette`, so the toggle only darkened the native controls — Switch, keyboard,
+    carets — sitting on a light UI. `app/_layout.tsx` now pins
+    `Appearance.setColorScheme("light")` at startup instead, which is what keeps those
+    controls consistent on a phone whose OS is in dark mode. The switch returns with the
+    theme, not before it.
+  - `(more)/docs` and `(more)/files` are read-oriented lists; `(more)/search` is the
+    global federated search screen.
 - `(shared)` — resource routes reached from a deep link rather than a tab, so a link opens
   the resource without hijacking tab state
 - top level — `booking/[token]`, `canonical-link/[encoded]`, `o/[tenantKey]/r/…`,
@@ -258,6 +288,15 @@ rather than being filtered client-side.
 `internal/linking/normalize.go` accepts non-canonical paths and rewrites them. Given the
 project's no-backward-compatibility stance, this is worth revisiting: every legacy shape it
 accepts is a second URL grammar to keep working.
+
+**D30 — mobile does not participate in the theme system.** `PreferenceService` stores a
+`theme_mode` per user and `theme-tokens` exports a `darkPalette`, but the mobile app
+imports `lightPalette` directly in every screen and never reads or writes the preference.
+Its Settings screen used to carry a Dark Mode switch that wrote a local MMKV key and
+called `Appearance.setColorScheme`, which changed nothing the app paints and left the
+native controls dark on a light UI; the switch has been removed and the color scheme
+pinned to light. Closing this means threading a palette through the mobile screens and
+then reading `GetUserPreference`, not restoring the toggle.
 
 **`theme_mode` has no `system` value.** "Follow the OS" is expressed indirectly through
 `preference_source = 'os_default'`. This works but is easy to get wrong from a new client,

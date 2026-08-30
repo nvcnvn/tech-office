@@ -43,22 +43,52 @@ interface MenuItem {
   href: string;
   sfIcon: string;
   label: string;
+  /** One line under the label saying what the row is for. */
+  hint?: string;
   testID: string;
+}
+
+function isExternal(item: MenuItem): boolean {
+  return item.href.startsWith("http");
 }
 
 // Search is deliberately absent: it is a top-level verb, reachable from the
 // SearchPill at the top of Chat, Today, My Work and Schedule. Listing it here
 // as well made it look like a setting.
 const featureItems: MenuItem[] = [
-  { href: "/(app)/(more)/docs", sfIcon: moreMenuIcons.documents.name, label: moreMenuIcons.documents.label, testID: moreMenuIcons.documents.testID },
-  { href: "/(app)/(more)/files", sfIcon: moreMenuIcons.files.name, label: moreMenuIcons.files.label, testID: moreMenuIcons.files.testID },
+  {
+    href: "/(app)/(more)/docs",
+    sfIcon: moreMenuIcons.documents.name,
+    label: moreMenuIcons.documents.label,
+    hint: "Written notes and references your team keeps",
+    testID: moreMenuIcons.documents.testID,
+  },
+  {
+    href: "/(app)/(more)/files",
+    sfIcon: moreMenuIcons.files.name,
+    label: moreMenuIcons.files.label,
+    hint: "Everything shared in chats, tasks and docs",
+    testID: moreMenuIcons.files.testID,
+  },
 ];
 
 const settingsItems: MenuItem[] = [
-  { href: "/(app)/(more)/settings", sfIcon: moreMenuIcons.settings.name, label: moreMenuIcons.settings.label, testID: moreMenuIcons.settings.testID },
+  {
+    href: "/(app)/(more)/settings",
+    sfIcon: moreMenuIcons.settings.name,
+    label: moreMenuIcons.settings.label,
+    hint: "Alerts, privacy, blocked people and your account",
+    testID: moreMenuIcons.settings.testID,
+  },
   // Help pointed at Settings, so the one row a confused user taps went nowhere
   // useful. It now opens the guide site the web app already serves at /docs.
-  { href: buildWebUrl("/docs"), sfIcon: moreMenuIcons.help.name, label: moreMenuIcons.help.label, testID: moreMenuIcons.help.testID },
+  {
+    href: buildWebUrl("/docs"),
+    sfIcon: moreMenuIcons.help.name,
+    label: moreMenuIcons.help.label,
+    hint: "Guides for getting things done in Tech Office",
+    testID: moreMenuIcons.help.testID,
+  },
 ];
 
 const devItems: MenuItem[] = __DEV__
@@ -67,6 +97,7 @@ const devItems: MenuItem[] = __DEV__
         href: "/(app)/(more)/navigation-debug",
         sfIcon: "arrow.trianglehead.branch",
         label: "Navigation Debug",
+        hint: "Maestro shared-route harness — development builds only",
         testID: "menu-navigation-debug",
       },
     ]
@@ -75,6 +106,8 @@ const devItems: MenuItem[] = __DEV__
 // ── Menu Row ────────────────────────────────────────────────────────────────
 
 function MenuRow({ item, onPress }: { item: MenuItem; onPress: () => void }) {
+  const external = isExternal(item);
+
   return (
     <Pressable
       testID={item.testID}
@@ -83,14 +116,51 @@ function MenuRow({ item, onPress }: { item: MenuItem; onPress: () => void }) {
         styles.menuRow,
         pressed && styles.menuRowPressed,
       ]}
-      accessibilityRole="button"
-      accessibilityLabel={item.label}
+      accessibilityRole={external ? "link" : "button"}
+      accessibilityLabel={
+        external ? `${item.label}, opens in your browser` : item.label
+      }
+      accessibilityHint={item.hint}
     >
       <View style={styles.menuIconWrap}>
         <SFIcon name={item.sfIcon} size={20} color={lightPalette.primary.main} />
       </View>
-      <Text style={styles.menuLabel}>{item.label}</Text>
+      <View style={styles.menuCopy}>
+        <Text style={styles.menuLabel}>{item.label}</Text>
+        {item.hint ? <Text style={styles.menuHint}>{item.hint}</Text> : null}
+      </View>
+      <SFIcon
+        name={external ? "arrow.up.right.square" : "chevron.right"}
+        size={14}
+        color={lightPalette.text.disabled}
+      />
     </Pressable>
+  );
+}
+
+function MenuSection({
+  items,
+  label,
+  openMenuItem,
+}: {
+  items: MenuItem[];
+  label?: string;
+  openMenuItem: (item: MenuItem) => void;
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <View style={styles.sectionBlock}>
+      {label ? <Text style={styles.sectionLabel}>{label}</Text> : null}
+      <View style={styles.section}>
+        {items.map((item, idx) => (
+          <React.Fragment key={item.testID}>
+            <MenuRow item={item} onPress={() => openMenuItem(item)} />
+            {idx < items.length - 1 && <View style={styles.separator} />}
+          </React.Fragment>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -135,8 +205,15 @@ export default function MoreScreen() {
       style={styles.scrollView}
       contentContainerStyle={styles.scrollContent}
     >
-      {/* User card */}
-      <View style={styles.profileCard}>
+      {/* The whole card opens the profile. It used to be only the "Edit Profile"
+          text, a target well under 44pt on a row that already looks tappable. */}
+      <Pressable
+        testID="edit-profile-button"
+        onPress={() => router.push("/(app)/(more)/profile")}
+        accessibilityRole="button"
+        accessibilityLabel={profileIcons.editProfile.label}
+        style={({ pressed }) => [styles.profileCard, pressed && styles.menuRowPressed]}
+      >
         <View style={{ flex: 1 }}>
           <UserCard
             employeeId={employeeId}
@@ -145,47 +222,29 @@ export default function MoreScreen() {
             testID="more-user-card"
           />
         </View>
-        <Pressable
-          testID="edit-profile-button"
-          onPress={() => router.push("/(app)/(more)/profile")}
-          style={styles.editProfileBtn}
-          accessibilityRole="button"
-          accessibilityLabel={profileIcons.editProfile.label}
-        >
-          <Text style={styles.editProfileText}>{profileIcons.editProfile.label} →</Text>
-        </Pressable>
-      </View>
+        <Text style={styles.editProfileText}>{profileIcons.editProfile.label}</Text>
+        <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+      </Pressable>
 
-      {/* Features section */}
-      <View style={styles.section}>
-        {featureItems.map((item, idx) => (
-          <React.Fragment key={item.testID}>
-            <MenuRow item={item} onPress={() => openMenuItem(item)} />
-            {idx < featureItems.length - 1 && <View style={styles.separator} />}
-          </React.Fragment>
-        ))}
-      </View>
+      <MenuSection
+        label="Workspace"
+        items={featureItems}
+        openMenuItem={openMenuItem}
+      />
 
-      {/* Settings section */}
-      <View style={styles.section}>
-        {settingsItems.map((item, idx) => (
-          <React.Fragment key={item.testID}>
-            <MenuRow item={item} onPress={() => openMenuItem(item)} />
-            {idx < settingsItems.length - 1 && <View style={styles.separator} />}
-          </React.Fragment>
-        ))}
-      </View>
+      <MenuSection
+        label="App"
+        items={settingsItems}
+        openMenuItem={openMenuItem}
+      />
 
-      {devItems.length > 0 ? (
-        <View style={styles.section}>
-          {devItems.map((item, idx) => (
-            <React.Fragment key={item.testID}>
-              <MenuRow item={item} onPress={() => openMenuItem(item)} />
-              {idx < devItems.length - 1 && <View style={styles.separator} />}
-            </React.Fragment>
-          ))}
-        </View>
-      ) : null}
+      {/* Labelled, so an internal harness sitting in the menu of a development
+          build reads as deliberate rather than as an unfinished feature. */}
+      <MenuSection
+        label="Developer"
+        items={devItems}
+        openMenuItem={openMenuItem}
+      />
 
       {/* Sign Out */}
       <View style={styles.section}>
@@ -217,24 +276,44 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: mobileLayout.screenPadding,
     gap: mobileLayout.cardGap,
+    paddingBottom: spacing[6],
   },
   profileCard: {
     backgroundColor: lightPalette.background.paper,
     borderRadius: radius.lg,
     borderCurve: "continuous",
+    borderWidth: border.thin,
+    borderColor: lightPalette.divider,
     padding: mobileLayout.cardPadding,
+    minHeight: mobileLayout.compactRowHeight,
     flexDirection: "row",
     alignItems: "center",
-    gap: mobileLayout.iconTextGap,
-  },
-  editProfileBtn: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    gap: spacing[1],
   },
   editProfileText: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
     color: lightPalette.primary.main,
     fontWeight: "500" as const,
+  },
+  sectionBlock: {
+    gap: spacing[1],
+  },
+  sectionLabel: {
+    paddingLeft: 4,
+    fontSize: mobileTypography.caption.fontSize as number,
+    fontWeight: "600" as const,
+    color: lightPalette.text.secondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  menuCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  menuHint: {
+    fontSize: mobileTypography.listSecondary.fontSize as number,
+    lineHeight: mobileTypography.listSecondary.lineHeight as number,
+    color: lightPalette.text.secondary,
   },
   section: {
     backgroundColor: lightPalette.background.paper,
@@ -265,7 +344,6 @@ const styles = StyleSheet.create({
     alignItems: "center" as const,
   },
   menuLabel: {
-    flex: 1,
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
     color: lightPalette.text.primary,

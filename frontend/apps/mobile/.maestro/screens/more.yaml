@@ -22,7 +22,8 @@ name: "Screen — More"
 - tapOn:
     id: "menu-documents"
 - extendedWaitUntil:
-    visible: "Search documents…"
+    visible:
+      id: "docs-search-input"
     timeout: 8000
 - takeScreenshot: "tmp/maestro-screenshots/03-documents"
 - swipe:
@@ -74,7 +75,7 @@ name: "Screen — More"
     id: "menu-settings"
 - extendedWaitUntil:
     visible:
-      id: "setting-dark-mode"
+      id: "setting-in-app-alerts"
     timeout: 8000
 - takeScreenshot: "tmp/maestro-screenshots/09-settings"
 - swipe:

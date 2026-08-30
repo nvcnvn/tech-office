@@ -120,7 +120,14 @@ followers.
 - Web: `/workspace/docs`, `/workspace/docs/[slug]`. There is also a **separate static docs
   site** under `apps/web/src/app/docs/` — product guides, feature pages, and owner/employee
   guides — which is marketing/help content, not the document system.
-- Mobile: `app/(app)/(more)/docs/index.tsx`, `docs/[slug].tsx` — read-oriented.
+- Mobile: `app/(app)/(more)/docs/index.tsx`, `docs/[slug].tsx` — read-oriented. The list
+  screen serves two differently-shaped sources: `ListDocuments` returns `DocumentSummary`,
+  `SearchDocuments` returns `SearchResult`, which wraps a `DocumentSummary` alongside a
+  `snippet`. Both are normalised to one row shape in `apps/mobile/src/lib/doc-rows.ts`,
+  covered by `doc-rows.check.ts` (`npm run check:doc-rows`), because reading a search hit
+  flat fails silently: the row still renders, as "Untitled", linking to `/docs/undefined`.
+  Queries are debounced 250ms and only issued at two characters or more; there is no
+  client-side re-filtering of server results.
 - Client: `packages/apis/src/docs.ts`.
 
 ## Tests

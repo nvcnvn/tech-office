@@ -50,10 +50,18 @@ export default function MoreLayout() {
         <Stack.Screen name="search" options={{ headerShown: false }} />
         <Stack.Screen name="profile" options={{ title: "Profile", ...childBackOptions }} />
         <Stack.Screen name="settings" options={{ title: "Settings", ...childBackOptions }} />
-        <Stack.Screen name="navigation-debug" options={{ title: "Navigation Debug", ...childBackOptions }} />
         <Stack.Screen name="docs/index" options={{ title: "Documents", ...childBackOptions }} />
-        <Stack.Screen name="docs/[slug]" options={{ ...childBackOptions }} />
+        {/* Not childBackOptions: a doc is opened from the Docs list, so its back
+            button belongs to that list. Sending it to More instead skipped the
+            list you were reading. */}
+        <Stack.Screen name="docs/[slug]" options={{ title: "Document" }} />
         <Stack.Screen name="files/index" options={{ title: "Files", ...childBackOptions }} />
+        {/* Maestro's shared-route smoke harness. The screen itself refuses to
+            render outside development — see navigation-debug.tsx. */}
+        <Stack.Screen
+          name="navigation-debug"
+          options={{ title: "Navigation Debug", ...childBackOptions }}
+        />
       </Stack>
     </ErrorBoundary>
   );

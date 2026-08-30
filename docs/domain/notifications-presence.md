@@ -385,6 +385,12 @@ while the union stopped at `doc_mentioned`.
 - Mobile: `app/(app)/(notifications)/`, `hooks/use-sse.ts`, `use-presence.ts`,
   `use-app-state-presence.ts`, `use-push-notifications.ts`,
   `use-stream-recovery-refresh.ts`.
+- **In-App Alerts** is a device-local preference, not a server one: `lib/app-settings.ts`
+  owns the MMKV key and `(app)/_layout.tsx` gates the foreground `LiveNotificationBanner`
+  on it. It suppresses only the in-app banner — the SSE stream, unread counts and push
+  notifications are unaffected, and turning it off is not a do-not-disturb setting. It is
+  toggled from `(more)/settings`. Anything added to `app-settings.ts` must have a reader:
+  this key was written and read by nothing for as long as the toggle existed.
 - Shared: `packages/notifications/` (`useSSEConnection`, `useNotifications`,
   `presenceState`), `packages/apis/src/notification.ts`, `presence.ts`, `push-tokens.ts`,
   `visibility.ts`, `notification-status.ts`.

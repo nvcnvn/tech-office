@@ -15,6 +15,7 @@
 
 import React, { useState, useMemo, useCallback } from "react";
 import {
+  Alert,
   View,
   Text,
   ScrollView,
@@ -50,24 +51,29 @@ import {
 const RECENTS_KEY = "global-search-recents";
 const MAX_RECENTS = 10;
 
+// These four are exactly what searchAll returns. Task, Event and Document rows
+// were configured here too, but nothing ever produced one, so their tap handlers
+// were unreachable code pretending the screen searched more than it does.
 interface SearchResult {
   id: string;
   title: string;
   subtitle?: string;
-  domain: "Person" | "Channel" | "Message" | "Task" | "Event" | "Department" | "Document";
+  domain: "Person" | "Channel" | "Message" | "Department";
   sfIcon: string;
   tint: string;
-  type: "employee" | "channel" | "message" | "task" | "event" | "department" | "document";
+  type: "employee" | "channel" | "message" | "department";
+  /** Messages navigate to the channel they were posted in, not to their own id. */
+  channelId?: string;
 }
 
-const DOMAIN_CONFIG: Record<string, { domain: SearchResult["domain"]; sfIcon: string; tint: string }> = {
+const DOMAIN_CONFIG: Record<
+  SearchResult["type"],
+  { domain: SearchResult["domain"]; sfIcon: string; tint: string }
+> = {
   employee: { domain: "Person", sfIcon: "person.fill", tint: "#7b1fa2" },
   channel: { domain: "Channel", sfIcon: "bubble.left.fill", tint: "#2563eb" },
   message: { domain: "Message", sfIcon: "text.bubble.fill", tint: "#64748b" },
-  task: { domain: "Task", sfIcon: "checkmark.square.fill", tint: "#16a34a" },
-  event: { domain: "Event", sfIcon: "calendar", tint: "#e65100" },
   department: { domain: "Department", sfIcon: "building.2.fill", tint: "#2563eb" },
-  document: { domain: "Document", sfIcon: "doc.text.fill", tint: "#7b1fa2" },
 };
 
 function useRecentItems() {
@@ -152,6 +158,7 @@ export default function SearchScreen() {
         sfIcon: cfg.sfIcon,
         tint: cfg.tint,
         type: "message",
+        channelId: m.channelId,
       });
     }
     for (const d of data.departments ?? []) {
@@ -170,9 +177,12 @@ export default function SearchScreen() {
   }, [data]);
 
   const openChat = useCallback(
-    (channelId: string) => {
+    (channelId: string, highlightedMessageId?: string) => {
+      const path = highlightedMessageId
+        ? `/(app)/(chat)/${channelId}?highlightedMessageId=${highlightedMessageId}`
+        : `/(app)/(chat)/${channelId}`;
       router.push(
-        withNavigationContext(`/(app)/(chat)/${channelId}`, {
+        withNavigationContext(path, {
           fallbackHref: "/(app)/(more)",
           ownerTab: "more",
           backLabel: "Search",
@@ -194,8 +204,15 @@ export default function SearchScreen() {
           try {
             const result = await createOrGetDirectMessage(item.id);
             openChat(result.channel.id);
-          } catch {
-            // silently handle error
+          } catch (err) {
+            // A swallowed failure here looked like a dead row: the person tapped,
+            // the spinner ran, and nothing happened.
+            Alert.alert(
+              "Couldn't open conversation",
+              err instanceof Error && err.message
+                ? err.message
+                : "Try again in a moment.",
+            );
           } finally {
             setOpeningDMFor(null);
           }
@@ -204,25 +221,16 @@ export default function SearchScreen() {
         case "channel":
           openChat(item.id);
           break;
-        case "task":
-          router.push(
-            withNavigationContext(`/(app)/(tasks)/${item.id}` as any, {
-              fallbackHref: "/(app)/(more)",
-              ownerTab: "more",
-              backLabel: "Search",
-            }) as never,
-          );
+        case "message":
+          // Tapping a message result did nothing at all. It opens the channel the
+          // message is in, with the message highlighted.
+          if (item.channelId) {
+            openChat(item.channelId, item.id);
+          }
           break;
-        case "event":
-          router.push(
-            withNavigationContext(`/(app)/(calendar)/${item.id}`, {
-              fallbackHref: "/(app)/(more)",
-              ownerTab: "more",
-              backLabel: "Search",
-            }) as never,
-          );
-          break;
-        default:
+        case "department":
+          // No department screen exists on mobile yet, so these rows stay
+          // informational rather than pretending to navigate.
           break;
       }
     },

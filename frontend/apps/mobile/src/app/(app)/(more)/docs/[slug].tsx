@@ -1,33 +1,48 @@
 /**
- * Doc viewer — read-only TipTap document rendered as plain text/markdown
+ * Doc viewer — read-only rendering of a TipTap document.
  *
- * Phase 2 will add an edit mode. For now shows the document content read-only.
+ * Still read-only; editing lives on the web. What changed is that the failure
+ * modes are now visible: a document that will not load says so and offers a
+ * retry, instead of rendering as "Empty document" and looking like the document
+ * itself was blank.
  */
 
 import React, { useEffect, useState } from "react";
 import {
-  View,
-  Text,
-  ScrollView,
   ActivityIndicator,
   Pressable,
+  ScrollView,
   Share,
-  Alert,
-  Platform,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { getDocument, getProfile } from "apis";
+import { getDocument } from "apis";
 import { formatDistanceToNow } from "date-fns";
-import { useAuth } from "@/hooks/use-auth";
-import { API_BASE_URL } from "@/lib/constants";
+import { useCurrentMembership } from "@/hooks/use-current-membership";
+import { EmptyState } from "@/components/ui/empty-state";
 import {
   extractCanonicalResourceLinks,
   getCanonicalLinkPreviewDisplay,
   removeCanonicalResourceLinksFromContent,
   type CanonicalLinkPreviewDisplay,
 } from "@tech-office/links";
-import { fetchCanonicalPreview, getCanonicalInAppRoute } from "@/lib/canonical-links";
+import {
+  fetchCanonicalPreview,
+  generateCanonicalUrl,
+  getCanonicalInAppRoute,
+} from "@/lib/canonical-links";
+import {
+  border,
+  lightPalette,
+  mobileLayout,
+  mobileTypography,
+  opacity,
+  radius,
+  spacing,
+} from "@tech-office/theme-tokens";
 
 /** Extract plain text from TipTap/ProseMirror JSON document */
 function extractText(node: any): string {
@@ -57,18 +72,20 @@ function CanonicalLinkPreviewCard({ url }: { url: string }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetchCanonicalPreview(url).then((result) => {
-      if (!cancelled) {
+    fetchCanonicalPreview(url)
+      .then((result) => {
+        if (cancelled) return;
         setDisplay(getCanonicalLinkPreviewDisplay(result?.preview ?? null, url));
-      }
-      if (!cancelled) setLoading(false);
-    }).catch(() => {
-      if (!cancelled) {
+        setLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
         setDisplay(getCanonicalLinkPreviewDisplay(null, url));
         setLoading(false);
-      }
-    });
-    return () => { cancelled = true; };
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   const handlePress = async () => {
@@ -78,8 +95,8 @@ function CanonicalLinkPreviewCard({ url }: { url: string }) {
 
   if (loading) {
     return (
-      <View style={{ borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 12, backgroundColor: "#f9fafb" }}>
-        <ActivityIndicator size="small" />
+      <View style={styles.linkCard}>
+        <ActivityIndicator size="small" color={lightPalette.text.secondary} />
       </View>
     );
   }
@@ -87,25 +104,29 @@ function CanonicalLinkPreviewCard({ url }: { url: string }) {
 
   return (
     <Pressable
-      onPress={() => { void handlePress(); }}
-      style={{ borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 8, padding: 12, backgroundColor: "#f9fafb", gap: 4 }}
+      onPress={() => void handlePress()}
+      style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}
     >
-      <Text style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5 }}>{display.badge}</Text>
-      {display.title && (
-        <Text style={{ fontSize: 14, fontWeight: "600", color: "#111827" }} numberOfLines={2}>{display.title}</Text>
-      )}
-      {display.subtitle && (
-        <Text style={{ fontSize: 12, color: "#6b7280" }} numberOfLines={1}>{display.subtitle}</Text>
-      )}
+      <Text style={styles.linkBadge}>{display.badge}</Text>
+      {display.title ? (
+        <Text style={styles.linkTitle} numberOfLines={2}>
+          {display.title}
+        </Text>
+      ) : null}
+      {display.subtitle ? (
+        <Text style={styles.linkSubtitle} numberOfLines={1}>
+          {display.subtitle}
+        </Text>
+      ) : null}
     </Pressable>
   );
 }
 
 export default function DocViewerScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
-  const auth = useAuth();
+  const { membership } = useCurrentMembership();
 
-  const { data: doc, isLoading } = useQuery({
+  const { data: doc, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["doc", slug],
     queryFn: async () => {
       const result = await getDocument({ slug: slug!, includeContent: true });
@@ -114,63 +135,49 @@ export default function DocViewerScreen() {
     enabled: !!slug,
   });
 
-  const { data: profileData } = useQuery({
-    queryKey: ["profile", "doc-share"],
-    queryFn: () => getProfile(),
-    enabled: auth.isAuthenticated,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const currentMembership = profileData?.organizations.find(
-    (org) => org.organizationId === auth.organizationId
-  ) ?? profileData?.organizations[0];
-
   const handleShare = async () => {
     if (!doc) return;
     const d = doc as any;
+    const title = d.title || "Document";
 
-    if (currentMembership?.organizationSubdomain && d?.id) {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/linking/generate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            target: {
-              tenantKey: currentMembership.organizationSubdomain,
-              resourceType: "document",
-              resourceId: d.id,
-            },
-          }),
-        });
-        const payload = (await response.json().catch(() => null)) as {
-          canonicalUrl?: string;
-        } | null;
-        if (response.ok && payload?.canonicalUrl) {
-          await Share.share({
-            title: d.title ?? "Document",
-            message: payload.canonicalUrl,
-            url: payload.canonicalUrl,
-          });
-          if (Platform.OS === "ios") {
-            // haptic feedback handled by Share sheet
-          }
-          return;
-        }
-      } catch {
-        // fall through to title-only share
-      }
-    }
+    // generateCanonicalUrl sends the auth token; this screen used to hand-roll
+    // the same POST without one, so sharing quietly fell back to a title-only
+    // message with no link in it.
+    const canonicalUrl =
+      membership?.organizationSubdomain && d.id
+        ? await generateCanonicalUrl(membership.organizationSubdomain, "document", d.id)
+        : null;
 
-    await Share.share({
-      title: d.title ?? "Document",
-      message: `Check out this document: ${d.title}`,
-    });
+    await Share.share(
+      canonicalUrl
+        ? { title, message: canonicalUrl, url: canonicalUrl }
+        : { title, message: `Check out this document: ${title}` },
+    );
   };
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+      <View style={styles.centered}>
+        <Stack.Screen options={{ title: "Document" }} />
+        <ActivityIndicator size="large" color={lightPalette.primary.main} />
+      </View>
+    );
+  }
+
+  if (isError || !doc) {
+    return (
+      <View style={styles.centered}>
+        <Stack.Screen options={{ title: "Document" }} />
+        <EmptyState
+          sfSymbol="exclamationmark.triangle"
+          title="We couldn't open this document"
+          subtitle={
+            error instanceof Error && error.message
+              ? error.message
+              : "It may have been deleted, or you may not have access to it."
+          }
+          action={{ label: "Try again", onPress: () => void refetch() }}
+        />
       </View>
     );
   }
@@ -178,69 +185,140 @@ export default function DocViewerScreen() {
   const d = doc as any;
   let bodyText = "";
   try {
-    const content =
-      typeof d?.content === "string" ? JSON.parse(d.content) : d?.content;
+    const content = typeof d?.content === "string" ? JSON.parse(d.content) : d?.content;
     bodyText = extractText(content);
   } catch {
-    bodyText = d?.content ?? "";
+    bodyText = typeof d?.content === "string" ? d.content : "";
   }
 
   const canonicalLinks = extractCanonicalResourceLinks(bodyText);
-  const displayBodyText = canonicalLinks.length > 0
-    ? removeCanonicalResourceLinksFromContent(bodyText)
-    : bodyText;
+  const displayBodyText = (
+    canonicalLinks.length > 0
+      ? removeCanonicalResourceLinksFromContent(bodyText)
+      : bodyText
+  ).trim();
 
   return (
-    <>
-      <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 20, gap: 12 }}
-      >
-        <Stack.Screen
-          options={{
-            title: d?.title ?? "Document",
-            headerRight: () => (
-              <Pressable onPress={handleShare} style={{ paddingRight: 4 }}>
-                <Text style={{ color: "#2563eb", fontSize: 15 }}>Share</Text>
-              </Pressable>
-            ),
-          }}
+    <ScrollView
+      contentInsetAdjustmentBehavior="automatic"
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+    >
+      <Stack.Screen
+        options={{
+          title: d?.title || "Document",
+          headerRight: () => (
+            <Pressable
+              testID="doc-share-button"
+              accessibilityRole="button"
+              accessibilityLabel="Share document"
+              hitSlop={12}
+              onPress={() => void handleShare()}
+            >
+              <Text style={styles.shareLabel}>Share</Text>
+            </Pressable>
+          ),
+        }}
+      />
+
+      {d?.updatedAt ? (
+        <Text style={styles.meta}>
+          Last updated {formatDistanceToNow(new Date(d.updatedAt), { addSuffix: true })}
+          {d?.updatedByName ? ` by ${d.updatedByName}` : ""}
+        </Text>
+      ) : null}
+
+      {displayBodyText ? (
+        <Text selectable style={styles.body}>
+          {displayBodyText}
+        </Text>
+      ) : canonicalLinks.length === 0 ? (
+        <EmptyState
+          sfSymbol="doc.text"
+          title="This document is empty"
+          subtitle="Nothing has been written in it yet. You can add to it on the web."
         />
+      ) : null}
 
-        {/* Meta */}
-        {d?.updatedAt && (
-          <Text style={{ fontSize: 12, color: "#999" }}>
-            Last updated{" "}
-            {formatDistanceToNow(new Date(d.updatedAt), { addSuffix: true })}
-            {d?.updatedByName ? ` by ${d.updatedByName}` : ""}
-          </Text>
-        )}
-
-        {/* Body */}
-        {displayBodyText ? (
-          <Text selectable style={{ fontSize: 15, lineHeight: 24, color: "#111" }}>
-            {displayBodyText.trim()}
-          </Text>
-        ) : bodyText ? (
-          null
-        ) : (
-          <View style={{ alignItems: "center", padding: 32 }}>
-            <Text style={{ color: "#999", fontSize: 15 }}>Empty document</Text>
-          </View>
-        )}
-
-        {/* Canonical resource link previews */}
-        {canonicalLinks.length > 0 && (
-          <View style={{ gap: 8, marginTop: 8 }}>
-            <Text style={{ fontSize: 12, color: "#6b7280", fontWeight: "600", textTransform: "uppercase" }}>
-              Linked Resources
-            </Text>
-            {canonicalLinks.map((url) => (
-              <CanonicalLinkPreviewCard key={url} url={url} />
-            ))}
-          </View>
-        )}
-      </ScrollView>
-    </>
+      {canonicalLinks.length > 0 ? (
+        <View style={styles.linksSection}>
+          <Text style={styles.linksHeader}>Linked Resources</Text>
+          {canonicalLinks.map((url) => (
+            <CanonicalLinkPreviewCard key={url} url={url} />
+          ))}
+        </View>
+      ) : null}
+    </ScrollView>
   );
 }
+
+const styles = StyleSheet.create({
+  screen: {
+    flex: 1,
+    backgroundColor: lightPalette.background.default,
+  },
+  content: {
+    padding: mobileLayout.screenPadding,
+    gap: spacing[1.5],
+    paddingBottom: spacing[6],
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: mobileLayout.screenPadding,
+    backgroundColor: lightPalette.background.default,
+  },
+  shareLabel: {
+    fontSize: mobileTypography.buttonSm.fontSize as number,
+    fontWeight: "600",
+    color: lightPalette.primary.main,
+  },
+  meta: {
+    fontSize: mobileTypography.caption.fontSize as number,
+    color: lightPalette.text.secondary,
+  },
+  body: {
+    fontSize: mobileTypography.listPrimary.fontSize as number,
+    lineHeight: 24,
+    color: lightPalette.text.primary,
+  },
+  linksSection: {
+    gap: spacing[1],
+    marginTop: spacing[1],
+  },
+  linksHeader: {
+    fontSize: mobileTypography.caption.fontSize as number,
+    fontWeight: "600",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    color: lightPalette.text.secondary,
+  },
+  linkCard: {
+    borderWidth: border.thin,
+    borderColor: lightPalette.divider,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    padding: mobileLayout.cardPadding,
+    backgroundColor: lightPalette.background.paper,
+    gap: 4,
+  },
+  pressed: {
+    opacity: opacity.pressed,
+  },
+  linkBadge: {
+    fontSize: mobileTypography.caption.fontSize as number,
+    color: lightPalette.text.secondary,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  linkTitle: {
+    fontSize: mobileTypography.listPrimary.fontSize as number,
+    fontWeight: "600",
+    color: lightPalette.text.primary,
+  },
+  linkSubtitle: {
+    fontSize: mobileTypography.listSecondary.fontSize as number,
+    color: lightPalette.text.secondary,
+  },
+});

@@ -1,3 +1,13 @@
+/**
+ * Navigation Debug — Maestro's harness for the shared-route stack, not a product
+ * screen. It opens task and channel routes with a chosen navigation context so a
+ * flow can assert contextual back behaviour without relaunching the dev client.
+ *
+ * The More menu only lists it under __DEV__, and the screen itself refuses to
+ * render outside development, so a deep link cannot surface it in a shipped
+ * build either.
+ */
+
 import React from "react";
 import {
   ScrollView,
@@ -6,7 +16,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useSitemap } from "expo-router";
 
 import { Button } from "@/components/ui/button";
@@ -35,6 +45,14 @@ function buildTaskContextHref(projectId: string, taskId: string): string {
 }
 
 export default function NavigationDebugScreen() {
+  if (!__DEV__) {
+    return <Redirect href="/(app)/(more)" />;
+  }
+
+  return <NavigationDebugContent />;
+}
+
+function NavigationDebugContent() {
   const router = useRouter();
   const sitemap = useSitemap();
   const [projectId, setProjectId] = React.useState("");

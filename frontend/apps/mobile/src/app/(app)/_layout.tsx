@@ -32,6 +32,7 @@ import { TermsGate } from "@/components/compliance/terms-gate";
 import { useAppStatePresence } from "@/hooks/use-app-state-presence";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
+import { useInAppAlertsEnabled } from "@/lib/app-settings";
 import { NOTIFICATIONS_HOME_HREF } from "@/lib/linking";
 import {
   getTabLabel,
@@ -99,6 +100,7 @@ export default function AppLayout() {
     incomingVoiceCall,
     clearIncomingVoiceCall,
   } = useNotificationStream();
+  const inAppAlertsEnabled = useInAppAlertsEnabled();
   const [voicePromptAction, setVoicePromptAction] = React.useState<"accept" | "decline" | null>(null);
   const [voicePromptError, setVoicePromptError] = React.useState<string | null>(null);
   const [activeVoiceLeaving, setActiveVoiceLeaving] = React.useState(false);
@@ -291,7 +293,7 @@ export default function AppLayout() {
           onAccept={() => void handleAcceptIncomingCall()}
           onDecline={() => void handleDeclineIncomingCall()}
         />
-      ) : liveNotification ? (
+      ) : liveNotification && inAppAlertsEnabled ? (
         <LiveNotificationBanner
           title={liveNotification.title}
           body={liveNotification.body}

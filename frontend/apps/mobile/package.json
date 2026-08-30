@@ -13,7 +13,8 @@
 		"maestro:suite": "./scripts/run-maestro-suite.sh",
 		"eas-build-pre-install": "./scripts/eas-inject-secrets.sh",
 		"check:store-manifest": "node scripts/check-store-manifest.js",
-		"check:voice-state": "node --experimental-strip-types src/hooks/channel-voice-call-state.check.ts"
+		"check:voice-state": "node --experimental-strip-types src/hooks/channel-voice-call-state.check.ts",
+		"check:doc-rows": "node --experimental-strip-types src/lib/doc-rows.check.ts"
 	},
 	"dependencies": {
 		"@connectrpc/connect": "^2.1.0",
