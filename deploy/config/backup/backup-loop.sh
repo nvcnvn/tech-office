@@ -9,6 +9,21 @@
 # keep alive inside the container.
 set -uo pipefail
 
+# Docker creates a fresh named volume owned by root:root, but pgBackRest runs as
+# postgres — so both the lock directory and the node-exporter textfile directory are
+# unwritable on a new deployment. Every pgbackrest command then fails with "unable to
+# acquire lock", including stanza-create, which in turn makes WAL archive-push fail
+# with "archive.info ... has a stanza-create been performed?". Nothing about that
+# chain names permissions, so fix it here where it is cheap and obvious.
+#
+# The container therefore starts as root and drops to postgres for the real work.
+if [ "$(id -u)" = "0" ]; then
+	install -d -o postgres -g postgres -m 0775 /var/lib/pgbackrest-lock /metrics
+	# Via bash, not directly: this file is a Swarm config, mounted read-only at 0444,
+	# so it is not executable — which is also why the entrypoint names bash.
+	exec gosu postgres /bin/bash "$0" "$@"
+fi
+
 STANZA=techoffice
 METRICS=/metrics/pgbackrest.prom
 PGBR=(pgbackrest --stanza="$STANZA")

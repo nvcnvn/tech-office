@@ -10,5 +10,5 @@ CID="$(docker ps -q -f "name=${STACK_NAME}_pgbackup" | head -1)"
 [ -n "$CID" ] || die "the pgbackup container is not running on this machine — run this on the db node"
 
 info "taking a ${TYPE} backup"
-docker exec "$CID" pgbackrest --stanza=techoffice --type="$TYPE" backup
-docker exec "$CID" pgbackrest --stanza=techoffice info
+docker exec -u postgres "$CID" pgbackrest --stanza=techoffice --type="$TYPE" backup
+docker exec -u postgres "$CID" pgbackrest --stanza=techoffice info

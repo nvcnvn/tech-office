@@ -41,12 +41,13 @@ docker service scale --detach=false "${STACK_NAME}_postgres=0" >/dev/null
 
 # --delta compares what is on disk against the backup manifest and only rewrites what
 # differs, so this is far quicker than wiping the volume first.
+trap '[ -n "${PGBR_CONF_DIR:-}" ] && rm -rf "$PGBR_CONF_DIR"' EXIT
 info "restoring"
 docker run --rm --user postgres \
 	-v "${STACK_NAME}_pgdata:/var/lib/postgresql/data" \
-	-v "$DEPLOY_DIR/secrets/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro" \
+	-v "$(stage_pgbackrest_conf):/etc/pgbackrest/pgbackrest.conf:ro" \
 	"${REGISTRY:+$REGISTRY/}tech-office-postgres:${RELEASE_TAG}" \
-	pgbackrest "${RESTORE_ARGS[@]}" --lock-path=/tmp --spool-path=/tmp restore
+	pgbackrest "${RESTORE_ARGS[@]}" --lock-path=/tmp restore
 
 info "starting postgres — it replays WAL before accepting connections"
 docker service scale --detach=false "${STACK_NAME}_postgres=1" >/dev/null

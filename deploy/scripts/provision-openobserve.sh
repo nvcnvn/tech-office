@@ -25,8 +25,20 @@ oo() { # method path  (body on stdin)
 		--data-binary @- "http://openobserve:5080$2" 2>/dev/null
 }
 
+describe_create() { case "$1" in 200|201) echo "ok" ;; *) echo "HTTP $1" ;; esac; }
 status() { tail -1 <<<"$1"; }
 body() { sed '$d' <<<"$1"; }
+
+# Emit {"name":"techoffice","body":"<arg, JSON-escaped>"} without hand-rolling escapes.
+json_template() {
+	if command -v python3 >/dev/null; then
+		python3 -c 'import json,sys; print(json.dumps({"name":"techoffice","body":sys.argv[1]}))' "$1"
+	elif command -v jq >/dev/null; then
+		jq -nc --arg b "$1" '{name:"techoffice", body:$b}'
+	else
+		die "need jq or python3 to build the alert template"
+	fi
+}
 
 info "waiting for OpenObserve"
 for _ in $(seq 1 60); do
@@ -38,29 +50,63 @@ done
 # --- Notification destination ------------------------------------------------
 if [ -n "${OBSERVE_ALERT_WEBHOOK_URL:-}" ]; then
 	info "creating alert template and destination"
-	out=$(oo POST "/api/${OBSERVE_ORG}/alerts/templates" <<-JSON
-	{"name":"techoffice","body":"{\"text\":\"[{alert_name}] {stream_name} — {alert_start_time}\"}"}
-	JSON
-	)
-	echo "  template: $(status "$out")"
-	out=$(oo POST "/api/${OBSERVE_ORG}/alerts/destinations" <<-JSON
-	{"name":"techoffice-alerts","url":"${OBSERVE_ALERT_WEBHOOK_URL}","method":"post","template":"techoffice","skip_tls_verify":false}
-	JSON
-	)
-	echo "  destination: $(status "$out")"
-	DEST_PATCH='s|"destinations": \[\]|"destinations": ["techoffice-alerts"]|'
+	# The request body a destination sends is provider-specific: Slack and Google Chat
+	# want {"text": ...}, Discord {"content": ...}, Telegram {"chat_id": ..., "text": ...}.
+	# OBSERVE_ALERT_TEMPLATE_BODY carries it, defaulting to the Slack shape. It is JSON
+	# embedded in a JSON string, so it is escaped here rather than by hand in .env.
+	# Not ${VAR:-default}: the default is full of braces, and the first unescaped '}'
+	# would close the expansion.
+	if [ -n "${OBSERVE_ALERT_TEMPLATE_BODY:-}" ]; then
+		TEMPLATE_BODY="$OBSERVE_ALERT_TEMPLATE_BODY"
+	else
+		TEMPLATE_BODY='{"text":"[{alert_name}] {stream_name} — {alert_start_time}"}'
+	fi
+	# POST creates; on a re-run the name already exists, so PUT the new body over it.
+	# Without the PUT an edited template or webhook URL would never take effect.
+	out=$(json_template "$TEMPLATE_BODY" | oo POST "/api/${OBSERVE_ORG}/alerts/templates")
+	case "$(status "$out")" in
+		400|409) out=$(json_template "$TEMPLATE_BODY" | oo PUT "/api/${OBSERVE_ORG}/alerts/templates/techoffice") ;;
+	esac
+	# 400 here is OpenObserve's duplicate-name response, not a failure: this script is
+	# meant to be safe to re-run.
+	echo "  template: $(describe_create "$(status "$out")")"
+	dest_json() {
+		cat <<-JSON
+		{"name":"techoffice-alerts","url":"${OBSERVE_ALERT_WEBHOOK_URL}","method":"post","template":"techoffice","skip_tls_verify":false}
+		JSON
+	}
+	out=$(dest_json | oo POST "/api/${OBSERVE_ORG}/alerts/destinations")
+	case "$(status "$out")" in
+		400|409) out=$(dest_json | oo PUT "/api/${OBSERVE_ORG}/alerts/destinations/techoffice-alerts") ;;
+	esac
+	echo "  destination: $(describe_create "$(status "$out")")"
 else
-	info "OBSERVE_ALERT_WEBHOOK_URL is empty — alerts will fire into the OpenObserve UI only"
-	DEST_PATCH='s|"destinations": \[\]|"destinations": []|'
+	# OpenObserve rejects an alert with no destination ("Alert destination or
+	# workflows is required"), so there is no UI-only mode to fall back to. Failing
+	# here beats posting every alert and watching each one 400.
+	die "OBSERVE_ALERT_WEBHOOK_URL is empty. OpenObserve requires a notification
+destination on every alert, so the alert set cannot be created without one. Put a
+Slack incoming webhook — or any endpoint that accepts a JSON POST — in deploy/.env
+and re-run this script. An alert nobody is paged for is not worth creating."
 fi
 
 # --- Alerts ------------------------------------------------------------------
 # One JSON object per line. jq or python3 — whichever this machine happens to have.
+# Sets .destinations on the way past. Doing this in the JSON layer rather than with a
+# sed on the serialised text matters: jq -c emits "destinations":[] and python3 emits
+# "destinations": [] — one space apart — so a text substitution silently matches on
+# some machines and not others, and the alerts it misses are rejected as having no
+# destination.
+DEST_NAME="techoffice-alerts"
 split_alerts() {
 	if command -v jq >/dev/null; then
-		jq -c '.[]' "$ALERTS"
+		jq -c --arg d "$DEST_NAME" '.[] | .destinations = [$d]' "$ALERTS"
 	elif command -v python3 >/dev/null; then
-		python3 -c 'import json,sys;[print(json.dumps(a)) for a in json.load(open(sys.argv[1]))]' "$ALERTS"
+		python3 -c 'import json,sys
+alerts = json.load(open(sys.argv[1]))
+for a in alerts:
+    a["destinations"] = [sys.argv[2]]
+    print(json.dumps(a))' "$ALERTS" "$DEST_NAME"
 	else
 		die "need jq or python3 to split ${ALERTS}; alternatively paste that file into the OpenObserve UI (Alerts → Import)"
 	fi
@@ -75,7 +121,7 @@ info "posting alerts to ${ALERT_PATH}"
 failed=0
 while IFS= read -r alert; do
 	name=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' <<<"$alert")
-	out=$(sed "$DEST_PATCH" <<<"$alert" | oo POST "$ALERT_PATH")
+	out=$(oo POST "$ALERT_PATH" <<<"$alert")
 	code=$(status "$out")
 	case "$code" in
 		200|201) echo "  ok     ${name}" ;;

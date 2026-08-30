@@ -10,7 +10,8 @@
 services:
   pgbackup:
     image: ${IMAGE_PREFIX}tech-office-postgres:${RELEASE_TAG}
-    user: postgres
+    # Starts as root so it can fix the ownership of the two named volumes it shares
+    # (Docker creates them root-owned), then drops to postgres itself via gosu.
     entrypoint: ["/bin/bash", "/usr/local/bin/backup-loop.sh"]
     environment:
       PGBACKREST_CONFIG: /run/secrets/pgbackrest.conf

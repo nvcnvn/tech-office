@@ -61,9 +61,12 @@ services:
     volumes:
       - whisper-cache:/app/hf-cache
     healthcheck:
-      test: ["CMD", "curl", "-sf", "http://localhost:8000/health"]
+      # python3, not curl: this image ships neither curl nor wget, so a curl-based
+      # check can never pass — the container serves fine, Docker marks it unhealthy,
+      # and Swarm SIGKILLs it forever.
+      test: ["CMD", "python3", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health', timeout=4).status == 200 else 1)"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 5
       start_period: 300s
     logging: *logging

@@ -19,26 +19,43 @@ NAME="techoffice-restore-drill-$$"
 cleanup() {
 	docker rm -f "$NAME" >/dev/null 2>&1 || true
 	docker volume rm "$VOL" >/dev/null 2>&1 || true
+	[ -n "${PGBR_CONF_DIR:-}" ] && rm -rf "$PGBR_CONF_DIR"
 }
 trap cleanup EXIT
 
 info "restoring the latest backup into a scratch volume"
 docker volume create "$VOL" >/dev/null
+# A fresh named volume is root-owned, and the restore below runs as postgres. Same
+# trap as the pgbackrest lock and metrics volumes in the backup stack.
+docker run --rm -v "$VOL:/v" "$IMAGE" chown postgres:postgres /v >/dev/null
+# Deliberately no --spool-path here: pgBackRest carries it into the restore_command
+# it writes into postgresql.auto.conf, where archive-get rejects it as invalid without
+# archive-async — failing recovery after the restore itself has already succeeded.
+CONF="$(stage_pgbackrest_conf)"
 docker run --rm --user postgres \
 	-v "$VOL:/var/lib/postgresql/data" \
-	-v "$DEPLOY_DIR/secrets/pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro" \
+	-v "$CONF:/etc/pgbackrest/pgbackrest.conf:ro" \
 	"$IMAGE" \
 	pgbackrest --stanza=techoffice --pg1-path=/var/lib/postgresql/data/pgdata \
-		--lock-path=/tmp --spool-path=/tmp \
+		--lock-path=/tmp \
 		--type=immediate --target-action=promote restore
 
 info "starting the restored cluster"
+# max_connections and max_worker_processes must be at least what the primary ran with
+# (core.yml), or recovery aborts with "insufficient parameter settings". Keep these in
+# step with core.yml if you change the primary's.
+#
+# The config has to be here too: recovery runs restore_command, which is
+# `pgbackrest archive-get`, and without it that cannot find the repository — the
+# restore succeeds and then the cluster fails to reach a consistent state.
 docker run -d --name "$NAME" \
 	-v "$VOL:/var/lib/postgresql/data" \
+	-v "$CONF:/etc/pgbackrest/pgbackrest.conf:ro" \
 	-e PGDATA=/var/lib/postgresql/data/pgdata \
 	"$IMAGE" \
 	postgres -c shared_preload_libraries=pg_textsearch,pg_stat_statements \
-		-c archive_mode=off -c listen_addresses=127.0.0.1 >/dev/null
+		-c archive_mode=off -c listen_addresses=127.0.0.1 \
+		-c max_connections="${PG_MAX_CONNECTIONS}" -c max_worker_processes=12 >/dev/null
 
 for _ in $(seq 1 60); do
 	docker exec "$NAME" pg_isready -q -h 127.0.0.1 && break

@@ -220,3 +220,17 @@ wait_for_service() {
 	docker service ps "$svc" --no-trunc || true
 	die "${svc} did not come up within ${timeout}s"
 }
+
+# pgbackrest.conf is mode 600 and owned by whoever runs these scripts, but the
+# containers below run as postgres (uid 999) and so cannot read a bind mount of it.
+# Stage a 0644 copy inside a 0700 directory: readable to the container's user,
+# still unreachable to other users on the host. Echoes the path to mount.
+stage_pgbackrest_conf() {
+	local dir
+	dir="$(mktemp -d)" || die "could not create a staging directory"
+	chmod 700 "$dir"
+	cp "$DEPLOY_DIR/secrets/pgbackrest.conf" "$dir/pgbackrest.conf"
+	chmod 644 "$dir/pgbackrest.conf"
+	PGBR_CONF_DIR="$dir"
+	echo "$dir/pgbackrest.conf"
+}

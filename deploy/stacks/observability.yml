@@ -29,11 +29,10 @@ services:
       ZO_COMPACT_DATA_RETENTION_DAYS: ${OBSERVE_RETENTION_DAYS}
       ZO_TELEMETRY: "false"
       ZO_HTTP_PORT: "5080"
-    # Not behind Traefik on purpose: no public observability UI. Reach it over an SSH
-    # tunnel, or open 5080 to your admin subnet only — Swarm host-mode publishing
-    # cannot bind to a single interface.
-    ports:
-      - {target: 5080, published: 5080, protocol: tcp, mode: host}
+    # No published port on purpose: this UI is reachable only from inside the overlay
+    # network. Swarm host-mode publishing cannot bind to a single interface, so a
+    # published 5080 would be on every interface with one shared root credential in
+    # front of it. deploy/README.md has the SSH-tunnel recipe for reaching it.
     networks: [internal]
     volumes:
       - openobserve-data:/data

@@ -148,7 +148,9 @@ log-level-console=info
 log-level-file=off
 # Shared with the postgres container so archive-push and backup cannot race.
 lock-path=/var/lib/pgbackrest-lock
-spool-path=/var/lib/pgbackrest-lock/spool
+# No spool-path: pgBackRest rejects it unless archive-async is also on, and the
+# rejection surfaces at the worst possible moment — archive-get during a restore,
+# which fails recovery after the files have already been restored.
 
 [techoffice]
 pg1-path=/var/lib/postgresql/data/pgdata

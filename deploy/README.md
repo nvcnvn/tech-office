@@ -340,13 +340,21 @@ otel-collector ──scrape──▶ node-exporter (per node), cadvisor (per nod
        └──OTLP/http──▶ openobserve  :5080   storage + PromQL + dashboards + alerts
 ```
 
-The UI is on `:5080` on the obs node, deliberately **not** published through Traefik.
-Reach it over an SSH tunnel, or restrict that port to your admin subnet — Swarm's
-host-mode publishing cannot bind to a single interface, so the firewall is the control.
+The UI is on `:5080` inside the overlay network and is published nowhere — not through
+Traefik, and not as a host port. Swarm's host-mode publishing cannot bind to a single
+interface, so any published port would be on every interface with one shared root
+credential in front of it.
+
+Reach it with an SSH tunnel plus a throwaway proxy on the far end. `techoffice_internal`
+is `attachable`, so a plain `docker run` can join it and — unlike Swarm — can bind to
+loopback only. One command opens both; Ctrl-C tears both down and removes the container:
 
 ```sh
-ssh -L 5080:localhost:5080 obs-node        # http://localhost:5080
-                                           # user: OBSERVE_ROOT_EMAIL, pass: OBSERVE_ROOT_PASSWORD
+ssh -L 5080:localhost:5080 obs-node \
+  'docker run --rm --network techoffice_internal -p 127.0.0.1:5080:5080 \
+     alpine/socat:1.8.1.3 TCP-LISTEN:5080,fork TCP:openobserve:5080'
+# then http://localhost:5080
+# user: OBSERVE_ROOT_EMAIL, pass: OBSERVE_ROOT_PASSWORD  (both in deploy/.env)
 ```
 
 Give the exporter's database user the monitoring role once, so `pg_stat_*` is readable:
@@ -448,6 +456,8 @@ Two or more machines need `REGISTRY` set, or every node except the builder fails
 | `no such image` on some nodes | `REGISTRY` unset on a multi-node fleet |
 | LiveKit exits with `could not resolve external IP` | STUN discovery could not complete. Common cause: the host resolves `stun.l.google.com` to IPv6 only while the container is on an IPv4-only overlay network. Set `LIVEKIT_NODE_IP` to the voice node's public address, which pins `node_ip` and skips discovery |
 | OpenObserve crash-loops with `ZO_ROOT_USER_PASSWORD is too weak` | It requires lower, upper, digit and a special character. `bootstrap.sh` appends a suffix for this one; a hand-edited `OBSERVE_ROOT_PASSWORD` has to satisfy the policy itself |
+| Every alert fails with `Alert destination or workflows is required` | `OBSERVE_ALERT_WEBHOOK_URL` is empty. OpenObserve will not create an alert with no destination, so this is required whenever the `observability` profile is on |
+| A service restarts forever with `exit (137): dockerexec: unhealthy container` | Its healthcheck is failing, not the process. Check the binary the healthcheck calls actually exists in that image — several slim images ship neither `curl` nor `wget` |
 | Certificates never issue | Port 80 not reachable from the internet, or DNS not pointing at the edge node |
 | Calls connect but have no audio | `LIVEKIT_NODE_IP` / `use_external_ip` wrong, or 7882/udp closed |
 | `WALArchivingFailing` | Bucket credentials or endpoint wrong in `deploy/secrets/pgbackrest.conf` — re-run `bootstrap.sh` after fixing `.env` |
