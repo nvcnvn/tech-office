@@ -219,8 +219,6 @@ PODS:
     - ExpoModulesCore
   - ExpoLinking (55.0.11):
     - ExpoModulesCore
-  - ExpoLocalAuthentication (55.0.11):
-    - ExpoModulesCore
   - ExpoLocation (55.1.6):
     - ExpoModulesCore
   - ExpoLogBox (55.0.10):
@@ -2617,7 +2615,6 @@ DEPENDENCIES:
   - "ExpoImagePicker (from `../../../node_modules/.pnpm/expo-image-picker@55.0.16_expo@55.0.11/node_modules/expo-image-picker/ios`)"
   - "ExpoKeepAwake (from `../../../node_modules/.pnpm/expo-keep-awake@55.0.6_expo@55.0.11_react@19.2.0/node_modules/expo-keep-awake/ios`)"
   - "ExpoLinking (from `../../../node_modules/.pnpm/expo-linking@55.0.11_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@react-native+_050b0d5359c1491583301acd6940ca99/node_modules/expo-linking/ios`)"
-  - "ExpoLocalAuthentication (from `../../../node_modules/.pnpm/expo-local-authentication@55.0.11_expo@55.0.11/node_modules/expo-local-authentication/ios`)"
   - "ExpoLocation (from `../../../node_modules/.pnpm/expo-location@55.1.6_expo@55.0.11/node_modules/expo-location/ios`)"
   - "ExpoLogBox (from `../../../node_modules/.pnpm/@expo+log-box@55.0.10_@expo+dom-webview@55.0.5_expo@55.0.11_react-native@0.83.4_@babel+_aec90cecb865c6e3562d9fc4ea6512bc/node_modules/@expo/log-box`)"
   - "ExpoModulesCore (from `../../../node_modules/.pnpm/expo-modules-core@55.0.20_react-native@0.83.4_@babel+core@7.29.0_@react-native+metro-co_a45f356a96929f8d29a9b8634002770e/node_modules/expo-modules-core`)"
@@ -2796,8 +2793,6 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-keep-awake@55.0.6_expo@55.0.11_react@19.2.0/node_modules/expo-keep-awake/ios"
   ExpoLinking:
     :path: "../../../node_modules/.pnpm/expo-linking@55.0.11_expo@55.0.11_react-native@0.83.4_@babel+core@7.29.0_@react-native+_050b0d5359c1491583301acd6940ca99/node_modules/expo-linking/ios"
-  ExpoLocalAuthentication:
-    :path: "../../../node_modules/.pnpm/expo-local-authentication@55.0.11_expo@55.0.11/node_modules/expo-local-authentication/ios"
   ExpoLocation:
     :path: "../../../node_modules/.pnpm/expo-location@55.1.6_expo@55.0.11/node_modules/expo-location/ios"
   ExpoLogBox:
@@ -3024,7 +3019,6 @@ SPEC CHECKSUMS:
   ExpoImagePicker: ca47c5ac15d1ccde2fbc765485e612c2a5a385d0
   ExpoKeepAwake: a1baf9810a2dee1905aa9bdd336852598f7220e9
   ExpoLinking: b42fd76bdda8662ddf797b17cb4cc793adabfe98
-  ExpoLocalAuthentication: d059ab01da1f2e3c8dc53de1e112e6f55b4bfc49
   ExpoLocation: 4667514a575dd18a6102e0907d9ef9c0253b20a9
   ExpoLogBox: a3de999775d423ac9cb85d24bd47628e5392761f
   ExpoModulesCore: b00920acd06301b8c62a265fa4d2f2e3d725c748

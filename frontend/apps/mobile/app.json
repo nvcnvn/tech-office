@@ -25,12 +25,19 @@
         "ITSAppUsesNonExemptEncryption": false
       },
       "usesAppleSignIn": true,
-      "googleServicesFile": "./GoogleService-Info.plist"
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f172a"
+        "backgroundImage": "./assets/adaptive-icon-background.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#F2733F"
       },
       "intentFilters": [
         {
@@ -65,6 +72,15 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
       "expo-apple-authentication",
       "expo-secure-store",
       "@react-native-firebase/app",
@@ -76,7 +92,7 @@
         "expo-notifications",
         {
           "icon": "./assets/notification-icon.png",
-          "color": "#0f172a"
+          "color": "#1F3B73"
         }
       ],
       [

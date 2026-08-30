@@ -380,6 +380,23 @@
 			shellPath = /bin/sh;
 			shellScript = "# Strip dev-launcher-specific local network permission keys from non-Debug builds\n# This only removes _expo._tcp Bonjour services and the dev-launcher usage description.\n# Other Bonjour services and custom descriptions are preserved for production use.\n\nif [ \"$CONFIGURATION\" != \"Debug\" ]; then\n  PLIST_PATH=\"${TARGET_BUILD_DIR}/${INFOPLIST_PATH}\"\n  if [ -f \"$PLIST_PATH\" ]; then\n    # Check if NSBonjourServices exists\n    if /usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" >/dev/null 2>&1; then\n      # Get the count of services\n      COUNT=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null | grep \"^    \" | wc -l | tr -d ' ')\n\n      # Remove _expo._tcp\n      for ((i=COUNT-1; i>=0; i--)); do\n        SERVICE=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices:$i\" \"$PLIST_PATH\" 2>/dev/null || echo \"\")\n        if echo \"$SERVICE\" | grep -q \"_expo._tcp\"; then\n          /usr/libexec/PlistBuddy -c \"Delete :NSBonjourServices:$i\" \"$PLIST_PATH\" 2>/dev/null || true\n        fi\n      done\n\n      # If the array is now empty, remove it entirely\n      REMAINING=$(/usr/libexec/PlistBuddy -c \"Print :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null | grep \"^    \" | wc -l | tr -d ' ')\n      if [ \"$REMAINING\" -eq \"0\" ]; then\n        /usr/libexec/PlistBuddy -c \"Delete :NSBonjourServices\" \"$PLIST_PATH\" 2>/dev/null || true\n      fi\n    fi\n\n    # Only delete the description if it matches the dev-launcher default text\n    DESC=$(/usr/libexec/PlistBuddy -c \"Print :NSLocalNetworkUsageDescription\" \"$PLIST_PATH\" 2>/dev/null || echo \"\")\n    if echo \"$DESC\" | grep -q \"Expo Dev Launcher\"; then\n      /usr/libexec/PlistBuddy -c \"Delete :NSLocalNetworkUsageDescription\" \"$PLIST_PATH\" 2>/dev/null || true\n    fi\n  fi\nfi\n";
 		};
+		D41D8CD98F00B204E9800998 /* Write Metro Host */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Write Metro Host";
+			outputPaths = (
+				"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ip.txt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"$CONFIGURATION\" = \"Debug\" ]; then\n  HOST=\"${METRO_HOST:-${REACT_NATIVE_PACKAGER_HOSTNAME:-}}\"\n  if [ -z \"$HOST\" ]; then\n    IFACE=$(route get default 2>/dev/null | awk '/interface:/{print $2; exit}')\n    if [ -n \"$IFACE\" ]; then\n      HOST=$(ipconfig getifaddr \"$IFACE\" 2>/dev/null || true)\n    fi\n  fi\n  if [ -n \"$HOST\" ]; then\n    mkdir -p \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n    printf '%s' \"$HOST\" > \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/ip.txt\"\n  fi\nfi\n";
+			showEnvVarsInLog = 0;
+		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -423,7 +440,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
 				PRODUCT_BUNDLE_IDENTIFIER = com.devguards.TechOffice;
-				PRODUCT_NAME = TechOffice;
+				PRODUCT_NAME = "TechOffice";
 				SWIFT_OBJC_BRIDGING_HEADER = "TechOffice/TechOffice-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -455,7 +472,7 @@
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
 				PRODUCT_BUNDLE_IDENTIFIER = com.devguards.TechOffice;
-				PRODUCT_NAME = TechOffice;
+				PRODUCT_NAME = "TechOffice";
 				SWIFT_OBJC_BRIDGING_HEADER = "TechOffice/TechOffice-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";

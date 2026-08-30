@@ -14,7 +14,8 @@
 		"lint": "eslint .",
 		"format": "prettier --write .",
 		"typecheck:mobile": "tsc -p apps/mobile/tsconfig.json --noEmit",
-		"web": "pnpm --filter web"
+		"web": "pnpm --filter web",
+		"brand": "node scripts/generate-brand-assets.mjs"
 	},
 	"pnpm": {
 		"overrides": {
