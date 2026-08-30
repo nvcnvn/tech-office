@@ -115,15 +115,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // stored at a lock-screen-readable accessibility level moves to one. Keychain
           // will not change that attribute on an update, only on a replace, and this
           // read has already proved the phone is unlocked enough to do it.
-          void Promise.all([
-            setSecureItem(TOKEN_KEY, token),
-            setSecureItem(TOKEN_EXPIRES_KEY, expiresAt),
-            orgId ? setSecureItem(ORG_ID_KEY, orgId) : Promise.resolve(),
-            employeeId ? setSecureItem(EMPLOYEE_ID_KEY, employeeId) : Promise.resolve(),
-          ]).catch(() => {
+          //
+          // Awaited, and finished before the app is told it is signed in. Replacing an
+          // entry deletes it first, so for as long as this runs the token is not in the
+          // Keychain; any request that reads it in that window goes out with no
+          // Authorization header, comes back unauthenticated, and ends the session the
+          // rewrite was meant to preserve.
+          try {
+            await Promise.all([
+              setSecureItem(TOKEN_KEY, token),
+              setSecureItem(TOKEN_EXPIRES_KEY, expiresAt),
+              orgId ? setSecureItem(ORG_ID_KEY, orgId) : Promise.resolve(),
+              employeeId ? setSecureItem(EMPLOYEE_ID_KEY, employeeId) : Promise.resolve(),
+            ]);
+          } catch {
             // Nothing to do about it here: the session still works, it just will not
             // survive a locked-screen wake until the next successful launch.
-          });
+          }
 
           setState({
             isLoading: false,

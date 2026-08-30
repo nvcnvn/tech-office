@@ -76,7 +76,17 @@ const trackedCalls = new Map<string, TrackedCall>();
  *  call the phone itself is already showing (FR-014). */
 const trackedCallListeners = new Set<() => void>();
 
+/**
+ * The call the OS is presenting, as a snapshot stable enough for `useSyncExternalStore`.
+ *
+ * Recomputed only when the set of tracked calls actually changes, because a getter that
+ * built a fresh object per read would re-render its subscribers forever.
+ */
+let presentedCall: { serverCallId: string; channelId?: string } | null = null;
+
 function notifyTrackedCallsChanged(): void {
+  const [first] = trackedCalls.entries();
+  presentedCall = first ? { serverCallId: first[0], channelId: first[1].channelId } : null;
   trackedCallListeners.forEach((listener) => listener());
 }
 
@@ -136,7 +146,6 @@ async function recoverTrackedCall(nativeId: string): Promise<string | undefined>
 type SessionResolver = () => { isAuthenticated: boolean } | null;
 
 let resolveSession: SessionResolver = () => null;
-let onCallAnswered: ((serverCallId: string, channelId?: string) => void) | null = null;
 
 /**
  * Whether this device rings through the OS rather than through the in-app prompt.
@@ -506,7 +515,6 @@ async function handleAnswered(nativeId: string, requestId: string): Promise<void
     }
     await voiceClient.connect(credentials);
 
-    onCallAnswered?.(serverCallId, tracked?.channelId);
     log("call answered and joined", { serverCallId, nativeId });
   } catch (error) {
     // The answer is already fulfilled, so the OS is showing a connected call. Failing to
@@ -580,10 +588,8 @@ let subscriptions: EventSubscription[] = [];
  */
 export function startNativeCallIntegration(options: {
   getSession: SessionResolver;
-  onAnswered?: (serverCallId: string, channelId?: string) => void;
 }): () => void {
   resolveSession = options.getSession;
-  onCallAnswered = options.onAnswered ?? null;
 
   Calls.registerVoIPPush();
 
@@ -673,6 +679,26 @@ export function startNativeCallIntegration(options: {
   };
 }
 
+function subscribeToTrackedCalls(onStoreChange: () => void): () => void {
+  trackedCallListeners.add(onStoreChange);
+  return () => {
+    trackedCallListeners.delete(onStoreChange);
+  };
+}
+
+/**
+ * The call this device is currently presenting through the OS, with the conversation it
+ * belongs to.
+ *
+ * Exposed so the authenticated layout can put the user on that conversation. On Android
+ * the OS call banner has no route of its own: tapping it — or answering from the lock
+ * screen — brings the app up on whatever screen it was last on, which is how a call
+ * answered from the lock screen lands on the More tab.
+ */
+export function useNativeCallPresentation(): { serverCallId: string; channelId?: string } | null {
+  return useSyncExternalStore(subscribeToTrackedCalls, () => presentedCall);
+}
+
 /**
  * Whether this device is presenting a given call through the OS, as reactive state.
  *
@@ -681,13 +707,7 @@ export function startNativeCallIntegration(options: {
  * it — which is what this lets a surface avoid (FR-014).
  */
 export function useNativeCallPresented(serverCallId: string | null | undefined): boolean {
-  return useSyncExternalStore(
-    (onStoreChange) => {
-      trackedCallListeners.add(onStoreChange);
-      return () => {
-        trackedCallListeners.delete(onStoreChange);
-      };
-    },
-    () => Boolean(serverCallId && trackedCalls.has(serverCallId)),
+  return useSyncExternalStore(subscribeToTrackedCalls, () =>
+    Boolean(serverCallId && trackedCalls.has(serverCallId)),
   );
 }

@@ -14,7 +14,7 @@
 
 import { Redirect, Tabs, usePathname, useRouter } from "expo-router";
 import React from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, AppState, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   joinVoiceCall,
@@ -45,7 +45,10 @@ import {
   toVoiceJoinCredentials,
   type VoiceClientSnapshot,
 } from "@/lib/voice/voice-client";
-import { connectCallWithNativePresentation } from "@/lib/voice/native-call";
+import {
+  connectCallWithNativePresentation,
+  useNativeCallPresentation,
+} from "@/lib/voice/native-call";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import {
   lightPalette,
@@ -152,6 +155,38 @@ export default function AppLayout() {
       }) as never,
     );
   }, [router]);
+
+  // The one owner of "the OS is showing a call, put the user on it".
+  //
+  // On Android the system call banner carries no route: tapping its body, or answering
+  // from the lock screen, brings the app up on whatever screen it was last showing — the
+  // More tab, if that is where the user left it. iOS keeps the user on CallKit and never
+  // exercises this. Routing from here rather than from the native answer callback is
+  // what makes it work at all, because that callback fires while the app is still
+  // starting up and this layout — the router the push needs — does not exist yet.
+  //
+  // Only while the app is actually in front: a call ignored in the background must not
+  // silently relocate the app to the caller's conversation. Once per call, so returning
+  // to the app mid-call does not drag the user off the screen they chose.
+  const presentedNativeCall = useNativeCallPresentation();
+  const routedNativeCallRef = React.useRef<string | null>(null);
+
+  React.useEffect(() => {
+    const channelId = presentedNativeCall?.channelId;
+    const serverCallId = presentedNativeCall?.serverCallId;
+    if (!channelId || !serverCallId) return;
+
+    const routeToCall = () => {
+      if (AppState.currentState !== "active") return;
+      if (routedNativeCallRef.current === serverCallId) return;
+      routedNativeCallRef.current = serverCallId;
+      navigateToVoiceCallChannel(channelId);
+    };
+
+    routeToCall();
+    const subscription = AppState.addEventListener("change", routeToCall);
+    return () => subscription.remove();
+  }, [navigateToVoiceCallChannel, presentedNativeCall]);
 
   const handleAcceptIncomingCall = React.useCallback(async () => {
     if (!incomingVoiceCall || voicePromptAction) return;

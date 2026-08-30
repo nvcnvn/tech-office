@@ -12,7 +12,7 @@
 import React, { useEffect } from "react";
 import { Appearance } from "react-native";
 import { Stack } from "expo-router/stack";
-import { router, usePathname, useRouter } from "expo-router";
+import { usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
@@ -21,7 +21,6 @@ import { queryClient, setupQueryPersistence } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { setPendingPostSignInRedirect } from "@/lib/auth-redirect-handoff";
 import { getCanonicalInAppRoute } from "@/lib/canonical-links";
-import { getTabLabel, getTabRootHref, withNavigationContext } from "@/lib/mobile-navigation";
 import { startNativeCallIntegration } from "@/lib/voice/native-call";
 import { buildWebUrl, WEB_BASE_URL, WEB_HOSTNAME } from "@/lib/constants";
 import { NotificationStreamProvider } from "@/providers/notification-stream-provider";
@@ -160,23 +159,13 @@ function NativeCallIntegration() {
   // answer event until a listener exists.
   useEffect(() => {
     if (auth.isLoading) return;
+    // Navigation is deliberately not wired here. A call answered from the lock screen
+    // leaves the app on whatever screen it was last on, but the answer event flushes
+    // from the native queue as soon as these listeners exist — before the authenticated
+    // layout is mounted — so a route pushed from the callback is lost. The layout picks
+    // the call up from `useNativeCallPresentation` instead.
     return startNativeCallIntegration({
       getSession: () => ({ isAuthenticated: isAuthenticated.current }),
-      // A call answered from the lock screen leaves the app on whatever screen it was
-      // last on. Opening the conversation behind the system call UI is what makes the
-      // in-app call bar, the participants and the transcript reachable once the user
-      // unlocks. The imperative router is used rather than the hook because this runs
-      // from a system callback, not from a render.
-      onAnswered: (_serverCallId, channelId) => {
-        if (!channelId) return;
-        router.push(
-          withNavigationContext(`/(app)/(chat)/${channelId}`, {
-            ownerTab: "chat",
-            fallbackHref: getTabRootHref("chat"),
-            backLabel: getTabLabel("chat"),
-          }) as never,
-        );
-      },
     });
   }, [auth.isLoading]);
 
