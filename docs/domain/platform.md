@@ -208,9 +208,16 @@ dashboards and alerting, fed by a single OpenTelemetry collector that scrapes
 node-exporter, cAdvisor, postgres_exporter and Traefik and pushes over OTLP. It replaced
 a Prometheus + Grafana + Alertmanager trio. The alert set lives in
 `deploy/config/openobserve/alerts.json` and is posted to OpenObserve's API by
-`deploy/scripts/provision-openobserve.sh`; the backend itself still exposes no
-Prometheus metrics, so those alerts are infrastructure-level plus Traefik's per-service
-5xx rate.
+`deploy/scripts/provision-openobserve.sh`; the only application metrics are the
+`pgxpool` statistics each backend replica serves on `:18090/metrics`, so the rest of the
+alert set is infrastructure-level plus Traefik's per-service 5xx rate.
+
+`ConnectionPoolSaturated` watches the mean time an acquisition waits for a connection,
+not the share of acquisitions that waited at all. The share is a ratio with no latency
+floor: the `flow` pool has two usable connections and every registered workflow scans all
+`FLOW_SHARD_COUNT` shards with one transaction each on every wake-up, so a few percent of
+its acquisitions queue for microseconds on a completely idle fleet, which is not an
+incident.
 
 Its UI is published nowhere — not through Traefik, and not as a host port. Swarm's
 host-mode publishing cannot bind to a single interface, so a published port would be on
@@ -227,9 +234,12 @@ cannot be created. The request body is provider-specific and lives in
 `OBSERVE_ALERT_TEMPLATE_BODY`, defaulting to the Slack/Google Chat `{"text": …}` shape;
 Discord wants `content`, and Telegram needs `chat_id` in the body with the bot token in
 the URL. That value must be single-quoted in `deploy/.env`, which bash sources — unquoted
-double quotes are stripped and the endpoint then silently rejects every alert. Both the
-template and the destination are upserted, so an edited webhook or body takes effect on
-the next run.
+double quotes are stripped and the endpoint then silently rejects every alert. The
+alerts, the template and the destination are all upserted by name, so an edited
+definition, webhook or body takes effect on the next run. The alerts have to be looked up
+and PUT over explicitly: OpenObserve's v2 API accepts a second alert with a name it
+already holds, so a plain POST on every deploy accumulated copies that each paged
+separately.
 
 **Images** are published to `ghcr.io/nvcnvn/` by `.github/workflows/publish-images.yml`:
 `tech-office-backend` and `tech-office-backend-migrate` for both architectures,

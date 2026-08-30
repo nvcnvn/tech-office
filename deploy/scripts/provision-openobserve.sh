@@ -3,8 +3,8 @@
 #
 #   deploy/scripts/provision-openobserve.sh
 #
-# Idempotent-ish: OpenObserve rejects a duplicate name, which this reports as
-# "exists" rather than an error. Everything it posts is also in
+# Idempotent: alerts, the template and the destination are all upserted by name, so
+# an edited definition takes effect on the next run. Everything it posts is also in
 # deploy/config/openobserve/alerts.json, so if the API shape ever moves under us you
 # can paste that file straight into the UI's alert import box instead.
 set -euo pipefail
@@ -118,14 +118,46 @@ probe=$(status "$(: | oo GET "$ALERT_PATH")")
 [ "$probe" = "404" ] && ALERT_PATH="/api/${OBSERVE_ORG}/alerts"
 info "posting alerts to ${ALERT_PATH}"
 
+# Contrary to the "duplicate names are rejected" assumption this script was written
+# with, the v2 API happily creates a second alert with the same name: three deploys
+# had left four copies of every alert, each one paging separately, and an edited
+# definition in alerts.json never reached the ones already there. So look up what
+# exists by name and PUT over it, deleting any surplus copies. The v1 list has no
+# alert_id to address, so that path still just POSTs.
+existing_alerts() { # name<TAB>alert_id per line
+	local out
+	out=$(: | oo GET "$ALERT_PATH")
+	[ "$(status "$out")" = "200" ] || return 0
+	if command -v jq >/dev/null; then
+		body "$out" | jq -r '.list[]? | "\(.name)\t\(.alert_id)"'
+	else
+		body "$out" | python3 -c 'import json,sys
+for a in json.load(sys.stdin).get("list", []):
+    print(a["name"] + "\t" + a["alert_id"])'
+	fi
+}
+EXISTING=$(existing_alerts)
+
 failed=0
 while IFS= read -r alert; do
 	name=$(sed -n 's/.*"name": *"\([^"]*\)".*/\1/p' <<<"$alert")
-	out=$(oo POST "$ALERT_PATH" <<<"$alert")
+	ids=$(awk -F'\t' -v n="$name" '$1 == n {print $2}' <<<"$EXISTING")
+	if [ -n "$ids" ]; then
+		out=$(oo PUT "${ALERT_PATH}/$(head -1 <<<"$ids")" <<<"$alert")
+		verb="updated"
+		dupes=0
+		for extra in $(tail -n +2 <<<"$ids"); do
+			: | oo DELETE "${ALERT_PATH}/${extra}" >/dev/null
+			dupes=$((dupes + 1))
+		done
+		[ "$dupes" -gt 0 ] && verb="updated (removed ${dupes} duplicate$([ "$dupes" -gt 1 ] && echo s))"
+	else
+		out=$(oo POST "$ALERT_PATH" <<<"$alert")
+		verb="created"
+	fi
 	code=$(status "$out")
 	case "$code" in
-		200|201) echo "  ok     ${name}" ;;
-		409) echo "  exists ${name}" ;;
+		200|201) echo "  ok     ${name} — ${verb}" ;;
 		*) echo "  FAIL   ${name} (HTTP ${code}): $(body "$out" | head -c 200)"; failed=1 ;;
 	esac
 done < <(split_alerts)

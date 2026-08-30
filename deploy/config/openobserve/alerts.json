@@ -76,14 +76,14 @@
   },
   {
     "name": "ConnectionPoolSaturated",
-    "description": "More than 5% of pgx acquisitions are waiting for a free connection — requests are queueing for the database. The `pool` label says which one. Either the pool ceiling and PG_MAX_CONNECTIONS need raising together, or a slow query is holding connections.",
+    "description": "A pgx acquisition is waiting more than 50ms on average for a free connection — requests are genuinely queueing for the database. The `pool` label says which one. Either the pool ceiling and PG_MAX_CONNECTIONS need raising together, or a slow query is holding connections. Measured as mean wait rather than the share of acquisitions that waited at all: the flow pool's poller waits microseconds on most of its acquisitions, which is not an incident.",
     "stream_type": "metrics",
-    "stream_name": "pgxpool_empty_acquire_count_total",
+    "stream_name": "pgxpool_acquire_duration_seconds_total",
     "is_real_time": false,
     "enabled": true,
     "query_condition": {
       "type": "promql",
-      "promql": "sum by (pool) (rate(pgxpool_empty_acquire_count_total[5m])) / sum by (pool) (rate(pgxpool_acquire_count_total[5m]))",
+      "promql": "sum by (pool) (rate(pgxpool_acquire_duration_seconds_total[5m])) / sum by (pool) (rate(pgxpool_acquire_count_total[5m]))",
       "promql_condition": {"column": "value", "operator": ">", "value": 0.05}
     },
     "trigger_condition": {"period": 10, "frequency": 5, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 60},

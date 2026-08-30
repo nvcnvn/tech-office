@@ -384,20 +384,30 @@ series per replica per pool, scraped through `tasks.backend` so every replica is
 The port is separate from the request port because Traefik routes all of `API_DOMAIN` to
 `:18080`; nothing on that mux is private.
 
-`pgxpool_empty_acquire_count_total` is the number worth watching. It counts acquisitions
-that had to wait for a connection to come back, which is the only honest answer to "are
-the pools too small" — the ceiling itself tells you nothing.
+Mean acquire wait is the number worth watching — how long a caller actually spends
+waiting for a connection, which is the only honest answer to "are the pools too small".
+The ceiling itself tells you nothing.
 
 ```promql
-sum by (pool) (rate(pgxpool_empty_acquire_count_total[5m]))
+sum by (pool) (rate(pgxpool_acquire_duration_seconds_total[5m]))
   / sum by (pool) (rate(pgxpool_acquire_count_total[5m]))
 ```
 
-Flat at zero means the pools are not the constraint at any size. `ConnectionPoolSaturated`
-fires when it holds above 5% for ten minutes. When it does, check whether Postgres is
-actually busy first (`pg_stat_activity` by state): a pool that is empty because queries
-are slow is not fixed by making the pool bigger — that just moves the queue into Postgres,
-where each waiting connection costs a process.
+`ConnectionPoolSaturated` fires when that holds above 50 ms for ten minutes. When it does,
+check whether Postgres is actually busy first (`pg_stat_activity` by state): a pool that is
+empty because queries are slow is not fixed by making the pool bigger — that just moves the
+queue into Postgres, where each waiting connection costs a process.
+
+The obvious alternative — `pgxpool_empty_acquire_count_total` over
+`pgxpool_acquire_count_total`, the share of acquisitions that had to wait at all — was what
+this alert used first, and it pages on nothing. The `flow` pool has three connections, one
+held permanently by the flows library's `LISTEN` loop, and every registered workflow scans
+all `FLOW_SHARD_COUNT` shards with one transaction per shard on each wake-up. Five
+workflows against 32 shards is 160 acquisitions per round through two usable connections,
+so a few percent of them queue — for microseconds. That ratio crossed 5% on an otherwise
+idle fleet while the total time spent waiting was a third of a second across 88,000
+acquisitions. A ratio with no latency floor cannot tell a busy pool from a chatty poller;
+the mean wait can.
 
 Beyond the pools the application exposes no metrics, so the remaining alerts are
 infrastructure-level. Application error rates come from Traefik's per-service 5xx.
