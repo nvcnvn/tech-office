@@ -263,7 +263,7 @@ func (l *pdfLogic) IsConvertible(mimeType string) bool {
 
 // GetPDFDownloadUrl generates a presigned URL for downloading the converted PDF
 func (l *pdfLogic) GetPDFDownloadUrl(ctx context.Context, storageKey string) (string, error) {
-	url, _, err := l.r2Client.GeneratePresignedDownloadURL(ctx, storageKey, 1*time.Hour)
+	url, _, err := l.r2Client.GenerateDownloadURL(ctx, storageKey, 1*time.Hour)
 	if err != nil {
 		return "", err
 	}

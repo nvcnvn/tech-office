@@ -41,6 +41,7 @@ type Config struct {
 	R2BucketName        string
 	R2Endpoint          string
 	R2PublicURL         string
+	R2PublicHMACSecret  string
 	SESFromEmail        string
 	SESReplyToEmail     string
 	SESConfigurationSet string
@@ -92,6 +93,7 @@ func load() *Config {
 		R2BucketName:         getEnv("R2_BUCKET_NAME", ""),
 		R2Endpoint:           getEnv("R2_ENDPOINT", ""),
 		R2PublicURL:          getEnv("R2_PUBLIC_URL", ""),
+		R2PublicHMACSecret:   getEnv("R2_PUBLIC_URL_HMAC_SECRET", ""),
 		SESFromEmail:         getEnv("SES_FROM_EMAIL", ""),
 		SESReplyToEmail:      getEnv("SES_REPLY_TO_EMAIL", ""),
 		SESConfigurationSet:  getEnv("SES_CONFIGURATION_SET", ""),

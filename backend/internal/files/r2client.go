@@ -3,10 +3,15 @@ package files
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -23,7 +28,15 @@ type R2Config struct {
 	SecretAccessKey string
 	BucketName      string
 	Endpoint        string
-	PublicURL       string
+	// PublicURL is the custom domain bound to the bucket (e.g.
+	// https://transformar.file.devguards.com). When set, downloads are served from it
+	// instead of presigned S3-endpoint URLs — R2 presigned URLs only work against
+	// the S3 API host, so the custom domain is protected by a Cloudflare WAF
+	// token-auth rule instead. Requires PublicHMACSecret.
+	PublicURL string
+	// PublicHMACSecret is the shared secret of that WAF rule's
+	// is_timed_hmac_valid_v0() call.
+	PublicHMACSecret string
 }
 
 // R2Client handles interactions with Cloudflare R2 storage
@@ -32,6 +45,7 @@ type R2Client struct {
 	presignClient *s3.PresignClient
 	bucketName    string
 	publicURL     string
+	hmacSecret    string
 }
 
 func validateR2Config(cfg R2Config) error {
@@ -48,6 +62,10 @@ func validateR2Config(cfg R2Config) error {
 	}
 	if strings.TrimSpace(cfg.Endpoint) == "" {
 		missingFields = append(missingFields, "R2_ENDPOINT")
+	}
+
+	if strings.TrimSpace(cfg.PublicURL) != "" && strings.TrimSpace(cfg.PublicHMACSecret) == "" {
+		missingFields = append(missingFields, "R2_PUBLIC_URL_HMAC_SECRET")
 	}
 
 	if len(missingFields) > 0 {
@@ -106,7 +124,8 @@ func NewR2Client(cfg R2Config) (*R2Client, error) {
 		client:        s3Client,
 		presignClient: presignClient,
 		bucketName:    cfg.BucketName,
-		publicURL:     cfg.PublicURL,
+		publicURL:     strings.TrimRight(cfg.PublicURL, "/"),
+		hmacSecret:    cfg.PublicHMACSecret,
 	}, nil
 }
 
@@ -142,11 +161,24 @@ func (r *R2Client) GeneratePresignedUploadURL(ctx context.Context, storageKey st
 	return presignedReq.URL, expiresAt, nil
 }
 
-// GeneratePresignedDownloadURL generates a presigned GET URL for file download
-func (r *R2Client) GeneratePresignedDownloadURL(ctx context.Context, storageKey string, expiresIn time.Duration) (string, time.Time, error) {
-	slog.DebugContext(ctx, "R2Client.GeneratePresignedDownloadURL",
+// GenerateDownloadURL returns a time-limited download URL for a stored object.
+//
+// With a custom domain configured it is a Cloudflare token-auth URL
+// (https://<domain>/<key>?verify=<ts>-<mac>), validated at the edge by a WAF rule
+// whose token_lifetime_seconds must match expiresIn; otherwise it is a presigned
+// URL against the R2 S3 endpoint.
+func (r *R2Client) GenerateDownloadURL(ctx context.Context, storageKey string, expiresIn time.Duration) (string, time.Time, error) {
+	slog.DebugContext(ctx, "R2Client.GenerateDownloadURL",
 		"storage_key", storageKey,
 		"expires_in", expiresIn)
+
+	if r.publicURL != "" {
+		downloadURL, expiresAt := r.signedPublicURL(storageKey, expiresIn)
+		slog.InfoContext(ctx, "generated signed public download URL",
+			"storage_key", storageKey,
+			"expires_at", expiresAt)
+		return downloadURL, expiresAt, nil
+	}
 
 	getObjectInput := &s3.GetObjectInput{
 		Bucket: aws.String(r.bucketName),
@@ -170,6 +202,23 @@ func (r *R2Client) GeneratePresignedDownloadURL(ctx context.Context, storageKey 
 		"expires_at", expiresAt)
 
 	return presignedReq.URL, expiresAt, nil
+}
+
+// signedPublicURL builds a Cloudflare token-auth URL: the MAC is
+// base64(HMAC-SHA256(secret, path+timestamp)), and the edge rule
+// is_timed_hmac_valid_v0(secret, http.request.uri, <lifetime>, http.request.timestamp.sec, 8)
+// recomputes it — 8 being len("?verify=").
+func (r *R2Client) signedPublicURL(storageKey string, expiresIn time.Duration) (string, time.Time) {
+	issuedAt := time.Now()
+	path := "/" + strings.TrimLeft(storageKey, "/")
+	timestamp := strconv.FormatInt(issuedAt.Unix(), 10)
+
+	mac := hmac.New(sha256.New, []byte(r.hmacSecret))
+	mac.Write([]byte(path + timestamp))
+	token := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+
+	return fmt.Sprintf("%s%s?verify=%s-%s", r.publicURL, path, timestamp, url.QueryEscape(token)),
+		issuedAt.Add(expiresIn)
 }
 
 // DeleteObject deletes a file from R2 bucket

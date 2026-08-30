@@ -451,7 +451,9 @@ Two or more machines need `REGISTRY` set, or every node except the builder fails
 | Symptom | Cause |
 |---|---|
 | `deploy.sh` stops after `docker stack deploy did not converge` | The task list it prints names the service; usually a published port already bound on that node, or an image no node can pull. Raise the cap with `DEPLOY_TIMEOUT=1800` if the fleet is merely slow |
-| Backend crash-loops with `failed to create R2 client` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_ENDPOINT` are empty in `deploy/.env` |
+| Backend crash-loops with `failed to create R2 client` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_ENDPOINT` are empty in `deploy/.env` (or `R2_PUBLIC_URL` is set without `R2_PUBLIC_URL_HMAC_SECRET`) |
+| Browser upload fails with `No 'Access-Control-Allow-Origin' header` on the presigned PUT | The R2 bucket has no CORS policy for `WEB_DOMAIN`; set one in the Cloudflare dashboard (R2 → bucket → Settings → CORS Policy), `GET`/`PUT`/`HEAD` |
+| Downloads 403 from the file domain | The Cloudflare WAF rule's secret or `token_lifetime_seconds` disagrees with `R2_PUBLIC_URL_HMAC_SECRET` / the backend's one-hour signature; see the `R2_PUBLIC_URL` block in `.env.example` |
 | Tasks stuck in `Pending` | No node carries the label that service places on — `docker node inspect <node> --format '{{.Spec.Labels}}'` |
 | `no such image` on some nodes | `REGISTRY` unset on a multi-node fleet |
 | LiveKit exits with `could not resolve external IP` | STUN discovery could not complete. Common cause: the host resolves `stun.l.google.com` to IPv6 only while the container is on an IPv4-only overlay network. Set `LIVEKIT_NODE_IP` to the voice node's public address, which pins `node_ip` and skips discovery |

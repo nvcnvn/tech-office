@@ -100,6 +100,9 @@ gen_into_env() {
 gen_into_env POSTGRES_PASSWORD
 gen_into_env LIVEKIT_API_SECRET
 gen_into_env BACKUP_CIPHER_PASS
+# Only used when R2_PUBLIC_URL is set; generated up front so the value already exists
+# to paste into the Cloudflare WAF token-auth rule.
+gen_into_env R2_PUBLIC_URL_HMAC_SECRET
 # OpenObserve rejects a password without lower, upper, digit and a special char.
 gen_into_env OBSERVE_ROOT_PASSWORD 'aA1!'
 load_env

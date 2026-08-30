@@ -274,12 +274,13 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 
 	// Create R2 client
 	r2Config := files.R2Config{
-		AccountID:       cfg.R2AccountID,
-		AccessKeyID:     cfg.R2AccessKeyID,
-		SecretAccessKey: cfg.R2SecretAccessKey,
-		BucketName:      cfg.R2BucketName,
-		Endpoint:        cfg.R2Endpoint,
-		PublicURL:       cfg.R2PublicURL,
+		AccountID:        cfg.R2AccountID,
+		AccessKeyID:      cfg.R2AccessKeyID,
+		SecretAccessKey:  cfg.R2SecretAccessKey,
+		BucketName:       cfg.R2BucketName,
+		Endpoint:         cfg.R2Endpoint,
+		PublicURL:        cfg.R2PublicURL,
+		PublicHMACSecret: cfg.R2PublicHMACSecret,
 	}
 	r2Client, err := files.NewR2Client(r2Config)
 	if err != nil {

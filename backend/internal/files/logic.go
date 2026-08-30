@@ -817,7 +817,7 @@ func (l *fileLogic) GetDownloadUrl(ctx context.Context, tx database.DBTX, params
 	}
 
 	// Generate URL
-	downloadURL, expiresAt, err := l.r2Client.GeneratePresignedDownloadURL(ctx, file.StorageKey, 1*time.Hour)
+	downloadURL, expiresAt, err := l.r2Client.GenerateDownloadURL(ctx, file.StorageKey, 1*time.Hour)
 	if err != nil {
 		return nil, err
 	}

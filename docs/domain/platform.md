@@ -170,6 +170,7 @@ than just endpoints:
 | `GOOGLE_APPLICATION_CREDENTIALS` | FCM client not built — **push notifications silently disabled** |
 | `APNS_VOIP_*` | APNs VoIP client not built — iOS calls fall back to the alert ring instead of presenting as system calls. A *partially* set credential fails startup rather than degrading, because that is a deployment mistake and not an opt-out. See `backend/docs/APNS-VOIP-SETUP.md`. |
 | `R2_*` | file storage unavailable |
+| `R2_PUBLIC_URL` | downloads are presigned URLs against the R2 S3 endpoint instead of the custom file domain (`transformar.file.devguards.com`); set, it also requires `R2_PUBLIC_URL_HMAC_SECRET` and a matching Cloudflare WAF token-auth rule — see [files.md](files.md#serving) |
 | `LIVEKIT_*` | voice falls back to dev defaults (`ws://localhost:7880`, `devkey`) |
 | `SES_*` | email sender logs instead of sending |
 
@@ -211,6 +212,25 @@ a Prometheus + Grafana + Alertmanager trio. The alert set lives in
 Prometheus metrics, so those alerts are infrastructure-level plus Traefik's per-service
 5xx rate.
 
+Its UI is published nowhere — not through Traefik, and not as a host port. Swarm's
+host-mode publishing cannot bind to a single interface, so a published port would be on
+every interface with one shared root credential in front of it. Reaching it means an SSH
+tunnel whose remote end is a throwaway `socat` container joined to
+`techoffice_internal`, which is declared `attachable` precisely so a plain `docker run`
+can join the overlay and bind to loopback only. `deploy/README.md` carries the command.
+
+**Alerting requires a notification destination.** OpenObserve rejects an alert that has
+none, so `OBSERVE_ALERT_WEBHOOK_URL` is required whenever the `observability` profile is
+enabled — there is no "alerts appear in the UI only" mode, and leaving it empty means no
+alerting at all. `provision-openobserve.sh` fails fast rather than posting alerts that
+cannot be created. The request body is provider-specific and lives in
+`OBSERVE_ALERT_TEMPLATE_BODY`, defaulting to the Slack/Google Chat `{"text": …}` shape;
+Discord wants `content`, and Telegram needs `chat_id` in the body with the bot token in
+the URL. That value must be single-quoted in `deploy/.env`, which bash sources — unquoted
+double quotes are stripped and the endpoint then silently rejects every alert. Both the
+template and the destination are upserted, so an edited webhook or body takes effect on
+the next run.
+
 **Images** are published to `ghcr.io/nvcnvn/` by `.github/workflows/publish-images.yml`:
 `tech-office-backend` and `tech-office-backend-migrate` for both architectures,
 `tech-office-postgres` for both architectures too, now that no extension is built from
@@ -227,6 +247,32 @@ client-side. That combination is what makes point-in-time recovery possible;
 and asserts the schema, migration version and table contents came back, which is the
 only evidence that any of it works. There is deliberately no PostgreSQL failover —
 recovery is restore-from-object-storage.
+
+The backup service starts as **root** and drops to `postgres` itself via `gosu`. Docker
+creates a named volume owned by `root:root`, and both the pgBackRest lock directory and
+the node-exporter textfile directory are shared volumes that `postgres` must write to;
+without the fix every pgBackRest command fails with "unable to acquire lock", including
+`stanza-create`, and the visible symptom is `archive_command` failing with "archive.info
+… has a stanza-create been performed?" while WAL accumulates on disk. `backup-loop.sh`
+therefore repairs both volumes' ownership on start. Anything that `docker exec`s into
+that container — `backup-info.sh`, `backup-now.sh` — must pass `-u postgres`, since PID 1
+there is root and pgBackRest refuses to run as root.
+
+Two constraints bind the restore path. `--spool-path` must not be passed to `restore`:
+pgBackRest carries it into the `restore_command` it writes into `postgresql.auto.conf`,
+where `archive-get` rejects it as invalid without `archive-async`, failing recovery after
+the restore itself has already succeeded. And the cluster that replays the WAL needs both
+`pgbackrest.conf` mounted (its `restore_command` is `archive-get`, which cannot find the
+repository otherwise) and `max_connections`/`max_worker_processes` at least as large as
+the primary's, or recovery aborts with "insufficient parameter settings". Because
+`pgbackrest.conf` is mode 600 and owned by the operator while these containers run as
+uid 999, the scripts stage a 0644 copy inside a 0700 directory rather than bind-mounting
+the original.
+
+pgBackRest reports "error(s) detected during backup" on every backup of a database using
+pgroonga. Its `pgrn*` files are not PostgreSQL 8 KB pages, so the page-checksum
+validation is meaningless on them; the backup still exits 0 and restores correctly. The
+restore drill, not the warning, is the signal to trust.
 
 ## Schema and migrations
 
