@@ -446,6 +446,8 @@ Two or more machines need `REGISTRY` set, or every node except the builder fails
 | Backend crash-loops with `failed to create R2 client` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET_NAME` / `R2_ENDPOINT` are empty in `deploy/.env` |
 | Tasks stuck in `Pending` | No node carries the label that service places on — `docker node inspect <node> --format '{{.Spec.Labels}}'` |
 | `no such image` on some nodes | `REGISTRY` unset on a multi-node fleet |
+| LiveKit exits with `could not resolve external IP` | STUN discovery could not complete. Common cause: the host resolves `stun.l.google.com` to IPv6 only while the container is on an IPv4-only overlay network. Set `LIVEKIT_NODE_IP` to the voice node's public address, which pins `node_ip` and skips discovery |
+| OpenObserve crash-loops with `ZO_ROOT_USER_PASSWORD is too weak` | It requires lower, upper, digit and a special character. `bootstrap.sh` appends a suffix for this one; a hand-edited `OBSERVE_ROOT_PASSWORD` has to satisfy the policy itself |
 | Certificates never issue | Port 80 not reachable from the internet, or DNS not pointing at the edge node |
 | Calls connect but have no audio | `LIVEKIT_NODE_IP` / `use_external_ip` wrong, or 7882/udp closed |
 | `WALArchivingFailing` | Bucket credentials or endpoint wrong in `deploy/secrets/pgbackrest.conf` — re-run `bootstrap.sh` after fixing `.env` |

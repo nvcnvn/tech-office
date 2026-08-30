@@ -82,10 +82,14 @@ fi
 
 # Generated passwords are written back into .env so the operator can read them once
 # and store them properly.
+# The generated value is alphanumeric on purpose: POSTGRES_PASSWORD is interpolated
+# into DATABASE_URL, where a '/' or '+' would have to be percent-encoded. Services
+# that enforce a character-class policy get a fixed suffix in $2 instead — the
+# entropy is in the 40 random characters, not in the suffix.
 gen_into_env() {
-	local key="$1" value
+	local key="$1" suffix="${2:-}" value
 	if grep -qE "^${key}=[^[:space:]#]" "$DEPLOY_DIR/.env"; then return 0; fi
-	value="$(openssl rand -base64 36 | tr -d '/+=' | cut -c1-40)"
+	value="$(openssl rand -base64 36 | tr -d '/+=' | cut -c1-40)${suffix}"
 	if grep -qE "^${key}=" "$DEPLOY_DIR/.env"; then
 		sed -i.bak "s|^${key}=.*|${key}=${value}|" "$DEPLOY_DIR/.env" && rm -f "$DEPLOY_DIR/.env.bak"
 	else
@@ -96,7 +100,8 @@ gen_into_env() {
 gen_into_env POSTGRES_PASSWORD
 gen_into_env LIVEKIT_API_SECRET
 gen_into_env BACKUP_CIPHER_PASS
-gen_into_env OBSERVE_ROOT_PASSWORD
+# OpenObserve rejects a password without lower, upper, digit and a special char.
+gen_into_env OBSERVE_ROOT_PASSWORD 'aA1!'
 load_env
 
 # DATABASE_URL has to agree with the password that was just generated.
