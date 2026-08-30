@@ -12,7 +12,7 @@
  * High-contrast light theme with subtle borders and restrained styling.
  */
 
-import { Redirect, Tabs, useRouter } from "expo-router";
+import { Redirect, Tabs, usePathname, useRouter } from "expo-router";
 import React from "react";
 import { ActivityIndicator, View } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -90,6 +90,7 @@ export const unstable_settings = {
 export default function AppLayout() {
   const auth = React.use(AuthContext);
   const router = useRouter();
+  const pathname = usePathname();
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const {
@@ -258,9 +259,19 @@ export default function AppLayout() {
     return <Redirect href="/(auth)" />;
   }
 
+  // This bar exists to say "you left the call's conversation, tap to go back".
+  // On the call's own channel there is nothing to return to: the channel already
+  // carries its own call banner, and stacking the two under the OS call chip is
+  // three rows of the same call. Suffix match so it holds whether or not the
+  // router strips the (app)/(chat) group segments from the pathname.
+  const onActiveVoiceCallChannel = Boolean(
+    voiceSnapshot.activeChannelId &&
+      pathname.endsWith(`/${voiceSnapshot.activeChannelId}`),
+  );
   const showActiveVoiceCallBar = Boolean(
     voiceSnapshot.activeCallId &&
       voiceSnapshot.activeChannelId &&
+      !onActiveVoiceCallChannel &&
       voiceSnapshot.connectionState !== "idle" &&
       voiceSnapshot.connectionState !== "disconnected" &&
       voiceSnapshot.connectionState !== "disconnecting",

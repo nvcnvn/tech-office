@@ -42,23 +42,40 @@ tags:
       id: "channel-header-title"
     timeout: 8000
 
-# The in-call bar only exists while a call is live, so everything below is conditional.
-# A run with no call in progress passes vacuously rather than failing on a state it was
-# never given.
+# On the call's own conversation the in-call surface is the channel's call banner. The
+# global return bar is deliberately not drawn here — it exists to return you to this
+# screen, and stacking it above the banner and the OS call chip put three rows of the
+# same call on one screen. Assert that absence, so re-introducing the duplicate fails.
 - runFlow:
     when:
       visible:
-        id: "active-voice-call-bar"
+        id: "voice-call-banner"
     commands:
       - takeScreenshot: "tmp/maestro-screenshots/native-call-in-call-surface"
-      # The bar must offer a way out. A call the user can hear but cannot leave from the
-      # app is the in-app half of the orphan problem.
+      - assertNotVisible:
+          id: "active-voice-call-bar"
+      # The banner must offer a way out. A call the user can hear but cannot leave from
+      # the app is the in-app half of the orphan problem.
       - assertVisible:
-          id: "active-voice-call-leave-button"
+          id: "voice-call-leave-button"
       - tapOn:
-          id: "active-voice-call-leave-button"
-      # Ending the call must remove the surface, not leave a stale bar behind.
+          id: "voice-call-leave-button"
+      # Ending the call must remove the surface, not leave a stale banner behind.
       - extendedWaitUntil:
           notVisible:
+            id: "voice-call-banner"
+          timeout: 8000
+
+# And the return bar must still appear once the call's conversation is not the open
+# screen — that is the whole reason it exists.
+- runFlow:
+    when:
+      visible:
+        id: "voice-call-banner"
+    commands:
+      - tapOn:
+          text: "Chat"
+      - extendedWaitUntil:
+          visible:
             id: "active-voice-call-bar"
           timeout: 8000

@@ -7,6 +7,12 @@ import {
   View,
 } from "react-native";
 import { SFIcon } from "@/components/ui/sf-icon";
+import type {
+  MobileVoiceCallSummary,
+  VoiceCallAction,
+} from "@/hooks/channel-voice-call-state";
+
+export type { MobileVoiceCallSummary };
 import {
   border,
   lightPalette,
@@ -17,18 +23,17 @@ import {
   touch,
 } from "@tech-office/theme-tokens";
 
-export interface MobileVoiceCallSummary {
-  id: string;
-  state: "ringing" | "active" | "ending" | "ended";
-  participantCount: number;
-}
-
 interface VoiceCallBannerProps {
   call: MobileVoiceCallSummary | null;
   connectionState: string;
   connectionQuality: "unknown" | "good" | "degraded";
+  isMuted?: boolean;
   joined?: boolean;
-  loading?: boolean;
+  /**
+   * Which call action is in flight, or null. This was one boolean shared by five
+   * actions, so starting a call greyed out the leave button of a different one.
+   */
+  pending?: VoiceCallAction | null;
   error?: string | null;
   onStart: () => void;
   onJoin: () => void;
@@ -67,13 +72,18 @@ export function VoiceCallBanner({
   call,
   connectionState,
   connectionQuality,
+  isMuted = false,
   joined = false,
-  loading = false,
+  pending = null,
   error,
   onStart,
   onJoin,
   onLeave,
 }: VoiceCallBannerProps) {
+  // Any call action in flight blocks the others — firing two at once is what produced
+  // the contorted guards this replaces — but only the action actually running spins.
+  const busy = pending !== null;
+
   if (!call) {
     return (
       <View style={styles.startRow}>
@@ -85,16 +95,16 @@ export function VoiceCallBanner({
         <Pressable
           testID="voice-call-start-button"
           onPress={onStart}
-          disabled={loading}
+          disabled={busy}
           style={({ pressed }) => [
             styles.startButton,
             pressed && styles.pressed,
-            loading && styles.disabled,
+            busy && styles.disabled,
           ]}
           accessibilityRole="button"
           accessibilityLabel="Start voice call"
         >
-          {loading ? (
+          {pending === "starting" ? (
             <ActivityIndicator
               size="small"
               color={lightPalette.primary.contrastText}
@@ -138,6 +148,7 @@ export function VoiceCallBanner({
             {call.participantCount === 1 ? "" : "s"} ·{" "}
             {mediaConnected ? "Connected" : joined ? "Joining" : "Not joined"} ·{" "}
             {qualityText(connectionQuality)}
+            {isMuted && mediaConnected ? " · Muted" : ""}
           </Text>
         </View>
         {error ? (
@@ -151,35 +162,46 @@ export function VoiceCallBanner({
           <Pressable
             testID="voice-call-leave-button"
             onPress={onLeave}
-            disabled={loading && !joined}
+            disabled={busy}
             style={({ pressed }) => [
               styles.iconButton,
               pressed && styles.pressed,
-              loading && !joined && styles.disabled,
+              busy && styles.disabled,
             ]}
             accessibilityRole="button"
             accessibilityLabel="Leave voice call"
           >
-            <SFIcon
-              name="phone.down.fill"
-              size={18}
-              color={lightPalette.error.main}
-            />
+            {pending === "leaving" ? (
+              <ActivityIndicator size="small" color={lightPalette.error.main} />
+            ) : (
+              <SFIcon
+                name="phone.down.fill"
+                size={18}
+                color={lightPalette.error.main}
+              />
+            )}
           </Pressable>
         ) : (
           <Pressable
             testID="voice-call-join-button"
             onPress={onJoin}
-            disabled={loading}
+            disabled={busy}
             style={({ pressed }) => [
               styles.joinButton,
               pressed && styles.pressed,
-              loading && styles.disabled,
+              busy && styles.disabled,
             ]}
             accessibilityRole="button"
             accessibilityLabel="Join voice call"
           >
-            <Text style={styles.joinButtonText}>Join</Text>
+            {pending === "joining" ? (
+              <ActivityIndicator
+                size="small"
+                color={lightPalette.primary.contrastText}
+              />
+            ) : (
+              <Text style={styles.joinButtonText}>Join</Text>
+            )}
           </Pressable>
         )}
       </View>

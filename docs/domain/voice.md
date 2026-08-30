@@ -292,7 +292,45 @@ unanswered call it draws **no** call banner at all — neither the "voice call s
 Join / Later" discovery prompt nor the join affordance that prompt falls through to.
 Answering it opens the conversation behind the system UI, which is how the in-call bar and
 the transcript become reachable once the phone is unlocked; from that point the in-app
-banner is drawn again, because it is the surface that mutes, shows quality and leaves.
+banner is drawn again, because it is the surface that shows connection quality, reports
+mute state and leaves the call. Muting itself is only ever done from the OS call UI.
+
+**Only one in-app in-call surface is drawn at a time.** The global active-call bar above
+the tab navigator is a *return* affordance: it exists to say the call is still running on a
+screen you have navigated away from. It is therefore not drawn while the conversation the
+call belongs to is the open route — `_layout.tsx` compares the pathname against
+`voiceSnapshot.activeChannelId` — because on that screen there is nothing to return to and
+the channel already carries its own call banner. Stacking the two under the operating
+system's own call chip put three rows of the same call on one screen, which is what the
+person answering from the lock screen saw as soon as the conversation opened behind the
+system UI. The mute state the return bar reports travels with the suppression: the
+channel's call banner appends **Muted** to its status line while the media is connected, so
+the state set from the lock screen is still visible where the bar is not.
+
+**One owner for a conversation's call state.** `useChannelVoiceCall` in
+`apps/mobile/src/hooks/use-channel-voice-call.ts` holds every piece of it, and the pure
+reducer it runs on lives in `channel-voice-call-state.ts` so the guards can be exercised
+without a renderer (`npm run check:voice-state`). Three rules the channel screen used to
+leave implicit are now stated once:
+
+- **An ended call never comes back.** Terminal call ids accumulate in a bounded
+  `endedCallIds` list, and every write of a call checks it. The screen previously kept a
+  single ref holding one ended id, which a second call — or a terminal event carrying no
+  call id — silently defeated, so a `GetActiveVoiceCall` response issued before the call
+  ended and landing after it put the call controls back on screen until the next signal
+  removed them again.
+- **Only the newest server read wins.** Each read takes a ticket, and applies only while
+  it still holds the latest one; changing conversation or leaving the screen invalidates
+  every read in flight.
+- **The incoming call has one source**, the notification provider. The channel screen no
+  longer keeps a second copy from its own stream subscription.
+
+**Declining is an answer the caller hears.** In a direct conversation the in-app prompt
+offers Answer and Decline only, and Decline declines the invitation — or ends the call
+when there is no invitation to decline, the same rule `native-call.ts` applies to a
+hang-up from the system call UI. **Later** remains on group channels, where "that call can
+run without me" is a real answer and is local to the device; on a one-to-one call it left
+the caller ringing for the full timeout while the callee believed they had responded.
 
 **A call this device places or joins from inside the app is reported to the OS too.**
 Every in-app path that connects the media — placing a call, joining one already running,

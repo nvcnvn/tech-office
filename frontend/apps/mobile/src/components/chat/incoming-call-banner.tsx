@@ -1,6 +1,7 @@
 import React from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { SFIcon } from "@/components/ui/sf-icon";
+import type { VoiceCallAction } from "@/hooks/channel-voice-call-state";
 import {
   border,
   lightPalette,
@@ -8,12 +9,12 @@ import {
   opacity,
   radius,
   spacing,
-  touch,
 } from "@tech-office/theme-tokens";
 
 interface IncomingCallBannerProps {
   alreadyInAnotherCall?: boolean;
-  loading?: boolean;
+  /** Which call action is in flight, so only the button actually running spins. */
+  pending?: VoiceCallAction | null;
   /** Override the title shown in the banner (default: "Incoming voice call") */
   title?: string;
   /** Override the subtitle / description text */
@@ -28,7 +29,7 @@ interface IncomingCallBannerProps {
 
 export function IncomingCallBanner({
   alreadyInAnotherCall = false,
-  loading = false,
+  pending = null,
   title,
   description,
   acceptLabel,
@@ -36,6 +37,7 @@ export function IncomingCallBanner({
   onAccept,
   onDecline,
 }: IncomingCallBannerProps) {
+  const busy = pending !== null;
   const resolvedTitle = title ?? "Incoming voice call";
 
   const resolvedDescription =
@@ -66,22 +68,26 @@ export function IncomingCallBanner({
         <Pressable
           testID="incoming-voice-decline-button"
           onPress={onDecline}
-          disabled={loading}
+          disabled={busy}
           accessibilityRole="button"
           accessibilityLabel={alreadyInAnotherCall ? "Stay in current call" : resolvedDeclineLabel}
-          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed, loading && styles.disabled]}
+          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed, busy && styles.disabled]}
         >
-          <Text style={styles.secondaryText}>{resolvedDeclineLabel}</Text>
+          {pending === "declining" ? (
+            <ActivityIndicator size="small" color={lightPalette.text.secondary} />
+          ) : (
+            <Text style={styles.secondaryText}>{resolvedDeclineLabel}</Text>
+          )}
         </Pressable>
         <Pressable
           testID="incoming-voice-accept-button"
           onPress={onAccept}
-          disabled={loading}
+          disabled={busy}
           accessibilityRole="button"
           accessibilityLabel={alreadyInAnotherCall ? "Switch to incoming call" : resolvedAcceptLabel}
-          style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, loading && styles.disabled]}
+          style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, busy && styles.disabled]}
         >
-          {loading ? (
+          {pending === "answering" || pending === "joining" ? (
             <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
           ) : (
             <Text style={styles.primaryText}>{resolvedAcceptLabel}</Text>

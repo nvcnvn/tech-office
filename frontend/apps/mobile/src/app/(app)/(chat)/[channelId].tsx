@@ -65,16 +65,7 @@ import {
   getChannel,
   markChannelAsRead,
   getProfile,
-  getActiveVoiceCall,
-  startVoiceCall,
-  voiceCallErrorMessage,
-  joinVoiceCall,
-  leaveVoiceCall,
-  respondToVoiceCallInvite,
-  voiceCallStateToString,
   type LinkedResource,
-  type VoiceCallSession,
-  type VoiceJoinCredentials,
   listBlockedPeople,
 } from "apis";
 import { useAuth } from "@/hooks/use-auth";
@@ -85,10 +76,7 @@ import { API_BASE_URL } from "@/lib/constants";
 import { isSameDay } from "date-fns";
 import { ChatMessageBody } from "@/components/chat/chat-message-body";
 import { TaskDiscussionContext } from "@/components/chat/task-discussion-context";
-import {
-  VoiceCallBanner,
-  type MobileVoiceCallSummary,
-} from "@/components/chat/voice-call-banner";
+import { VoiceCallBanner } from "@/components/chat/voice-call-banner";
 import { IncomingCallBanner } from "@/components/chat/incoming-call-banner";
 import { VoiceMessageRecorder } from "@/components/chat/voice-message-recorder";
 import { SFIcon } from "@/components/ui/sf-icon";
@@ -96,17 +84,10 @@ import * as Haptics from "expo-haptics";
 import { useWindowDimensions } from "react-native";
 import { useManualRefresh } from "@/hooks/use-manual-refresh";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
+import { useChannelVoiceCall } from "@/hooks/use-channel-voice-call";
 import { formatMessageTime } from "@/lib/date-utils";
 import { parseChatStreamEvent } from "@/lib/chat-stream-events";
-import {
-  voiceClient,
-  type VoiceClientSnapshot,
-} from "@/lib/voice/voice-client";
-import {
-  isNativeCallTierCapable,
-  connectCallWithNativePresentation,
-  useNativeCallPresented,
-} from "@/lib/voice/native-call";
+import { useNativeCallPresented } from "@/lib/voice/native-call";
 import {
   parseNavigationContext,
   resolveNavigationBackHref,
@@ -212,64 +193,6 @@ interface ChannelSummary {
 interface GetChannelResponseShape {
   channel?: ChannelSummary;
   linkedResource?: LinkedResource;
-}
-
-interface IncomingVoiceCallInvite {
-  channelId: string;
-  callId: string;
-  invitationId?: string;
-  alreadyInAnotherCall?: boolean;
-  participantCount?: number;
-  state?: string;
-}
-
-function streamStateToMobileVoiceState(state?: string): MobileVoiceCallSummary["state"] {
-  switch (state) {
-    case "active":
-    case "VOICE_CALL_STATE_ACTIVE":
-      return "active";
-    case "ending":
-    case "VOICE_CALL_STATE_ENDING":
-      return "ending";
-    case "ended":
-    case "VOICE_CALL_STATE_ENDED":
-      return "ended";
-    default:
-      return "ringing";
-  }
-}
-
-function toMobileVoiceCall(
-  call: VoiceCallSession | undefined | null,
-): MobileVoiceCallSummary | null {
-  if (!call?.id) return null;
-  return {
-    id: call.id,
-    state: voiceCallStateToString(call.state),
-    participantCount: call.participants?.length ?? 0,
-  };
-}
-
-function toMobileJoinCredentials(
-  credentials: VoiceJoinCredentials | undefined | null,
-  activeCallId?: string,
-  activeChannelId?: string,
-) {
-  if (!credentials?.livekitToken || !credentials.roomName) return null;
-  return {
-    livekitUrl: credentials.livekitUrl,
-    livekitToken: credentials.livekitToken,
-    roomName: credentials.roomName,
-    activeCallId,
-    activeChannelId,
-    expiresAt: credentials.expiresAt
-      ? protoToDate(credentials.expiresAt)?.toISOString()
-      : undefined,
-  };
-}
-
-function mobileVoiceErrorMessage(error: unknown, fallback: string): string {
-  return voiceCallErrorMessage(error, fallback);
 }
 
 // ── Reaction Picker ────────────────────────────────────────────────────────
@@ -825,110 +748,9 @@ export default function ChannelScreen() {
   const flatListRef = useRef<FlatList>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
-  const [activeVoiceCall, setActiveVoiceCall] =
-    useState<MobileVoiceCallSummary | null>(null);
-  const [joinedVoiceCallId, setJoinedVoiceCallId] = useState<string | null>(null);
-  const [incomingVoiceCall, setIncomingVoiceCall] =
-    useState<IncomingVoiceCallInvite | null>(null);
-  // When the user taps "Later" on the channel-call discovery banner we remember
-  // the call ID so we don't re-show the prominent prompt for the same call.
-  const [dismissedCallId, setDismissedCallId] = useState<string | null>(null);
-  const [voiceLoading, setVoiceLoading] = useState(false);
-  const [voiceError, setVoiceError] = useState<string | null>(null);
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticMessage[]
   >([]);
-  const [voiceSnapshot, setVoiceSnapshot] = useState<VoiceClientSnapshot>(() =>
-    voiceClient.getSnapshot(),
-  );
-  // The last call we know has ended. GetActiveVoiceCall answers "was there a call
-  // when this request was issued", so a refresh kicked off by an earlier signal
-  // lands after the terminal event and reports the call as still active. Without
-  // this it puts the call back, and nothing later takes it away: no further event
-  // is coming for a call that is already over.
-  const endedVoiceCallIdRef = useRef<string | null>(null);
-
-  // Every call loaded from the server lands here rather than in setActiveVoiceCall
-  // directly, so one stale response cannot resurrect an ended call.
-  const applyLoadedVoiceCall = useCallback(
-    (nextCall: MobileVoiceCallSummary | null) => {
-      if (
-        nextCall &&
-        (nextCall.state === "ended" ||
-          nextCall.id === endedVoiceCallIdRef.current)
-      ) {
-        setActiveVoiceCall(null);
-        return;
-      }
-      setActiveVoiceCall(nextCall);
-    },
-    [],
-  );
-
-  useEffect(() => voiceClient.subscribe(setVoiceSnapshot), []);
-
-  // React to disconnects from the VoiceClient. VoiceClient only records an error
-  // for disconnects that are genuine failures, so a network drop leaves the
-  // backend holding a stale participant and needs the leave API. A clean drop is
-  // the server having deleted the LiveKit room because the call ended - the one
-  // terminal signal that survives a missed live-only voice_call_ended event - so
-  // re-read the call either way rather than assuming it is over: in a channel
-  // call the room can drop just this participant.
-  useEffect(() => {
-    if (voiceSnapshot.connectionState !== "disconnected" || !joinedVoiceCallId) {
-      return;
-    }
-    const callId = joinedVoiceCallId;
-    setJoinedVoiceCallId(null);
-    if (voiceSnapshot.error) {
-      setVoiceError(voiceSnapshot.error);
-      void leaveVoiceCall(callId).catch(() => undefined);
-    }
-    if (channelId) {
-      void getActiveVoiceCall(channelId)
-        .then((response) => {
-          applyLoadedVoiceCall(
-            response.hasActiveCall ? toMobileVoiceCall(response.call) : null,
-          );
-        })
-        .catch(() => undefined);
-    }
-  }, [
-    applyLoadedVoiceCall,
-    channelId,
-    joinedVoiceCallId,
-    voiceSnapshot.connectionState,
-    voiceSnapshot.error,
-  ]);
-
-  useEffect(() => {
-    if (!channelId) {
-      setActiveVoiceCall(null);
-      return;
-    }
-
-    let cancelled = false;
-    getActiveVoiceCall(channelId)
-      .then((response) => {
-        if (!cancelled) {
-          applyLoadedVoiceCall(
-            response.hasActiveCall ? toMobileVoiceCall(response.call) : null,
-          );
-          setVoiceError(null);
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setVoiceError(
-            mobileVoiceErrorMessage(error, "Unable to load active voice call."),
-          );
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [applyLoadedVoiceCall, channelId]);
 
   const { data: channelData } = useQuery({
     queryKey: ["channel", channelId],
@@ -946,173 +768,26 @@ export default function ChannelScreen() {
     channelId ||
     "Voice call";
 
-  const handleStartVoiceCall = useCallback(async () => {
-    if (!channelId || voiceLoading) return;
-    setVoiceLoading(true);
-    setVoiceError(null);
-    try {
-      endedVoiceCallIdRef.current = null;
-      const response = await startVoiceCall({ channelId });
-      const nextCall = toMobileVoiceCall(response.call);
-      setActiveVoiceCall(nextCall);
-      setJoinedVoiceCallId(nextCall?.id ?? null);
-      const credentials = toMobileJoinCredentials(
-        response.joinCredentials,
-        nextCall?.id,
-        channelId,
-      );
-      if (credentials) {
-        await connectCallWithNativePresentation(credentials, {
-          id: channelId,
-          displayName: channelTitle,
-        });
-      }
-    } catch (error) {
-      setVoiceError(
-        mobileVoiceErrorMessage(error, "Unable to start voice call."),
-      );
-    } finally {
-      setVoiceLoading(false);
-    }
-  }, [channelId, channelTitle, voiceLoading]);
-
-  const handleJoinVoiceCall = useCallback(async () => {
-    if (!activeVoiceCall || voiceLoading) return;
-    setVoiceLoading(true);
-    setVoiceError(null);
-    try {
-      const response = await joinVoiceCall(activeVoiceCall.id);
-      const nextCall = toMobileVoiceCall(response.call);
-      setActiveVoiceCall(nextCall);
-      setJoinedVoiceCallId(nextCall?.id ?? activeVoiceCall.id);
-      const credentials = toMobileJoinCredentials(
-        response.joinCredentials,
-        nextCall?.id ?? activeVoiceCall.id,
-        channelId,
-      );
-      if (credentials) {
-        await connectCallWithNativePresentation(credentials, {
-          id: channelId ?? activeVoiceCall.id,
-          displayName: channelTitle,
-        });
-      }
-    } catch (error) {
-      setVoiceError(
-        mobileVoiceErrorMessage(error, "Unable to join voice call."),
-      );
-    } finally {
-      setVoiceLoading(false);
-    }
-  }, [activeVoiceCall, channelId, channelTitle, voiceLoading]);
-
-  const handleAcceptIncomingVoiceCall = useCallback(async () => {
-    if (!incomingVoiceCall || voiceLoading) return;
-    setVoiceLoading(true);
-    setVoiceError(null);
-    try {
-      let credentials = null;
-      if (incomingVoiceCall.invitationId) {
-        const response = await respondToVoiceCallInvite({
-          invitationId: incomingVoiceCall.invitationId,
-          response: "accept",
-        });
-        credentials = toMobileJoinCredentials(
-          response.joinCredentials,
-          incomingVoiceCall.callId,
-          incomingVoiceCall.channelId,
-        );
-        setActiveVoiceCall({
-          id: incomingVoiceCall.callId,
-          state: streamStateToMobileVoiceState(incomingVoiceCall.state),
-          participantCount: incomingVoiceCall.participantCount ?? 1,
-        });
-        setJoinedVoiceCallId(incomingVoiceCall.callId);
-      } else {
-        const response = await joinVoiceCall(incomingVoiceCall.callId);
-        const nextCall = toMobileVoiceCall(response.call);
-        setActiveVoiceCall(nextCall);
-        setJoinedVoiceCallId(nextCall?.id ?? incomingVoiceCall.callId);
-        credentials = toMobileJoinCredentials(
-          response.joinCredentials,
-          nextCall?.id ?? incomingVoiceCall.callId,
-          incomingVoiceCall.channelId,
-        );
-      }
-      if (credentials) {
-        await voiceClient.disconnect();
-        await connectCallWithNativePresentation(credentials, {
-          id: incomingVoiceCall.channelId,
-          displayName: channelTitle,
-        });
-      }
-      setIncomingVoiceCall(null);
-    } catch (error) {
-      setVoiceError(
-        mobileVoiceErrorMessage(error, "Unable to answer voice call."),
-      );
-    } finally {
-      setVoiceLoading(false);
-    }
-  }, [channelTitle, incomingVoiceCall, voiceLoading]);
-
-  const handleDeclineIncomingVoiceCall = useCallback(async () => {
-    if (!incomingVoiceCall || voiceLoading) return;
-    setVoiceLoading(true);
-    setVoiceError(null);
-    try {
-      if (incomingVoiceCall.invitationId) {
-        await respondToVoiceCallInvite({
-          invitationId: incomingVoiceCall.invitationId,
-          response: "decline",
-        });
-      }
-      setIncomingVoiceCall(null);
-    } catch (error) {
-      setVoiceError(
-        mobileVoiceErrorMessage(error, "Unable to decline voice call."),
-      );
-    } finally {
-      setVoiceLoading(false);
-    }
-  }, [incomingVoiceCall, voiceLoading]);
-
-  const handleLeaveVoiceCall = useCallback(async () => {
-    if (!activeVoiceCall || (voiceLoading && joinedVoiceCallId !== activeVoiceCall.id)) return;
-    setVoiceLoading(true);
-    setVoiceError(null);
-    try {
-      await voiceClient.disconnect();
-      const response = await leaveVoiceCall(activeVoiceCall.id);
-      const nextCall = toMobileVoiceCall(response.call);
-      if (!nextCall || nextCall.state === "ended") {
-        endedVoiceCallIdRef.current = activeVoiceCall.id;
-      }
-      applyLoadedVoiceCall(nextCall);
-      setJoinedVoiceCallId(null);
-      await queryClient.invalidateQueries({ queryKey: ["messages", channelId] });
-    } catch (error) {
-      setVoiceError(
-        mobileVoiceErrorMessage(error, "Unable to leave voice call."),
-      );
-    } finally {
-      setVoiceLoading(false);
-    }
-  }, [
-    activeVoiceCall,
-    applyLoadedVoiceCall,
-    channelId,
-    joinedVoiceCallId,
-    queryClient,
-    voiceLoading,
-  ]);
-
   // ── Report active channel so notification provider can suppress local popups ──
   const {
     setActiveChannel,
     clearUnreadChannel,
     subscribe,
     incomingVoiceCall: globalIncomingVoiceCall,
+    clearIncomingVoiceCall,
   } = useNotificationStream();
+
+  // Every piece of call state for this conversation, and the only writer of it.
+  const invalidateMessagesForCall = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["messages", channelId] });
+  }, [channelId, queryClient]);
+  const voice = useChannelVoiceCall({
+    channelId,
+    channelTitle,
+    incoming: globalIncomingVoiceCall,
+    clearIncoming: clearIncomingVoiceCall,
+    onCallSettled: invalidateMessagesForCall,
+  });
   useFocusEffect(
     useCallback(() => {
       if (!channelId) {
@@ -1125,16 +800,6 @@ export default function ChannelScreen() {
       return () => setActiveChannel(null);
     }, [channelId, setActiveChannel, clearUnreadChannel]),
   );
-
-  useEffect(() => {
-    if (!incomingVoiceCall) {
-      return;
-    }
-    if (globalIncomingVoiceCall?.callId === incomingVoiceCall.callId) {
-      return;
-    }
-    setIncomingVoiceCall(null);
-  }, [globalIncomingVoiceCall?.callId, incomingVoiceCall]);
 
   // ── Channel info ─────────────────────────────────────────────────────────
   const navigationContext = useMemo(() => {
@@ -1626,49 +1291,9 @@ export default function ChannelScreen() {
             type === "chat_reaction" || event.notificationType === "reaction";
 
           if (isVoiceEvent) {
-            // On a device the OS rings for, this call is already on screen as a system
-            // incoming call. The inline prompt is the fallback tier only — mirrors the
-            // same suppression in notification-stream-provider (FR-014).
-            if (
-              event.notificationType === "voice_call_incoming" &&
-              event.callId &&
-              !isNativeCallTierCapable()
-            ) {
-              setIncomingVoiceCall({
-                channelId,
-                callId: event.callId,
-                invitationId: event.invitationId,
-                alreadyInAnotherCall: event.alreadyInAnotherCall,
-                participantCount: event.participantCount,
-                state: event.state,
-              });
-            }
-            if (event.notificationType === "voice_call_ended" || event.state === "VOICE_CALL_STATE_ENDED") {
-              const activeVoiceSnapshot = voiceClient.getSnapshot();
-              if (!event.callId || activeVoiceSnapshot.activeCallId === event.callId) {
-                void voiceClient.disconnect();
-              }
-              // A late "ended" for a previous call must not wipe the call that
-              // replaced it.
-              setActiveVoiceCall((current) =>
-                event.callId && current && current.id !== event.callId ? current : null,
-              );
-              endedVoiceCallIdRef.current = event.callId ?? endedVoiceCallIdRef.current;
-              setJoinedVoiceCallId((current) => current === event.callId ? null : current);
-              setIncomingVoiceCall((current) => current?.callId === event.callId ? null : current);
-              setVoiceError(null);
-              setDismissedCallId((current) => current === event.callId ? null : current);
-              queryClient.invalidateQueries({
-                queryKey: ["messages", channelId],
-              });
-            } else {
-              getActiveVoiceCall(channelId)
-                .then((response) => {
-                  applyLoadedVoiceCall(
-                    response.hasActiveCall ? toMobileVoiceCall(response.call) : null,
-                  );
-                })
-                .catch(() => {});
+            // One writer. The hook decides what the event means for the call; the screen
+            // only decides what it means for the transcript.
+            if (voice.applyStreamEvent(event) === "updated") {
               void fetchNewerIntoCache();
             }
           } else if (isReactionEvent) {
@@ -1698,14 +1323,13 @@ export default function ChannelScreen() {
         // ignore
       }
     });
-  }, [channelId, fetchNewerIntoCache, queryClient, subscribe]);
+  }, [channelId, fetchNewerIntoCache, queryClient, subscribe, voice]);
 
   // ── Behavior 5: Reset transient state when switching channels ───────────
   useEffect(() => {
     setAtBottom(true);
     atBottomRef.current = true;
     setShowNewMessages(false);
-    setJoinedVoiceCallId(null);
     setActiveHighlight(null);
     setOptimisticMessages([]);
     lastMessageIdRef.current = null;
@@ -2128,13 +1752,8 @@ export default function ChannelScreen() {
     return () => clearTimeout(timer);
   }, [isFetchingNextPage]);
 
-  const isActiveVoiceCallJoined = Boolean(
-    activeVoiceCall &&
-      (joinedVoiceCallId === activeVoiceCall.id ||
-        voiceSnapshot.activeCallId === activeVoiceCall.id),
-  );
   const osIsPresentingThisCall = useNativeCallPresented(
-    activeVoiceCall?.id ?? incomingVoiceCall?.callId,
+    voice.call?.id ?? voice.incoming?.callId,
   );
 
   return (
@@ -2345,68 +1964,66 @@ export default function ChannelScreen() {
           // The phone is ringing for this call on its own screen. A second "join this
           // call" affordance in the app is the old in-app tier showing through, and
           // dismissing it only swaps it for another one (FR-014). Once the call is
-          // answered the in-app banner is wanted again — that is the surface that mutes,
-          // shows quality and leaves.
-          if (osIsPresentingThisCall && !isActiveVoiceCallJoined) return null;
+          // answered the in-app banner is wanted again — that is the surface that shows
+          // quality, reports mute state and leaves.
+          if (osIsPresentingThisCall && !voice.joined) return null;
 
-          // Compute whether we should show the prominent "channel call started"
-          // prompt. Shown when there is an active call that the user hasn't
-          // joined, there is no targeted invitation already displaying, and the
-          // user hasn't dismissed this particular call.
-          const showChannelCallPrompt =
-            activeVoiceCall != null &&
-            !isActiveVoiceCallJoined &&
-            incomingVoiceCall == null &&
-            dismissedCallId !== activeVoiceCall.id;
-
-          const showInlineIncomingCall =
-            incomingVoiceCall != null && globalIncomingVoiceCall?.callId !== incomingVoiceCall.callId;
-          const idleVoiceCallError =
-            activeVoiceCall == null && incomingVoiceCall == null
-              ? voiceError ?? voiceSnapshot.error
-              : null;
-
-          if (showInlineIncomingCall) {
+          // A targeted invitation the provider raised for this conversation. Only a
+          // device the OS does not ring for ever gets one (the fallback tier).
+          if (voice.incoming && !voice.joined) {
             return (
               <IncomingCallBanner
-                alreadyInAnotherCall={incomingVoiceCall.alreadyInAnotherCall}
-                loading={voiceLoading}
-                onAccept={() => void handleAcceptIncomingVoiceCall()}
-                onDecline={() => void handleDeclineIncomingVoiceCall()}
+                alreadyInAnotherCall={voice.incoming.alreadyInAnotherCall}
+                pending={voice.pending}
+                onAccept={() => void voice.answer()}
+                onDecline={() => void voice.decline()}
               />
             );
           }
 
-          if (showChannelCallPrompt) {
-            return (
+          // A call is running in this conversation and the user has not joined it.
+          if (voice.call && !voice.joined && !voice.dismissed) {
+            // A direct call is a call *to you*, so the only two answers are yes and no,
+            // and no has to reach the caller. "Later" is a group answer — it means "that
+            // call can run without me" — and offering it on a 1:1 left the caller ringing
+            // for the full timeout while the callee believed they had responded.
+            return isDirectConversation ? (
               <IncomingCallBanner
-                loading={voiceLoading}
+                pending={voice.pending}
+                onAccept={() => void voice.join()}
+                onDecline={() => void voice.decline()}
+              />
+            ) : (
+              <IncomingCallBanner
+                pending={voice.pending}
                 title="Voice call started"
                 description="Someone started a voice call in this conversation."
                 acceptLabel="Join"
                 declineLabel="Later"
-                onAccept={() => void handleJoinVoiceCall()}
-                onDecline={() => setDismissedCallId(activeVoiceCall.id)}
+                onAccept={() => void voice.join()}
+                onDecline={voice.dismiss}
               />
             );
           }
 
-          if (activeVoiceCall) {
+          if (voice.call) {
             return (
               <VoiceCallBanner
-                call={activeVoiceCall}
-                connectionState={voiceSnapshot.connectionState}
-                connectionQuality={voiceSnapshot.connectionQuality}
-                joined={isActiveVoiceCallJoined}
-                loading={voiceLoading}
-                error={voiceError ?? voiceSnapshot.error}
-                onStart={handleStartVoiceCall}
-                onJoin={handleJoinVoiceCall}
-                onLeave={handleLeaveVoiceCall}
+                call={voice.call}
+                connectionState={voice.snapshot.connectionState}
+                connectionQuality={voice.snapshot.connectionQuality}
+                isMuted={voice.snapshot.isMuted}
+                joined={voice.joined}
+                pending={voice.pending}
+                error={voice.error ?? voice.snapshot.error}
+                onStart={() => void voice.start()}
+                onJoin={() => void voice.join()}
+                onLeave={() => void voice.leave()}
               />
             );
           }
 
+          const idleVoiceCallError = voice.error ?? voice.snapshot.error;
           if (idleVoiceCallError) {
             return (
               <View testID="voice-call-inline-error" style={styles.voiceCallInlineError}>
@@ -2436,20 +2053,21 @@ export default function ChannelScreen() {
             onSent={handleVoiceMessageSent}
             onActiveChange={handleVoiceRecorderActiveChange}
             idleAccessory={
-              activeVoiceCall == null && incomingVoiceCall == null ? (
+              voice.call == null && voice.incoming == null ? (
                 <Pressable
                   testID="voice-call-start-button"
-                  onPress={handleStartVoiceCall}
-                  disabled={voiceLoading || !channelId}
+                  onPress={() => void voice.start()}
+                  disabled={voice.pending !== null || !channelId}
                   style={({ pressed }) => [
                     styles.composerAccessoryButton,
                     pressed && styles.composerAccessoryButtonPressed,
-                    (voiceLoading || !channelId) && styles.composerAccessoryButtonDisabled,
+                    (voice.pending !== null || !channelId) &&
+                      styles.composerAccessoryButtonDisabled,
                   ]}
                   accessibilityRole="button"
                   accessibilityLabel="Start voice call"
                 >
-                  {voiceLoading ? (
+                  {voice.pending === "starting" ? (
                     <ActivityIndicator
                       size="small"
                       color={lightPalette.primary.main}
