@@ -1,7 +1,7 @@
 # Cross-compile from the builder's native architecture rather than emulating the
 # target: pure-Go builds do this for free, and QEMU would make the multi-arch
 # publish job take hours.
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS builder
 
 ARG TARGETOS=linux
 ARG TARGETARCH=amd64

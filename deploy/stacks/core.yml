@@ -245,7 +245,7 @@ services:
       update_config: {order: start-first, parallelism: 1, delay: 15s, failure_action: rollback, monitor: 45s}
       rollback_config: {order: start-first, parallelism: 1}
       resources:
-        # Go 1.25 reads GOMAXPROCS from this cgroup quota, so 2 CPUs here means
+        # Go 1.27 reads GOMAXPROCS from this cgroup quota, so 2 CPUs here means
         # 2 there — 3 replicas cannot collectively outbid postgres for the 6 cores.
         limits: {memory: 1500M, cpus: "2.0"}
         reservations: {memory: 512M}
