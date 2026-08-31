@@ -145,7 +145,15 @@ export default function AppLayout() {
     }
   }, [incomingVoiceCall?.id]);
 
+  // Read, never depended on, so navigating does not rebuild the callbacks below.
+  const pathnameRef = React.useRef(pathname);
+  pathnameRef.current = pathname;
+
   const navigateToVoiceCallChannel = React.useCallback((channelId: string) => {
+    // Placing or answering a call from its own conversation already leaves the user on
+    // the destination. Pushing it again stacks a second copy of the screen over the
+    // identical one, which reads as a flicker. Suffix match, as in the call bar below.
+    if (pathnameRef.current.endsWith(`/${channelId}`)) return;
     const targetHref = `/(app)/(chat)/${channelId}`;
     router.push(
       withNavigationContext(targetHref, {
@@ -179,6 +187,8 @@ export default function AppLayout() {
     const routeToCall = () => {
       if (AppState.currentState !== "active") return;
       if (routedNativeCallRef.current === serverCallId) return;
+      // Counts as routed even when the user is already there, so walking away from a
+      // call placed here is not undone by the next render.
       routedNativeCallRef.current = serverCallId;
       navigateToVoiceCallChannel(channelId);
     };

@@ -193,8 +193,15 @@ LiveKit for development.
 
 On mobile it is also the one notification type where the client branches explicitly
 instead of inferring a route: `apps/mobile/src/lib/linking.ts` special-cases it. That
-branch now serves the **tier-B path only**. A call presented as a system call navigates
-from `native-call.ts` when the user answers, and never passes through the route resolver.
+branch now serves the **tier-B path only**. A call presented as a system call never
+passes through the route resolver: `_layout.tsx` watches the presented-call store and
+routes to the conversation itself, once per call and only while the app is in front.
+
+That layout also owns every other "put the user on the call" push — answering the in-app
+prompt, tapping the return bar — and the one guard they all need lives in it: the push is
+skipped when the open route already ends in that channel id. Placing a call from a
+conversation presents it to the OS and lands right back here, so without the guard the
+screen the user is looking at is pushed on top of itself, which they see as a flicker.
 
 ## Native call presentation
 
