@@ -28,31 +28,37 @@ permissions:
 
 jobs:
   publish:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - name: tech-office-backend
+            runs_on: ubuntu-latest
             context: backend
             dockerfile: backend/Dockerfile
             # The Go build cross-compiles, so both architectures are cheap.
             platforms: linux/amd64,linux/arm64
           - name: tech-office-backend-migrate
+            runs_on: ubuntu-latest
             context: backend
             dockerfile: backend/Dockerfile.migrate
             platforms: linux/amd64,linux/arm64
           - name: tech-office-postgres
+            runs_on: ubuntu-latest
             context: backend/docker
             dockerfile: backend/docker/postgres.Dockerfile
             platforms: linux/amd64,linux/arm64
           - name: tech-office-web-transformar
+            # A Next.js build carries platform-specific SWC binaries, so it cannot be
+            # cross-compiled the way the Go images are, and QEMU emulation of it is
+            # unusably slow. Built natively on a GitHub arm64 runner instead — free on
+            # public repositories. arm64 only, because that is what transformar.work
+            # runs; add an amd64 leg here if the hosted deployment ever moves back.
+            runs_on: ubuntu-24.04-arm
             context: frontend
             dockerfile: frontend/Dockerfile
-            # amd64 only: a Next.js build carries platform-specific SWC binaries, so
-            # this cannot be cross-compiled the way the Go images are, and building it
-            # twice under QEMU is not worth the runner minutes.
-            platforms: linux/amd64
+            platforms: linux/arm64
             # No build args — the Dockerfile's ARG defaults already are the
             # transformar.work production values.
     steps:

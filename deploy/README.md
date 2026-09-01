@@ -79,7 +79,7 @@ ghcr.io/nvcnvn/tech-office-postgres          linux/amd64, linux/arm64
 A fourth is published for the project's own hosted deployment:
 
 ```
-ghcr.io/nvcnvn/tech-office-web-transformar   linux/amd64
+ghcr.io/nvcnvn/tech-office-web-transformar   linux/arm64
 ```
 
 **Do not pull that one for your own site.** It has `https://transformar.work` and its
