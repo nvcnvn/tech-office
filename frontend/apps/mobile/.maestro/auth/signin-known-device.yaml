@@ -10,40 +10,7 @@ name: "Auth — Returning worker signs in with six taps"
 # ---------------------------------------------------------------------------
 # First run — fresh device, the revealed sequence
 # ---------------------------------------------------------------------------
-- launchApp:
-    clearState: true
-    clearKeychain: true
-- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-- runFlow:
-    when:
-      visible:
-        id: "xmark"
-    commands:
-      - tapOn:
-          id: "xmark"
-- runFlow:
-    when:
-      visible: "DEVELOPMENT SERVERS"
-    commands:
-      - tapOn:
-          text: "Tech Office"
-          index: 1
-- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-- runFlow:
-    when:
-      visible:
-        id: "xmark"
-    commands:
-      - tapOn:
-          id: "xmark"
+- runFlow: "dev-client-bootstrap.yaml"
 
 # Step 1 — where do you work
 - extendedWaitUntil:

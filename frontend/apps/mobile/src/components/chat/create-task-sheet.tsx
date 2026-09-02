@@ -34,8 +34,10 @@ import {
   type Task,
 } from "apis";
 import * as Haptics from "expo-haptics";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { SFIcon } from "@/components/ui/sf-icon";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { invalidateTaskQueries } from "@/lib/task-query-invalidation";
 import {
   border,
@@ -107,6 +109,16 @@ export function CreateTaskSheet({
   onCreated,
 }: CreateTaskSheetProps) {
   const queryClient = useQueryClient();
+  // The title field takes focus as the sheet opens, so the keyboard is up before anyone
+  // has decided anything. Nothing lifts a Modal clear of it, which left the project
+  // list, the assignee and the confirm button underneath — on Android, where the window
+  // is drawn edge to edge, the keyboard height also stops short of the navigation bar.
+  const insets = useSafeAreaInsets();
+  const keyboardHeight = useKeyboardHeight();
+  const sheetLift =
+    keyboardHeight > 0
+      ? keyboardHeight + (Platform.OS === "android" ? insets.bottom : 0)
+      : 0;
 
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -231,9 +243,15 @@ export function CreateTaskSheet({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { paddingBottom: sheetLift }]}>
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-        <View style={styles.sheet} testID="create-task-sheet">
+        <View
+          style={[
+            styles.sheet,
+            keyboardHeight > 0 ? null : { paddingBottom: insets.bottom + spacing[4] },
+          ]}
+          testID="create-task-sheet"
+        >
           <View style={styles.handle} />
           <Text style={styles.sheetTitle}>Create task</Text>
           <Text style={styles.sheetSubtitle}>
@@ -261,7 +279,11 @@ export function CreateTaskSheet({
               style={[styles.input, titleError ? styles.inputError : null]}
               placeholder="What needs doing?"
               placeholderTextColor={lightPalette.text.secondary}
-              autoFocus
+              // Not auto-focused: the title arrives pre-filled from the message, so the
+              // common case needs no typing, and raising the keyboard on open squeezed
+              // the sheet on a small phone until the project list and the confirm button
+              // had nowhere to go. Tapping the field still selects the whole title for
+              // anyone who does want to replace it.
               selectTextOnFocus
               testID="create-task-sheet-title"
             />

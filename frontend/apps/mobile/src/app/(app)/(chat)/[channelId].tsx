@@ -89,6 +89,7 @@ import { VoiceMessageRecorder } from "@/components/chat/voice-message-recorder";
 import { SFIcon } from "@/components/ui/sf-icon";
 import * as Haptics from "expo-haptics";
 import { useWindowDimensions } from "react-native";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { useManualRefresh } from "@/hooks/use-manual-refresh";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
 import { useChannelVoiceCall } from "@/hooks/use-channel-voice-call";
@@ -896,6 +897,7 @@ export default function ChannelScreen() {
   const showContextBackAction =
     !!navigationContext.backLabel && !navigation.canGoBack();
   const isSharedResourceRoute = segments[0] === "(shared)";
+  const keyboardHeight = useKeyboardHeight();
   const keyboardVerticalOffset =
     Platform.OS === "ios"
       ? insets.top +
@@ -1334,6 +1336,9 @@ export default function ChannelScreen() {
   const [taskLinksByMessage, setTaskLinksByMessage] = useState<
     Map<string, MessageTaskLink[]>
   >(new Map());
+  // Converting a message does not change the set of message ids, so the lookup below
+  // would not re-run and the chip would only appear the next time the page changed.
+  const [taskLinkReloadToken, setTaskLinkReloadToken] = useState(0);
   const taskLinkMessageKey = React.useMemo(
     () =>
       messages
@@ -1367,7 +1372,7 @@ export default function ChannelScreen() {
     return () => {
       cancelled = true;
     };
-  }, [taskLinkMessageKey]);
+  }, [taskLinkMessageKey, taskLinkReloadToken]);
 
   listItemCountRef.current = listItems.length;
 
@@ -1861,8 +1866,17 @@ export default function ChannelScreen() {
   return (
     <>
       <KeyboardAvoidingView
-        style={{ flex: 1, backgroundColor: lightPalette.background.default }}
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={[
+          { flex: 1, backgroundColor: lightPalette.background.default },
+          // Android draws edge to edge, so the window never shrinks for the keyboard
+          // and KeyboardAvoidingView has nothing to measure: the composer stayed
+          // behind the keyboard, send button and all. The keyboard height stops at
+          // the top of the navigation bar, so clearing it takes the bottom inset too.
+          Platform.OS === "android" && keyboardHeight > 0
+            ? { paddingBottom: keyboardHeight + insets.bottom }
+            : null,
+        ]}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={keyboardVerticalOffset}
       >
         <Stack.Screen
@@ -1950,6 +1964,12 @@ export default function ChannelScreen() {
               ref={flatListRef}
               style={{ backgroundColor: lightPalette.background.default }}
               contentInsetAdjustmentBehavior="automatic"
+              // Dragging the conversation puts the keyboard away, which is how every chat
+              // app behaves and the only way to see the messages the keyboard covers on a
+              // small screen. "handled" keeps a tap on a message from being eaten by that
+              // dismissal, so reactions and the action sheet still open on the first tap.
+              keyboardDismissMode="on-drag"
+              keyboardShouldPersistTaps="handled"
               data={listItems}
               keyExtractor={(item) => item.key}
               inverted
@@ -2296,6 +2316,7 @@ export default function ChannelScreen() {
           messageId={createTaskTarget?.id ?? ""}
           messageText={createTaskTarget?.text ?? ""}
           mentionedEmployeeIds={createTaskTarget?.mentionedEmployeeIds ?? []}
+          onCreated={() => setTaskLinkReloadToken((token) => token + 1)}
         />
 
         <ReportSheet

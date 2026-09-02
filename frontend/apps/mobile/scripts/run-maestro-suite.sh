@@ -45,6 +45,15 @@ if [[ -z ${MAESTRO_RUN_ID:-} ]]; then
 fi
 env_flags+=(-e "MAESTRO_RUN_ID=$MAESTRO_RUN_ID")
 
+# The dev-client launcher only discovers Metro on the host it runs on, so a physical
+# device has nothing to tap. auth/dev-client-bootstrap.yaml opens this URL instead —
+# the same LAN IP the dev commands resolve, so one bootstrap serves every target.
+if [[ -z ${MAESTRO_DEV_CLIENT_URL:-} ]]; then
+  source "$SCRIPT_DIR/resolve-ip.sh"
+  MAESTRO_DEV_CLIENT_URL="techoffice://expo-development-client/?url=http%3A%2F%2F${METRO_HOST}%3A18082"
+fi
+env_flags+=(-e "MAESTRO_DEV_CLIENT_URL=$MAESTRO_DEV_CLIENT_URL")
+
 # Story flows run first: they exercise sign-in and onboarding from a fresh install, which
 # every screen flow then assumes already works. The screen sweep walks one top-level
 # surface per file, and behavioural flows that belong to the standing suite are listed

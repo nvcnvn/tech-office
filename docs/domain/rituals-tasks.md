@@ -130,7 +130,9 @@ rendered page of messages — and returns a `MessageTaskLink` for each converted
 id, identifier, title, project, and the task's **live** state name and category, so a chip
 shows where the work actually stands rather than where it started. The repeated request
 field is the contract-level guarantee against an N+1; both clients call it once per page
-from the message list, never per message.
+from the message list, never per message. A conversion does not change the set of message
+ids on the page, so the client that performed it re-runs the lookup on success — otherwise
+the chip on the message just converted would not appear until the page changed.
 
 Access filtering happens in SQL. A link to a task in a project the caller cannot see is
 **omitted from the response entirely**, never returned with a flag — a flagged entry would
@@ -385,7 +387,10 @@ per-instance flood — generating 30 days of a daily ritual used to mean 30 noti
   `rituals/[definitionId]`; plus `app/(shared)/resource/tasks/` for deep links. Evidence
   capture uses `src/lib/evidence-media.ts`. Turning a message into a task is a
   purpose-built bottom sheet reached from the chat long-press action sheet —
-  `src/components/chat/create-task-sheet.tsx`.
+  `src/components/chat/create-task-sheet.tsx`. The sheet does not take focus on open: the
+  title arrives pre-filled from the message, and raising the keyboard left a small phone
+  with no room for the project list or the confirm button. It lifts clear of the keyboard
+  when the title is edited.
 - Clients: `packages/apis/src/collaboration.ts`, `collaboration-ritual.ts`.
 
 ## Tests

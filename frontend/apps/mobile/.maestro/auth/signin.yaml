@@ -4,40 +4,7 @@ name: "Auth — Sign in with email"
 # Screen flows use this as their shared bootstrap, so it authenticates with credentials
 # that do not depend on a PIN having been set.
 ---
-- launchApp:
-    clearState: true
-    clearKeychain: true
-- runFlow:
-        when:
-            visible: "Continue"
-        commands:
-            - tapOn: "Continue"
-- runFlow:
-        when:
-            visible:
-                id: "xmark"
-        commands:
-            - tapOn:
-                    id: "xmark"
-- runFlow:
-        when:
-            visible: "DEVELOPMENT SERVERS"
-        commands:
-            - tapOn:
-                text: "Tech Office"
-                index: 1
-- runFlow:
-        when:
-            visible: "Continue"
-        commands:
-            - tapOn: "Continue"
-- runFlow:
-        when:
-            visible:
-                id: "xmark"
-        commands:
-            - tapOn:
-                    id: "xmark"
+- runFlow: "dev-client-bootstrap.yaml"
 
 # The sign-in screen opens on the PIN sequence. Email is the quiet secondary action.
 - extendedWaitUntil:
@@ -57,22 +24,41 @@ name: "Auth — Sign in with email"
     id: "subdomain-input"
 - eraseText: 64
 - inputText: "${MAESTRO_TEST_SUBDOMAIN}"
+
+# Dismiss the keyboard before reaching for the next field. On iOS it covers the lower half
+# of the form, and the tap meant for the email field landed on the keyboard instead —
+# leaving focus on the workspace box, which then received the email address.
+- hideKeyboard
 - tapOn:
     id: "email-input"
 
 # Enter email
 - eraseText: 50
 - inputText: "${MAESTRO_TEST_EMAIL}"
-- tapOn: "Sign in to your workspace"
+- hideKeyboard
 - tapOn:
     id: "password-input"
 
 # Secure fields keep stale text between runs unless erased first.
 - eraseText: 20
 - inputText: "${MAESTRO_TEST_PASSWORD}"
-- tapOn: "Sign in to your workspace"
-- tapOn:
-    id: "signin-button"
+
+# Submitting differs by platform because dismissing the keyboard does. On iOS nothing here
+# blurs a secure field — hideKeyboard is refused on it and tapping the heading does not
+# take focus away — so the Sign in button stays under the keyboard and only the return key
+# reaches the form. Android dismisses on the heading tap and can press the button itself.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - pressKey: Enter
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "Sign in to your workspace"
+      - tapOn:
+          id: "signin-button"
 
 # iOS offers to save the password after a form submit. The sheet covers the screen and
 # makes every later assertion fail, in whichever flow happens to run next — dismiss it

@@ -197,10 +197,18 @@ MAESTRO_BIN := $(shell command -v maestro 2>/dev/null \
 # one claimed. Empty entries in .env are dropped so this default survives.
 MAESTRO_RUN_ID ?= $(shell date +%H%M%S)
 
+# The dev-client launcher only discovers Metro on the host it runs on, so a physical
+# device has nothing to tap. Every flow opens this URL instead — same LAN IP the app was
+# built against, resolved by the same script the dev commands use.
+MAESTRO_DEV_CLIENT_URL ?= $(shell \
+	. frontend/apps/mobile/scripts/resolve-ip.sh >/dev/null 2>&1; \
+	printf 'techoffice://expo-development-client/?url=http%%3A%%2F%%2F%s%%3A18082' "$$METRO_HOST")
+
 # Build -e KEY=VALUE flags from .env file
 MAESTRO_ENV_FLAGS = $(shell test -f $(MAESTRO_ENV) && \
 	grep -v '^\#' $(MAESTRO_ENV) | grep '=.' | sed 's/^/-e /' | tr '\n' ' ') \
-	-e MAESTRO_RUN_ID=$(MAESTRO_RUN_ID)
+	-e MAESTRO_RUN_ID=$(MAESTRO_RUN_ID) \
+	-e MAESTRO_DEV_CLIENT_URL=$(MAESTRO_DEV_CLIENT_URL)
 
 .PHONY: check-maestro
 check-maestro:

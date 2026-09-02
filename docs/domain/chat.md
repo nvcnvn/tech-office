@@ -192,6 +192,12 @@ channel is *about* (linked task/project, recent activity) alongside the message 
 - Clients: `packages/apis/src/chat.ts`, `chat-files.ts`, `chat-reactions.ts`;
   `apps/mobile/src/lib/chat-stream-events.ts` for live event handling.
 
+On mobile, both message lists — the channel and the thread — dismiss the keyboard when
+dragged and keep a tap on a message working while it is up. The composer is lifted clear of
+the keyboard by an explicit measurement rather than by `KeyboardAvoidingView`'s own: the
+Android app draws edge to edge, so its window is never resized for the keyboard and there
+is nothing for that component to measure against (`src/hooks/use-keyboard-height.ts`).
+
 ## Tests
 
 `integration/chat_messaging_test.go`, `chat_stream_test.go`,

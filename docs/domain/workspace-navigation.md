@@ -247,6 +247,17 @@ top-level surface (`chat`, `today`, `my-work`, `schedule`, `alerts`, `more`), `a
 `make test-mobile` (`scripts/run-maestro-suite.sh`) runs the two story flows
 (`auth/signin-known-device`, `onboarding/owner-signup`), then the screen sweep, then the
 behavioural flows the runner names.
+
+Every flow that starts from a fresh install begins with `auth/dev-client-bootstrap.yaml`,
+which clears state and then **opens the Metro bundle URL directly** rather than tapping a
+server in the dev-client launcher. The launcher only lists a server it can discover on the
+same host, so tapping works on a simulator or emulator and finds nothing on a physical
+device, where Metro is across the LAN. The URL comes from `MAESTRO_DEV_CLIENT_URL`, which
+the Makefile and the suite runner both build from `scripts/resolve-ip.sh` — the same LAN IP
+the dev commands use. The bootstrap then dismisses the developer menu, which is shaped
+differently on each platform: Android puts the greeting behind a Continue button and labels
+the close control only with a content description, iOS shows the greeting inside the menu
+and exposes the SF Symbol as an identifier.
 Design guidance lives in the `building-native-ui` skill and `specs/mobile-ui-design.md`.
 
 ## Shared frontend packages
@@ -271,6 +282,14 @@ workspace-address rules `deriveSubdomain` / `isValidSubdomain` / `normalizeSubdo
 `apps/web/e2e/`; Maestro flows for mobile.
 
 ## Known drift
+
+**D37 — Maestro cannot drive a physical iPhone.** 2.3.0's `test` does not enumerate
+connected iPhones; 2.8.0 and 2.10.0 do, but fail to build their XCUITest driver because the
+`MaestroDriverLib` sources they extract are missing, so `xcodebuild` stops on absent input
+files. Detection additionally requires the CoreDevice tunnel to be warm — run
+`xcrun devicectl device info details --device <udid>` immediately beforehand, or the device
+reads as "not connected". Android runs on real hardware; iOS is verified on a simulator
+until an upstream release ships a complete driver bundle.
 
 **D18 — a Maestro flow cannot drive the mobile signup password field.** iOS 18 lays its
 automatic-strong-password cover view over the field on `(auth)/signup`, chosen

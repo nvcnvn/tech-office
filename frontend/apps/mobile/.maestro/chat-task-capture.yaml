@@ -10,7 +10,7 @@ name: "Chat task capture — turn a message into a task from the conversation"
 # first channel happens to contain — a system row such as a voice-call record has no
 # Create task action at all, and picking one at random would make the flow flaky.
 ---
-- runFlow: "../auth/signin.yaml"
+- runFlow: "auth/signin.yaml"
 - runFlow:
     when:
       visible:
@@ -27,9 +27,12 @@ name: "Chat task capture — turn a message into a task from the conversation"
 - tapOn:
     id: "channel-row-.*"
     index: 0
+# Waiting on the composer rather than on an existing message: which channel sorts first
+# changes between runs — a task discussion channel provisioned by an earlier run is
+# empty and sorts to the top — and this flow supplies its own message anyway.
 - extendedWaitUntil:
     visible:
-      id: "message-bubble-.*"
+      id: "message-input"
     timeout: 10000
 
 # Post the message this flow will convert.
@@ -41,7 +44,22 @@ name: "Chat task capture — turn a message into a task from the conversation"
 # The keyboard stays up after sending and overlaps the timeline; dismiss it before
 # reaching for the message. longPressOn retries on its own, so there is no separate
 # wait step to race the optimistic-to-confirmed re-render.
-- hideKeyboard
+#
+# hideKeyboard is refused against the multiline composer on iOS, so the keyboard is put
+# away the way a person would: by dragging the conversation.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - swipe:
+          from:
+            id: "message-bubble-.*"
+          direction: DOWN
 
 # Long-pressing a message opens the action sheet, which offers Create task (FR-001).
 # Matched on the row's accessibility label, which is "<author>: <text>".
@@ -95,9 +113,13 @@ name: "Chat task capture — turn a message into a task from the conversation"
 - takeScreenshot: "tmp/maestro-screenshots/capture-04-chip-on-message"
 
 # Tapping the chip opens the task it names (FR-022) …
+#
+# Anchored below this run's own message: earlier runs leave their converted messages in
+# the channel, and an unanchored chip selector opens whichever one the list happens to
+# render first.
 - tapOn:
     id: "message-task-chip-.*"
-    index: 0
+    below: ".*Maestro capture probe ${MAESTRO_RUN_ID}.*"
 - extendedWaitUntil:
     visible:
       id: "task-origin-block"

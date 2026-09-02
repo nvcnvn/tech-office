@@ -40,7 +40,10 @@ export function TaskDiscussionContext({ linkedResource }: TaskDiscussionContextP
         <Text selectable style={styles.eyebrow}>
           Task discussion
         </Text>
-        <Text selectable style={styles.title} numberOfLines={1}>
+        {/* Not selectable: a selectable Text on Android ignores numberOfLines, so the
+            task name wrapped to a second line the banner has no room for and showed up
+            sliced through the middle. iOS ellipsised it correctly. */}
+        <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail">
           {linkedResource.displayIdentifier || "Task"}
           {linkedResource.displayTitle ? ` ${linkedResource.displayTitle}` : ""}
         </Text>

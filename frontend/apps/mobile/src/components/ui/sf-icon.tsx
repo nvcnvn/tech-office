@@ -125,6 +125,14 @@ const SF_TO_IONICONS: Record<string, IoniconsName> = {
   gear: "settings-outline",
   gearshape: "settings-outline",
   "gearshape.fill": "settings",
+  // Names that were reaching the "help-outline" fallback, which renders as a bare "?"
+  // next to its label — the share row on the message action sheet and the "Open task"
+  // link on a task discussion header both showed one.
+  link: "link-outline",
+  "arrow.up.right": "open-outline",
+  "arrow.right.circle.fill": "arrow-forward-circle",
+  "location.fill": "location",
+  lifepreserver: "help-buoy-outline",
   "questionmark.circle": "help-circle-outline",
   "questionmark.circle.fill": "help-circle",
   "rectangle.portrait.and.arrow.right": "log-out-outline",

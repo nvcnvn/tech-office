@@ -42,6 +42,7 @@ import {
   getProfile,
 } from "apis";
 import { useAuth } from "@/hooks/use-auth";
+import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { generateCanonicalUrl } from "@/lib/canonical-links";
 import { ChatMessageBody } from "@/components/chat/chat-message-body";
 import { SFIcon } from "@/components/ui/sf-icon";
@@ -473,6 +474,7 @@ export default function ThreadScreen() {
   const contextBackHref = resolveNavigationBackHref(navigationContext, "/(app)/(chat)");
   const showContextBackAction = !!navigationContext.backLabel && !navigation.canGoBack();
   const isSharedResourceRoute = segments[0] === "(shared)";
+  const keyboardHeight = useKeyboardHeight();
   const keyboardVerticalOffset =
     Platform.OS === "ios"
       ? insets.top + IOS_NAVIGATION_BAR_HEIGHT + (isSharedResourceRoute ? IOS_NAVIGATION_BAR_HEIGHT : 0)
@@ -984,8 +986,17 @@ export default function ThreadScreen() {
   return (
     <>
     <KeyboardAvoidingView
-      style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+      style={[
+        { flex: 1 },
+        // Android draws edge to edge, so the window never shrinks for the keyboard and
+        // KeyboardAvoidingView has nothing to measure: the composer stayed behind the
+        // keyboard, send button and all. The keyboard height stops at the top of the
+        // navigation bar, so clearing it takes the bottom inset too.
+        Platform.OS === "android" && keyboardHeight > 0
+          ? { paddingBottom: keyboardHeight + insets.bottom }
+          : null,
+      ]}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={keyboardVerticalOffset}
     >
       <Stack.Screen
@@ -1026,6 +1037,10 @@ export default function ThreadScreen() {
         <FlatList
           ref={flatListRef}
           contentInsetAdjustmentBehavior="automatic"
+          // Same as the channel list: dragging the thread puts the keyboard away, and
+          // "handled" keeps a tap on a reply working on the first tap.
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
           data={displayedReplies}
           keyExtractor={(item) => item.id ?? item.messageId ?? String(Math.random())}
           contentContainerStyle={styles.list}

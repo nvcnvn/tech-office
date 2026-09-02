@@ -20,40 +20,7 @@ name: "Onboarding — Owner creates a workspace, sets a PIN, adds a teammate"
 # comment in `(auth)/signup.tsx`. Everything before and after the password field drives
 # correctly; the PIN and teammate steps are unverified as a consequence.
 ---
-- launchApp:
-    clearState: true
-    clearKeychain: true
-- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-- runFlow:
-    when:
-      visible:
-        id: "xmark"
-    commands:
-      - tapOn:
-          id: "xmark"
-- runFlow:
-    when:
-      visible: "DEVELOPMENT SERVERS"
-    commands:
-      - tapOn:
-          text: "Tech Office"
-          index: 1
-- runFlow:
-    when:
-      visible: "Continue"
-    commands:
-      - tapOn: "Continue"
-- runFlow:
-    when:
-      visible:
-        id: "xmark"
-    commands:
-      - tapOn:
-          id: "xmark"
+- runFlow: "../auth/dev-client-bootstrap.yaml"
 
 # ---------------------------------------------------------------------------
 # User story 2 — create a workspace
