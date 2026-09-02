@@ -53,7 +53,7 @@ VALIDATION SUMMARY:
 
 # Tech Office Constitution
 
-**Version**: 5.18.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-08-28
+**Version**: 5.19.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-09-02
 
 ## Purpose & Scope
 
@@ -453,11 +453,14 @@ test('chat works', async ({ page }) => { // VIOLATION: Must be in e2e/
 - **Connect Layer**: RPC handlers, owns connection pools, extracts auth, manages transactions, translates errors to `connect.Error`, performs lightweight proto-level authorization verification
 
 **Proto-Level Authorization (MANDATORY)**:
-- ALL RPC methods MUST explicitly declare `allowed_roles` in proto `access_control` option
-- NO role inheritance - MUST list ALL roles explicitly (e.g., `[ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]`)
-- Connect layer performs lightweight verification of proto-declared roles
+- ALL RPC methods MUST explicitly declare `required_permissions` in the proto `access_control` option, or `allow_unauthenticated: true` for a genuinely public method
+- Permission ids are `<domain>.<action>` strings from the catalogue in `public.permission` (e.g. `chat.sendMessage`). They are matched with **OR** semantics: the caller needs any one of the listed permissions
+- An empty `required_permissions` with `allow_unauthenticated: false` means "any authenticated user" and MUST be a deliberate choice, not an omission
+- **Authorization is by permission, never by role.** Roles are named bundles of permissions that organizations may edit, and a custom role must land on the correct side of every check without the proto being touched. A proto that names a role is a violation
+- Connect layer performs lightweight verification of the proto-declared permissions; the interceptor resolves the caller's effective permission set and rejects before the handler runs
 - Logic layer implements complex business rules (e.g., "only department managers can approve", "users can only edit own records")
 - Proto authorization is declarative and self-documenting; logic authorization is imperative and context-dependent
+- New permission ids are added by migration to `public.permission` and granted to the seeded role templates in `public.default_role_permission` in the same migration
 
 **Examples**:
 ```protobuf
@@ -465,8 +468,7 @@ test('chat works', async ({ page }) => { // VIOLATION: Must be in e2e/
 service PreferenceService {
   rpc GetUserPreference(GetUserPreferenceRequest) returns (GetUserPreferenceResponse){
     option (rpc.v1.access_control) = {
-      allowed_roles: [ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR, ROLE_EMPLOYEE]
-      allow_unauthenticated: false
+      required_permissions: ["pref.view"]
     };
   }
 }
@@ -477,12 +479,12 @@ service PreferenceService {
   // VIOLATION: No access_control option
 }
 
-// ❌ WRONG: Relying on role inheritance (not supported)
+// ❌ WRONG: Authorizing by role
 service DepartmentService {
   rpc CreateDepartment(CreateDepartmentRequest) returns (CreateDepartmentResponse){
     option (rpc.v1.access_control) = {
-      allowed_roles: [ROLE_OWNER]  // VIOLATION: Must list ROLE_ADMIN, ROLE_OWNER, ROLE_OPERATOR explicitly
-      allow_unauthenticated: false
+      allowed_roles: [ROLE_OWNER]  // VIOLATION: `allowed_roles` does not exist.
+                                   // Use required_permissions: ["dept.create"]
     };
   }
 }
@@ -1563,6 +1565,7 @@ exercised before release.
 - v5.12.0 (2026-03-18): Principle II expanded with Scenario-as-Contract mandate — test scenarios MUST be derived from spec User Stories and FR-XXX Requirements; every User Story and user-observable FR must have a scenario; scenario stubs reviewed and approved during planning (before tasks are created) constitute the behavioral contract; FR traceability comments required in test files; plan-template.md updated with traceability checks
 - v5.11.0 (2026-03-10): Added Principle XII (Architecture Documentation Maintenance) mandating that backend/docs/ architecture documents be consulted before architectural changes and updated after implementation + tests pass; added architecture doc checks to plan and tasks templates
 - v5.10.0 (2026-03-10): Principle II overhauled to scenario-first testing workflow — test scenarios MUST be composed and reviewed before implementation; added Definition of Done requiring entire test suite to pass; updated plan and tasks templates with scenario composition and review gates
+- v5.19.0 (2026-09-02): PATCH-in-substance, MINOR-in-form — Principle III's Proto-Level Authorization section corrected from `allowed_roles` to `required_permissions`. The constitution had described an option that does not exist: feature 020 replaced `RoleBasedAccessControl` with `PermissionBasedAccessControl` in `backend/rpc/v1/rbac.proto`, no proto in the repository has ever used `allowed_roles`, and a service written to the letter of the old text would not compile. The corrected text states OR semantics across permission ids, records that an empty `required_permissions` with `allow_unauthenticated: false` means "any authenticated user", forbids naming a role in a proto (organizations may edit role bundles, so a custom role must land correctly without a proto change), and requires new permission ids to be added to `public.permission` and granted to the seeded role templates in the same migration. Found while planning feature 039 (feature tour), whose Constitution Check could not both follow the constitution and compile.
 - v5.18.0 (2026-08-28): Removed Citus. The database is a single PostgreSQL node; the trigger, volatile-function and `ON DELETE SET NULL` prohibitions in Principle I are withdrawn. The tenancy discipline they were introduced to serve (organization_id on every tenant table, leading every unique key, carried through every join, pinned by every query) is retained for tenant isolation and shard-readiness, and is now machine-checked by `make lint-tenancy` instead of by review. Corrected the migration workflow: schema.sql is generated from the migrations, never hand-edited.
 - v5.9.0 (2026-03-07): Enhanced Principle VIII with NON-NEGOTIABLE rule mandating named constants instead of value literals; fixed 34 existing violations across 9 backend files; added NotificationPreference constants to notification package
 - v5.8.0 (2025-12-20): Enhanced Principle VIII (Cross-Stack Constant & Type Synchronization) with automated testing requirements and real bug example demonstrating the impact of constant mismatches between backend and frontend layers
