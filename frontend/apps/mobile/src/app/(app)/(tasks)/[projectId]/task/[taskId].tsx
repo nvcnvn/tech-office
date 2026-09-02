@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from "react-native";
 import * as Haptics from "expo-haptics";
@@ -42,6 +43,7 @@ import {
 import { EmptyState } from "@/components/ui/empty-state";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { useAuth } from "@/hooks/use-auth";
+import { TaskOriginBlock } from "@/components/tasks/task-origin-block";
 import { useResolvedProjectId } from "@/hooks/use-resolved-project-id";
 import { API_BASE_URL } from "@/lib/constants";
 import { ensureEvidenceCameraPermission, pickEvidencePhoto, uploadEvidenceAsset } from "@/lib/evidence-media";
@@ -1129,6 +1131,8 @@ export default function TaskDetailScreen() {
   const queryClient = useQueryClient();
   const auth = useAuth();
   const { resolvedProjectId: projectId } = useResolvedProjectId(rawProjectId);
+  // Width the origin block's excerpt renders into (screen less the card's own margins).
+  const { width: originContentWidth } = useWindowDimensions();
   const [submittingRequirementId, setSubmittingRequirementId] = useState<string | null>(null);
   const [activeTextRequirementId, setActiveTextRequirementId] = useState<string | null>(null);
   const [textDrafts, setTextDrafts] = useState<Record<string, string>>({});
@@ -1795,6 +1799,13 @@ export default function TaskDetailScreen() {
             ) : null}
           </View>
         </View>
+
+        {/* Where this task came from, when it was created from a chat message */}
+        <TaskOriginBlock
+          taskId={task.id}
+          sourceMessageId={task.sourceMessageId}
+          contentWidth={originContentWidth}
+        />
 
         {taskContextMessage ? (
           <View

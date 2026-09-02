@@ -4,7 +4,7 @@ Channels, messages, threads, reactions, presence-aware typing, and the per-user 
 Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RPCs) and
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
-**Status date: 2026-08-27.** Supersedes specs 009, 010, 027.
+**Status date: 2026-09-02.** Supersedes specs 009, 010, 027.
 
 ## Channels
 
@@ -18,12 +18,14 @@ other domains:
 |---|---|---|
 | `chat` | users | ordinary channel |
 | `direct_message` | `CreateOrGetDirectMessage` | 1:1 DM |
-| `project_ticket_thread` | collaboration, on task creation | task comment thread |
+| `project_ticket_thread` | collaboration, when a task is first opened | task comment thread |
 | `crm_deal_notes` | — | reserved |
 | `support_ticket` | — | reserved |
 
 That reuse is why `collaboration.task.channel_id` FKs into `chat.channel`, and why chat
 notifications need `sourceDomain` to distinguish a real chat message from a task comment.
+A task's thread is created lazily, the first time somebody opens the task, so a task nobody
+opens never creates a channel nobody reads — see [rituals-tasks.md](rituals-tasks.md).
 
 `chat.channel_membership` holds `is_admin`, `notification_preference`
 (`all | mentions | muted`), and the unread cursor (`last_viewed_message_id`,
@@ -44,9 +46,10 @@ advances the cursor and `GetUnreadCount` derives from it.
   mentions fan out to every member.
 - `file_ids uuid[]` references `files.file_metadata`.
 - `message_kind IN ('text','voice','system')`. System messages carry
-  `system_event_type IN ('voice_call_started','voice_call_ended','voice_call_missed','voice_call_cancelled')`,
+  `system_event_type IN ('voice_call_started','voice_call_ended','voice_call_missed','voice_call_cancelled','task_created_from_message')`,
   and a CHECK enforces that `system` ⇔ `system_event_type IS NOT NULL`. This is how a
-  voice call leaves a trace in the channel timeline — see [voice.md](voice.md).
+  voice call leaves a trace in the channel timeline — see [voice.md](voice.md) — and how a
+  conversion into a task leaves one on the message it came from, below.
 
 Pagination uses the UUID v7 message ID as the cursor: v7 embeds a millisecond timestamp in
 its first 48 bits, so `ORDER BY id DESC` is chronological and the index
@@ -76,7 +79,47 @@ reason in reverse: voice needs the other participant of a direct conversation wi
 reading chat's tables.
 
 `GetMessage` is also what the compliance domain calls to resolve a reported message's
-author and snapshot — see [compliance-safety.md](compliance-safety.md).
+author and snapshot — see [compliance-safety.md](compliance-safety.md) — and what
+collaboration calls to render the origin block on a task created from a message.
+
+## The task-conversion announcement
+
+`AnnounceTaskCreatedFromMessage` on `ChatLogic` writes one `chat.message` row recording
+that a message was turned into a task:
+
+| Field | Value |
+|---|---|
+| `message_kind` | `system` |
+| `system_event_type` | `task_created_from_message` |
+| `parent_message_id` | the source message — a thread reply, not a channel post |
+| `author_employee_id` | the person who converted |
+| `metadata` | `{"taskId", "identifier", "title"}` |
+
+It is called only by `internal/collaboration`, on that caller's transaction, so the
+announcement commits with the task or not at all. No client can call it: chat's RPC surface
+is unchanged.
+
+**It notifies nobody.** It writes the row directly and does not call `broadcastNewMessage`
+or `notifyMentionedUsersV2`, which is why `SendMessage` could not be reused — that always
+broadcasts. The announcement appears in the thread and produces no reply notification for
+the source message's author and no mention notification for anyone. This mirrors how voice
+leaves a call record (`createVoiceSystemMessage`).
+
+Chat learns nothing about tasks here. The identifier and title are opaque strings it
+stores for rendering, and this metadata is readable by every channel member — which is why
+the access-filtered task chip on the source message is served by collaboration rather than
+read out of it.
+
+Both clients render this row from its metadata rather than from `message_text`: web shows
+the identifier as a link to the task, mobile shows it as a record card. Mobile does not
+link, because the metadata carries no project id and every mobile task route is
+project-scoped; the chip on the source message does carry one, and that is what navigates
+there.
+
+Collaboration also reads chat through `ChatLogic.GetChannel`, for the channel name shown in
+a task's origin block and for the channel-administrator check that gates changing a
+channel's remembered task destination. Both were already implemented on `chatLogicImpl`;
+the interface is satisfied structurally and chat gained nothing for them.
 
 ## Reactions and typing
 

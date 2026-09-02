@@ -106,6 +106,7 @@ import TaskFileUpload from './components/TaskFileUpload';
 import CustomFieldEditor from './components/CustomFieldEditor';
 import EvidenceChecklist from './components/EvidenceChecklist';
 import RitualDefinitionSection from './components/RitualDefinitionSection';
+import TaskOriginBlock from './components/TaskOriginBlock';
 
 const LINKING_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:18080';
 
@@ -1010,6 +1011,9 @@ export default function TaskDetailPage() {
 								</Box>
 							)}
 						</Box>
+
+						{/* Where this task came from, when it was created from a chat message */}
+						<TaskOriginBlock taskId={taskId} sourceMessageId={task.sourceMessageId} />
 
 						{/* Description */}
 						<Box sx={{ mb: 3 }}>

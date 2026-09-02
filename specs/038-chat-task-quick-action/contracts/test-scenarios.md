@@ -203,4 +203,4 @@ Every other Functional Requirement and all three User Stories are traced above.
 
 ## Approval
 
-- [ ] Reviewed and approved as the behavioural contract for feature 038 — required before `/speckit-tasks`.
+- [x] Reviewed and approved as the behavioural contract for feature 038 — required before `/speckit-tasks`.

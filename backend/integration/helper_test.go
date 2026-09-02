@@ -1697,7 +1697,7 @@ func (w *testWorld) createTask(actor testUser, projectID, title, levelID string)
 	req := connect.NewRequest(&rpcv1.CreateTaskRequest{
 		ProjectId: projectID,
 		Title:     title,
-		LevelId:   levelID,
+		LevelId:   &levelID,
 	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	resp, err := w.collab.CreateTask(context.Background(), req)
@@ -1710,7 +1710,7 @@ func (w *testWorld) createTaskError(actor testUser, projectID, title, levelID st
 	req := connect.NewRequest(&rpcv1.CreateTaskRequest{
 		ProjectId: projectID,
 		Title:     title,
-		LevelId:   levelID,
+		LevelId:   &levelID,
 	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	_, err := w.collab.CreateTask(context.Background(), req)
@@ -1722,7 +1722,7 @@ func (w *testWorld) createChildTask(actor testUser, projectID, title, levelID, p
 	req := connect.NewRequest(&rpcv1.CreateTaskRequest{
 		ProjectId:    projectID,
 		Title:        title,
-		LevelId:      levelID,
+		LevelId:      &levelID,
 		ParentTaskId: &parentID,
 	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
@@ -1736,7 +1736,7 @@ func (w *testWorld) createChildTaskError(actor testUser, projectID, title, level
 	req := connect.NewRequest(&rpcv1.CreateTaskRequest{
 		ProjectId:    projectID,
 		Title:        title,
-		LevelId:      levelID,
+		LevelId:      &levelID,
 		ParentTaskId: &parentID,
 	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
@@ -2917,21 +2917,36 @@ func (w *testWorld) addDocumentComment(actor testUser, docID, text string) strin
 // ---------------------------------------------------------------------------
 
 // sendTaskComment sends a plain-text comment to a task's discussion channel.
-// The task must have been created with a chat channel (channel_id is set).
+// A task is created without resources and provisions them when it is first opened, so
+// this opens the task first, which is what a person commenting on one does too.
 // This models the V2 concept of task discussion as a bundled surface.
 func (w *testWorld) sendTaskComment(actor testUser, task *rpcv1.Task, text string) string {
 	w.t.Helper()
-	require.NotNil(w.t, task.ChannelId, "task must have a discussion channel (channel_id must be set)")
-	return w.sendMessage(actor, *task.ChannelId, text)
+	opened := w.openTask(actor, task)
+	require.NotNil(w.t, opened.ChannelId, "opening a task must provision its discussion channel")
+	return w.sendMessage(actor, *opened.ChannelId, text)
 }
 
 // updateTaskDescriptionDocument edits the task's linked description document.
-// The task must have a description document (description_document_id is set).
+// Like sendTaskComment, it opens the task first so the document exists.
 // This models the V2 task_description_modified event surface.
 func (w *testWorld) updateTaskDescriptionDocument(actor testUser, task *rpcv1.Task, contentJSON string) {
 	w.t.Helper()
-	require.NotNil(w.t, task.DescriptionDocumentId, "task must have a description document (description_document_id must be set)")
-	w.updateDocument(actor, *task.DescriptionDocumentId, contentJSON)
+	opened := w.openTask(actor, task)
+	require.NotNil(w.t, opened.DescriptionDocumentId, "opening a task must provision its description document")
+	w.updateDocument(actor, *opened.DescriptionDocumentId, contentJSON)
+}
+
+// openTask fetches a task the way the task detail view does, which is what provisions
+// its chat channel and description document the first time. Tasks are created without
+// those resources, so a task nobody opens never creates a channel nobody reads.
+// It is idempotent: opening an already-provisioned task returns the same resources.
+func (w *testWorld) openTask(actor testUser, task *rpcv1.Task) *rpcv1.Task {
+	w.t.Helper()
+	if task.ChannelId != nil && task.DescriptionDocumentId != nil {
+		return task
+	}
+	return w.getTask(actor, task.Id)
 }
 
 // ---------------------------------------------------------------------------

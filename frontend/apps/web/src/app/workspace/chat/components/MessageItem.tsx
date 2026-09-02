@@ -15,18 +15,21 @@
 'use client';
 
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { Avatar, IconButton, Typography, Menu, MenuItem, Tooltip, Button, Box, alpha } from '@mui/material';
+import { Avatar, Chip, IconButton, Typography, Menu, MenuItem, Tooltip, Button, Box, alpha } from '@mui/material';
 import { type Theme, useTheme } from '@mui/material/styles';
 import EmojiEmotionsIcon from '@mui/icons-material/EmojiEmotions';
 import ReactionPicker from './ReactionPicker';
 import { ReportContentDialog } from '../../components/ReportContentDialog';
+import CreateTaskFromMessageDialog, { titleFromMessageText } from './CreateTaskFromMessageDialog';
 import { codeToEmoji, QUICK_REACTION_EMOJIS } from '../utils/emoji';
 import MentionPreview from './MentionPreview';
 import FileAttachment from './FileAttachment';
 import VoiceMessagePlayer from './voice/VoiceMessagePlayer';
 import { VoiceCallRecord, voiceCallOutcomeHintFromText } from './voice/VoiceCallRecord';
 import { getAuthToken, getFileMetadataBatch } from 'apis';
-import type { FileMetadata } from 'apis';
+import { SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE } from 'apis';
+import type { FileMetadata, MessageTaskLink, StateCategory } from 'apis';
+import NextLink from 'next/link';
 import { useAuthState } from '@/lib/auth/hooks';
 import {
 	extractFirstCanonicalResourceLink,
@@ -230,6 +233,42 @@ interface MessageItemProps {
 	 * was said in the open or in private (Feature 036).
 	 */
 	isDirectMessage?: boolean;
+	/**
+	 * Employees this message mentions. Used to pre-select an assignee when a message is
+	 * turned into a task and it names exactly one person (Feature 038).
+	 */
+	mentionedEmployeeIds?: string[];
+	/** A message in an archived channel cannot be turned into a task. */
+	isChannelArchived?: boolean;
+	/**
+	 * Tasks this message has produced, resolved by one batched call for the whole
+	 * rendered page (Feature 038). Links to tasks in projects the reader cannot access
+	 * never arrive here at all, so an empty list is indistinguishable from a message
+	 * that was never converted — which is the point.
+	 */
+	taskLinks?: MessageTaskLink[];
+	/** Called after a conversion, so the page can refresh its chips. */
+	onTaskCreated?: () => void;
+}
+
+/** How many chips one message shows before the rest collapse into a count. */
+const MAX_VISIBLE_TASK_CHIPS = 3;
+
+/** Chip colour by workflow state category, so the chip reads at a glance. */
+function chipColorForState(category: StateCategory): 'default' | 'primary' | 'success' | 'warning' {
+	switch (category) {
+		case 'done':
+		case 'verified':
+			return 'success';
+		case 'in_progress':
+		case 'submitted':
+			return 'primary';
+		case 'overdue':
+		case 'missed':
+			return 'warning';
+		default:
+			return 'default';
+	}
 }
 
 export default function MessageItem({
@@ -258,6 +297,10 @@ export default function MessageItem({
 	onEdit,
 	onDelete,
 	isDirectMessage = false,
+	mentionedEmployeeIds = [],
+	isChannelArchived = false,
+	taskLinks = [],
+	onTaskCreated,
 }: MessageItemProps) {
 	const { user } = useAuthState();
 	const [isHovered, setIsHovered] = useState(false);
@@ -265,6 +308,8 @@ export default function MessageItem({
 	const [copyLinkSuccess, setCopyLinkSuccess] = useState(false);
 	const [reactionPickerAnchor, setReactionPickerAnchor] = useState<null | HTMLElement>(null);
 	const [reportOpen, setReportOpen] = useState(false);
+	const [createTaskOpen, setCreateTaskOpen] = useState(false);
+
 	// Local state to control the visual pulse animation so it self-expires
 	// instead of relying solely on the parent prop. This prevents a stuck
 	// blinking state when navigating between threads/pages.
@@ -308,6 +353,30 @@ export default function MessageItem({
 		(messageKind === 'system' && systemEventType?.startsWith('voice_call_') && timelineMetadata?.callId)
 	);
 	const isLocalOnly = Boolean(deliveryState);
+
+	// Feature 038: the chips this message carries, and the announcement it may itself be.
+	const visibleTaskLinks = useMemo(() => taskLinks.slice(0, MAX_VISIBLE_TASK_CHIPS), [taskLinks]);
+	const hiddenTaskLinkCount = Math.max(0, taskLinks.length - MAX_VISIBLE_TASK_CHIPS);
+	const isTaskAnnouncement =
+		messageKind === 'system' && systemEventType === SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE;
+	const announcedTask = useMemo(() => {
+		if (!isTaskAnnouncement || !metadataJson) return null;
+		try {
+			const parsed = JSON.parse(metadataJson) as { taskId?: string; identifier?: string; title?: string };
+			return parsed.taskId && parsed.identifier
+				? { taskId: parsed.taskId, identifier: parsed.identifier, title: parsed.title ?? '' }
+				: null;
+		} catch {
+			return null;
+		}
+	}, [isTaskAnnouncement, metadataJson]);
+
+	// A system message is a record the system wrote about itself, an unsent message has no
+	// server-side id to point an origin at, and an archived channel is closed for new work.
+	// None of the three can become a task, so the action is not offered for them at all
+	// rather than offered and then refused.
+	const canCreateTask =
+		Boolean(channelId) && messageKind !== 'system' && !isLocalOnly && !isChannelArchived;
 
 	// Shared compact button style (uses theme tokens)
 	const compactButtonSx = (t: Theme, hasReacted = false, compact = false) => ({
@@ -753,6 +822,10 @@ export default function MessageItem({
 
 	return (
 		<Box
+			// A stable per-message handle, so a test can act on one message among many
+			// rather than on whichever happened to render first. Mirrors the
+			// message-bubble-<id> handle the mobile timeline already carries.
+			data-testid={`message-row-${id}`}
 			className={`group px-4 py-2 transition-colors ${showPulse ? 'animate-pulse' : ''}`}
 			sx={{
 				backgroundColor: showPulse
@@ -790,7 +863,7 @@ export default function MessageItem({
 					</div>
 
 					{/* Message Text (Sanitized HTML from Backend or canonical-linkified plain text) */}
-					{hasDisplayMessageText && !isVoiceCallRecord && !isVoiceMessage ? (
+					{hasDisplayMessageText && !isVoiceCallRecord && !isVoiceMessage && !isTaskAnnouncement ? (
 						<Typography
 							ref={messageContainerRef}
 							variant="body2"
@@ -843,6 +916,77 @@ export default function MessageItem({
 						</Typography>
 					) : null}
 					{canonicalPreviewDisplay ? <CanonicalPreviewCard display={canonicalPreviewDisplay} /> : null}
+
+					{/*
+					  * The conversion's own announcement. It renders as a link to the task
+					  * rather than the plain sentence stored on the row, so the thread reads
+					  * as "this became PROJ-12" and gets you there in one click.
+					  */}
+					{isTaskAnnouncement && announcedTask ? (
+						<Typography
+							variant="body2"
+							sx={{ color: theme.palette.text.secondary }}
+							data-testid="task-created-from-message-announcement"
+						>
+							Created{' '}
+							<Box
+								component={NextLink}
+								href={`/workspace/tasks/${announcedTask.taskId}`}
+								sx={{ color: 'primary.main', textDecoration: 'underline', fontWeight: 600 }}
+							>
+								{announcedTask.identifier}
+							</Box>
+							{announcedTask.title ? ` · ${announcedTask.title}` : null}
+						</Typography>
+					) : null}
+
+					{/*
+					  * What this message became. Capped, because a message converted many
+					  * times should not push the conversation off the screen; the overflow
+					  * count keeps the fact visible without the list.
+					  */}
+					{visibleTaskLinks.length > 0 ? (
+						<Box
+							sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}
+							data-testid="message-task-chips"
+						>
+							{/*
+							  * NextLink wraps the Chip rather than being its `component`: as the
+							  * component, MUI's ButtonBase renders the anchor but Next's click
+							  * handling never runs, so the chip looked like a link and did nothing.
+							  */}
+							{visibleTaskLinks.map((link) => (
+								<NextLink
+									key={link.taskId}
+									href={`/workspace/projects/${link.projectId}/tasks/${link.taskId}`}
+									style={{ textDecoration: 'none' }}
+									data-testid={`message-task-chip-${link.taskId}`}
+								>
+									{/*
+									  * Deliberately not `clickable`: that makes MUI render a <button>
+									  * inside the anchor, which takes the click and never navigates.
+									  * The wrapping link is the affordance.
+									  */}
+									<Chip
+										size="small"
+										color={chipColorForState(link.stateCategory)}
+										variant="outlined"
+										label={`${link.identifier} · ${link.stateName}`}
+										title={link.title}
+										sx={{ cursor: 'pointer' }}
+									/>
+								</NextLink>
+							))}
+							{hiddenTaskLinkCount > 0 ? (
+								<Chip
+									size="small"
+									variant="outlined"
+									label={`+${hiddenTaskLinkCount} more`}
+									data-testid="message-task-chip-overflow"
+								/>
+							) : null}
+						</Box>
+					) : null}
 
 					{isVoiceCallRecord ? (
 						<VoiceCallRecord
@@ -1040,6 +1184,17 @@ export default function MessageItem({
 							<MenuItem onClick={onDelete} sx={{ color: theme.palette.error.main }}>
 								Delete message
 							</MenuItem>
+							{canCreateTask && (
+								<MenuItem
+									onClick={() => {
+										setMoreMenuAnchor(null);
+										setCreateTaskOpen(true);
+									}}
+									data-testid="message-menu-create-task"
+								>
+									Create task
+								</MenuItem>
+							)}
 							<MenuItem
 								onClick={() => {
 									setMoreMenuAnchor(null);
@@ -1051,6 +1206,18 @@ export default function MessageItem({
 								Report message
 							</MenuItem>
 						</Menu>
+
+						{canCreateTask && (
+							<CreateTaskFromMessageDialog
+								open={createTaskOpen}
+								onClose={() => setCreateTaskOpen(false)}
+								channelId={channelId ?? ''}
+								messageId={id}
+								initialTitle={titleFromMessageText(messageText)}
+								mentionedEmployeeIds={mentionedEmployeeIds}
+								onCreated={() => onTaskCreated?.()}
+							/>
+						)}
 
 						<ReportContentDialog
 							open={reportOpen}

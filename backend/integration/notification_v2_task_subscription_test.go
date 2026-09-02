@@ -282,10 +282,13 @@ func TestNotificationV2TaskSubscription(t *testing.T) {
 	})
 
 	t.Run("when a task creates resource surfaces", func(t *testing.T) {
-		// V2 schema contract: task creation should register surface rows in
+		// V2 schema contract: a task's resources register surface rows in
 		// notification.resource_surface linking the parent task to:
 		//   - its discussion channel (surface_type=task_discussion, surface_domain=chat_channel)
 		//   - its description document (surface_type=task_description, surface_domain=document)
+		//
+		// Those resources are provisioned when the task is first opened, not at creation,
+		// so the surfaces are registered then too.
 		w := newTestWorld(t)
 		owner := w.withOwner()
 
@@ -293,7 +296,7 @@ func TestNotificationV2TaskSubscription(t *testing.T) {
 		level0 := levelByDepth(project.Levels, 0)
 		require.NotNil(t, level0)
 
-		task := w.createTask(owner, project.ID, "Surface Task", level0.Id)
+		task := w.openTask(owner, w.createTask(owner, project.ID, "Surface Task", level0.Id))
 		time.Sleep(100 * time.Millisecond)
 
 		surfaces := w.queryResourceSurfaces(notification.ResourceDomainTask, task.Id)

@@ -260,6 +260,7 @@ func (l *logicImpl) GenerateRitualInstances(
 			_ = l.Queries.IncrementProjectTaskCount(ctx, tx, &database.IncrementProjectTaskCountParams{
 				OrganizationID: orgID,
 				ID:             dbuuid.UUID(def.ProjectID),
+				TaskCount:      1,
 				UpdatedAt:      pgtype.Timestamptz{Time: now, Valid: true},
 			})
 

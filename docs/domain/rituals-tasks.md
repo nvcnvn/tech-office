@@ -2,12 +2,12 @@
 
 Projects, tasks, workflow automation, and the recurring-operational-task ("ritual") system
 with evidence capture and compliance reporting. Owned by `internal/collaboration`;
-contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 63 RPCs — the largest
+contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-08-22.** Supersedes specs 017, 022, 023, 028, 029, 034 (034 is in
-development on this branch; its backend change is described here as shipped because the
-code and migration are both present).
+**Status date: 2026-09-02.** Supersedes specs 017, 022, 023, 028, 029, 034, 038 (034 and
+038 are in development on this branch; their backend changes are described here as shipped
+because the code and migrations are both present).
 
 ## Projects
 
@@ -54,22 +54,129 @@ checked by the interceptor.
 - **Cross-domain** — `channel_id` → `chat.channel` (comments),
   `description_document_id` → `docs.document` (rich description), `file_ids uuid[]` →
   `files.file_metadata`
+- **Origin** — `source_channel_id` and `source_message_id`, set together or not at all
+  (a CHECK enforces it), recording the chat message a task was created from
 - **Ritual fields** — `task_kind IN ('standard','ritual_instance')`,
   `ritual_definition_id`, `scheduled_date`, `completion_deadline`, `skip_reason`,
   `detached_from_ritual`
 
 Task descriptions are real documents and task comments are real chat channels. The
 description document is created with `document_type = 'task_description'` and is filtered
-out of the workspace docs list.
+out of the workspace docs list. Neither is created when the task is — see
+[Lazy resource creation](#lazy-resource-creation) below.
+
+`level_id` is optional on `CreateTaskRequest`. When it is absent the project's shallowest
+level is used, which is where an ordinary top-level task belongs. This resolution runs
+before anything parses the field, because the parse panics on an empty string.
 
 Search indexes on `title`: PGroonga (multilingual full text) **and** trigram (fuzzy).
 
 `collaboration.task_assignee` supports roles `assignee | reviewer | approver`.
 
-RPC groups: tasks (`CreateTask`…`GetTaskByIdentifier`), assignment (`AssignTask`,
+RPC groups: tasks (`CreateTask`…`GetTaskByIdentifier`), tasks from chat messages
+(`CreateTaskFromMessage`, `ListTasksBySourceMessages`, `GetTaskOrigin`,
+`GetChannelTaskDestination`, `SetChannelTaskDestination`), assignment (`AssignTask`,
 `UnassignTask`, `WatchTask`, `UnwatchTask`), custom fields, workflow rules, membership,
 saved views, analytics (`GetTaskAnalytics`, `ExportTasksCSV`), file upload
 (`RequestTaskFileUpload`, `ConfirmTaskFileUpload`).
+
+### Tasks created from chat messages
+
+A message in any chat channel can be turned into an ordinary standard task.
+`CreateTaskFromMessage` takes four inputs — project, title, optional assignee, optional due
+date — and nothing else. There is no level, state, ritual or custom-field parameter, so
+this path is **structurally incapable** of producing a ritual; the constraint is enforced by
+the message shape rather than by validation.
+
+It does not reimplement task creation. It validates what is specific to this path and then
+delegates to `CreateTask`, so workflow rules, notifications, search indexing and analytics
+all apply exactly as they do for a task created through the full form.
+
+What it refuses, before writing anything:
+
+| Condition | Code |
+|---|---|
+| Title empty after trimming | `InvalidArgument` + a `BadRequest` naming the `title` field |
+| Destination archived, or not writable by the caller | `FailedPrecondition` + a `PreconditionFailure` naming the project |
+| Caller is a `viewer`, or not a member of a private destination project | `PermissionDenied` |
+| Source message soft-deleted, `system` kind, or in a channel the caller cannot read | `FailedPrecondition` |
+| Destination project in another organization | `NotFound` |
+
+Reading the source message goes through `ChatLogic.GetMessage`, which is also the channel
+access check: a caller who cannot read the channel cannot read the message, so a private
+channel they do not belong to is refused there rather than by a separate lookup.
+
+The whole conversion is **one transaction**: the task row, its origin columns and the
+threaded announcement on the source message commit together or not at all. A task existing
+with no trace in the conversation it came from would be worse than a refusal the user can
+retry.
+
+The announcement itself is written by `ChatLogic.AnnounceTaskCreatedFromMessage` and
+notifies nobody — see [chat.md](chat.md#the-task-conversion-announcement). An assignee named
+at creation still receives the ordinary task-assignment notification, because that comes
+from `CreateTask` unchanged.
+
+Direction of dependency: collaboration owns this feature end to end and calls chat through
+the `ChatLogic` interface. `internal/chat` gains one logic-layer method and no knowledge of
+tasks; no RPC here is served by `ChatService`.
+
+#### The link back, in both directions
+
+A converted message carries a chip naming the task it became, and the task carries a block
+naming the conversation it came from.
+
+`ListTasksBySourceMessages` takes a list of message ids — at most 200, one call per
+rendered page of messages — and returns a `MessageTaskLink` for each converted one: task
+id, identifier, title, project, and the task's **live** state name and category, so a chip
+shows where the work actually stands rather than where it started. The repeated request
+field is the contract-level guarantee against an N+1; both clients call it once per page
+from the message list, never per message.
+
+Access filtering happens in SQL. A link to a task in a project the caller cannot see is
+**omitted from the response entirely**, never returned with a flag — a flagged entry would
+still leak the identifier and title of work the reader may not know exists. A message with
+no links is therefore indistinguishable from one that was never converted. A deleted task
+produces no link either.
+
+`GetTaskOrigin` resolves the human-readable side: channel display name, message author, and
+the message excerpt as chat stored it. It is a separate call from `GetTask` so the ordinary
+task read stays a single-domain query; clients make it only when the task carries a
+`source_message_id`. Both chat reads run as the caller, so someone who can see the task but
+not the private channel it came from gets the identifiers and nothing else.
+
+A **soft-deleted source message does not remove the origin.** The row and its foreign keys
+survive, so the task still names the conversation; only `source_message_available` goes
+false and the excerpt is withheld — showing chat's deletion placeholder as an excerpt would
+misrepresent it as what was said.
+
+#### The channel's remembered destination
+
+`collaboration.channel_task_destination` (`organization_id`, `channel_id`, `project_id`,
+`set_by_employee_id`, `updated_at`, PK `(organization_id, channel_id)`) remembers which
+project a channel's tasks go to, so the second conversion in a channel costs a title and a
+confirmation rather than a project hunt.
+
+- **The first conversion in a channel writes it**, with `INSERT … ON CONFLICT DO NOTHING`.
+  That single statement is what makes a later conversion which overrides the project for
+  itself leave the channel's default untouched — an exception must not silently redirect
+  everything that follows.
+- **`GetChannelTaskDestination` resolves it against what the caller can use right now.** An
+  archived project, a project the caller is a `viewer` on or cannot access, or a project
+  that has gone, all come back `is_set = false` with a `ChannelDestinationUnsetReason`
+  (`NEVER_SET`, `PROJECT_ARCHIVED`, `PROJECT_DELETED`, `NO_ACCESS`). The reason is a proto
+  enum, so the one-line explanation each client shows is a client-side lookup with no
+  cross-stack string to keep in sync.
+- **The row is never deleted for those reasons.** Unarchiving the project restores the
+  setting rather than losing it. `PROJECT_DELETED` is defensive: the project foreign key is
+  `ON DELETE CASCADE`, so a hard-deleted project takes the destination row with it and the
+  channel reads as `NEVER_SET` — and the product exposes no project deletion at all,
+  archiving being the supported operation.
+- **`SetChannelTaskDestination` requires the caller to administer the channel**, checked in
+  the logic layer above the interceptor's `collab.createTask` permission — the same shape as
+  ritual definition management. An absent `project_id` clears it. Per constitution principle
+  XIII this administrative surface is **web-only**: mobile reads the destination and can
+  override it for a single conversion, but does not configure it.
+- Every channel remembers independently, direct messages included.
 
 ### Custom fields, workflow rules, saved views
 
@@ -168,12 +275,19 @@ through `CollaborationServiceConnect`, and the unreachable `every_minute` /
 `every_two_minutes` recurrence types that existed only to make the deleted cron fire fast
 in testing.
 
-### Lazy resource creation (feature 023)
+### Lazy resource creation
 
-Generating an instance does **not** create its chat channel or description document. A
-30-day window across many definitions would otherwise create thousands of channels and
-documents nobody opens. `EnsureTaskResources` creates them on first user interaction with
-the task detail view.
+`CreateTask` does **not** create a task's chat channel or description document; both
+columns stay NULL. `EnsureTaskResources` creates them on first user interaction with the
+task detail view, and is idempotent, so concurrent openers do not produce duplicates.
+
+This applies to **every** task, standard and ritual instance alike. A 30-day ritual window
+across many definitions would otherwise create thousands of channels and documents nobody
+opens, and the same argument holds for an ordinary task nobody gets round to.
+
+Both resources are created as the task's **reporter**, not as whoever opened it. Because
+provisioning is lazy the opener is arbitrary, and making them the channel admin would hand
+control of the discussion to a passer-by and let ownership race on who looked first.
 
 This has a second use: "did anyone touch this instance?" becomes cheap to answer.
 
@@ -264,11 +378,14 @@ per-instance flood — generating 30 days of a daily ritual used to mean 30 noti
 ## Client surfaces
 
 - Web: `/workspace/projects`, `/workspace/projects/[id]`, `/workspace/tasks`,
-  `/workspace/tasks/[id]`.
+  `/workspace/tasks/[id]`. Turning a message into a task is reached from the chat message
+  action menu — `workspace/chat/components/CreateTaskFromMessageDialog.tsx`.
 - Mobile: `app/(app)/(tasks)/` — project list, `[projectId]/index`,
   `[projectId]/[taskId]`, `[projectId]/create`, `[projectId]/settings`,
   `rituals/[definitionId]`; plus `app/(shared)/resource/tasks/` for deep links. Evidence
-  capture uses `src/lib/evidence-media.ts`.
+  capture uses `src/lib/evidence-media.ts`. Turning a message into a task is a
+  purpose-built bottom sheet reached from the chat long-press action sheet —
+  `src/components/chat/create-task-sheet.tsx`.
 - Clients: `packages/apis/src/collaboration.ts`, `collaboration-ritual.ts`.
 
 ## Tests
@@ -280,8 +397,9 @@ per-instance flood — generating 30 days of a daily ritual used to mean 30 noti
 `collaboration_customfield_test.go`, `collaboration_membership_test.go`,
 `collaboration_ritual_notification_test.go`, `collaboration_ritual_ux_redesign_test.go`,
 `ritual_submission_flow_test.go`, `ritual_tasks_improvement_test.go`,
-`workflow_task_lifecycle_test.go`, `workflow_project_team_test.go`, plus the unit tests
-`evidence_logic_test.go` and `ritual_schedule_change_test.go`.
+`workflow_task_lifecycle_test.go`, `workflow_project_team_test.go`,
+`chat_task_capture_test.go`, plus the unit tests `evidence_logic_test.go`,
+`ritual_schedule_change_test.go` and `task_from_message_logic_test.go`.
 
 ## Known drift
 
@@ -299,6 +417,11 @@ code and the DB CHECK with no caller. `20260830000001_drift_register_fixes.up.sq
 all three so the CHECK describes what the product can actually produce. If overdue and
 missed are ever made real states, they need a sweep of their own plus their notification
 types put back in both places; the 034 sweep only generates, it does not reconcile.
+
+**Tasks from chat messages are only partly built.** Creating one works end to end, and the
+origin columns are written; the two RPCs that read them back (`ListTasksBySourceMessages`,
+`GetTaskOrigin`) and the per-channel destination memory are declared in the proto and the
+schema with nothing behind them. See D31 and D32 in the drift register.
 
 **Spec reading order.** Rituals accumulated across five specs; if you must read them, the
 useful order is 022 (model) → 023 (lazy resources + schedule change) → 028 (submission

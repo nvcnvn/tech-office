@@ -3,7 +3,7 @@
 The cross-cutting client experience: federated search, canonical cross-platform links, the
 context rail, theme preferences, and the shape of the web and mobile apps.
 
-**Status date: 2026-08-27.** Supersedes specs 011, 012, 013, 027, 030, 031, 035.
+**Status date: 2026-09-02.** Supersedes specs 011, 012, 013, 027, 030, 031, 035.
 
 ## Canonical resource links
 
@@ -27,6 +27,13 @@ or change what it opens.
 
 `anchorType` ∈ `message`, `thread`, `requirement`, `section` — the sub-location within the
 resource (a specific message, a specific evidence requirement).
+
+The message anchor is what carries a reader between a conversation and the work that came
+out of it. A task created from a chat message shows an origin block whose link opens the
+channel anchored on the source message; the message shows a chip whose link opens the task
+directly at its project-scoped route. Both are in-app navigations, not canonical-URL
+round trips — the canonical shape is what a *shared* link looks like, and the anchor query
+keys are the same either way.
 
 ### Endpoints
 

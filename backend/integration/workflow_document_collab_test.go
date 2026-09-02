@@ -136,8 +136,10 @@ func TestDocumentWithTaskIntegration(t *testing.T) {
 
 		w.addProjectMember(manager, proj.ID, dev.ID, rpcv1.ProjectMemberRole_PROJECT_MEMBER_ROLE_MEMBER)
 
-		task := w.createTask(manager, proj.ID, "Feature: OAuth Login", level0.Id)
-		require.NotNil(t, task.DescriptionDocumentId, "task should have a description document")
+		// A task's description document is provisioned when the task is first opened,
+		// which is what openTask does.
+		task := w.openTask(manager, w.createTask(manager, proj.ID, "Feature: OAuth Login", level0.Id))
+		require.NotNil(t, task.DescriptionDocumentId, "opening a task should provision its description document")
 
 		descDocID := *task.DescriptionDocumentId
 

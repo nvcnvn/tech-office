@@ -1,6 +1,6 @@
 # Domain Snapshots
 
-**Status date: 2026-08-30** · Branch at capture: `main`
+**Status date: 2026-09-02** · Branch at capture: `038-chat-task-quick-action`
 
 These documents describe **what the system does today**, domain by domain, derived by
 reading the code, the proto contracts and `backend/database/scripts/schema.sql` — not by
@@ -67,6 +67,10 @@ problem is fixed, not annotated — the register is a list of open problems, not
 | D27 | Contract | [notifications-presence.md](notifications-presence.md#known-drift) | Mobile subscribes to and branches on SSE event types the backend never emits (`chat_message`, `chat_reaction`). Every real event arrives as `notification` and the reaction branch has a `notificationType` fallback, so nothing breaks, but the vocabulary reads as though a second event family exists. |
 | D28 | Contract | [notifications-presence.md](notifications-presence.md#known-drift), [calendar.md](calendar.md#known-drift) | `notification.personal_preference.muted_domains` omits `calendar` from its CHECK, although `calendar` is a valid `source_domain` publishing six notification types. Calendar notifications cannot be domain-muted. |
 | D30 | Behaviour | [workspace-navigation.md](workspace-navigation.md#known-drift) | Mobile does not participate in the theme system. `PreferenceService` stores `theme_mode` and `theme-tokens` exports a `darkPalette`, but every mobile screen imports `lightPalette` by name and mobile never reads or writes the preference. Its Dark Mode switch wrote a local MMKV key and called `Appearance.setColorScheme`, darkening only the native controls on a light UI; it has been removed and the scheme pinned to light. Closing this means threading a palette through the mobile screens first, then reading `GetUserPreference` — not restoring the toggle. |
+| D33 | Contract | [rituals-tasks.md](rituals-tasks.md#the-channels-remembered-destination) | `ChannelDestinationUnsetReason.PROJECT_DELETED` is implemented but unreachable. `GetChannelTaskDestination` returns it when a destination row outlives its project, but `channel_task_destination`'s project foreign key is `ON DELETE CASCADE` — as `specs/038-chat-task-quick-action/data-model.md` specifies — so a deleted project takes the row with it and the channel reads `NEVER_SET` instead. The product exposes no project deletion at all (archiving is the supported operation), so the value is dead today. The approved scenario list asks for `PROJECT_DELETED`; the test asserts what actually happens and says why. |
+| D34 | Contract | [workspace-navigation.md](workspace-navigation.md#mobile-application) | `frontend/apps/mobile` does not typecheck. Three errors predate feature 038 and none are in its files: an optimistic message builds `updatedAt.seconds` as a `number` where the generated proto wants `bigint`; the chat index subscribes to a `"tabPress"` navigation event React Navigation's core event map does not declare; and `chat-message-body.tsx` passes `durationMs` and `waveformPeaks` to `VoiceMessagePlayer`, whose props are only `fileId` and `maxWidth`, so the voice-message duration and waveform are silently dropped. Nothing runs `tsc` on mobile in CI, which is why they persist. |
+| D35 | Contract | [workspace-navigation.md](workspace-navigation.md#mobile-application) | `frontend/apps/mobile/.maestro/chat-task-capture.yaml` has never been executed. It covers feature 038's User Stories 1 and 2 on both stories' mobile surfaces, but Maestro is not installed in the implementation environment and no simulator or device was attached, so Constitution XIII's per-story blackbox requirement is unmet for them — the same shape of gap as D18, from a different cause. |
+| D36 | Contract | [platform.md](platform.md#testing) | `make test-frontend-one F=<spec>` cannot run. `pnpm --filter web exec` already runs inside `apps/web`, so `--config=apps/web/e2e/playwright.config.ts` resolves to `apps/web/apps/web/e2e/...` and Playwright exits with "does not exist". The working invocation is `npx playwright test --config=e2e/playwright.config.ts <spec>` from `apps/web`. `make test-frontend`, which passes no config, is unaffected. |
 | D29 | Behaviour | [rituals-tasks.md](rituals-tasks.md#known-drift) | Nothing sweeps a ritual instance into `overdue` or `missed`. `overdue` is derived only when an evidence write triggers `reconcileRitualTaskState`; an instance whose deadline passes with no evidence activity stays in `todo` and nobody is notified. Making these real states needs a reconciliation sweep of its own and the notification types put back in the Go list and the DB CHECK together. |
 
 ### Fixed on 2026-08-30
@@ -84,6 +88,13 @@ and second-organization membership), D20 (`TestPresencePingPong` racing the resc
 D25 (no in-app mute), D26 (decline indistinguishable from cancel). D8 was already resolved
 when the register was written: `schema.sql` is generated from the migrations by
 `backend/scripts/regen-schema.sh` and can no longer disagree with them.
+
+### Fixed on 2026-09-02
+
+D31 and D32, the two deferred halves of feature 038. The message→task chip
+(`ListTasksBySourceMessages`), the task origin block (`GetTaskOrigin`) and the channel's
+remembered destination (`GetChannelTaskDestination`, `SetChannelTaskDestination`) all have
+logic-layer implementations, Connect handlers and callers on both clients now.
 
 ## Keeping these current
 

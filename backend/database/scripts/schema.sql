@@ -603,7 +603,7 @@ CREATE TABLE chat.message (
     CONSTRAINT message_kind_valid CHECK ((message_kind = ANY (ARRAY['text'::text, 'voice'::text, 'system'::text]))),
     CONSTRAINT message_metadata_object CHECK ((jsonb_typeof(metadata) = 'object'::text)),
     CONSTRAINT message_system_event_consistency CHECK ((((message_kind = 'system'::text) AND (system_event_type IS NOT NULL)) OR ((message_kind <> 'system'::text) AND (system_event_type IS NULL)))),
-    CONSTRAINT message_system_event_type_valid CHECK (((system_event_type IS NULL) OR (system_event_type = ANY (ARRAY['voice_call_started'::text, 'voice_call_ended'::text, 'voice_call_missed'::text, 'voice_call_cancelled'::text]))))
+    CONSTRAINT message_system_event_type_valid CHECK (((system_event_type IS NULL) OR (system_event_type = ANY (ARRAY['voice_call_started'::text, 'voice_call_ended'::text, 'voice_call_missed'::text, 'voice_call_cancelled'::text, 'task_created_from_message'::text]))))
 );
 
 
@@ -732,6 +732,33 @@ COMMENT ON COLUMN chat.user_chat_config.pinned_channel_ids IS 'Array of pinned c
 --
 
 COMMENT ON COLUMN chat.user_chat_config.sidebar_category_collapsed IS 'JSONB object tracking collapsed state of sidebar categories. Example: {"channels": false, "direct_messages": false}.';
+
+
+--
+-- Name: channel_task_destination; Type: TABLE; Schema: collaboration; Owner: -
+--
+
+CREATE TABLE collaboration.channel_task_destination (
+    organization_id uuid NOT NULL,
+    channel_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    set_by_employee_id uuid NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: TABLE channel_task_destination; Type: COMMENT; Schema: collaboration; Owner: -
+--
+
+COMMENT ON TABLE collaboration.channel_task_destination IS 'The project that tasks created from a chat channel default to. Written by the first conversion in a channel and changeable only by a channel administrator; a per-conversion override never changes it.';
+
+
+--
+-- Name: COLUMN channel_task_destination.set_by_employee_id; Type: COMMENT; Schema: collaboration; Owner: -
+--
+
+COMMENT ON COLUMN collaboration.channel_task_destination.set_by_employee_id IS 'Who last set the destination. Shown when explaining where the pre-filled project came from.';
 
 
 --
@@ -1131,11 +1158,14 @@ CREATE TABLE collaboration.task (
     completion_deadline timestamp with time zone,
     skip_reason text,
     detached_from_ritual boolean DEFAULT false NOT NULL,
+    source_channel_id uuid,
+    source_message_id uuid,
     CONSTRAINT no_self_parent CHECK (((parent_task_id IS NULL) OR (parent_task_id <> id))),
     CONSTRAINT task_child_count_check CHECK ((child_count >= 0)),
     CONSTRAINT task_comment_count_check CHECK ((comment_count >= 0)),
     CONSTRAINT task_depth_check CHECK (((depth >= 0) AND (depth <= 5))),
     CONSTRAINT task_kind_check CHECK ((task_kind = ANY (ARRAY['standard'::text, 'ritual_instance'::text]))),
+    CONSTRAINT task_source_message_consistency CHECK (((source_channel_id IS NULL) = (source_message_id IS NULL))),
     CONSTRAINT valid_date_range CHECK (((start_date IS NULL) OR (due_date IS NULL) OR (start_date <= due_date)))
 );
 
@@ -1180,6 +1210,20 @@ COMMENT ON COLUMN collaboration.task.description_document_id IS 'Linked document
 --
 
 COMMENT ON COLUMN collaboration.task.file_ids IS 'Array of file UUIDs from files.file_metadata. Managed via Files API with upload_context=project.';
+
+
+--
+-- Name: COLUMN task.source_channel_id; Type: COMMENT; Schema: collaboration; Owner: -
+--
+
+COMMENT ON COLUMN collaboration.task.source_channel_id IS 'Chat channel the originating message was posted in. NULL for tasks not created from a message.';
+
+
+--
+-- Name: COLUMN task.source_message_id; Type: COMMENT; Schema: collaboration; Owner: -
+--
+
+COMMENT ON COLUMN collaboration.task.source_message_id IS 'Chat message this task was created from. NULL for tasks not created from a message.';
 
 
 --
@@ -3944,6 +3988,14 @@ ALTER TABLE ONLY chat.user_chat_config
 
 
 --
+-- Name: channel_task_destination channel_task_destination_pkey; Type: CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.channel_task_destination
+    ADD CONSTRAINT channel_task_destination_pkey PRIMARY KEY (organization_id, channel_id);
+
+
+--
 -- Name: custom_field_definition custom_field_definition_pkey; Type: CONSTRAINT; Schema: collaboration; Owner: -
 --
 
@@ -5445,6 +5497,13 @@ CREATE INDEX idx_task_ritual_today ON collaboration.task USING btree (organizati
 
 
 --
+-- Name: idx_task_source_message; Type: INDEX; Schema: collaboration; Owner: -
+--
+
+CREATE INDEX idx_task_source_message ON collaboration.task USING btree (organization_id, source_message_id) WHERE (source_message_id IS NOT NULL);
+
+
+--
 -- Name: idx_task_title_pgroonga; Type: INDEX; Schema: collaboration; Owner: -
 --
 
@@ -6846,6 +6905,38 @@ ALTER TABLE ONLY collaboration.task_assignee
 
 
 --
+-- Name: channel_task_destination fk_channel_task_destination_channel; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.channel_task_destination
+    ADD CONSTRAINT fk_channel_task_destination_channel FOREIGN KEY (organization_id, channel_id) REFERENCES chat.channel(organization_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: channel_task_destination fk_channel_task_destination_organization; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.channel_task_destination
+    ADD CONSTRAINT fk_channel_task_destination_organization FOREIGN KEY (organization_id) REFERENCES public.organization(id) ON DELETE CASCADE;
+
+
+--
+-- Name: channel_task_destination fk_channel_task_destination_project; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.channel_task_destination
+    ADD CONSTRAINT fk_channel_task_destination_project FOREIGN KEY (organization_id, project_id) REFERENCES collaboration.project(organization_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: channel_task_destination fk_channel_task_destination_set_by; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.channel_task_destination
+    ADD CONSTRAINT fk_channel_task_destination_set_by FOREIGN KEY (organization_id, set_by_employee_id) REFERENCES organization.employee(organization_id, id);
+
+
+--
 -- Name: evidence_submission fk_es_evidence_req; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
 --
 
@@ -7107,6 +7198,22 @@ ALTER TABLE ONLY collaboration.task
 
 ALTER TABLE ONLY collaboration.task
     ADD CONSTRAINT fk_task_ritual_definition FOREIGN KEY (organization_id, ritual_definition_id) REFERENCES collaboration.ritual_definition(organization_id, id) ON DELETE RESTRICT;
+
+
+--
+-- Name: task fk_task_source_channel; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.task
+    ADD CONSTRAINT fk_task_source_channel FOREIGN KEY (organization_id, source_channel_id) REFERENCES chat.channel(organization_id, id) ON DELETE SET NULL;
+
+
+--
+-- Name: task fk_task_source_message; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.task
+    ADD CONSTRAINT fk_task_source_message FOREIGN KEY (organization_id, source_message_id) REFERENCES chat.message(organization_id, id) ON DELETE SET NULL;
 
 
 --

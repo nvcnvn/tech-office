@@ -115,7 +115,7 @@ graph TD
     CAL -->|"PublishNotification()"| NOTIF
 
     %% T3 → T2 dependencies
-    COLLAB -->|"CreateChannel()"| CHAT
+    COLLAB -->|"CreateChannel()<br/>GetMessage()<br/>AnnounceTaskCreatedFromMessage()"| CHAT
     COLLAB -->|"CreateDocument()"| DOCS
 
     %% T3 → T1 dependencies
@@ -384,11 +384,11 @@ graph LR
 
 #### `collaboration` (Task Management)
 - **Schema**: `collaboration`
-- **Tables**: `project`, `project_state`, `task_level`, `task`, `task_assignee`, `custom_field_definition`, `custom_field_value`, `workflow_rule`, `workflow_rule_execution`, `project_membership`, `saved_view`, `task_watcher`
+- **Tables**: `project`, `project_state`, `task_level`, `task`, `task_assignee`, `custom_field_definition`, `custom_field_value`, `workflow_rule`, `workflow_rule_execution`, `project_membership`, `saved_view`, `task_watcher`, `channel_task_destination`
 - **Role**: Projects with configurable workflows, tasks with hierarchy (max 5 levels), custom fields, automation rules, analytics, saved views, membership & roles
-- **Code dependencies**: `chat` (CreateChannel), `docs` (CreateDocument), `notification` (PublishNotification), `files` (FileLogic)
+- **Code dependencies**: `chat` (CreateChannel, GetMessage, AnnounceTaskCreatedFromMessage), `docs` (CreateDocument), `notification` (PublishNotification), `files` (FileLogic)
 - **Workflows**: `RitualGenerationWorkflow` (`ritual_generation_sweep`) — one platform-wide job on a fixed 1-minute cadence. It discovers every organization holding at least one unarchived ritual definition and calls `GenerateRitualInstances` once per organization. There is **no** per-ritual-definition schedule: a definition's dates are derived entirely from its stored `recurrence_rule`, `timezone`, `last_generated_date`, and `generation_window_days`, so creating, updating, archiving, unarchiving, or rescheduling a ritual performs zero scheduling operations. Archiving is what stops generation; the discovery query simply stops selecting the definition. A newly created definition is generated inside the creation transaction so its instances exist immediately rather than after the next sweep. A failure on one organization is logged with that organization's ID and the sweep continues; an unparseable recurrence rule skips its own definition only.
-- **Why orchestrator**: Creating a task auto-provisions a chat channel (discussion thread) and a document (description), then publishes notifications for assignments/updates
+- **Why orchestrator**: A task owns a chat channel (discussion thread) and a document (description) — both provisioned lazily on first open, as the task's reporter, by `EnsureTaskResources` rather than at creation — and publishes notifications for assignments/updates. Collaboration also owns turning a chat message into a task: it writes the task's origin columns and asks chat to leave a non-notifying threaded announcement on the source message. The dependency runs collaboration → chat only; `internal/chat` knows nothing about tasks.
 
 ### T4 — Aggregation
 
@@ -422,6 +422,22 @@ type ChatLogic interface {
     CreateChannel(ctx context.Context, tx database.DBTX,
         orgID, creatorID dbuuid.UUID,
         req *rpcv1.CreateChannelRequest) (*rpcv1.Channel, error)
+
+    // Resolves the channel name shown in a task's origin block, and the caller's
+    // channel membership — including whether they administer the channel, which gates
+    // changing that channel's remembered task destination.
+    GetChannel(ctx context.Context, tx database.DBTX,
+        orgID, employeeID, channelID dbuuid.UUID) (*rpcv1.Channel, *rpcv1.LinkedResource, error)
+
+    // Resolves the author and excerpt shown in a task's origin block.
+    GetMessage(ctx context.Context, tx database.DBTX,
+        orgID, employeeID, messageID dbuuid.UUID) (*rpcv1.Message, error)
+
+    // Posts the threaded system reply recording that a message became a task.
+    // Runs on the caller's transaction and notifies nobody.
+    AnnounceTaskCreatedFromMessage(ctx context.Context, tx database.DBTX,
+        orgID, actorID, channelID, sourceMessageID, taskID dbuuid.UUID,
+        identifier, title string) (dbuuid.UUID, error)
 }
 
 // Defined in collaboration package — thin interface
@@ -624,6 +640,10 @@ graph TD
 | `collaboration.project.(org, owner_employee_id)` | → `organization.employee.(org, id)` | T3 → T0 ✅ |
 | `collaboration.task.(org, reporter_employee_id)` | → `organization.employee.(org, id)` | T3 → T0 ✅ |
 | `collaboration.task.(org, channel_id)` | → `chat.channel.(org, id)` | T3 → T2 ✅ |
+| `collaboration.task.(org, source_channel_id)` | → `chat.channel.(org, id)` | T3 → T2 ✅ |
+| `collaboration.task.(org, source_message_id)` | → `chat.message.(org, id)` | T3 → T2 ✅ |
+| `collaboration.channel_task_destination.(org, channel_id)` | → `chat.channel.(org, id)` | T3 → T2 ✅ |
+| `collaboration.channel_task_destination.(org, project_id)` | → `collaboration.project.(org, id)` | T3 → T3 ✅ |
 | `collaboration.task.(org, description_document_id)` | → `docs.document.(org, id)` | T3 → T2 ✅ |
 | `collaboration.task_assignee.(org, employee_id)` | → `organization.employee.(org, id)` | T3 → T0 ✅ |
 | `calendar.event.(org, organizer_id)` | → `organization.employee.(org, id)` | T4 → T0 ✅ |

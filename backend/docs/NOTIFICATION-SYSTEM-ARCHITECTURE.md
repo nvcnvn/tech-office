@@ -167,7 +167,7 @@ This diagram shows which service calls which, and through what mechanism.
 
 ```mermaid
 flowchart TB
-    Collaboration["Collaboration<br/>(task_logic)<br/><br/>On task create:<br/>1. CreateTask()<br/>2. chatLogic.CreateChannel()<br/>3. docsLogic.CreateDocument()<br/>4. registerTaskResourceSurfaces()<br/>5. createTaskWatcher(reporter) -> upsertResourceSubscription()<br/><br/>On assign:<br/>1. createTaskWatcher(assignee) -> upsertResourceSubscription()<br/>2. notifyTaskWatchers(task_assigned, direct_targeted)<br/><br/>On status move:<br/>1. notifyTaskWatchers(task_status_changed)"]
+    Collaboration["Collaboration<br/>(task_logic)<br/><br/>On task create:<br/>1. CreateTask()<br/>2. createTaskWatcher(reporter) -> upsertResourceSubscription()<br/><br/>On first open (EnsureTaskResources):<br/>1. chatLogic.CreateChannel() as the reporter<br/>2. docsLogic.CreateDocument() as the reporter<br/>3. registerTaskResourceSurfaces()<br/><br/>On assign:<br/>1. createTaskWatcher(assignee) -> upsertResourceSubscription()<br/>2. notifyTaskWatchers(task_assigned, direct_targeted)<br/><br/>On status move:<br/>1. notifyTaskWatchers(task_status_changed)<br/><br/>On CreateTaskFromMessage:<br/>1. CreateTask() (so assignment still notifies)<br/>2. SetTaskOrigin()<br/>3. RememberChannelTaskDestination() ON CONFLICT DO NOTHING<br/>4. chatLogic.AnnounceTaskCreatedFromMessage() — notifies nobody"]
     Notification["Notification Service<br/><br/>Owns:<br/>• resource_subscription<br/>• resource_surface<br/>• notification + recipient<br/>• active_connection<br/>• push_token"]
     Chat["Chat<br/>(chat/logic)<br/><br/>On message:<br/>1. broadcastNewMessage() -> live_only to channel members<br/>2. bridgeTaskChannelMessage()<br/>   a. GetResourceSurfaceBySurface(chat_channel)<br/>   b. Resolve parent task when surface is task_discussion<br/>   c. Auto-subscribe commenter<br/>   d. ListActiveResourceSubscriptionsByResource(task)<br/>   e. Publish task_commented<br/>   f. Publish task_mentioned for @mentions"]
     Voice["Voice<br/>(voice/logic)<br/><br/>On call start/join/leave/webhook:<br/>1. Reuse chat channel authorization<br/>2. Publish voice_call_started/updated/ended as live_only channel events<br/>3. Publish voice_call_incoming as persistent direct alert<br/>4. Refresh call records and artifact state"]
@@ -470,6 +470,26 @@ flowchart TD
 
 ---
 
+## Deliberately silent writes: system messages
+
+Two paths write a `chat.message` row without producing any notification, by inserting the
+row directly instead of going through `SendMessage()`:
+
+| Writer | Row | Why silent |
+|---|---|---|
+| `createVoiceSystemMessage()` | `system_event_type = voice_call_*` | The call itself already notified; the row is only a timeline record. |
+| `AnnounceTaskCreatedFromMessage()` | `system_event_type = task_created_from_message` | Turning a message into a task must not notify the message's author, nor anyone mentioned in it. |
+
+Neither calls `broadcastNewMessage()` or `notifyMentionedUsersV2()`, and neither can reuse
+`SendMessage()` — that always broadcasts. For `AnnounceTaskCreatedFromMessage` the omission
+*is* the requirement: the announcement appears in the source message's thread and generates
+no reply or mention notification for anyone.
+
+The conversion is not silent overall. It goes through `CreateTask` unchanged, so an
+assignee named at creation still receives the ordinary `task_assigned` notification.
+
+---
+
 ## End-to-End Example: Task Comment
 
 1. Alice posts a message in task T-42's discussion channel
@@ -517,7 +537,7 @@ flowchart TD
     ChatLogic["chat.NewChatLogic(queries, notificationService)<br/>Calls notificationService.PublishNotification()<br/>Reads notification.resource_surface for task bridge"]
     VoiceLogic["voice.NewLogic(queries, chatLogic, liveKitClient, voiceConfig)<br/>Calls notificationService.PublishNotification()<br/>Uses chatLogic for channel auth and system messages<br/>Uses fileLogic for voice uploads/artifacts"]
     DocsLogic["docs.NewDocumentLogic(queries, notificationService)<br/>Calls notificationService.PublishNotification()<br/>Reads notification.resource_surface for task-description bridge"]
-    CollaborationLogic["collaboration.NewLogic(queries, chatLogic, docsLogic, notificationService)<br/>Calls chatLogic.CreateChannel() on task creation<br/>Calls docsLogic.CreateDocument() on task creation<br/>Writes notification.resource_surface on task creation<br/>Writes notification.resource_subscription on watch, assign, create<br/>Calls notificationService.PublishNotification()"]
+    CollaborationLogic["collaboration.NewLogic(queries, chatLogic, docsLogic, notificationService)<br/>Calls chatLogic.CreateChannel() on a task's first open, as its reporter<br/>Calls docsLogic.CreateDocument() on a task's first open, as its reporter<br/>Calls chatLogic.GetChannel()/GetMessage() for a task's origin block<br/>Calls chatLogic.AnnounceTaskCreatedFromMessage() on conversion (silent)<br/>Writes notification.resource_surface when those resources are created<br/>Writes notification.resource_subscription on watch, assign, create<br/>Calls notificationService.PublishNotification()"]
 
     Server --> NotificationService
     NotificationService --> NotificationLogic

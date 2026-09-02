@@ -129,6 +129,9 @@ export interface Task {
 	skipReason?: string;
 	evidenceProgress?: TaskEvidenceProgressSummary;
 	detachedFromRitual: boolean;
+	/** Set only when the task was created from a chat message. */
+	sourceChannelId?: string;
+	sourceMessageId?: string;
 }
 
 export interface AssignedWorkSummaryItem {
@@ -685,6 +688,8 @@ function protoTaskToNative(t: collaboration.Task): Task {
 			? protoTimestampToDate(t.completionDeadline) ?? undefined
 			: undefined,
 		skipReason: t.skipReason || undefined,
+		sourceChannelId: t.sourceChannelId || undefined,
+		sourceMessageId: t.sourceMessageId || undefined,
 		evidenceProgress: t.evidenceProgress
 			? {
 				totalRequirements: t.evidenceProgress.totalRequirements,
@@ -1202,6 +1207,227 @@ export async function createTask(params: CreateTaskParams): Promise<CreateTaskRe
 		return {
 			task: protoTaskToNative(typed.task!),
 		};
+	});
+}
+
+/**
+ * Turn a chat message into a task.
+ *
+ * Four inputs and no more: this is the quick-capture path, not the full task form. There
+ * is deliberately no level, state, ritual or custom-field parameter — a task created this
+ * way is always an ordinary standard task, and the server picks the level.
+ */
+export interface CreateTaskFromMessageParams {
+	sourceChannelId: string;
+	sourceMessageId: string;
+	projectId: string;
+	title: string;
+	assigneeEmployeeId?: string;
+	/** ISO date string, e.g. "2026-09-04". */
+	dueDate?: string;
+	/** Subtask of the discussed task, when converting inside a task comment thread. */
+	parentTaskId?: string;
+}
+
+export interface CreateTaskFromMessageResponse {
+	task: Task;
+	/** The threaded system reply left on the source message. */
+	announcementMessageId: string;
+}
+
+export async function createTaskFromMessage(
+	params: CreateTaskFromMessageParams,
+): Promise<CreateTaskFromMessageResponse> {
+	return await rpcCall(async () => {
+		const response = await collaborationClient.createTaskFromMessage({
+			sourceChannelId: params.sourceChannelId,
+			sourceMessageId: params.sourceMessageId,
+			projectId: params.projectId,
+			title: params.title,
+			assigneeEmployeeId: params.assigneeEmployeeId,
+			dueDate: params.dueDate,
+			parentTaskId: params.parentTaskId,
+		});
+		const typed = response as collaboration.CreateTaskFromMessageResponse;
+		return {
+			task: protoTaskToNative(typed.task!),
+			announcementMessageId: typed.announcementMessageId,
+		};
+	});
+}
+
+/**
+ * The chip a chat message carries once it has become a task.
+ *
+ * Links to tasks in projects the caller cannot access never appear in the response at
+ * all, so the absence of a link is indistinguishable from a message that was never
+ * converted. That is deliberate: a flagged entry would leak the identifier.
+ */
+export interface MessageTaskLink {
+	sourceMessageId: string;
+	taskId: string;
+	identifier: string;
+	title: string;
+	projectId: string;
+	stateName: string;
+	stateCategory: StateCategory;
+}
+
+/**
+ * Resolve the task chips for a whole rendered page of messages in one call.
+ *
+ * Call this once per page of messages, never once per message — the repeated parameter
+ * is what keeps the chip cheap. At most 200 ids per call.
+ */
+export async function listTasksBySourceMessages(messageIds: string[]): Promise<MessageTaskLink[]> {
+	if (messageIds.length === 0) return [];
+	return await rpcCall(async () => {
+		const response = await collaborationClient.listTasksBySourceMessages({ messageIds });
+		const typed = response as collaboration.ListTasksBySourceMessagesResponse;
+		return typed.links.map(l => ({
+			sourceMessageId: l.sourceMessageId,
+			taskId: l.taskId,
+			identifier: l.identifier,
+			title: l.title,
+			projectId: l.projectId,
+			stateName: l.stateName,
+			stateCategory: protoStateCategoryToString(l.stateCategory),
+		}));
+	});
+}
+
+/**
+ * Where a task came from, when it was created from a chat message.
+ *
+ * `sourceMessageAvailable` goes false once the message is deleted. The task keeps its
+ * origin either way — only the excerpt disappears.
+ */
+export interface TaskOrigin {
+	hasOrigin: boolean;
+	sourceChannelId: string;
+	channelDisplayName: string;
+	sourceMessageId: string;
+	authorDisplayName: string;
+	/** Sanitized HTML, as stored by chat. Empty when the message is unavailable. */
+	excerptHtml: string;
+	sourceMessageAvailable: boolean;
+}
+
+/**
+ * Read a task's origin block. Call it only when the task carries a `sourceMessageId`;
+ * it is a separate call so the ordinary task read stays a single-domain query.
+ */
+export async function getTaskOrigin(taskId: string): Promise<TaskOrigin> {
+	return await rpcCall(async () => {
+		const response = await collaborationClient.getTaskOrigin({ taskId });
+		const typed = response as collaboration.GetTaskOriginResponse;
+		return {
+			hasOrigin: typed.hasOrigin,
+			sourceChannelId: typed.sourceChannelId,
+			channelDisplayName: typed.channelDisplayName,
+			sourceMessageId: typed.sourceMessageId,
+			authorDisplayName: typed.authorDisplayName,
+			excerptHtml: typed.excerptHtml,
+			sourceMessageAvailable: typed.sourceMessageAvailable,
+		};
+	});
+}
+
+/** Why a channel has no usable remembered task destination. */
+export type ChannelDestinationUnsetReason =
+	| 'never_set'
+	| 'project_archived'
+	| 'project_deleted'
+	| 'no_access';
+
+/**
+ * The project a channel's tasks default to.
+ *
+ * `isSet` is false when the channel has never had a task created from it, and also when
+ * the remembered project has since become unusable — `unsetReason` says which, and
+ * `channelDestinationUnsetExplanation` turns it into the line to show.
+ */
+export interface ChannelTaskDestination {
+	isSet: boolean;
+	projectId: string;
+	projectName: string;
+	projectKey: string;
+	unsetReason?: ChannelDestinationUnsetReason;
+}
+
+function protoUnsetReasonToString(
+	r: collaboration.ChannelDestinationUnsetReason,
+): ChannelDestinationUnsetReason | undefined {
+	switch (r) {
+		case collaboration.ChannelDestinationUnsetReason.NEVER_SET:
+			return 'never_set';
+		case collaboration.ChannelDestinationUnsetReason.PROJECT_ARCHIVED:
+			return 'project_archived';
+		case collaboration.ChannelDestinationUnsetReason.PROJECT_DELETED:
+			return 'project_deleted';
+		case collaboration.ChannelDestinationUnsetReason.NO_ACCESS:
+			return 'no_access';
+		default:
+			return undefined;
+	}
+}
+
+/**
+ * The one-line explanation for an unusable remembered destination.
+ *
+ * Lives here rather than on the wire so there is no cross-stack string to keep in sync:
+ * the server sends an enum, each client renders its own words.
+ */
+export function channelDestinationUnsetExplanation(
+	reason: ChannelDestinationUnsetReason | undefined,
+): string | undefined {
+	switch (reason) {
+		case 'project_archived':
+			return 'This channel used to file tasks in a project that has since been archived.';
+		case 'project_deleted':
+			return 'This channel used to file tasks in a project that no longer exists.';
+		case 'no_access':
+			return 'This channel files tasks in a project you cannot add work to.';
+		default:
+			// never_set is the ordinary first-time case and needs no explaining.
+			return undefined;
+	}
+}
+
+function protoDestinationToNative(
+	d: collaboration.GetChannelTaskDestinationResponse,
+): ChannelTaskDestination {
+	return {
+		isSet: d.isSet,
+		projectId: d.projectId,
+		projectName: d.projectName,
+		projectKey: d.projectKey,
+		unsetReason: d.isSet ? undefined : protoUnsetReasonToString(d.unsetReason),
+	};
+}
+
+export async function getChannelTaskDestination(channelId: string): Promise<ChannelTaskDestination> {
+	return await rpcCall(async () => {
+		const response = await collaborationClient.getChannelTaskDestination({ channelId });
+		return protoDestinationToNative(response as collaboration.GetChannelTaskDestinationResponse);
+	});
+}
+
+/**
+ * Change or clear what a channel remembers. Omitting `projectId` clears it.
+ *
+ * Requires the caller to administer the channel. Web-only per constitution principle
+ * XIII: mobile reads the destination and can override it for one conversion, but does
+ * not configure it.
+ */
+export async function setChannelTaskDestination(
+	channelId: string,
+	projectId?: string,
+): Promise<ChannelTaskDestination> {
+	return await rpcCall(async () => {
+		const response = await collaborationClient.setChannelTaskDestination({ channelId, projectId });
+		const typed = response as collaboration.SetChannelTaskDestinationResponse;
+		return protoDestinationToNative(typed.destination!);
 	});
 }
 

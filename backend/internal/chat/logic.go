@@ -83,6 +83,10 @@ type ChatLogic interface {
 	AnnounceVoiceCallStarted(ctx context.Context, tx database.DBTX, orgID, actorID, channelID, callID dbuuid.UUID) error
 	AnnounceVoiceCallEnded(ctx context.Context, tx database.DBTX, orgID, actorID, channelID, callID dbuuid.UUID, outcome string) error
 
+	// AnnounceTaskCreatedFromMessage leaves a threaded, non-notifying system reply on a
+	// message that was turned into a task. Called by collaboration on its transaction.
+	AnnounceTaskCreatedFromMessage(ctx context.Context, tx database.DBTX, orgID, actorID, channelID, sourceMessageID, taskID dbuuid.UUID, identifier, title string) (dbuuid.UUID, error)
+
 	// User Chat Config methods
 	GetUserChatConfig(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID) (*database.ChatUserChatConfig, error)
 	AddChannelToCategory(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, channelID dbuuid.UUID, category string) error
@@ -3449,6 +3453,56 @@ INSERT INTO chat.message(
 )
 RETURNING id`, orgID, channelID, "Voice message", senderID, fileID, string(metadataJSON)).Scan(&messageID); err != nil {
 		return dbuuid.UUID{}, fmt.Errorf("create voice message: %w", err)
+	}
+	return messageID, nil
+}
+
+// AnnounceTaskCreatedFromMessage records that a message was turned into a task, as a
+// system reply in that message's thread.
+//
+// It is modelled on createVoiceSystemMessage, which is how voice leaves a call record in
+// a channel timeline. Like that one, and unlike SendMessage, it MUST NOT broadcast or
+// notify: the announcement appears in the thread and produces no reply notification for
+// the source message's author and no mention notification for anyone. SendMessage cannot
+// be reused here precisely because it always broadcasts.
+//
+// It runs on the caller's transaction, so the announcement commits with the task that
+// caused it or not at all, and returns the new message id so the caller can surface it.
+//
+// Chat learns nothing about tasks here. The identifier and title are opaque strings it
+// stores for rendering; the access-filtered task data behind the message chip comes from
+// collaboration, because this metadata is readable by every channel member.
+func (s *chatLogicImpl) AnnounceTaskCreatedFromMessage(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, actorID, channelID, sourceMessageID, taskID dbuuid.UUID,
+	identifier, title string,
+) (dbuuid.UUID, error) {
+	metadataJSON, err := json.Marshal(map[string]any{
+		"taskId":     taskID.String(),
+		"identifier": identifier,
+		"title":      title,
+	})
+	if err != nil {
+		return dbuuid.UUID{}, fmt.Errorf("marshal task announcement metadata: %w", err)
+	}
+
+	var messageID dbuuid.UUID
+	if err := tx.QueryRow(ctx, `
+INSERT INTO chat.message(
+    id, organization_id, channel_id, message_text, author_employee_id,
+    parent_message_id, mentions, file_ids, message_kind, system_event_type, metadata
+) VALUES (
+    uuidv7(), $1, $2, $3, $4,
+    $5, '[]'::jsonb, ARRAY[]::uuid[], 'system', $6, $7::jsonb
+)
+RETURNING id`,
+		orgID, channelID,
+		fmt.Sprintf("Created task %s", identifier),
+		actorID, sourceMessageID,
+		SystemEventTypeTaskCreatedFromMessage, string(metadataJSON),
+	).Scan(&messageID); err != nil {
+		return dbuuid.UUID{}, fmt.Errorf("create task announcement message: %w", err)
 	}
 	return messageID, nil
 }

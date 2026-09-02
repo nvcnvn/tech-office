@@ -1,0 +1,123 @@
+appId: com.devguards.TechOffice
+name: "Chat task capture — turn a message into a task from the conversation"
+# Feature 038, US1. FR-001, FR-004, FR-009.
+#
+# Long-press the message, tap Create task, pick a project, confirm — which is the whole
+# argument for the sheet's shape: recording a piece of work costs a handful of taps and
+# never leaves the conversation.
+#
+# The flow posts its own message and acts on that, so it does not depend on whatever the
+# first channel happens to contain — a system row such as a voice-call record has no
+# Create task action at all, and picking one at random would make the flow flaky.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-chat"
+- extendedWaitUntil:
+    visible:
+      id: "channel-row-.*"
+    timeout: 10000
+- tapOn:
+    id: "channel-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "message-bubble-.*"
+    timeout: 10000
+
+# Post the message this flow will convert.
+- tapOn:
+    id: "message-input"
+- inputText: "Maestro capture probe ${MAESTRO_RUN_ID}"
+- tapOn:
+    id: "send-button"
+# The keyboard stays up after sending and overlaps the timeline; dismiss it before
+# reaching for the message. longPressOn retries on its own, so there is no separate
+# wait step to race the optimistic-to-confirmed re-render.
+- hideKeyboard
+
+# Long-pressing a message opens the action sheet, which offers Create task (FR-001).
+# Matched on the row's accessibility label, which is "<author>: <text>".
+- longPressOn: ".*Maestro capture probe ${MAESTRO_RUN_ID}.*"
+- extendedWaitUntil:
+    visible:
+      id: "message-action-create-task"
+    timeout: 5000
+- takeScreenshot: "tmp/maestro-screenshots/capture-01-message-actions"
+
+- tapOn:
+    id: "message-action-create-task"
+- extendedWaitUntil:
+    visible:
+      id: "create-task-sheet"
+    timeout: 5000
+
+# The sheet opens with the title already taken from the message body, so the common
+# case — a message that already says what needs doing — costs no typing (FR-009).
+- assertVisible: ".*Maestro capture probe ${MAESTRO_RUN_ID}.*"
+- takeScreenshot: "tmp/maestro-screenshots/capture-02-sheet-prefilled"
+
+# The project has to be answered: nothing is remembered for this channel yet, and no
+# project is inferred from the person's history.
+- tapOn:
+    id: "create-task-sheet-project-.*"
+    index: 0
+
+- tapOn:
+    id: "create-task-sheet-submit"
+
+# The sheet closing is the confirmation. The person is left in the conversation they
+# never had to leave (FR-004).
+- extendedWaitUntil:
+    notVisible:
+      id: "create-task-sheet"
+    timeout: 10000
+- assertVisible:
+    id: "message-bubble-.*"
+- takeScreenshot: "tmp/maestro-screenshots/capture-03-back-in-conversation"
+
+# ── User Story 2 — what the message became, and getting back to it ────────────
+#
+# The conversion left a chip on the message naming the task, and the chip is the way
+# back to it. The chip is resolved by one batched lookup for the whole rendered page,
+# so it appears without a per-message round trip (FR-021).
+- extendedWaitUntil:
+    visible:
+      id: "message-task-chip-.*"
+    timeout: 10000
+- takeScreenshot: "tmp/maestro-screenshots/capture-04-chip-on-message"
+
+# Tapping the chip opens the task it names (FR-022) …
+- tapOn:
+    id: "message-task-chip-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "task-origin-block"
+    timeout: 10000
+
+# … and the task says which conversation it came from, who said it, and what they said
+# (FR-020). A message the reader can still see shows its excerpt rather than the
+# "deleted" note.
+- assertVisible:
+    id: "task-origin-channel"
+- assertVisible:
+    id: "task-origin-excerpt"
+- assertVisible: ".*Maestro capture probe ${MAESTRO_RUN_ID}.*"
+- takeScreenshot: "tmp/maestro-screenshots/capture-05-task-origin-block"
+
+# The origin link is the way back to the conversation, anchored on the source message.
+- tapOn:
+    id: "task-origin-link"
+- extendedWaitUntil:
+    visible:
+      id: "message-bubble-.*"
+    timeout: 10000
+- takeScreenshot: "tmp/maestro-screenshots/capture-06-back-in-conversation"

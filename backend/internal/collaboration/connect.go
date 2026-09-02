@@ -19,6 +19,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/internal/linking"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"github.com/nvcnvn/tech-office/backend/rpc/v1/rpcv1connect"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
 // ============================================================================
@@ -61,12 +62,12 @@ func NewCollaborationServiceConnect(
 	postProcess flows.Workflow[files.FilePostProcessingWorkflowInput, files.FilePostProcessingWorkflowOutput],
 ) *CollaborationServiceConnect {
 	return &CollaborationServiceConnect{
-		Logic:           logic,
-		TenantPool:      tenantPool,
-		FileLogic:       fileLogic,
-		Queries:         queries,
-		FlowsClient:     flowsClient,
-		PostProcess:     postProcess,
+		Logic:       logic,
+		TenantPool:  tenantPool,
+		FileLogic:   fileLogic,
+		Queries:     queries,
+		FlowsClient: flowsClient,
+		PostProcess: postProcess,
 	}
 }
 
@@ -153,6 +154,18 @@ func handleError(err error) error {
 	case errors.Is(err, ErrMemberNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, ErrAccessDenied):
+		return connect.NewError(connect.CodePermissionDenied, err)
+	case errors.Is(err, ErrEmptyTaskTitle):
+		// Named field, so the quick sheet can mark the title input rather than showing a
+		// whole-request error the user has to guess the cause of (Principle X).
+		return fieldViolation(connect.CodeInvalidArgument, err, "title", err.Error())
+	case errors.Is(err, ErrSourceMessageNotConvertible):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, ErrDestinationUnusable):
+		return destinationUnusable(err)
+	case errors.Is(err, ErrTooManySourceMessages):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	case errors.Is(err, ErrChannelAdminRequired):
 		return connect.NewError(connect.CodePermissionDenied, err)
 	case errors.Is(err, ErrInvalidViewType):
 		return connect.NewError(connect.CodeInvalidArgument, err)
@@ -1655,4 +1668,192 @@ func taskAssigneeRoleFromProto(role rpcv1.TaskAssigneeRole) string {
 	default:
 		return ""
 	}
+}
+
+// fieldViolation attaches a BadRequest naming the single input the caller got wrong, so a
+// client can mark that field instead of showing a whole-request error (Principle X).
+func fieldViolation(code connect.Code, err error, field, description string) *connect.Error {
+	cErr := connect.NewError(code, err)
+	badReq := &errdetails.BadRequest{
+		FieldViolations: []*errdetails.BadRequest_FieldViolation{
+			{Field: field, Description: description},
+		},
+	}
+	if d, detailErr := connect.NewErrorDetail(badReq); detailErr == nil {
+		cErr.AddDetail(d)
+	}
+	return cErr
+}
+
+// destinationUnusable reports a destination project that can no longer receive tasks.
+// The PreconditionFailure names the project so the quick sheet reopens its project picker
+// with an explanation, rather than showing a dead end the user cannot act on (FR-018).
+func destinationUnusable(err error) *connect.Error {
+	cErr := connect.NewError(connect.CodeFailedPrecondition, err)
+	pf := &errdetails.PreconditionFailure{
+		Violations: []*errdetails.PreconditionFailure_Violation{
+			{
+				Type:        "DESTINATION_PROJECT_UNUSABLE",
+				Subject:     "project",
+				Description: err.Error(),
+			},
+		},
+	}
+	if d, detailErr := connect.NewErrorDetail(pf); detailErr == nil {
+		cErr.AddDetail(d)
+	}
+	return cErr
+}
+
+// CreateTaskFromMessage turns a chat message into a task.
+//
+// The whole conversion runs inside one transaction: the task row, its origin columns and
+// the threaded announcement on the source message commit together or not at all. A task
+// that exists with no trace in the conversation it came from would be worse than a
+// refusal the user can retry (FR-031).
+func (s *CollaborationServiceConnect) CreateTaskFromMessage(
+	ctx context.Context,
+	req *connect.Request[rpcv1.CreateTaskFromMessageRequest],
+) (*connect.Response[rpcv1.CreateTaskFromMessageResponse], error) {
+	slog.DebugContext(ctx, "CreateTaskFromMessage RPC called",
+		"sourceMessageId", req.Msg.GetSourceMessageId(),
+		"projectId", req.Msg.GetProjectId(),
+	)
+
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var task *rpcv1.Task
+	var announcementID dbuuid.UUID
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		task, announcementID, txErr = s.Logic.CreateTaskFromMessage(ctx, tx, organizationID, employeeID, req.Msg)
+		return txErr
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to create task from message", "error", err)
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(&rpcv1.CreateTaskFromMessageResponse{
+		Task:                  task,
+		AnnouncementMessageId: announcementID.String(),
+	}), nil
+}
+
+// ListTasksBySourceMessages resolves the chips for a whole rendered page of messages in
+// one call. The repeated request field is the contract-level N+1 guard: a client that
+// called this per message would be visibly misusing the shape.
+func (s *CollaborationServiceConnect) ListTasksBySourceMessages(
+	ctx context.Context,
+	req *connect.Request[rpcv1.ListTasksBySourceMessagesRequest],
+) (*connect.Response[rpcv1.ListTasksBySourceMessagesResponse], error) {
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	var links []*rpcv1.MessageTaskLink
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		links, txErr = s.Logic.ListTasksBySourceMessages(ctx, tx, organizationID, employeeID, req.Msg.GetMessageIds())
+		return txErr
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to list tasks by source messages", "error", err)
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(&rpcv1.ListTasksBySourceMessagesResponse{Links: links}), nil
+}
+
+// GetTaskOrigin resolves the origin block on a task created from a message. It is a
+// separate call from GetTask so the ordinary task read stays a single-domain query; the
+// client makes it only when the task carries a source message id.
+func (s *CollaborationServiceConnect) GetTaskOrigin(
+	ctx context.Context,
+	req *connect.Request[rpcv1.GetTaskOriginRequest],
+) (*connect.Response[rpcv1.GetTaskOriginResponse], error) {
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	taskID, err := parseUUID(req.Msg.GetTaskId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, ErrTaskNotFound)
+	}
+
+	var origin *rpcv1.GetTaskOriginResponse
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		origin, txErr = s.Logic.GetTaskOrigin(ctx, tx, organizationID, employeeID, taskID)
+		return txErr
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to get task origin", "error", err)
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(origin), nil
+}
+
+// GetChannelTaskDestination reports where this channel's tasks go, resolved against what
+// the caller can actually use.
+func (s *CollaborationServiceConnect) GetChannelTaskDestination(
+	ctx context.Context,
+	req *connect.Request[rpcv1.GetChannelTaskDestinationRequest],
+) (*connect.Response[rpcv1.GetChannelTaskDestinationResponse], error) {
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	channelID, err := parseUUID(req.Msg.GetChannelId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	var dest *rpcv1.GetChannelTaskDestinationResponse
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		dest, txErr = s.Logic.GetChannelTaskDestination(ctx, tx, organizationID, employeeID, channelID)
+		return txErr
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to get channel task destination", "error", err)
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(dest), nil
+}
+
+// SetChannelTaskDestination changes or clears a channel's remembered destination. An
+// absent project id clears it. Requires the caller to administer the channel, checked in
+// the logic layer above the interceptor's permission check.
+func (s *CollaborationServiceConnect) SetChannelTaskDestination(
+	ctx context.Context,
+	req *connect.Request[rpcv1.SetChannelTaskDestinationRequest],
+) (*connect.Response[rpcv1.SetChannelTaskDestinationResponse], error) {
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	channelID, err := parseUUID(req.Msg.GetChannelId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	var dest *rpcv1.GetChannelTaskDestinationResponse
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		dest, txErr = s.Logic.SetChannelTaskDestination(ctx, tx, organizationID, employeeID, channelID, req.Msg.ProjectId)
+		return txErr
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "failed to set channel task destination", "error", err)
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(&rpcv1.SetChannelTaskDestinationResponse{Destination: dest}), nil
 }

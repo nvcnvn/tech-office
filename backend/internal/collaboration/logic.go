@@ -39,11 +39,29 @@ var (
 	ErrLastOwner                = errors.New("cannot remove last project owner")
 )
 
-// ChatLogic defines the interface for chat operations needed by collaboration
-// Used to create task comment channels (channel_type=project_ticket_thread)
+// ChatLogic defines the interface for chat operations needed by collaboration.
+//
+// The dependency runs one way only: collaboration calls chat, never the reverse. Every
+// method here is satisfied structurally by chatLogicImpl, and none of them tells chat
+// anything about tasks beyond the strings it is asked to store.
 type ChatLogic interface {
 	// CreateChannel creates a new chat channel for task comments
+	// (channel_type=project_ticket_thread).
 	CreateChannel(ctx context.Context, tx database.DBTX, orgID, creatorID dbuuid.UUID, req *rpcv1.CreateChannelRequest) (*rpcv1.Channel, error)
+
+	// GetChannel resolves the channel name shown in a task's origin block, and the
+	// caller's channel membership — including whether they administer the channel, which
+	// is what gates changing the channel's remembered task destination.
+	GetChannel(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, channelID dbuuid.UUID) (*rpcv1.Channel, *rpcv1.LinkedResource, error)
+
+	// GetMessage resolves the author and excerpt shown in a task's origin block.
+	// Already implemented on chatLogicImpl and already used this way by internal/compliance.
+	GetMessage(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, messageID dbuuid.UUID) (*rpcv1.Message, error)
+
+	// AnnounceTaskCreatedFromMessage posts the threaded system reply that records a
+	// message having been turned into a task. It notifies nobody, and it runs on the
+	// caller's transaction so the announcement commits with the task or not at all.
+	AnnounceTaskCreatedFromMessage(ctx context.Context, tx database.DBTX, orgID, actorID, channelID, sourceMessageID, taskID dbuuid.UUID, identifier, title string) (dbuuid.UUID, error)
 }
 
 // DocsLogic defines the interface for docs operations needed by collaboration
@@ -87,6 +105,23 @@ type Logic interface {
 	CreateTask(ctx context.Context, tx database.DBTX, orgID, reporterID dbuuid.UUID, req *rpcv1.CreateTaskRequest) (*rpcv1.Task, error)
 	GetTask(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, taskID dbuuid.UUID, includeCustomFields bool) (*rpcv1.Task, []*rpcv1.TaskWatcher, error)
 	GetTaskByIdentifier(ctx context.Context, tx database.DBTX, orgID, projectID dbuuid.UUID, identifier string) (*rpcv1.Task, error)
+
+	// Tasks created from chat messages. Returns the task and the id of the threaded
+	// announcement left on the source message.
+	CreateTaskFromMessage(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, req *rpcv1.CreateTaskFromMessageRequest) (*rpcv1.Task, dbuuid.UUID, error)
+
+	// ListTasksBySourceMessages resolves the chips a page of chat messages carries, in
+	// one call. Links to tasks in projects the caller cannot see are omitted.
+	ListTasksBySourceMessages(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, messageIDs []string) ([]*rpcv1.MessageTaskLink, error)
+
+	// GetTaskOrigin resolves the human-readable origin block on a task created from a
+	// message: channel name, message author and excerpt.
+	GetTaskOrigin(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, taskID dbuuid.UUID) (*rpcv1.GetTaskOriginResponse, error)
+
+	// The project a channel's tasks default to. Set by the first conversion in the
+	// channel, changed or cleared only by a channel administrator.
+	GetChannelTaskDestination(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, channelID dbuuid.UUID) (*rpcv1.GetChannelTaskDestinationResponse, error)
+	SetChannelTaskDestination(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, channelID dbuuid.UUID, projectID *string) (*rpcv1.GetChannelTaskDestinationResponse, error)
 	UpdateTask(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.UpdateTaskRequest) (*rpcv1.Task, []*rpcv1.WorkflowRuleExecution, error)
 	DeleteTask(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, taskID dbuuid.UUID, deleteChildren bool) (int32, error)
 	ListTasks(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, req *rpcv1.ListTasksRequest) ([]*rpcv1.Task, error)

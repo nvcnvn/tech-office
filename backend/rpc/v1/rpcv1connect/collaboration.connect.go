@@ -99,6 +99,21 @@ const (
 	// CollaborationServiceGetTaskByIdentifierProcedure is the fully-qualified name of the
 	// CollaborationService's GetTaskByIdentifier RPC.
 	CollaborationServiceGetTaskByIdentifierProcedure = "/rpc.v1.CollaborationService/GetTaskByIdentifier"
+	// CollaborationServiceCreateTaskFromMessageProcedure is the fully-qualified name of the
+	// CollaborationService's CreateTaskFromMessage RPC.
+	CollaborationServiceCreateTaskFromMessageProcedure = "/rpc.v1.CollaborationService/CreateTaskFromMessage"
+	// CollaborationServiceListTasksBySourceMessagesProcedure is the fully-qualified name of the
+	// CollaborationService's ListTasksBySourceMessages RPC.
+	CollaborationServiceListTasksBySourceMessagesProcedure = "/rpc.v1.CollaborationService/ListTasksBySourceMessages"
+	// CollaborationServiceGetTaskOriginProcedure is the fully-qualified name of the
+	// CollaborationService's GetTaskOrigin RPC.
+	CollaborationServiceGetTaskOriginProcedure = "/rpc.v1.CollaborationService/GetTaskOrigin"
+	// CollaborationServiceGetChannelTaskDestinationProcedure is the fully-qualified name of the
+	// CollaborationService's GetChannelTaskDestination RPC.
+	CollaborationServiceGetChannelTaskDestinationProcedure = "/rpc.v1.CollaborationService/GetChannelTaskDestination"
+	// CollaborationServiceSetChannelTaskDestinationProcedure is the fully-qualified name of the
+	// CollaborationService's SetChannelTaskDestination RPC.
+	CollaborationServiceSetChannelTaskDestinationProcedure = "/rpc.v1.CollaborationService/SetChannelTaskDestination"
 	// CollaborationServiceAssignTaskProcedure is the fully-qualified name of the CollaborationService's
 	// AssignTask RPC.
 	CollaborationServiceAssignTaskProcedure = "/rpc.v1.CollaborationService/AssignTask"
@@ -263,6 +278,14 @@ type CollaborationServiceClient interface {
 	GetAssignedWorkSummary(context.Context, *connect.Request[v1.GetAssignedWorkSummaryRequest]) (*connect.Response[v1.GetAssignedWorkSummaryResponse], error)
 	MoveTask(context.Context, *connect.Request[v1.MoveTaskRequest]) (*connect.Response[v1.MoveTaskResponse], error)
 	GetTaskByIdentifier(context.Context, *connect.Request[v1.GetTaskByIdentifierRequest]) (*connect.Response[v1.GetTaskByIdentifierResponse], error)
+	CreateTaskFromMessage(context.Context, *connect.Request[v1.CreateTaskFromMessageRequest]) (*connect.Response[v1.CreateTaskFromMessageResponse], error)
+	ListTasksBySourceMessages(context.Context, *connect.Request[v1.ListTasksBySourceMessagesRequest]) (*connect.Response[v1.ListTasksBySourceMessagesResponse], error)
+	GetTaskOrigin(context.Context, *connect.Request[v1.GetTaskOriginRequest]) (*connect.Response[v1.GetTaskOriginResponse], error)
+	GetChannelTaskDestination(context.Context, *connect.Request[v1.GetChannelTaskDestinationRequest]) (*connect.Response[v1.GetChannelTaskDestinationResponse], error)
+	// Additionally requires the caller to be a channel administrator. That is a
+	// resource check in the logic layer on top of this permission, the same shape as
+	// ritual definition management.
+	SetChannelTaskDestination(context.Context, *connect.Request[v1.SetChannelTaskDestinationRequest]) (*connect.Response[v1.SetChannelTaskDestinationResponse], error)
 	AssignTask(context.Context, *connect.Request[v1.AssignTaskRequest]) (*connect.Response[v1.AssignTaskResponse], error)
 	UnassignTask(context.Context, *connect.Request[v1.UnassignTaskRequest]) (*connect.Response[v1.UnassignTaskResponse], error)
 	WatchTask(context.Context, *connect.Request[v1.WatchTaskRequest]) (*connect.Response[v1.WatchTaskResponse], error)
@@ -458,6 +481,36 @@ func NewCollaborationServiceClient(httpClient connect.HTTPClient, baseURL string
 			httpClient,
 			baseURL+CollaborationServiceGetTaskByIdentifierProcedure,
 			connect.WithSchema(collaborationServiceMethods.ByName("GetTaskByIdentifier")),
+			connect.WithClientOptions(opts...),
+		),
+		createTaskFromMessage: connect.NewClient[v1.CreateTaskFromMessageRequest, v1.CreateTaskFromMessageResponse](
+			httpClient,
+			baseURL+CollaborationServiceCreateTaskFromMessageProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("CreateTaskFromMessage")),
+			connect.WithClientOptions(opts...),
+		),
+		listTasksBySourceMessages: connect.NewClient[v1.ListTasksBySourceMessagesRequest, v1.ListTasksBySourceMessagesResponse](
+			httpClient,
+			baseURL+CollaborationServiceListTasksBySourceMessagesProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("ListTasksBySourceMessages")),
+			connect.WithClientOptions(opts...),
+		),
+		getTaskOrigin: connect.NewClient[v1.GetTaskOriginRequest, v1.GetTaskOriginResponse](
+			httpClient,
+			baseURL+CollaborationServiceGetTaskOriginProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("GetTaskOrigin")),
+			connect.WithClientOptions(opts...),
+		),
+		getChannelTaskDestination: connect.NewClient[v1.GetChannelTaskDestinationRequest, v1.GetChannelTaskDestinationResponse](
+			httpClient,
+			baseURL+CollaborationServiceGetChannelTaskDestinationProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("GetChannelTaskDestination")),
+			connect.WithClientOptions(opts...),
+		),
+		setChannelTaskDestination: connect.NewClient[v1.SetChannelTaskDestinationRequest, v1.SetChannelTaskDestinationResponse](
+			httpClient,
+			baseURL+CollaborationServiceSetChannelTaskDestinationProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("SetChannelTaskDestination")),
 			connect.WithClientOptions(opts...),
 		),
 		assignTask: connect.NewClient[v1.AssignTaskRequest, v1.AssignTaskResponse](
@@ -763,6 +816,11 @@ type collaborationServiceClient struct {
 	getAssignedWorkSummary         *connect.Client[v1.GetAssignedWorkSummaryRequest, v1.GetAssignedWorkSummaryResponse]
 	moveTask                       *connect.Client[v1.MoveTaskRequest, v1.MoveTaskResponse]
 	getTaskByIdentifier            *connect.Client[v1.GetTaskByIdentifierRequest, v1.GetTaskByIdentifierResponse]
+	createTaskFromMessage          *connect.Client[v1.CreateTaskFromMessageRequest, v1.CreateTaskFromMessageResponse]
+	listTasksBySourceMessages      *connect.Client[v1.ListTasksBySourceMessagesRequest, v1.ListTasksBySourceMessagesResponse]
+	getTaskOrigin                  *connect.Client[v1.GetTaskOriginRequest, v1.GetTaskOriginResponse]
+	getChannelTaskDestination      *connect.Client[v1.GetChannelTaskDestinationRequest, v1.GetChannelTaskDestinationResponse]
+	setChannelTaskDestination      *connect.Client[v1.SetChannelTaskDestinationRequest, v1.SetChannelTaskDestinationResponse]
 	assignTask                     *connect.Client[v1.AssignTaskRequest, v1.AssignTaskResponse]
 	unassignTask                   *connect.Client[v1.UnassignTaskRequest, v1.UnassignTaskResponse]
 	watchTask                      *connect.Client[v1.WatchTaskRequest, v1.WatchTaskResponse]
@@ -919,6 +977,31 @@ func (c *collaborationServiceClient) MoveTask(ctx context.Context, req *connect.
 // GetTaskByIdentifier calls rpc.v1.CollaborationService.GetTaskByIdentifier.
 func (c *collaborationServiceClient) GetTaskByIdentifier(ctx context.Context, req *connect.Request[v1.GetTaskByIdentifierRequest]) (*connect.Response[v1.GetTaskByIdentifierResponse], error) {
 	return c.getTaskByIdentifier.CallUnary(ctx, req)
+}
+
+// CreateTaskFromMessage calls rpc.v1.CollaborationService.CreateTaskFromMessage.
+func (c *collaborationServiceClient) CreateTaskFromMessage(ctx context.Context, req *connect.Request[v1.CreateTaskFromMessageRequest]) (*connect.Response[v1.CreateTaskFromMessageResponse], error) {
+	return c.createTaskFromMessage.CallUnary(ctx, req)
+}
+
+// ListTasksBySourceMessages calls rpc.v1.CollaborationService.ListTasksBySourceMessages.
+func (c *collaborationServiceClient) ListTasksBySourceMessages(ctx context.Context, req *connect.Request[v1.ListTasksBySourceMessagesRequest]) (*connect.Response[v1.ListTasksBySourceMessagesResponse], error) {
+	return c.listTasksBySourceMessages.CallUnary(ctx, req)
+}
+
+// GetTaskOrigin calls rpc.v1.CollaborationService.GetTaskOrigin.
+func (c *collaborationServiceClient) GetTaskOrigin(ctx context.Context, req *connect.Request[v1.GetTaskOriginRequest]) (*connect.Response[v1.GetTaskOriginResponse], error) {
+	return c.getTaskOrigin.CallUnary(ctx, req)
+}
+
+// GetChannelTaskDestination calls rpc.v1.CollaborationService.GetChannelTaskDestination.
+func (c *collaborationServiceClient) GetChannelTaskDestination(ctx context.Context, req *connect.Request[v1.GetChannelTaskDestinationRequest]) (*connect.Response[v1.GetChannelTaskDestinationResponse], error) {
+	return c.getChannelTaskDestination.CallUnary(ctx, req)
+}
+
+// SetChannelTaskDestination calls rpc.v1.CollaborationService.SetChannelTaskDestination.
+func (c *collaborationServiceClient) SetChannelTaskDestination(ctx context.Context, req *connect.Request[v1.SetChannelTaskDestinationRequest]) (*connect.Response[v1.SetChannelTaskDestinationResponse], error) {
+	return c.setChannelTaskDestination.CallUnary(ctx, req)
 }
 
 // AssignTask calls rpc.v1.CollaborationService.AssignTask.
@@ -1175,6 +1258,14 @@ type CollaborationServiceHandler interface {
 	GetAssignedWorkSummary(context.Context, *connect.Request[v1.GetAssignedWorkSummaryRequest]) (*connect.Response[v1.GetAssignedWorkSummaryResponse], error)
 	MoveTask(context.Context, *connect.Request[v1.MoveTaskRequest]) (*connect.Response[v1.MoveTaskResponse], error)
 	GetTaskByIdentifier(context.Context, *connect.Request[v1.GetTaskByIdentifierRequest]) (*connect.Response[v1.GetTaskByIdentifierResponse], error)
+	CreateTaskFromMessage(context.Context, *connect.Request[v1.CreateTaskFromMessageRequest]) (*connect.Response[v1.CreateTaskFromMessageResponse], error)
+	ListTasksBySourceMessages(context.Context, *connect.Request[v1.ListTasksBySourceMessagesRequest]) (*connect.Response[v1.ListTasksBySourceMessagesResponse], error)
+	GetTaskOrigin(context.Context, *connect.Request[v1.GetTaskOriginRequest]) (*connect.Response[v1.GetTaskOriginResponse], error)
+	GetChannelTaskDestination(context.Context, *connect.Request[v1.GetChannelTaskDestinationRequest]) (*connect.Response[v1.GetChannelTaskDestinationResponse], error)
+	// Additionally requires the caller to be a channel administrator. That is a
+	// resource check in the logic layer on top of this permission, the same shape as
+	// ritual definition management.
+	SetChannelTaskDestination(context.Context, *connect.Request[v1.SetChannelTaskDestinationRequest]) (*connect.Response[v1.SetChannelTaskDestinationResponse], error)
 	AssignTask(context.Context, *connect.Request[v1.AssignTaskRequest]) (*connect.Response[v1.AssignTaskResponse], error)
 	UnassignTask(context.Context, *connect.Request[v1.UnassignTaskRequest]) (*connect.Response[v1.UnassignTaskResponse], error)
 	WatchTask(context.Context, *connect.Request[v1.WatchTaskRequest]) (*connect.Response[v1.WatchTaskResponse], error)
@@ -1366,6 +1457,36 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 		CollaborationServiceGetTaskByIdentifierProcedure,
 		svc.GetTaskByIdentifier,
 		connect.WithSchema(collaborationServiceMethods.ByName("GetTaskByIdentifier")),
+		connect.WithHandlerOptions(opts...),
+	)
+	collaborationServiceCreateTaskFromMessageHandler := connect.NewUnaryHandler(
+		CollaborationServiceCreateTaskFromMessageProcedure,
+		svc.CreateTaskFromMessage,
+		connect.WithSchema(collaborationServiceMethods.ByName("CreateTaskFromMessage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	collaborationServiceListTasksBySourceMessagesHandler := connect.NewUnaryHandler(
+		CollaborationServiceListTasksBySourceMessagesProcedure,
+		svc.ListTasksBySourceMessages,
+		connect.WithSchema(collaborationServiceMethods.ByName("ListTasksBySourceMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
+	collaborationServiceGetTaskOriginHandler := connect.NewUnaryHandler(
+		CollaborationServiceGetTaskOriginProcedure,
+		svc.GetTaskOrigin,
+		connect.WithSchema(collaborationServiceMethods.ByName("GetTaskOrigin")),
+		connect.WithHandlerOptions(opts...),
+	)
+	collaborationServiceGetChannelTaskDestinationHandler := connect.NewUnaryHandler(
+		CollaborationServiceGetChannelTaskDestinationProcedure,
+		svc.GetChannelTaskDestination,
+		connect.WithSchema(collaborationServiceMethods.ByName("GetChannelTaskDestination")),
+		connect.WithHandlerOptions(opts...),
+	)
+	collaborationServiceSetChannelTaskDestinationHandler := connect.NewUnaryHandler(
+		CollaborationServiceSetChannelTaskDestinationProcedure,
+		svc.SetChannelTaskDestination,
+		connect.WithSchema(collaborationServiceMethods.ByName("SetChannelTaskDestination")),
 		connect.WithHandlerOptions(opts...),
 	)
 	collaborationServiceAssignTaskHandler := connect.NewUnaryHandler(
@@ -1690,6 +1811,16 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 			collaborationServiceMoveTaskHandler.ServeHTTP(w, r)
 		case CollaborationServiceGetTaskByIdentifierProcedure:
 			collaborationServiceGetTaskByIdentifierHandler.ServeHTTP(w, r)
+		case CollaborationServiceCreateTaskFromMessageProcedure:
+			collaborationServiceCreateTaskFromMessageHandler.ServeHTTP(w, r)
+		case CollaborationServiceListTasksBySourceMessagesProcedure:
+			collaborationServiceListTasksBySourceMessagesHandler.ServeHTTP(w, r)
+		case CollaborationServiceGetTaskOriginProcedure:
+			collaborationServiceGetTaskOriginHandler.ServeHTTP(w, r)
+		case CollaborationServiceGetChannelTaskDestinationProcedure:
+			collaborationServiceGetChannelTaskDestinationHandler.ServeHTTP(w, r)
+		case CollaborationServiceSetChannelTaskDestinationProcedure:
+			collaborationServiceSetChannelTaskDestinationHandler.ServeHTTP(w, r)
 		case CollaborationServiceAssignTaskProcedure:
 			collaborationServiceAssignTaskHandler.ServeHTTP(w, r)
 		case CollaborationServiceUnassignTaskProcedure:
@@ -1877,6 +2008,26 @@ func (UnimplementedCollaborationServiceHandler) MoveTask(context.Context, *conne
 
 func (UnimplementedCollaborationServiceHandler) GetTaskByIdentifier(context.Context, *connect.Request[v1.GetTaskByIdentifierRequest]) (*connect.Response[v1.GetTaskByIdentifierResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.GetTaskByIdentifier is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) CreateTaskFromMessage(context.Context, *connect.Request[v1.CreateTaskFromMessageRequest]) (*connect.Response[v1.CreateTaskFromMessageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.CreateTaskFromMessage is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) ListTasksBySourceMessages(context.Context, *connect.Request[v1.ListTasksBySourceMessagesRequest]) (*connect.Response[v1.ListTasksBySourceMessagesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.ListTasksBySourceMessages is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) GetTaskOrigin(context.Context, *connect.Request[v1.GetTaskOriginRequest]) (*connect.Response[v1.GetTaskOriginResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.GetTaskOrigin is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) GetChannelTaskDestination(context.Context, *connect.Request[v1.GetChannelTaskDestinationRequest]) (*connect.Response[v1.GetChannelTaskDestinationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.GetChannelTaskDestination is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) SetChannelTaskDestination(context.Context, *connect.Request[v1.SetChannelTaskDestinationRequest]) (*connect.Response[v1.SetChannelTaskDestinationResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.SetChannelTaskDestination is not implemented"))
 }
 
 func (UnimplementedCollaborationServiceHandler) AssignTask(context.Context, *connect.Request[v1.AssignTaskRequest]) (*connect.Response[v1.AssignTaskResponse], error) {

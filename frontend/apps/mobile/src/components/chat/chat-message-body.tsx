@@ -11,6 +11,8 @@ import {
   type CanonicalLinkPreview,
 } from "@tech-office/links";
 
+import { SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE } from "apis";
+
 import { fetchCanonicalPreview, getCanonicalInAppRoute } from "@/lib/canonical-links";
 import {
   getTabLabel,
@@ -48,6 +50,10 @@ interface ChatMessageBodyProps {
 
 interface VoiceTimelineMetadata {
   callId?: string;
+  // Set only on a task_created_from_message announcement (Feature 038).
+  taskId?: string;
+  identifier?: string;
+  title?: string;
   voiceMessageId?: string;
   durationMs?: number | string;
   mimeType?: string;
@@ -87,6 +93,7 @@ export function ChatMessageBody({
   messageText,
   fileIds = [],
   messageKind,
+  systemEventType,
   metadataJson,
   channelId,
   messageTimestamp,
@@ -183,6 +190,44 @@ export function ChatMessageBody({
           </Text>
         ) : null}
       </Pressable>
+    );
+  }
+
+  // Feature 038: a conversion's announcement names the task it created rather than
+  // repeating the plain sentence stored on the row. It is not a link: the announcement's
+  // metadata carries no project id, and every mobile task route is project-scoped. The
+  // chip on the source message does have one, and that is what navigates.
+  if (
+    messageKind === "system" &&
+    systemEventType === SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE &&
+    timelineMetadata?.taskId &&
+    timelineMetadata?.identifier
+  ) {
+    return (
+      <View
+        testID="task-created-from-message-announcement"
+        style={{
+          paddingHorizontal: 12,
+          paddingVertical: 10,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: "#e2e8f0",
+          backgroundColor: "#f8fafc",
+          maxWidth: Math.min(contentWidth, 320),
+        }}
+      >
+        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: "#64748b" }}>
+          Created task
+        </Text>
+        <Text style={{ marginTop: 2, fontSize: 15, fontWeight: "700", color: "#0f172a" }}>
+          {timelineMetadata.identifier}
+        </Text>
+        {timelineMetadata.title ? (
+          <Text style={{ marginTop: 2, fontSize: 13, color: "#475569" }} numberOfLines={2}>
+            {timelineMetadata.title}
+          </Text>
+        ) : null}
+      </View>
     );
   }
 

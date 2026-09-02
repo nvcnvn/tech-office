@@ -33,10 +33,11 @@
 
 'use client';
 
-import React, { useRef, useState, useEffect, useCallback } from 'react';
+import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { Box, CircularProgress, Button } from '@mui/material';
 import MessageItem from './MessageItem';
+import { listTasksBySourceMessages, type MessageTaskLink } from 'apis';
 import { codeToEmoji } from '../utils/emoji';
 
 // Local type for proto reaction objects until generated types are available
@@ -71,6 +72,8 @@ export interface VirtualizedMessage {
 	messageKind?: string;
 	systemEventType?: string;
 	metadataJson?: string;
+	/** Employees this message mentions, used to pre-select an assignee on conversion. */
+	mentionedEmployeeIds?: string[];
 }
 
 interface VirtualizedMessageListProps {
@@ -105,6 +108,68 @@ interface VirtualizedMessageListProps {
 function convertTimestamp(ts?: { seconds: bigint | string | number }): Date {
 	if (!ts) return new Date();
 	return new Date(Number(ts.seconds) * 1000);
+}
+
+/** At most this many message ids in one chip lookup, matching the server's cap. */
+const MAX_TASK_LINK_LOOKUP = 200;
+
+/**
+ * Resolve, in one call, which of the rendered messages have become tasks.
+ *
+ * This is the single place the chip lookup happens. Doing it per message would issue one
+ * request per row on every scroll, which is why the RPC takes a list: a per-message
+ * implementation would be visibly wrong against that shape.
+ *
+ * Links to tasks in projects the reader cannot access never come back, so a message with
+ * no entry here is indistinguishable from one that was never converted.
+ */
+function useMessageTaskLinks(messages: VirtualizedMessage[]): {
+	linksByMessage: Map<string, MessageTaskLink[]>;
+	refresh: () => void;
+} {
+	const [linksByMessage, setLinksByMessage] = useState<Map<string, MessageTaskLink[]>>(new Map());
+	const [reloadToken, setReloadToken] = useState(0);
+
+	// Keyed on the ids themselves, so scrolling within an already-resolved page does not
+	// re-fetch, while a page of new messages does.
+	const messageIdKey = useMemo(
+		() =>
+			messages
+				.map((m) => m.id)
+				.filter((id): id is string => Boolean(id))
+				.slice(-MAX_TASK_LINK_LOOKUP)
+				.join(','),
+		[messages],
+	);
+
+	useEffect(() => {
+		if (!messageIdKey) {
+			setLinksByMessage(new Map());
+			return;
+		}
+		let cancelled = false;
+		listTasksBySourceMessages(messageIdKey.split(','))
+			.then((links) => {
+				if (cancelled) return;
+				const grouped = new Map<string, MessageTaskLink[]>();
+				for (const link of links) {
+					const existing = grouped.get(link.sourceMessageId);
+					if (existing) existing.push(link);
+					else grouped.set(link.sourceMessageId, [link]);
+				}
+				setLinksByMessage(grouped);
+			})
+			.catch(() => {
+				// A failed lookup means no chips, not a broken conversation.
+				if (!cancelled) setLinksByMessage(new Map());
+			});
+		return () => {
+			cancelled = true;
+		};
+	}, [messageIdKey, reloadToken]);
+
+	const refresh = useCallback(() => setReloadToken((t) => t + 1), []);
+	return { linksByMessage, refresh };
 }
 
 function voiceCallIdForMessage(message: VirtualizedMessage): string | null {
@@ -160,6 +225,9 @@ export default function VirtualizedMessageList({
 }: VirtualizedMessageListProps) {
 	const virtuosoRef = useRef<VirtuosoHandle>(null);
 	const visibleMessages = React.useMemo(() => collapseVoiceCallTimelineMessages(messages), [messages]);
+
+	// One chip lookup for the whole rendered page (Feature 038).
+	const { linksByMessage, refresh: refreshTaskLinks } = useMessageTaskLinks(visibleMessages);
 
 	// ── Scroll / bottom tracking ──────────────────────────────────────
 	const [atBottom, setAtBottom] = useState(true);
@@ -340,6 +408,9 @@ export default function VirtualizedMessageList({
 							messageKind={message.messageKind}
 							systemEventType={message.systemEventType}
 							metadataJson={message.metadataJson}
+							mentionedEmployeeIds={message.mentionedEmployeeIds || []}
+							taskLinks={linksByMessage.get(messageId) || []}
+							onTaskCreated={refreshTaskLinks}
 							onReply={!isLocalOnly && onReply ? () => onReply(messageId) : undefined}
 							onReact={!isLocalOnly && onReact ? (emoji, shouldRemove) => onReact(messageId, emoji, shouldRemove) : undefined}
 							onEdit={!isLocalOnly && onEdit ? () => onEdit(messageId) : undefined}

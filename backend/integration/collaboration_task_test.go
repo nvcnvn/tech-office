@@ -1,6 +1,7 @@
 package integration
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -30,12 +31,45 @@ func TestTask(t *testing.T) {
 				"identifier should start with project key")
 		})
 
-		t.Run("it has an integrated chat channel", func(t *testing.T) {
-			assert.NotNil(t, task.ChannelId, "task should have an associated chat channel")
+		t.Run("it has no chat channel or description document until it is opened", func(t *testing.T) {
+			assert.Nil(t, task.ChannelId, "a task should not provision a channel at creation")
+			assert.Nil(t, task.DescriptionDocumentId, "a task should not provision a document at creation")
 		})
 
-		t.Run("it has an integrated description document", func(t *testing.T) {
-			assert.NotNil(t, task.DescriptionDocumentId, "task should have a description document")
+		t.Run("opening it provisions both", func(t *testing.T) {
+			opened := w.getTask(owner, task.Id)
+			assert.NotNil(t, opened.ChannelId, "opening a task should provision its chat channel")
+			assert.NotNil(t, opened.DescriptionDocumentId, "opening a task should provision its description document")
+		})
+	})
+
+	// D5: level_id is optional on CreateTaskRequest. The quick sheet that turns a chat
+	// message into a task has four fields and a task level is not one of them.
+	t.Run("when a task is created without a level", func(t *testing.T) {
+		proj := w.createProject(owner, "Default Level", uniqueProjectKey("DFLV"))
+		level0 := levelByDepth(proj.Levels, 0)
+		require.NotNil(t, level0)
+
+		t.Run("CreateTask with an explicit level_id behaves as before", func(t *testing.T) {
+			level1 := levelByDepth(proj.Levels, 1)
+			require.NotNil(t, level1)
+
+			task := w.createTask(owner, proj.ID, "Explicit level", level1.Id)
+
+			assert.Equal(t, level1.Id, task.LevelId, "an explicit level must be used as given")
+		})
+
+		t.Run("CreateTask without a level_id selects the shallowest level", func(t *testing.T) {
+			req := connect.NewRequest(&rpcv1.CreateTaskRequest{
+				ProjectId: proj.ID,
+				Title:     "No level named",
+			})
+			req.Header().Set("Authorization", "Bearer "+owner.Token)
+			resp, err := w.collab.CreateTask(context.Background(), req)
+			require.NoError(t, err, "an absent level must default, never panic the server")
+
+			assert.Equal(t, level0.Id, resp.Msg.Task.LevelId,
+				"an absent level should fall back to the project's shallowest level")
 		})
 	})
 

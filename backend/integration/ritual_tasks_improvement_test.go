@@ -72,23 +72,47 @@ func TestRitualTasksImprovementLazyResources(t *testing.T) {
 		})
 	})
 
+	// Lazy provisioning is no longer a ritual-instance special case: it is how every task
+	// gets its resources. A standard task behaves exactly like a ritual instance here.
 	t.Run("when a standard task is created", func(t *testing.T) {
 		standardProj := w.createProject(owner, "Standard Task Project", uniqueProjectKey("STLZ"))
 		level0 := levelByDepth(standardProj.Levels, 0)
 		require.NotNil(t, level0)
 		standardTask := w.createTask(owner, standardProj.ID, "Standard Task", level0.Id)
 
-		// FR-006: Standard tasks MUST continue to create channels eagerly.
-		t.Run("it still has a channel created eagerly (no behavior change)", func(t *testing.T) {
-			assert.NotEmpty(t, standardTask.ChannelId,
-				"standard tasks should still get a channel at creation time")
+		t.Run("it has no channel until it is opened", func(t *testing.T) {
+			assert.Empty(t, standardTask.ChannelId,
+				"a standard task should not provision a channel at creation time")
 		})
 
-		// FR-006: Standard tasks MUST continue to create docs eagerly.
-		t.Run("it still has a description document created eagerly (no behavior change)", func(t *testing.T) {
-			assert.NotEmpty(t, standardTask.DescriptionDocumentId,
-				"standard tasks should still get a description doc at creation time")
+		t.Run("it has no description document until it is opened", func(t *testing.T) {
+			assert.Empty(t, standardTask.DescriptionDocumentId,
+				"a standard task should not provision a description doc at creation time")
 		})
+
+		t.Run("opening it provisions both, once", func(t *testing.T) {
+			opened := w.getTask(owner, standardTask.Id)
+			require.NotEmpty(t, opened.ChannelId, "first GetTask should provision the channel")
+			require.NotEmpty(t, opened.DescriptionDocumentId, "first GetTask should provision the document")
+
+			again := w.getTask(owner, standardTask.Id)
+			assert.Equal(t, opened.ChannelId, again.ChannelId,
+				"opening a standard task twice must not create a second channel")
+			assert.Equal(t, opened.DescriptionDocumentId, again.DescriptionDocumentId,
+				"opening a standard task twice must not create a second document")
+		})
+	})
+
+	// The change above removed the ritual-instance gate from EnsureTaskResources. This is
+	// the regression net proving ritual instances kept the behaviour they already had.
+	t.Run("ritual instances still provision resources on first open", func(t *testing.T) {
+		require.GreaterOrEqual(t, len(tasks), 3, "need an instance not already opened above")
+		ritualTask := tasks[2]
+		require.Empty(t, ritualTask.ChannelId, "a freshly generated instance starts with no channel")
+
+		opened := w.getTask(owner, ritualTask.Id)
+		assert.NotEmpty(t, opened.ChannelId, "opening a ritual instance still provisions its channel")
+		assert.NotEmpty(t, opened.DescriptionDocumentId, "opening a ritual instance still provisions its document")
 	})
 }
 

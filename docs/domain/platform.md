@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-08-28.**
+**Status date: 2026-09-02.**
 
 ## Shape
 
@@ -34,7 +34,7 @@ decides transaction scope.
 
 Tenant isolation is **application-enforced, not RLS-enforced**.
 
-- 84 of the 100 tables carry `organization_id` and a composite primary key
+- 85 of the 101 tables carry `organization_id` and a composite primary key
   `(organization_id, id)`. Every unique constraint on them leads with `organization_id`,
   and every join between two of them carries it in the join condition.
 - The remaining 16 are global, with no `organization_id`: `public.permission`,
@@ -61,7 +61,7 @@ actually scopes the data. A query that forgets it is a tenant leak, and no datab
 backstop will catch it.
 
 **`make lint-tenancy` is that backstop.** `backend/tools/tenancylint` parses `schema.sql`
-and all 517 sqlc queries with the real PostgreSQL parser and fails the build unless every
+and all 524 sqlc queries with the real PostgreSQL parser and fails the build unless every
 tenant table in a statement is transitively connected, through `organization_id`
 equalities, to an `organization_id = <parameter>` predicate. That one rule catches both a
 missing filter and a join that forgot to carry `organization_id`. Tenant tables are

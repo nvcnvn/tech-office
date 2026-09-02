@@ -164,6 +164,46 @@ service CollaborationService {
   }
 
   // -------------------------------------------------------------------------
+  // Tasks created from chat messages
+  //
+  // Collaboration owns this feature end to end. Chat gains one logic-layer announce
+  // method and no knowledge of tasks; no RPC below is served by ChatService.
+  // -------------------------------------------------------------------------
+
+  rpc CreateTaskFromMessage(CreateTaskFromMessageRequest) returns (CreateTaskFromMessageResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.createTask"]
+    };
+  }
+
+  rpc ListTasksBySourceMessages(ListTasksBySourceMessagesRequest) returns (ListTasksBySourceMessagesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  rpc GetTaskOrigin(GetTaskOriginRequest) returns (GetTaskOriginResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+
+  rpc GetChannelTaskDestination(GetChannelTaskDestinationRequest) returns (GetChannelTaskDestinationResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewProject"]
+    };
+  }
+
+  // Additionally requires the caller to be a channel administrator. That is a
+  // resource check in the logic layer on top of this permission, the same shape as
+  // ritual definition management.
+  rpc SetChannelTaskDestination(SetChannelTaskDestinationRequest) returns (SetChannelTaskDestinationResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.createTask"]
+    };
+  }
+
+  // -------------------------------------------------------------------------
   // Task Assignment
   // -------------------------------------------------------------------------
 
@@ -524,6 +564,17 @@ enum StateCategory {
   STATE_CATEGORY_OVERDUE = 8;
   STATE_CATEGORY_MISSED = 9;
   STATE_CATEGORY_SKIPPED = 10;
+}
+
+// Why a channel has no usable remembered task destination. An enum rather than a
+// string so the one-line explanation the client shows is a client-side lookup with no
+// cross-stack string to keep in sync.
+enum ChannelDestinationUnsetReason {
+  CHANNEL_DESTINATION_UNSET_REASON_UNSPECIFIED = 0;
+  CHANNEL_DESTINATION_UNSET_REASON_NEVER_SET = 1;
+  CHANNEL_DESTINATION_UNSET_REASON_PROJECT_ARCHIVED = 2;
+  CHANNEL_DESTINATION_UNSET_REASON_PROJECT_DELETED = 3;
+  CHANNEL_DESTINATION_UNSET_REASON_NO_ACCESS = 4;
 }
 
 enum StateType {
@@ -887,6 +938,12 @@ message Task {
   string skip_reason = 25;
   TaskEvidenceProgress evidence_progress = 26;
   bool detached_from_ritual = 27;
+
+  // Where this task came from, when it was created from a chat message. Identifiers
+  // only: the human-readable origin (channel name, author, excerpt) needs a call into
+  // chat and is served by GetTaskOrigin, so GetTask stays a single-domain read.
+  optional string source_channel_id = 28;
+  optional string source_message_id = 29;
 }
 
 message TaskAssignee {
@@ -898,7 +955,9 @@ message TaskAssignee {
 message CreateTaskRequest {
   string project_id = 1;
   string title = 2;
-  string level_id = 3;
+  // Absent selects the project's shallowest level. The quick sheet that creates a task
+  // from a chat message has four fields and a task level is not one of them.
+  optional string level_id = 3;
 
   optional string parent_task_id = 4;
   optional string state_id = 5; // Uses initial state if not provided
@@ -1050,6 +1109,99 @@ message GetTaskByIdentifierRequest {
 
 message GetTaskByIdentifierResponse {
   Task task = 1;
+}
+
+// =============================================================================
+// MESSAGES - Tasks created from chat messages
+// =============================================================================
+
+message CreateTaskFromMessageRequest {
+  string source_channel_id = 1;
+  string source_message_id = 2;
+  string project_id = 3;
+  string title = 4;
+  optional string assignee_employee_id = 5;
+  optional string due_date = 6; // ISO date string, e.g. "2026-09-04"
+  // Subtask of the discussed task, when converting inside a task comment thread.
+  optional string parent_task_id = 7;
+
+  // Deliberately absent: task_kind, ritual_definition_id, scheduled_date,
+  // completion_deadline, level_id, state_id and custom_fields. This path can only
+  // produce a standard task, and the four-field limit of the quick sheet is enforced
+  // by this message shape rather than by validation.
+  //
+  // Also absent: any flag about remembering the destination. The server records the
+  // channel's destination only when none exists, so the first conversion sets it and a
+  // later override leaves it untouched, without a client deciding.
+}
+
+message CreateTaskFromMessageResponse {
+  Task task = 1;
+  // The threaded system reply posted on the source message.
+  string announcement_message_id = 2;
+}
+
+message ListTasksBySourceMessagesRequest {
+  // One call per rendered page of messages, at most 200. The repeated shape is the
+  // contract-level guarantee against an N+1: a per-message implementation is visibly
+  // wrong against it.
+  repeated string message_ids = 1;
+}
+
+message ListTasksBySourceMessagesResponse {
+  // Links to tasks in projects the caller cannot access are omitted, never returned
+  // with a flag: a flagged entry would leak the identifier.
+  repeated MessageTaskLink links = 1;
+}
+
+message MessageTaskLink {
+  string source_message_id = 1;
+  string task_id = 2;
+  string identifier = 3; // e.g., "PROJ-12"
+  string title = 4;
+  string project_id = 5;
+  string state_name = 6;
+  StateCategory state_category = 7;
+}
+
+message GetTaskOriginRequest {
+  string task_id = 1;
+}
+
+message GetTaskOriginResponse {
+  bool has_origin = 1;
+  string source_channel_id = 2;
+  string channel_display_name = 3;
+  string source_message_id = 4;
+  string author_display_name = 5;
+  string excerpt_html = 6; // sanitized HTML, as stored by chat
+  // False once the source message has been soft-deleted. The task and its origin
+  // columns survive; only the excerpt becomes unavailable.
+  bool source_message_available = 7;
+}
+
+message GetChannelTaskDestinationRequest {
+  string channel_id = 1;
+}
+
+message GetChannelTaskDestinationResponse {
+  // False when never set, or when the remembered project is archived, deleted or not
+  // writable by the caller. The stored row is never deleted for those reasons, so the
+  // setting returns if the project is unarchived.
+  bool is_set = 1;
+  string project_id = 2;
+  string project_name = 3;
+  string project_key = 4;
+  ChannelDestinationUnsetReason unset_reason = 5;
+}
+
+message SetChannelTaskDestinationRequest {
+  string channel_id = 1;
+  optional string project_id = 2; // absent clears the remembered destination
+}
+
+message SetChannelTaskDestinationResponse {
+  GetChannelTaskDestinationResponse destination = 1;
 }
 
 // =============================================================================

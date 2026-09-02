@@ -42,6 +42,7 @@ import { VoiceCallBar } from "./voice/VoiceCallBar";
 import { VoiceCallAnnouncement } from "./voice/VoiceCallAnnouncement";
 import TypingIndicator from "./TypingIndicator";
 import InviteMemberDialog from "./InviteMemberDialog";
+import ChannelTaskDestinationDialog from "./ChannelTaskDestinationDialog";
 import { emojiToCode } from "../utils/emoji";
 import { useThemeColors } from "@/theme/useThemeColors";
 import { useRegisterActiveChannel } from "@/hooks/useActiveChannelRegistry";
@@ -89,6 +90,7 @@ export default function MessageList({
   // Register this channel as actively visible so notification popups are suppressed
   useRegisterActiveChannel(channelId);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [taskDestinationOpen, setTaskDestinationOpen] = useState(false);
   const [copyChannelLinkSuccess, setCopyChannelLinkSuccess] = useState(false);
   const [optimisticMessages, setOptimisticMessages] = useState<
     OptimisticMessage[]
@@ -527,6 +529,26 @@ export default function MessageList({
           >
             <span className="text-lg">👥</span>
           </IconButton>
+          {/*
+            * Where this channel's tasks go. Administrative configuration, so it is
+            * offered to channel administrators only — everyone else picks a project
+            * per conversion (Feature 038, FR-017).
+            */}
+          {channelData?.currentUserMembership?.isAdmin && (
+            <IconButton
+              size="small"
+              onClick={() => setTaskDestinationOpen(true)}
+              title="Where this channel's tasks go"
+              data-testid="channel-task-destination-btn"
+              sx={{
+                "&:hover": {
+                  backgroundColor: "rgba(0, 0, 0, 0.04)",
+                },
+              }}
+            >
+              <span className="text-lg">📋</span>
+            </IconButton>
+          )}
         </div>
       </div>
 
@@ -584,6 +606,18 @@ export default function MessageList({
           onVoiceMessageSent={handleVoiceMessageSent}
         />
       </div>
+
+      {/* Where this channel's tasks go — channel administrators only */}
+      {channelData?.currentUserMembership?.isAdmin && (
+        <ChannelTaskDestinationDialog
+          open={taskDestinationOpen}
+          onClose={() => setTaskDestinationOpen(false)}
+          channelId={channelId}
+          channelName={
+            channelData.displayName || channelData.titleSlug || "this channel"
+          }
+        />
+      )}
 
       {/* Invite Member Dialog */}
       {channelData && (

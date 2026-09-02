@@ -16,7 +16,7 @@ const appendTaskFileID = `-- name: AppendTaskFileID :one
 UPDATE collaboration.task
 SET file_ids = array_append(file_ids, $1::uuid), updated_at = $2
 WHERE organization_id = $3 AND id = $4
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
 `
 
 type AppendTaskFileIDParams struct {
@@ -62,6 +62,8 @@ func (q *Queries) AppendTaskFileID(ctx context.Context, db DBTX, arg *AppendTask
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
@@ -210,6 +212,21 @@ func (q *Queries) CheckRitualInstanceExists(ctx context.Context, db DBTX, arg *C
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const clearChannelTaskDestination = `-- name: ClearChannelTaskDestination :exec
+DELETE FROM collaboration.channel_task_destination
+WHERE organization_id = $1 AND channel_id = $2
+`
+
+type ClearChannelTaskDestinationParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ChannelID      dbuuid.UUID `json:"channel_id"`
+}
+
+func (q *Queries) ClearChannelTaskDestination(ctx context.Context, db DBTX, arg *ClearChannelTaskDestinationParams) error {
+	_, err := db.Exec(ctx, clearChannelTaskDestination, arg.OrganizationID, arg.ChannelID)
+	return err
 }
 
 const clearDefaultView = `-- name: ClearDefaultView :exec
@@ -803,7 +820,7 @@ INSERT INTO collaboration.task (
     $19,
     $20
 )
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
 `
 
 type CreateTaskParams struct {
@@ -884,6 +901,8 @@ func (q *Queries) CreateTask(ctx context.Context, db DBTX, arg *CreateTaskParams
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
@@ -1275,7 +1294,7 @@ SET channel_id = $1
 WHERE organization_id = $2
   AND id = $3
   AND channel_id IS NULL
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
 `
 
 type EnsureTaskChannelParams struct {
@@ -1317,6 +1336,8 @@ func (q *Queries) EnsureTaskChannel(ctx context.Context, db DBTX, arg *EnsureTas
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
@@ -1327,7 +1348,7 @@ SET description_document_id = $1
 WHERE organization_id = $2
   AND id = $3
   AND description_document_id IS NULL
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
 `
 
 type EnsureTaskDocumentParams struct {
@@ -1369,6 +1390,8 @@ func (q *Queries) EnsureTaskDocument(ctx context.Context, db DBTX, arg *EnsureTa
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
@@ -1421,6 +1444,66 @@ func (q *Queries) GetAssignedWorkSummaryCounts(ctx context.Context, db DBTX, arg
 	)
 	var i GetAssignedWorkSummaryCountsRow
 	err := row.Scan(&i.DueTodayCount, &i.OverdueCount)
+	return &i, err
+}
+
+const getChannelTaskDestination = `-- name: GetChannelTaskDestination :one
+
+SELECT
+    d.channel_id,
+    d.project_id,
+    d.set_by_employee_id,
+    p.id          AS resolved_project_id,
+    p.name        AS project_name,
+    p.key         AS project_key,
+    p.visibility  AS project_visibility,
+    p.is_archived AS project_is_archived
+FROM collaboration.channel_task_destination d
+LEFT JOIN collaboration.project p
+    ON p.organization_id = d.organization_id AND p.id = d.project_id
+WHERE d.organization_id = $1 AND d.channel_id = $2
+`
+
+type GetChannelTaskDestinationParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ChannelID      dbuuid.UUID `json:"channel_id"`
+}
+
+type GetChannelTaskDestinationRow struct {
+	ChannelID         dbuuid.UUID     `json:"channel_id"`
+	ProjectID         dbuuid.UUID     `json:"project_id"`
+	SetByEmployeeID   dbuuid.UUID     `json:"set_by_employee_id"`
+	ResolvedProjectID dbuuid.NullUUID `json:"resolved_project_id"`
+	ProjectName       pgtype.Text     `json:"project_name"`
+	ProjectKey        pgtype.Text     `json:"project_key"`
+	ProjectVisibility pgtype.Text     `json:"project_visibility"`
+	ProjectIsArchived pgtype.Bool     `json:"project_is_archived"`
+}
+
+// =============================================================================
+// CHANNEL TASK DESTINATION QUERIES
+//
+// The project a channel's tasks default to. Written by the first conversion in a
+// channel; changed or cleared only by a channel administrator. Rows are never deleted
+// because the project became archived or unreachable — FR-018 requires those to be
+// *treated* as unset at read time, so unarchiving restores the setting.
+// =============================================================================
+// LEFT JOIN rather than JOIN: the project FK cascades, so a missing project row should
+// not exist, but reading a row whose project has gone must report it rather than return
+// nothing at all.
+func (q *Queries) GetChannelTaskDestination(ctx context.Context, db DBTX, arg *GetChannelTaskDestinationParams) (*GetChannelTaskDestinationRow, error) {
+	row := db.QueryRow(ctx, getChannelTaskDestination, arg.OrganizationID, arg.ChannelID)
+	var i GetChannelTaskDestinationRow
+	err := row.Scan(
+		&i.ChannelID,
+		&i.ProjectID,
+		&i.SetByEmployeeID,
+		&i.ResolvedProjectID,
+		&i.ProjectName,
+		&i.ProjectKey,
+		&i.ProjectVisibility,
+		&i.ProjectIsArchived,
+	)
 	return &i, err
 }
 
@@ -2141,7 +2224,7 @@ func (q *Queries) GetSavedView(ctx context.Context, db DBTX, arg *GetSavedViewPa
 }
 
 const getTask = `-- name: GetTask :one
-SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual FROM collaboration.task
+SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id FROM collaboration.task
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
 `
 
@@ -2181,12 +2264,14 @@ func (q *Queries) GetTask(ctx context.Context, db DBTX, arg *GetTaskParams) (*Co
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
 
 const getTaskByIdentifier = `-- name: GetTaskByIdentifier :one
-SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual FROM collaboration.task
+SELECT id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id FROM collaboration.task
 WHERE organization_id = $1 AND project_id = $2 AND identifier = $3 AND is_deleted = FALSE
 `
 
@@ -2227,6 +2312,8 @@ func (q *Queries) GetTaskByIdentifier(ctx context.Context, db DBTX, arg *GetTask
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
@@ -2408,6 +2495,37 @@ func (q *Queries) GetTaskLevel(ctx context.Context, db DBTX, arg *GetTaskLevelPa
 		&i.Color,
 		&i.Depth,
 		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const getTaskOrigin = `-- name: GetTaskOrigin :one
+SELECT id, project_id, source_channel_id, source_message_id
+FROM collaboration.task
+WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
+`
+
+type GetTaskOriginParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ID             dbuuid.UUID `json:"id"`
+}
+
+type GetTaskOriginRow struct {
+	ID              dbuuid.UUID     `json:"id"`
+	ProjectID       dbuuid.UUID     `json:"project_id"`
+	SourceChannelID dbuuid.NullUUID `json:"source_channel_id"`
+	SourceMessageID dbuuid.NullUUID `json:"source_message_id"`
+}
+
+// Reads a task back with just its origin columns, for the origin block on task detail.
+func (q *Queries) GetTaskOrigin(ctx context.Context, db DBTX, arg *GetTaskOriginParams) (*GetTaskOriginRow, error) {
+	row := db.QueryRow(ctx, getTaskOrigin, arg.OrganizationID, arg.ID)
+	var i GetTaskOriginRow
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
@@ -3572,7 +3690,7 @@ func (q *Queries) ListTaskLevels(ctx context.Context, db DBTX, arg *ListTaskLeve
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.updated_at, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual FROM collaboration.task t
+SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.updated_at, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual, t.source_channel_id, t.source_message_id FROM collaboration.task t
 WHERE t.organization_id = $1 
   AND t.project_id = $2
   AND t.is_deleted = FALSE
@@ -3648,6 +3766,8 @@ func (q *Queries) ListTasks(ctx context.Context, db DBTX, arg *ListTasksParams) 
 			&i.CompletionDeadline,
 			&i.SkipReason,
 			&i.DetachedFromRitual,
+			&i.SourceChannelID,
+			&i.SourceMessageID,
 		); err != nil {
 			return nil, err
 		}
@@ -3660,7 +3780,7 @@ func (q *Queries) ListTasks(ctx context.Context, db DBTX, arg *ListTasksParams) 
 }
 
 const listTasksByAssignee = `-- name: ListTasksByAssignee :many
-SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.updated_at, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual FROM collaboration.task t
+SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.updated_at, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual, t.source_channel_id, t.source_message_id FROM collaboration.task t
 JOIN collaboration.task_assignee ta ON ta.organization_id = t.organization_id AND ta.task_id = t.id
 WHERE t.organization_id = $1 
   AND t.project_id = $2
@@ -3722,6 +3842,91 @@ func (q *Queries) ListTasksByAssignee(ctx context.Context, db DBTX, arg *ListTas
 			&i.CompletionDeadline,
 			&i.SkipReason,
 			&i.DetachedFromRitual,
+			&i.SourceChannelID,
+			&i.SourceMessageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTasksBySourceMessages = `-- name: ListTasksBySourceMessages :many
+SELECT
+    t.id,
+    t.source_message_id,
+    t.identifier,
+    t.title,
+    t.project_id,
+    ps.name     AS state_name,
+    ps.category AS state_category
+FROM collaboration.task t
+JOIN collaboration.project p
+    ON p.organization_id = t.organization_id AND p.id = t.project_id
+JOIN collaboration.project_state ps
+    ON ps.organization_id = t.organization_id AND ps.id = t.state_id
+WHERE t.organization_id = $1
+  AND t.source_message_id = ANY($2::uuid[])
+  AND t.is_deleted = FALSE
+  AND (
+      p.visibility = 'public'
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+          WHERE pm.organization_id = t.organization_id
+            AND pm.project_id = t.project_id
+            AND pm.employee_id = $3
+      )
+  )
+ORDER BY t.id
+`
+
+type ListTasksBySourceMessagesParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	MessageIds     []dbuuid.UUID `json:"message_ids"`
+	EmployeeID     dbuuid.UUID   `json:"employee_id"`
+}
+
+type ListTasksBySourceMessagesRow struct {
+	ID              dbuuid.UUID     `json:"id"`
+	SourceMessageID dbuuid.NullUUID `json:"source_message_id"`
+	Identifier      string          `json:"identifier"`
+	Title           string          `json:"title"`
+	ProjectID       dbuuid.UUID     `json:"project_id"`
+	StateName       string          `json:"state_name"`
+	StateCategory   string          `json:"state_category"`
+}
+
+// The batched reverse lookup behind the chip a message carries once it has become a task.
+// One call per rendered page of messages, never one per message; idx_task_source_message
+// is the partial index that makes it cheap.
+//
+// Access filtering happens here rather than in Go: a link to a task in a project the
+// caller cannot see is omitted from the result entirely, because returning it with a flag
+// would leak the identifier (FR-021).
+//
+// Every join stays inside the collaboration schema. The chat side is only ever the stored
+// source_message_id value, never a join target.
+func (q *Queries) ListTasksBySourceMessages(ctx context.Context, db DBTX, arg *ListTasksBySourceMessagesParams) ([]*ListTasksBySourceMessagesRow, error) {
+	rows, err := db.Query(ctx, listTasksBySourceMessages, arg.OrganizationID, arg.MessageIds, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListTasksBySourceMessagesRow
+	for rows.Next() {
+		var i ListTasksBySourceMessagesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SourceMessageID,
+			&i.Identifier,
+			&i.Title,
+			&i.ProjectID,
+			&i.StateName,
+			&i.StateCategory,
 		); err != nil {
 			return nil, err
 		}
@@ -3825,6 +4030,121 @@ func (q *Queries) MigrateTasksToState(ctx context.Context, db DBTX, arg *Migrate
 		arg.UpdatedAt,
 	)
 	return err
+}
+
+const rememberChannelTaskDestination = `-- name: RememberChannelTaskDestination :exec
+INSERT INTO collaboration.channel_task_destination (
+    organization_id, channel_id, project_id, set_by_employee_id
+) VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, channel_id) DO NOTHING
+`
+
+type RememberChannelTaskDestinationParams struct {
+	OrganizationID  dbuuid.UUID `json:"organization_id"`
+	ChannelID       dbuuid.UUID `json:"channel_id"`
+	ProjectID       dbuuid.UUID `json:"project_id"`
+	SetByEmployeeID dbuuid.UUID `json:"set_by_employee_id"`
+}
+
+// The first conversion in a channel sets the destination; every later conversion,
+// including one that overrides the project for itself, leaves it exactly as it was
+// (FR-015, FR-016). DO NOTHING is what makes those two requirements one statement.
+func (q *Queries) RememberChannelTaskDestination(ctx context.Context, db DBTX, arg *RememberChannelTaskDestinationParams) error {
+	_, err := db.Exec(ctx, rememberChannelTaskDestination,
+		arg.OrganizationID,
+		arg.ChannelID,
+		arg.ProjectID,
+		arg.SetByEmployeeID,
+	)
+	return err
+}
+
+const setChannelTaskDestination = `-- name: SetChannelTaskDestination :exec
+INSERT INTO collaboration.channel_task_destination (
+    organization_id, channel_id, project_id, set_by_employee_id, updated_at
+) VALUES ($1, $2, $3, $4, now())
+ON CONFLICT (organization_id, channel_id) DO UPDATE
+SET project_id         = EXCLUDED.project_id,
+    set_by_employee_id = EXCLUDED.set_by_employee_id,
+    updated_at         = EXCLUDED.updated_at
+`
+
+type SetChannelTaskDestinationParams struct {
+	OrganizationID  dbuuid.UUID `json:"organization_id"`
+	ChannelID       dbuuid.UUID `json:"channel_id"`
+	ProjectID       dbuuid.UUID `json:"project_id"`
+	SetByEmployeeID dbuuid.UUID `json:"set_by_employee_id"`
+}
+
+// The channel-administrator path, which does overwrite.
+func (q *Queries) SetChannelTaskDestination(ctx context.Context, db DBTX, arg *SetChannelTaskDestinationParams) error {
+	_, err := db.Exec(ctx, setChannelTaskDestination,
+		arg.OrganizationID,
+		arg.ChannelID,
+		arg.ProjectID,
+		arg.SetByEmployeeID,
+	)
+	return err
+}
+
+const setTaskOrigin = `-- name: SetTaskOrigin :one
+UPDATE collaboration.task
+SET source_channel_id = $3,
+    source_message_id = $4
+WHERE organization_id = $1 AND id = $2
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
+`
+
+type SetTaskOriginParams struct {
+	OrganizationID  dbuuid.UUID     `json:"organization_id"`
+	ID              dbuuid.UUID     `json:"id"`
+	SourceChannelID dbuuid.NullUUID `json:"source_channel_id"`
+	SourceMessageID dbuuid.NullUUID `json:"source_message_id"`
+}
+
+// Records the chat message a task was created from. Run in the same transaction as the
+// CreateTask that produced the task, so a task never exists with a half-written origin.
+// The CHECK on the table enforces that both halves are set or neither is.
+func (q *Queries) SetTaskOrigin(ctx context.Context, db DBTX, arg *SetTaskOriginParams) (*CollaborationTask, error) {
+	row := db.QueryRow(ctx, setTaskOrigin,
+		arg.OrganizationID,
+		arg.ID,
+		arg.SourceChannelID,
+		arg.SourceMessageID,
+	)
+	var i CollaborationTask
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Identifier,
+		&i.Title,
+		&i.ParentTaskID,
+		&i.Depth,
+		&i.Path,
+		&i.LevelID,
+		&i.StateID,
+		&i.StartDate,
+		&i.DueDate,
+		&i.EstimatedHours,
+		&i.ChannelID,
+		&i.DescriptionDocumentID,
+		&i.FileIds,
+		&i.ReporterEmployeeID,
+		&i.ChildCount,
+		&i.CommentCount,
+		&i.IsDeleted,
+		&i.UpdatedAt,
+		&i.TaskKind,
+		&i.RitualDefinitionID,
+		&i.ScheduledDate,
+		&i.CompletionDeadline,
+		&i.SkipReason,
+		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
+	)
+	return &i, err
 }
 
 const softDeletePendingRitualInstances = `-- name: SoftDeletePendingRitualInstances :exec
@@ -4503,7 +4823,7 @@ SET
     skip_reason = COALESCE($11, skip_reason),
     updated_at = $3
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
 `
 
 type UpdateTaskParams struct {
@@ -4563,6 +4883,8 @@ func (q *Queries) UpdateTask(ctx context.Context, db DBTX, arg *UpdateTaskParams
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }
@@ -4614,7 +4936,7 @@ const updateTaskState = `-- name: UpdateTaskState :one
 UPDATE collaboration.task
 SET state_id = $3, updated_at = $4
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
-RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
 `
 
 type UpdateTaskStateParams struct {
@@ -4660,6 +4982,8 @@ func (q *Queries) UpdateTaskState(ctx context.Context, db DBTX, arg *UpdateTaskS
 		&i.CompletionDeadline,
 		&i.SkipReason,
 		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }

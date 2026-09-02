@@ -409,3 +409,43 @@ var DefaultMixedProjectStates = []struct {
 	{Name: "Missed", Color: "#dc2626", Category: StateCategoryMissed, IsInitial: false, IsClosed: true, StateType: StateTypeRitual},
 	{Name: "Skipped", Color: "#9ca3af", Category: StateCategorySkipped, IsInitial: false, IsClosed: true, StateType: StateTypeRitual},
 }
+
+// ---------------------------------------------------------------------------
+// Tasks created from chat messages
+// ---------------------------------------------------------------------------
+
+// Errors specific to turning a chat message into a task. Each maps to a Connect code in
+// handleError; the two that carry a structured detail are noted below.
+var (
+	// ErrEmptyTaskTitle is returned when the title is blank after trimming. Carries a
+	// BadRequest detail naming the title field, so the sheet can mark that one input
+	// rather than showing a whole-request error.
+	ErrEmptyTaskTitle = errors.New("task title must not be empty")
+
+	// ErrSourceMessageNotConvertible is returned for a message that cannot become a task:
+	// a system message, or one that has been soft-deleted.
+	ErrSourceMessageNotConvertible = errors.New("this message cannot be turned into a task")
+
+	// ErrDestinationUnusable is returned when the destination project is archived,
+	// deleted, or not writable by the caller. Carries a PreconditionFailure naming the
+	// project so the client reopens the project picker instead of showing a dead end.
+	ErrDestinationUnusable = errors.New("the destination project can no longer receive tasks")
+
+	// ErrTooManySourceMessages is returned when a chip lookup asks for more message ids
+	// than one rendered page could hold.
+	ErrTooManySourceMessages = errors.New("too many message ids in one request")
+
+	// ErrChannelAdminRequired is returned when a channel member who does not administer
+	// the channel tries to change or clear its remembered task destination. It is a
+	// resource check above the interceptor's permission check, in the same shape as
+	// ritual definition management.
+	ErrChannelAdminRequired = errors.New("only a channel administrator can change where this channel's tasks go")
+)
+
+// MaxSourceMessagesPerLookup caps a single reverse lookup of tasks by source message.
+// The client makes one call per rendered page of messages, which is far below this.
+const MaxSourceMessagesPerLookup = 200
+
+// MaxTaskTitleLength is where a title derived from a message body is truncated, at a word
+// boundary. Long messages are common; a task list full of paragraphs is not usable.
+const MaxTaskTitleLength = 120

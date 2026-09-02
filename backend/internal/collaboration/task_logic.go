@@ -56,12 +56,20 @@ func (l *logicImpl) CreateTask(
 
 	now := time.Now()
 	projectID := dbuuid.MustParse(req.ProjectId)
-	levelID := dbuuid.MustParse(req.LevelId)
 
 	// Check creator's project role — viewers cannot create tasks
 	role, roleErr := l.GetProjectMemberRole(ctx, tx, orgID, projectID, reporterID)
 	if roleErr != nil || role == ProjectMemberRoleViewer {
 		return nil, ErrAccessDenied
+	}
+
+	// Resolve the level before anything parses it. level_id is optional: the quick sheet
+	// that creates a task from a chat message has four fields and a task level is not one
+	// of them. This resolution must stay ahead of the parse below — MustParse panics on an
+	// empty string, so an absent level would take the server down rather than default.
+	levelID, err := l.resolveTaskLevel(ctx, tx, orgID, projectID, req.LevelId)
+	if err != nil {
+		return nil, err
 	}
 
 	// Get next task number atomically
@@ -141,53 +149,10 @@ func (l *logicImpl) CreateTask(
 		stateID = dbuuid.UUID(initialState.ID)
 	}
 
-	// Create chat channel for task comments
-	var channelID dbuuid.NullUUID
-	if l.ChatLogic != nil {
-		// Convert identifier to lowercase for slug validation (only allows lowercase alphanumeric + hyphens)
-		lowercaseSlug := strings.ToLower(identifier)
-		channel, err := l.ChatLogic.CreateChannel(ctx, tx, orgID, reporterID, &rpcv1.CreateChannelRequest{
-			TitleSlug:   fmt.Sprintf("task-%s", lowercaseSlug),
-			DisplayName: fmt.Sprintf("Task: %s", req.Title),
-			Description: fmt.Sprintf("Discussion for task %s", identifier),
-			ChannelType: rpcv1.ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD,
-			IsPrivate:   true,
-		})
-		if err != nil {
-			slog.WarnContext(ctx, "failed to create chat channel for task",
-				"error", err,
-			)
-		} else {
-			channelID = dbuuid.UUIDToNullUUID(dbuuid.MustParse(channel.Id))
-			// Enroll all current project members in the new task channel.
-			if err := l.Queries.EnrollProjectMembersInChannel(ctx, tx, &database.EnrollProjectMembersInChannelParams{
-				OrganizationID: orgID,
-				ChannelID:      dbuuid.UUID(channelID.UUID),
-				ProjectID:      projectID,
-			}); err != nil {
-				slog.WarnContext(ctx, "failed to enroll project members in task channel",
-					"error", err,
-				)
-			}
-		}
-	}
-
-	// Create description document
-	var descriptionDocID dbuuid.NullUUID
-	if l.DocsLogic != nil {
-		doc, err := l.DocsLogic.CreateDocument(ctx, tx, orgID, reporterID, &rpcv1.CreateDocumentRequest{
-			Title:       fmt.Sprintf("Task: %s", req.Title),
-			ContentJson: "{}",
-			Visibility:  rpcv1.DocumentVisibility_DOCUMENT_VISIBILITY_PUBLIC,
-		})
-		if err != nil {
-			slog.WarnContext(ctx, "failed to create description document for task",
-				"error", err,
-			)
-		} else {
-			descriptionDocID = dbuuid.UUIDToNullUUID(dbuuid.MustParse(doc.Id))
-		}
-	}
+	// A task's chat channel and description document are NOT created here. They are
+	// provisioned by EnsureTaskResources the first time someone opens the task, so a task
+	// nobody opens never creates a channel nobody reads. Both columns stay NULL until then.
+	var channelID, descriptionDocID dbuuid.NullUUID
 
 	// Parse dates
 	var startDate, dueDate pgtype.Date
@@ -284,10 +249,13 @@ func (l *logicImpl) CreateTask(
 		}
 	}
 
-	// Increment project task count
+	// Increment project task count. The delta is explicit: leaving it zero made every
+	// create a no-op while DeleteTask still decremented, so the first deletion in a
+	// project drove task_count to -1 and tripped project_task_count_check.
 	err = l.Queries.IncrementProjectTaskCount(ctx, tx, &database.IncrementProjectTaskCountParams{
 		OrganizationID: orgID,
 		ID:             projectID,
+		TaskCount:      1,
 		UpdatedAt:      pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
@@ -316,6 +284,37 @@ func (l *logicImpl) CreateTask(
 	)
 
 	return l.taskToProto(task, nil, nil), nil
+}
+
+// resolveTaskLevel turns an optional level_id into the level the task will actually get.
+// An explicit level is used as given; an absent one falls back to the project's shallowest
+// level, which is the level an ordinary top-level task belongs at.
+//
+// This exists because level_id is optional on CreateTaskRequest and is parsed with
+// MustParse, which panics on an empty string. Every caller must go through here before
+// that parse.
+func (l *logicImpl) resolveTaskLevel(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, projectID dbuuid.UUID,
+	requested *string,
+) (dbuuid.UUID, error) {
+	if requested != nil && *requested != "" {
+		return dbuuid.MustParse(*requested), nil
+	}
+
+	// ListTaskLevels already orders by depth ASC, so the shallowest level is the first.
+	levels, err := l.Queries.ListTaskLevels(ctx, tx, &database.ListTaskLevelsParams{
+		OrganizationID: orgID,
+		ProjectID:      projectID,
+	})
+	if err != nil {
+		return dbuuid.UUID{}, fmt.Errorf("failed to list task levels for default: %w", err)
+	}
+	if len(levels) == 0 {
+		return dbuuid.UUID{}, ErrLevelNotFound
+	}
+	return dbuuid.UUID(levels[0].ID), nil
 }
 
 // GetTask retrieves a task by ID
@@ -420,9 +419,10 @@ func (l *logicImpl) GetTask(
 	return taskProto, watchers, nil
 }
 
-// EnsureTaskResources lazily provisions a chat channel and description document
-// for a ritual instance task that was generated without resources. This is
-// idempotent: concurrent callers will not create duplicate resources.
+// EnsureTaskResources lazily provisions a chat channel and description document for a
+// task that does not have them yet. Every task is created without resources, so this is
+// where they come from for all of them, on first open. It is idempotent: concurrent
+// callers will not create duplicate resources.
 func (l *logicImpl) EnsureTaskResources(
 	ctx context.Context,
 	tx database.DBTX,
@@ -439,23 +439,24 @@ func (l *logicImpl) EnsureTaskResources(
 		return nil, nil, fmt.Errorf("failed to get task: %w", err)
 	}
 
-	// Only provision resources for ritual instances
-	if task.TaskKind != TaskKindRitualInstance {
-		return l.GetTask(ctx, tx, orgID, taskID, true)
-	}
-
 	// Fast path: resources already exist
 	if task.ChannelID.Valid && task.DescriptionDocumentID.Valid {
 		return l.GetTask(ctx, tx, orgID, taskID, true)
 	}
 
+	// Resources are owned by the task's reporter, not by whoever happens to open the task
+	// first. Provisioning is lazy, so the opener is arbitrary; making them the channel
+	// admin would hand control of the discussion to a passer-by and make ownership race.
+	// The eager path this replaced always used the reporter, and so does this.
+	ownerID := dbuuid.UUID(task.ReporterEmployeeID)
+
 	// Create channel if not yet set
 	if !task.ChannelID.Valid && l.ChatLogic != nil {
 		lowercaseSlug := strings.ToLower(task.Identifier)
-		channel, chErr := l.ChatLogic.CreateChannel(ctx, tx, orgID, employeeID, &rpcv1.CreateChannelRequest{
+		channel, chErr := l.ChatLogic.CreateChannel(ctx, tx, orgID, ownerID, &rpcv1.CreateChannelRequest{
 			TitleSlug:   fmt.Sprintf("task-%s", lowercaseSlug),
 			DisplayName: fmt.Sprintf("Task: %s", task.Title),
-			Description: fmt.Sprintf("Discussion for ritual task %s", task.Identifier),
+			Description: fmt.Sprintf("Discussion for task %s", task.Identifier),
 			ChannelType: rpcv1.ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD,
 			IsPrivate:   true,
 		})
@@ -485,7 +486,7 @@ func (l *logicImpl) EnsureTaskResources(
 
 	// Create document if not yet set
 	if !task.DescriptionDocumentID.Valid && l.DocsLogic != nil {
-		doc, docErr := l.DocsLogic.CreateDocument(ctx, tx, orgID, employeeID, &rpcv1.CreateDocumentRequest{
+		doc, docErr := l.DocsLogic.CreateDocument(ctx, tx, orgID, ownerID, &rpcv1.CreateDocumentRequest{
 			Title:       fmt.Sprintf("Task: %s", task.Title),
 			ContentJson: "{}",
 			Visibility:  rpcv1.DocumentVisibility_DOCUMENT_VISIBILITY_PUBLIC,
@@ -968,6 +969,17 @@ func (l *logicImpl) taskToProto(t *database.CollaborationTask, assignees []*data
 	if t.ParentTaskID.Valid {
 		s := t.ParentTaskID.UUID.String()
 		task.ParentTaskId = &s
+	}
+
+	// Where the task came from, when it was created from a chat message. The table's
+	// CHECK guarantees both halves are set together, so either both appear or neither.
+	if t.SourceChannelID.Valid {
+		s := t.SourceChannelID.UUID.String()
+		task.SourceChannelId = &s
+	}
+	if t.SourceMessageID.Valid {
+		s := t.SourceMessageID.UUID.String()
+		task.SourceMessageId = &s
 	}
 
 	if t.StartDate.Valid {

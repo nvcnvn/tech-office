@@ -67,14 +67,21 @@ import {
   getProfile,
   type LinkedResource,
   listBlockedPeople,
+  listTasksBySourceMessages,
+  type MessageTaskLink,
 } from "apis";
 import { useAuth } from "@/hooks/use-auth";
 import { BlockConfirm } from "@/components/compliance/block-confirm";
 import { ReportSheet } from "@/components/compliance/report-sheet";
+import { CreateTaskSheet } from "@/components/chat/create-task-sheet";
+import { MessageTaskChips } from "@/components/chat/message-task-chips";
 import { generateCanonicalUrl } from "@/lib/canonical-links";
 import { API_BASE_URL } from "@/lib/constants";
 import { isSameDay } from "date-fns";
 import { ChatMessageBody } from "@/components/chat/chat-message-body";
+
+/** At most this many message ids in one chip lookup, matching the server's cap. */
+const MAX_TASK_LINK_LOOKUP = 200;
 import { TaskDiscussionContext } from "@/components/chat/task-discussion-context";
 import { VoiceCallBanner } from "@/components/chat/voice-call-banner";
 import { IncomingCallBanner } from "@/components/chat/incoming-call-banner";
@@ -281,6 +288,8 @@ function MessageActionSheet({
   onReport,
   onBlockAuthor,
   canBlockAuthor,
+  onCreateTask,
+  canCreateTask,
 }: {
   visible: boolean;
   hasReplies: boolean;
@@ -293,6 +302,13 @@ function MessageActionSheet({
   onBlockAuthor: () => void;
   /** False for your own messages: blocking yourself is not a thing. */
   canBlockAuthor: boolean;
+  onCreateTask: () => void;
+  /**
+   * False for a system message, which is a record the system wrote about itself rather
+   * than something a person said, and for an archived channel, which is closed for new
+   * work. The action is not offered rather than offered and then refused.
+   */
+  canCreateTask: boolean;
 }) {
   return (
     <Modal
@@ -395,6 +411,36 @@ function MessageActionSheet({
             />
           </Pressable>
 
+          {canCreateTask ? (
+            <Pressable
+              onPress={onCreateTask}
+              style={({ pressed }) => [
+                styles.actionSheetRow,
+                pressed && styles.actionSheetRowPressed,
+              ]}
+              testID="message-action-create-task"
+            >
+              <View style={styles.actionSheetIconWrap}>
+                <SFIcon
+                  name="checkmark.square"
+                  size={16}
+                  color={lightPalette.text.primary}
+                />
+              </View>
+              <View style={styles.actionSheetRowBody}>
+                <Text style={styles.actionSheetRowTitle}>Create task</Text>
+                <Text style={styles.actionSheetRowText}>
+                  Turn this message into a task without leaving the conversation.
+                </Text>
+              </View>
+              <SFIcon
+                name="chevron.right"
+                size={14}
+                color={lightPalette.text.secondary}
+              />
+            </Pressable>
+          ) : null}
+
           {/* Reporting is two taps from here — long-press, Report, reason — which
               is what keeps the whole flow within three (SC-003). */}
           <Pressable
@@ -488,6 +534,8 @@ function MessageBubble({
   isHighlightedMessage,
   channelId,
   contentWidth,
+  taskLinksByMessage,
+  onTaskPress,
   onPress,
   onLongPress,
   onReactionPress,
@@ -498,6 +546,9 @@ function MessageBubble({
   isHighlightedMessage?: (messageId: string) => boolean;
   channelId?: string;
   contentWidth: number;
+  /** Tasks each message has produced, resolved once for the whole page (Feature 038). */
+  taskLinksByMessage?: Map<string, MessageTaskLink[]>;
+  onTaskPress: (link: MessageTaskLink) => void;
   onPress: (id: string) => void;
   onLongPress: (id: string) => void;
   onReactionPress: (
@@ -587,6 +638,11 @@ function MessageBubble({
                   messageTimestamp={msgDate}
                   contentWidth={contentWidth}
                   textStyle={styles.messageText}
+                />
+
+                <MessageTaskChips
+                  links={taskLinksByMessage?.get(item.id) ?? []}
+                  onOpen={onTaskPress}
                 />
 
                 {item.clientStatus ? (
@@ -723,6 +779,11 @@ export default function ChannelScreen() {
   const [pendingShareUrl, setPendingShareUrl] = useState<string | null>(null);
   // Feature 036: reporting and blocking, plus the direct-history hiding a block
   // implies. Shared channels are deliberately untouched — see below.
+  const [createTaskTarget, setCreateTaskTarget] = useState<{
+    id: string;
+    text: string;
+    mentionedEmployeeIds: string[];
+  } | null>(null);
   const [reportTargetId, setReportTargetId] = useState<string | null>(null);
   const [blockTarget, setBlockTarget] = useState<{ id: string; name: string } | null>(null);
   const [revealedMessageIds, setRevealedMessageIds] = useState<Set<string>>(() => new Set());
@@ -1267,6 +1328,47 @@ export default function ChannelScreen() {
 
     return items;
   }, [messages]);
+  // Feature 038: which of these messages have become tasks, resolved in one call for
+  // the whole loaded page. Doing it per message would issue a request per row on every
+  // scroll, which is why the RPC takes a list.
+  const [taskLinksByMessage, setTaskLinksByMessage] = useState<
+    Map<string, MessageTaskLink[]>
+  >(new Map());
+  const taskLinkMessageKey = React.useMemo(
+    () =>
+      messages
+        .map((message) => message.id)
+        .filter(Boolean)
+        .slice(0, MAX_TASK_LINK_LOOKUP)
+        .join(","),
+    [messages],
+  );
+  useEffect(() => {
+    if (!taskLinkMessageKey) {
+      setTaskLinksByMessage(new Map());
+      return;
+    }
+    let cancelled = false;
+    listTasksBySourceMessages(taskLinkMessageKey.split(","))
+      .then((links) => {
+        if (cancelled) return;
+        const grouped = new Map<string, MessageTaskLink[]>();
+        for (const link of links) {
+          const existing = grouped.get(link.sourceMessageId);
+          if (existing) existing.push(link);
+          else grouped.set(link.sourceMessageId, [link]);
+        }
+        setTaskLinksByMessage(grouped);
+      })
+      .catch(() => {
+        // A failed lookup means no chips, not a broken conversation.
+        if (!cancelled) setTaskLinksByMessage(new Map());
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskLinkMessageKey]);
+
   listItemCountRef.current = listItems.length;
 
   useEffect(() => {
@@ -1915,6 +2017,20 @@ export default function ChannelScreen() {
                     }
                     channelId={channelId}
                     contentWidth={htmlContentWidth}
+                    taskLinksByMessage={taskLinksByMessage}
+                    onTaskPress={(link) =>
+                      router.push(
+                        withNavigationContext(
+                          `/(app)/(tasks)/${link.projectId}/task/${link.taskId}`,
+                          {
+                            parentHref: contextualChannelHref,
+                            fallbackHref: contextBackHref,
+                            ownerTab: navigationContext.ownerTab ?? "chat",
+                            backLabel: navigationContext.backLabel ?? "Channel",
+                          },
+                        ) as never,
+                      )
+                    }
                     onPress={handleMessagePress}
                     onLongPress={openMessageActions}
                     onReactionPress={handleReactionPress}
@@ -2159,6 +2275,27 @@ export default function ChannelScreen() {
             closeMessageActions();
             if (target) setBlockTarget(target);
           }}
+          canCreateTask={selectedMessage?.messageKind !== "system"}
+          onCreateTask={() => {
+            const target = selectedMessage
+              ? {
+                  id: selectedMessage.id,
+                  text: selectedMessage.messageText ?? "",
+                  mentionedEmployeeIds: selectedMessage.mentionedEmployeeIds ?? [],
+                }
+              : null;
+            closeMessageActions();
+            if (target) setCreateTaskTarget(target);
+          }}
+        />
+
+        <CreateTaskSheet
+          visible={createTaskTarget !== null}
+          onClose={() => setCreateTaskTarget(null)}
+          channelId={channelId ?? ""}
+          messageId={createTaskTarget?.id ?? ""}
+          messageText={createTaskTarget?.text ?? ""}
+          mentionedEmployeeIds={createTaskTarget?.mentionedEmployeeIds ?? []}
         />
 
         <ReportSheet

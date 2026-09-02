@@ -1066,6 +1066,46 @@ func (s *ChatUserChatConfig) FieldsMap() map[string]any {
 	}
 }
 
+// The project that tasks created from a chat channel default to. Written by the first conversion in a channel and changeable only by a channel administrator; a per-conversion override never changes it.
+type CollaborationChannelTaskDestination struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ChannelID      dbuuid.UUID `json:"channel_id"`
+	ProjectID      dbuuid.UUID `json:"project_id"`
+	// Who last set the destination. Shown when explaining where the pre-filled project came from.
+	SetByEmployeeID dbuuid.UUID        `json:"set_by_employee_id"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (s *CollaborationChannelTaskDestination) TableName() string {
+	return "collaboration.channel_task_destination"
+}
+
+func (s *CollaborationChannelTaskDestination) Fields() ([]string, []any) {
+	return []string{
+			"organization_id",
+			"channel_id",
+			"project_id",
+			"set_by_employee_id",
+			"updated_at",
+		}, []any{
+			&s.OrganizationID,
+			&s.ChannelID,
+			&s.ProjectID,
+			&s.SetByEmployeeID,
+			&s.UpdatedAt,
+		}
+}
+
+func (s *CollaborationChannelTaskDestination) FieldsMap() map[string]any {
+	return map[string]any{
+		"organization_id":    &s.OrganizationID,
+		"channel_id":         &s.ChannelID,
+		"project_id":         &s.ProjectID,
+		"set_by_employee_id": &s.SetByEmployeeID,
+		"updated_at":         &s.UpdatedAt,
+	}
+}
+
 // Custom field definitions per project. Supports text, number, single/multi select, date, user, checkbox field types.
 type CollaborationCustomFieldDefinition struct {
 	ID             dbuuid.UUID `json:"id"`
@@ -1798,6 +1838,10 @@ type CollaborationTask struct {
 	CompletionDeadline pgtype.Timestamptz `json:"completion_deadline"`
 	SkipReason         pgtype.Text        `json:"skip_reason"`
 	DetachedFromRitual bool               `json:"detached_from_ritual"`
+	// Chat channel the originating message was posted in. NULL for tasks not created from a message.
+	SourceChannelID dbuuid.NullUUID `json:"source_channel_id"`
+	// Chat message this task was created from. NULL for tasks not created from a message.
+	SourceMessageID dbuuid.NullUUID `json:"source_message_id"`
 }
 
 func (s *CollaborationTask) TableName() string {
@@ -1833,6 +1877,8 @@ func (s *CollaborationTask) Fields() ([]string, []any) {
 			"completion_deadline",
 			"skip_reason",
 			"detached_from_ritual",
+			"source_channel_id",
+			"source_message_id",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -1861,6 +1907,8 @@ func (s *CollaborationTask) Fields() ([]string, []any) {
 			&s.CompletionDeadline,
 			&s.SkipReason,
 			&s.DetachedFromRitual,
+			&s.SourceChannelID,
+			&s.SourceMessageID,
 		}
 }
 
@@ -1893,6 +1941,8 @@ func (s *CollaborationTask) FieldsMap() map[string]any {
 		"completion_deadline":     &s.CompletionDeadline,
 		"skip_reason":             &s.SkipReason,
 		"detached_from_ritual":    &s.DetachedFromRitual,
+		"source_channel_id":       &s.SourceChannelID,
+		"source_message_id":       &s.SourceMessageID,
 	}
 }
 

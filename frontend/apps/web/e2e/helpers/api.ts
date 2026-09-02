@@ -1068,3 +1068,34 @@ export async function unblockPerson(user: TestUser, employeeId: string) {
     employeeId,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Feature 038 — tasks created from chat messages
+// ---------------------------------------------------------------------------
+
+export async function createTaskFromMessage(
+  user: TestUser,
+  opts: {
+    sourceChannelId: string;
+    sourceMessageId: string;
+    projectId: string;
+    title: string;
+    assigneeEmployeeId?: string;
+    dueDate?: string;
+  },
+) {
+  return apiCall<{
+    task: { id: string; identifier: string; title: string; projectId: string };
+    announcementMessageId: string;
+  }>(user, '/rpc.v1.CollaborationService/CreateTaskFromMessage', opts);
+}
+
+export async function getChannelTaskDestination(user: TestUser, channelId: string) {
+  return apiCall<{
+    isSet: boolean;
+    projectId: string;
+    projectName: string;
+    projectKey: string;
+    unsetReason?: string;
+  }>(user, '/rpc.v1.CollaborationService/GetChannelTaskDestination', { channelId });
+}

@@ -104,6 +104,13 @@ const (
 	SystemEventTypeVoiceCallEnded     = "voice_call_ended"
 	SystemEventTypeVoiceCallMissed    = "voice_call_missed"
 	SystemEventTypeVoiceCallCancelled = "voice_call_cancelled"
+
+	// SystemEventTypeTaskCreatedFromMessage marks the threaded, non-notifying reply left
+	// on a message that was turned into a task (Feature 038). Chat writes the row and
+	// knows nothing else about tasks: the identifier and title travel in the message
+	// metadata, and the access-filtered task data behind the chip comes from
+	// CollaborationService.ListTasksBySourceMessages, never from here.
+	SystemEventTypeTaskCreatedFromMessage = "task_created_from_message"
 )
 
 func IsValidSystemEventType(eventType string) bool {
@@ -111,7 +118,8 @@ func IsValidSystemEventType(eventType string) bool {
 	case SystemEventTypeVoiceCallStarted,
 		SystemEventTypeVoiceCallEnded,
 		SystemEventTypeVoiceCallMissed,
-		SystemEventTypeVoiceCallCancelled:
+		SystemEventTypeVoiceCallCancelled,
+		SystemEventTypeTaskCreatedFromMessage:
 		return true
 	default:
 		return false

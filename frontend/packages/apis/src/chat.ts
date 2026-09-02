@@ -99,7 +99,18 @@ export type SystemEventType =
 	| 'voice_call_started'
 	| 'voice_call_ended'
 	| 'voice_call_missed'
-	| 'voice_call_cancelled';
+	| 'voice_call_cancelled'
+	| 'task_created_from_message';
+
+/**
+ * The system event a conversion leaves on the message it came from.
+ *
+ * Exported as a named constant so no client spells the string inline: it must match the
+ * database CHECK on chat.message and SystemEventTypeTaskCreatedFromMessage in the Go
+ * chat package exactly (constitution principle VIII), and the match is asserted in
+ * backend/integration/collaboration_constants_test.go.
+ */
+export const SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE: SystemEventType = 'task_created_from_message';
 
 
 // ============================================================================

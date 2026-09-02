@@ -198,6 +198,60 @@ RETURNING *;
 SELECT * FROM collaboration.task
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE;
 
+-- name: SetTaskOrigin :one
+-- Records the chat message a task was created from. Run in the same transaction as the
+-- CreateTask that produced the task, so a task never exists with a half-written origin.
+-- The CHECK on the table enforces that both halves are set or neither is.
+UPDATE collaboration.task
+SET source_channel_id = sqlc.narg('source_channel_id'),
+    source_message_id = sqlc.narg('source_message_id')
+WHERE organization_id = $1 AND id = $2
+RETURNING *;
+
+-- name: GetTaskOrigin :one
+-- Reads a task back with just its origin columns, for the origin block on task detail.
+SELECT id, project_id, source_channel_id, source_message_id
+FROM collaboration.task
+WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE;
+
+-- name: ListTasksBySourceMessages :many
+-- The batched reverse lookup behind the chip a message carries once it has become a task.
+-- One call per rendered page of messages, never one per message; idx_task_source_message
+-- is the partial index that makes it cheap.
+--
+-- Access filtering happens here rather than in Go: a link to a task in a project the
+-- caller cannot see is omitted from the result entirely, because returning it with a flag
+-- would leak the identifier (FR-021).
+--
+-- Every join stays inside the collaboration schema. The chat side is only ever the stored
+-- source_message_id value, never a join target.
+SELECT
+    t.id,
+    t.source_message_id,
+    t.identifier,
+    t.title,
+    t.project_id,
+    ps.name     AS state_name,
+    ps.category AS state_category
+FROM collaboration.task t
+JOIN collaboration.project p
+    ON p.organization_id = t.organization_id AND p.id = t.project_id
+JOIN collaboration.project_state ps
+    ON ps.organization_id = t.organization_id AND ps.id = t.state_id
+WHERE t.organization_id = $1
+  AND t.source_message_id = ANY(@message_ids::uuid[])
+  AND t.is_deleted = FALSE
+  AND (
+      p.visibility = 'public'
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+          WHERE pm.organization_id = t.organization_id
+            AND pm.project_id = t.project_id
+            AND pm.employee_id = @employee_id
+      )
+  )
+ORDER BY t.id;
+
 -- name: GetTaskByIdentifier :one
 SELECT * FROM collaboration.task
 WHERE organization_id = $1 AND project_id = $2 AND identifier = $3 AND is_deleted = FALSE;
@@ -1095,3 +1149,53 @@ WHERE dm.organization_id = @organization_id
   AND e.is_active = TRUE
 ORDER BY COALESCE(recent.cnt, 0) ASC, dm.employee_id ASC
 LIMIT 1;
+
+-- =============================================================================
+-- CHANNEL TASK DESTINATION QUERIES
+--
+-- The project a channel's tasks default to. Written by the first conversion in a
+-- channel; changed or cleared only by a channel administrator. Rows are never deleted
+-- because the project became archived or unreachable — FR-018 requires those to be
+-- *treated* as unset at read time, so unarchiving restores the setting.
+-- =============================================================================
+
+-- name: GetChannelTaskDestination :one
+-- LEFT JOIN rather than JOIN: the project FK cascades, so a missing project row should
+-- not exist, but reading a row whose project has gone must report it rather than return
+-- nothing at all.
+SELECT
+    d.channel_id,
+    d.project_id,
+    d.set_by_employee_id,
+    p.id          AS resolved_project_id,
+    p.name        AS project_name,
+    p.key         AS project_key,
+    p.visibility  AS project_visibility,
+    p.is_archived AS project_is_archived
+FROM collaboration.channel_task_destination d
+LEFT JOIN collaboration.project p
+    ON p.organization_id = d.organization_id AND p.id = d.project_id
+WHERE d.organization_id = $1 AND d.channel_id = $2;
+
+-- name: RememberChannelTaskDestination :exec
+-- The first conversion in a channel sets the destination; every later conversion,
+-- including one that overrides the project for itself, leaves it exactly as it was
+-- (FR-015, FR-016). DO NOTHING is what makes those two requirements one statement.
+INSERT INTO collaboration.channel_task_destination (
+    organization_id, channel_id, project_id, set_by_employee_id
+) VALUES ($1, $2, $3, $4)
+ON CONFLICT (organization_id, channel_id) DO NOTHING;
+
+-- name: SetChannelTaskDestination :exec
+-- The channel-administrator path, which does overwrite.
+INSERT INTO collaboration.channel_task_destination (
+    organization_id, channel_id, project_id, set_by_employee_id, updated_at
+) VALUES ($1, $2, $3, $4, now())
+ON CONFLICT (organization_id, channel_id) DO UPDATE
+SET project_id         = EXCLUDED.project_id,
+    set_by_employee_id = EXCLUDED.set_by_employee_id,
+    updated_at         = EXCLUDED.updated_at;
+
+-- name: ClearChannelTaskDestination :exec
+DELETE FROM collaboration.channel_task_destination
+WHERE organization_id = $1 AND channel_id = $2;
