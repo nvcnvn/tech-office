@@ -47,6 +47,7 @@ import { useThemeColors } from "@/theme/useThemeColors";
 import { OrganizationSwitcherDropdown } from "@/components/OrganizationSwitcherDropdown";
 import { GlobalIncomingVoiceCall } from "./voice/GlobalIncomingVoiceCall";
 import { versionedPublicAssetPath } from "@/lib/publicAsset";
+import { TourProvider } from "@/components/tour/TourProvider";
 
 // Dynamically import ChannelSidebar to avoid loading it on non-chat pages
 const ChannelSidebar = dynamic(
@@ -475,6 +476,13 @@ function WorkspaceLayoutContent({
     <ThemeProvider employeeId={user.sub}>
       <NotificationStreamProvider organizationId={organizationId}>
         <GlobalIncomingVoiceCall />
+        {/*
+          The feature tour (Feature 039). Inside this component, so it renders only after
+          useRequireAuth has resolved and the workspace itself is being drawn — never
+          before authentication, and never in front of a workspace that has not painted
+          (FR-008, FR-013). The hook suppresses it while a deep-link redirect is pending.
+        */}
+        <TourProvider>
         <WorkspaceUI
           pathname={pathname}
           searchParams={searchParams}
@@ -487,6 +495,7 @@ function WorkspaceLayoutContent({
         >
           {children}
         </WorkspaceUI>
+        </TourProvider>
       </NotificationStreamProvider>
     </ThemeProvider>
   );

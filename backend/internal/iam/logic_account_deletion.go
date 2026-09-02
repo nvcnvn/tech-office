@@ -218,6 +218,12 @@ func (d *AccountDeleter) PurgeOrgIdentity(ctx context.Context, tx database.DBTX,
 	}); err != nil {
 		return fmt.Errorf("delete user preferences: %w", err)
 	}
+	if err := d.Queries.DeleteTourProgressForOrganization(ctx, tx, &database.DeleteTourProgressForOrganizationParams{
+		OrganizationID: orgID,
+		EmployeeID:     employeeID,
+	}); err != nil {
+		return fmt.Errorf("delete tour progress: %w", err)
+	}
 	if err := d.Queries.DeleteIdentityForOrganization(ctx, tx, &database.DeleteIdentityForOrganizationParams{
 		OrganizationID: orgID,
 		ID:             employeeID,

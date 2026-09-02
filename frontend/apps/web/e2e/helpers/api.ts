@@ -1099,3 +1099,39 @@ export async function getChannelTaskDestination(user: TestUser, channelId: strin
     unsetReason?: string;
   }>(user, '/rpc.v1.CollaborationService/GetChannelTaskDestination', { channelId });
 }
+
+// ---------------------------------------------------------------------------
+// Feature tour (Feature 039)
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the caller's tour. Used by the specs to arrange a starting state — how many stops
+ * this person actually gets is a server decision, so the specs ask rather than assume.
+ */
+export async function getTour(
+  user: TestUser,
+  platform: 'TOUR_PLATFORM_WEB' | 'TOUR_PLATFORM_MOBILE' = 'TOUR_PLATFORM_WEB',
+) {
+  return apiCall<{
+    audience: string;
+    tourId: string;
+    contentVersion: string;
+    stops: { key: string; title: string; body: string; actionLabel: string; target: string }[];
+    status: string;
+    currentStop: number;
+    shouldOffer: boolean;
+  }>(user, '/rpc.v1.TourService/GetTour', { platform });
+}
+
+/** Put a person's tour into a known state before a spec opens the browser. */
+export async function updateTourProgress(
+  user: TestUser,
+  status: 'TOUR_STATUS_IN_PROGRESS' | 'TOUR_STATUS_COMPLETED' | 'TOUR_STATUS_DISMISSED',
+  currentStop = 0,
+) {
+  return apiCall<{ status: string; currentStop: number }>(
+    user,
+    '/rpc.v1.TourService/UpdateTourProgress',
+    { status, currentStop },
+  );
+}

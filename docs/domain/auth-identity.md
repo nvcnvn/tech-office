@@ -3,7 +3,7 @@
 Who a person is, how they prove it, which organizations they belong to, and what they are
 allowed to do. Owned by `internal/iam` and `rpc/v1/iam.proto` (`IAMService`, 40 RPCs).
 
-**Status date: 2026-08-28.** Supersedes specs 001, 002, 018, 020, 024, 035.
+**Status date: 2026-09-02.** Supersedes specs 001, 002, 018, 020, 024, 035.
 
 ## The identity model
 
@@ -180,8 +180,8 @@ Feature 020 replaced role checks with permission checks. Roles are just named bu
 
 - `public.permission` — the canonical catalogue, a global table with no `organization_id`.
   IDs are `<domain>.<action>`, e.g. `chat.sendMessage`. Rows are immutable at
-  runtime; only migrations change them. Domains: `iam`, `org`, `dept`, `chat`, `files`,
-  `docs`, `collab`, `notif`, `calendar`, `pref`.
+  runtime; only migrations change them. 120 rows across 12 domains: `calendar`, `chat`,
+  `collab`, `compliance`, `dept`, `docs`, `files`, `iam`, `notif`, `org`, `pref`, `tour`.
 - `public.default_role` + `public.default_role_permission` — the three system role
   templates copied into every new organization.
 - `iam.role` / `iam.role_permission` / `iam.employee_role` — the per-org instances. Orgs
@@ -195,6 +195,11 @@ The three seeded roles:
 | `owner` | every permission. Cannot have role-management permissions removed. |
 | `operator` | everything except `iam.importEmployees`, `files.updateQuota`, `iam.manageRoles`, `iam.manageOrgAccounts` |
 | `employee` | everything except the invite/import/role/org-account permissions and the `dept.*` mutation permissions and `files.updateQuota` |
+
+`tour.view` and `tour.update` are the exception to the exclusion lists above: all three
+roles hold both, because everyone needs to see their own feature tour. `iam.inviteUser` is
+what separates the two tours — see
+[workspace-navigation.md](workspace-navigation.md#feature-tour).
 
 All three are `is_system = true` and cannot be deleted from an org.
 

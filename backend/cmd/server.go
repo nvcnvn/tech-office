@@ -32,6 +32,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	"github.com/nvcnvn/tech-office/backend/internal/organization"
 	"github.com/nvcnvn/tech-office/backend/internal/preference"
+	"github.com/nvcnvn/tech-office/backend/internal/tour"
 	"github.com/nvcnvn/tech-office/backend/internal/voice"
 	"github.com/nvcnvn/tech-office/backend/rpc/v1/rpcv1connect"
 )
@@ -268,6 +269,13 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	preferenceConnect := preference.NewService(tenantPool, preferenceLogic)
 	mux.Handle(rpcv1connect.NewPreferenceServiceHandler(preferenceConnect, interceptors))
 	slog.InfoContext(ctx, "preference service registered")
+
+	// Register Tour Service
+	slog.InfoContext(ctx, "initializing tour service")
+	tourLogic := tour.NewLogic(queries)
+	tourConnect := tour.NewService(tenantPool, tourLogic)
+	mux.Handle(rpcv1connect.NewTourServiceHandler(tourConnect, interceptors))
+	slog.InfoContext(ctx, "tour service registered")
 
 	// Register File Storage Service (before Chat Service - Chat depends on FileLogic)
 	slog.InfoContext(ctx, "initializing file storage service")

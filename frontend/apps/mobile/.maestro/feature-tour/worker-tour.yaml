@@ -1,0 +1,129 @@
+appId: com.devguards.TechOffice
+name: "Feature tour — worker"
+# User stories 2 and 3 on the phone. The shared sign-in bootstrap authenticates an
+# existing employee, whose tour may already have been seen on an earlier run, so this flow
+# drives the tour through the replay entry point (FR-017) rather than depending on a
+# never-touched account. That is also the path US3 is about, so nothing is faked to get a
+# deterministic start.
+#
+# What a stop says is server-owned and covered by the backend scenarios; this flow covers
+# what only a device shows.
+tags:
+  - tour
+---
+# ---------------------------------------------------------------------------
+# FR-008 — a mandatory gate comes first, and the tour waits behind it
+# ---------------------------------------------------------------------------
+# The tour is mounted inside the authenticated tab layout, below the sign-in screens and
+# inside the terms gate, so it cannot render while a person is still getting in. Asserted
+# here on the sign-in screen itself, which is the moment the rule is about.
+- runFlow: "../auth/dev-client-bootstrap.yaml"
+- extendedWaitUntil:
+    visible:
+      id: "signin-with-email"
+    timeout: 15000
+- assertNotVisible:
+    id: "feature-tour-offer"
+- assertNotVisible:
+    id: "feature-tour"
+
+- runFlow: "../auth/signin.yaml"
+
+# ---------------------------------------------------------------------------
+# US3 — More → Take the tour runs it from the first stop
+# ---------------------------------------------------------------------------
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-take-the-tour"
+    timeout: 8000
+- tapOn:
+    id: "menu-take-the-tour"
+
+- extendedWaitUntil:
+    visible:
+      id: "feature-tour"
+    timeout: 8000
+
+# Four stops, not six: this account is a worker, and the server chose the sequence from
+# their permissions. A worker seeing "Stop 1 of 6" would mean the audience rule broke —
+# which also means MAESTRO_TEST_EMAIL must be an account WITHOUT iam.inviteUser, as
+# .maestro/config.yaml already documents. Point it at an owner and this is the line that
+# fails, correctly.
+- assertVisible: "Stop 1 of 4"
+- takeScreenshot: "tmp/maestro-screenshots/tour-worker-01-stop-1"
+
+# ---------------------------------------------------------------------------
+# US2 — the today stop closes the tour and opens the Today tab (FR-012)
+# ---------------------------------------------------------------------------
+- assertVisible:
+    id: "feature-tour-action"
+- tapOn:
+    id: "feature-tour-action"
+- extendedWaitUntil:
+    notVisible:
+      id: "feature-tour"
+    timeout: 8000
+- extendedWaitUntil:
+    visible: "Today"
+    timeout: 10000
+
+# ---------------------------------------------------------------------------
+# US2 — returning to the tab it was offered from reopens it at the same stop
+# ---------------------------------------------------------------------------
+# No prompt on the way back: this person already accepted once, and the stop advanced
+# because they did the thing the card asked for.
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "feature-tour"
+    timeout: 10000
+- assertNotVisible:
+    id: "feature-tour-offer"
+- assertVisible: "Stop 2 of 4"
+- takeScreenshot: "tmp/maestro-screenshots/tour-worker-02-resumed"
+
+# ---------------------------------------------------------------------------
+# Every stop renders in portrait with no clipping (FR-020, FR-025)
+# ---------------------------------------------------------------------------
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 3 of 4"
+    timeout: 5000
+- takeScreenshot: "tmp/maestro-screenshots/tour-worker-03-stop-3"
+
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 4 of 4"
+    timeout: 5000
+- assertVisible:
+    id: "feature-tour-dismiss"
+- takeScreenshot: "tmp/maestro-screenshots/tour-worker-04-stop-4"
+
+# ---------------------------------------------------------------------------
+# US2 — dismissing it stops the offer, and a relaunch does not bring it back
+# ---------------------------------------------------------------------------
+# Declining is a decision, not a snooze (FR-009, FR-007).
+- tapOn:
+    id: "feature-tour-dismiss"
+- extendedWaitUntil:
+    notVisible:
+      id: "feature-tour"
+    timeout: 8000
+
+- runFlow: "../auth/dev-client-relaunch.yaml"
+# The tab bar, not a screen title: a relaunch resumes on whatever tab the person left, so
+# there is no one header to wait for. Tab labels are not exposed as text, so this waits on
+# the tab button's testID.
+- extendedWaitUntil:
+    visible:
+      id: "tab-more"
+    timeout: 30000
+- assertNotVisible:
+    id: "feature-tour-offer"
+- assertNotVisible:
+    id: "feature-tour"

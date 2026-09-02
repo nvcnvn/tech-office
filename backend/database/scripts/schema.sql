@@ -2488,6 +2488,53 @@ COMMENT ON COLUMN iam.sso_identity.provider_user_id IS 'Unique user ID from SSO 
 
 
 --
+-- Name: tour_progress; Type: TABLE; Schema: iam; Owner: -
+--
+
+CREATE TABLE iam.tour_progress (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    employee_id uuid NOT NULL,
+    tour_id text NOT NULL,
+    status text NOT NULL,
+    current_stop integer DEFAULT 0 NOT NULL,
+    content_version text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT tour_progress_current_stop_check CHECK ((current_stop >= 0)),
+    CONSTRAINT tour_progress_status_check CHECK ((status = ANY (ARRAY['in_progress'::text, 'completed'::text, 'dismissed'::text]))),
+    CONSTRAINT tour_progress_tour_id_check CHECK ((tour_id = ANY (ARRAY['administrator'::text, 'worker'::text])))
+);
+
+
+--
+-- Name: TABLE tour_progress; Type: COMMENT; Schema: iam; Owner: -
+--
+
+COMMENT ON TABLE iam.tour_progress IS 'How far a person got in a feature tour. One row per employee per tour, written on first engagement and never on read — the absence of a row is "not started". MUST align with backend constants in internal/tour/content.go.';
+
+
+--
+-- Name: COLUMN tour_progress.tour_id; Type: COMMENT; Schema: iam; Owner: -
+--
+
+COMMENT ON COLUMN iam.tour_progress.tour_id IS 'Which tour: administrator or worker. Derived from the caller''s permissions by the server, never sent by a client.';
+
+
+--
+-- Name: COLUMN tour_progress.current_stop; Type: COMMENT; Schema: iam; Owner: -
+--
+
+COMMENT ON COLUMN iam.tour_progress.current_stop IS 'Zero-based index of the first stop not yet completed, addressing the permission-filtered stop list. Clamped to that list on read without being written back.';
+
+
+--
+-- Name: COLUMN tour_progress.content_version; Type: COMMENT; Schema: iam; Owner: -
+--
+
+COMMENT ON COLUMN iam.tour_progress.content_version IS 'The tour content version in force when the row was last written — the record of which copy this person actually saw.';
+
+
+--
 -- Name: user; Type: TABLE; Schema: iam; Owner: -
 --
 
@@ -4628,11 +4675,27 @@ ALTER TABLE ONLY iam.sso_identity
 
 
 --
+-- Name: tour_progress tour_progress_pkey; Type: CONSTRAINT; Schema: iam; Owner: -
+--
+
+ALTER TABLE ONLY iam.tour_progress
+    ADD CONSTRAINT tour_progress_pkey PRIMARY KEY (organization_id, id);
+
+
+--
 -- Name: user_preference unique_employee_preference; Type: CONSTRAINT; Schema: iam; Owner: -
 --
 
 ALTER TABLE ONLY iam.user_preference
     ADD CONSTRAINT unique_employee_preference UNIQUE (organization_id, employee_id);
+
+
+--
+-- Name: tour_progress unique_employee_tour; Type: CONSTRAINT; Schema: iam; Owner: -
+--
+
+ALTER TABLE ONLY iam.tour_progress
+    ADD CONSTRAINT unique_employee_tour UNIQUE (organization_id, employee_id, tour_id);
 
 
 --
@@ -7814,6 +7877,22 @@ ALTER TABLE ONLY iam.account_lockout
 
 ALTER TABLE ONLY iam.role_permission
     ADD CONSTRAINT fk_role_permission_role FOREIGN KEY (organization_id, role_id) REFERENCES iam.role(organization_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: tour_progress fk_tour_progress_employee; Type: FK CONSTRAINT; Schema: iam; Owner: -
+--
+
+ALTER TABLE ONLY iam.tour_progress
+    ADD CONSTRAINT fk_tour_progress_employee FOREIGN KEY (organization_id, employee_id) REFERENCES organization.employee(organization_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: tour_progress fk_tour_progress_organization; Type: FK CONSTRAINT; Schema: iam; Owner: -
+--
+
+ALTER TABLE ONLY iam.tour_progress
+    ADD CONSTRAINT fk_tour_progress_organization FOREIGN KEY (organization_id) REFERENCES public.organization(id) ON DELETE CASCADE;
 
 
 --

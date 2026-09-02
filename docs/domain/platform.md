@@ -111,7 +111,7 @@ Tokens are internal JWTs signed by `iam.InternalJWTSigner` (RSA key from
 only). Permissions are resolved per request by `iam.PermissionLookup` against the
 `AdminPool`, because role/permission rows must be readable regardless of tenant context.
 
-The permission catalogue itself lives in `public.permission` (~95 rows, `<domain>.<action>`
+The permission catalogue itself lives in `public.permission` (120 rows across 12 domains, `<domain>.<action>`
 format) and is seeded by migration. See [auth-identity.md](auth-identity.md) for the role
 model layered on top.
 
@@ -305,7 +305,7 @@ Schemas reserved but unused so far: `timekeeping`, `learning`, `compliance`, `pa
 
 | Command | What it runs |
 |---|---|
-| `make test-backend` | Go integration tests in `backend/integration` (77 files) against a live Postgres |
+| `make test-backend` | Go integration tests in `backend/integration` (89 files) against a live Postgres |
 | `make test-frontend` | Playwright E2E against web |
 | `make test-mobile` | Maestro flows against the Expo app |
 | `make test` | all three |

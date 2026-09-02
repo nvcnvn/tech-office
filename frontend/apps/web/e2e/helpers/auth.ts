@@ -185,7 +185,32 @@ export async function createTestEmployee(owner: TestUser): Promise<TestUser> {
  * Inject the auth token into the browser's localStorage so the app treats the
  * user as logged in. Call this BEFORE navigating to any authenticated route.
  */
-export async function loginAs(page: Page, user: TestUser): Promise<void> {
+export interface LoginOptions {
+  /**
+   * Leave the feature tour offerable. Only the tour's own specs want this — everything
+   * else is testing a workspace surface, and a first-time person is offered the tour over
+   * the top of it.
+   */
+  keepTour?: boolean;
+}
+
+export async function loginAs(
+  page: Page,
+  user: TestUser,
+  options: LoginOptions = {},
+): Promise<void> {
+  // Feature 039: every freshly created test user is a first-time arrival, so the tour
+  // offers itself on the workspace home — which is where most specs start. Dismissing it
+  // server-side here is the same treatment the Maestro bootstrap gives it, and it keeps
+  // the decision in one place instead of in every spec.
+  if (!options.keepTour) {
+    await rpc(
+      '/rpc.v1.TourService/UpdateTourProgress',
+      { status: 'TOUR_STATUS_DISMISSED', currentStop: 0 },
+      user.token,
+    ).catch(() => undefined);
+  }
+
   await page.addInitScript(
     ({ token, expiresAt }) => {
       localStorage.setItem('tech_office_access_token', token);

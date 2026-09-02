@@ -24,6 +24,7 @@ import { SFIcon } from "@/components/ui/sf-icon";
 import { AuthContext } from "@/hooks/use-auth";
 import { UserCard } from "@/components/common/user-card";
 import { buildWebUrl } from "@/lib/constants";
+import { useTourController } from "@/providers/tour-provider";
 import {
   border,
   lightPalette,
@@ -39,13 +40,19 @@ import {
 // ── Menu definitions ────────────────────────────────────────────────────────
 
 interface MenuItem {
-  /** In-app route, or an https URL opened in the system browser. */
+  /**
+   * In-app route, or an https URL opened in the system browser. Empty when the row does
+   * something in place rather than navigating — the "Take the tour" row, which reopens
+   * the tour over whatever screen the person is on.
+   */
   href: string;
   sfIcon: string;
   label: string;
   /** One line under the label saying what the row is for. */
   hint?: string;
   testID: string;
+  /** Runs instead of navigating. When set, `href` is ignored. */
+  action?: () => void;
 }
 
 function isExternal(item: MenuItem): boolean {
@@ -171,9 +178,37 @@ export default function MoreScreen() {
   const router = useRouter();
 
   const employeeId = auth?.employeeId ?? "";
+  const tour = useTourController();
+
+  /*
+   * "Take the tour" sits next to Help because they answer the same question. It is a row
+   * rather than a link: restarting reopens the tour over the screen the person is on, and
+   * it is offered whether or not they finished or dismissed it before (FR-017). Hidden
+   * only when there is no tour to run — a person whose permissions filter every stop away.
+   */
+  const appItems: MenuItem[] = React.useMemo(() => {
+    if (!tour?.tour || tour.tour.stops.length === 0) {
+      return settingsItems;
+    }
+    const takeTheTour: MenuItem = {
+      href: "",
+      sfIcon: "map",
+      label: "Take the tour",
+      hint: "A quick walk through what this app does",
+      testID: "menu-take-the-tour",
+      action: () => tour.restart(),
+    };
+    // Before Help, so the shorter in-app answer comes before the one that leaves the app.
+    return [settingsItems[0], takeTheTour, ...settingsItems.slice(1)];
+  }, [tour]);
 
   const openMenuItem = React.useCallback(
     (item: MenuItem) => {
+      if (item.action) {
+        item.action();
+        return;
+      }
+
       if (item.href.startsWith("http")) {
         void openBrowserAsync(item.href);
         return;
@@ -234,7 +269,7 @@ export default function MoreScreen() {
 
       <MenuSection
         label="App"
-        items={settingsItems}
+        items={appItems}
         openMenuItem={openMenuItem}
       />
 

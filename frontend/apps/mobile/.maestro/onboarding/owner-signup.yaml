@@ -171,6 +171,30 @@ name: "Onboarding — Owner creates a workspace, sets a PIN, adds a teammate"
 - tapOn:
     id: "teammate-done"
 
+# Feature 039: a brand-new owner is exactly who the administrator tour is offered to, so it
+# is on screen the moment onboarding finishes. Decline it before waiting for the tab bar —
+# the offer is a modal, and on iOS a modal replaces the visible hierarchy, so "Chat" cannot
+# be waited on while the sheet is up. ../feature-tour/owner-tour.yaml accepts it instead.
+- extendedWaitUntil:
+    visible:
+      id: "feature-tour-sheet"
+    timeout: 12000
+    optional: true
+- runFlow:
+    when:
+      visible:
+        id: "feature-tour-offer-decline"
+    commands:
+      - tapOn:
+          id: "feature-tour-offer-decline"
+- runFlow:
+    when:
+      visible:
+        id: "feature-tour-dismiss"
+    commands:
+      - tapOn:
+          id: "feature-tour-dismiss"
+
 - extendedWaitUntil:
     visible: "Chat"
     timeout: 20000

@@ -12,7 +12,7 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
 	Box,
 	Typography,
@@ -51,7 +51,13 @@ export default function DocumentTree({ activeDocumentId }: DocumentTreeProps) {
 	const queryClient = useQueryClient();
 	const [searchQuery, setSearchQuery] = useState('');
 	const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
-	const [newDocDialogOpen, setNewDocDialogOpen] = useState(false);
+	const searchParams = useSearchParams();
+	// FR-013a (Feature 039): ?create=1 lands with the new-document dialog already open, so
+	// the tour's docs stop does not deposit someone in front of an empty tree. Read once on
+	// mount, not on every searchParams change, so closing the dialog does not reopen it.
+	const [newDocDialogOpen, setNewDocDialogOpen] = useState(
+		() => searchParams.get('create') === '1'
+	);
 	const [newDocParentId, setNewDocParentId] = useState<string | undefined>();
 
 	// Fetch root documents

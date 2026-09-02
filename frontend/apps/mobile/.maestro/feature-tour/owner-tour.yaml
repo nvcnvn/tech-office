@@ -1,0 +1,143 @@
+appId: com.devguards.TechOffice
+name: "Feature tour — administrator"
+# User story 1 on the phone.
+#
+# Requires MAESTRO_TEST_EMAIL to be an account holding iam.inviteUser — an owner or an
+# operator — because that permission is what selects the administrator tour. The six-stop
+# assertions below are the check that it did.
+#
+# The automatic offer is proven by the shared bootstrap itself: ../auth/signin.yaml waits
+# for the offer and declines it, so a run that reached this point has already seen the tour
+# arrive unprompted on a fresh install. This flow then asks for it back through the entry
+# point every person has (FR-017), which is also the only way to reach it deterministically
+# on a device whose account may have answered the offer on an earlier run.
+#
+# What a stop says is not asserted here — the copy is server-owned and covered by
+# backend/integration/feature_tour_test.go and contracts/tour-content.md. This flow covers
+# what only a device can show: that the sheet appears, that it is operable and readable on
+# a small screen, and that finishing it stops the offer for good.
+tags:
+  - tour
+---
+- runFlow: "../auth/signin.yaml"
+
+# ---------------------------------------------------------------------------
+# Replay from More (FR-017)
+# ---------------------------------------------------------------------------
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-take-the-tour"
+    timeout: 8000
+- tapOn:
+    id: "menu-take-the-tour"
+
+- extendedWaitUntil:
+    visible:
+      id: "feature-tour"
+    timeout: 8000
+- assertVisible: "Stop 1 of 6"
+
+# A way out on every card, so leaving never depends on finding a gesture (FR-009).
+- assertVisible:
+    id: "feature-tour-dismiss"
+
+# ---------------------------------------------------------------------------
+# FR-025 / FR-020 — every stop renders in portrait with no clipping
+# ---------------------------------------------------------------------------
+# Walked one card at a time with the position line asserted each time: a card that failed
+# to lay out would leave the sheet on the previous stop, and the assertion would catch it
+# rather than a screenshot nobody reads.
+- takeScreenshot: "tmp/maestro-screenshots/tour-01-stop-1"
+
+# ---------------------------------------------------------------------------
+# FR-023 — the web-only stops offer no action
+# ---------------------------------------------------------------------------
+# people, project and ritual are the three stops whose work has no mobile surface. The
+# server strips their action label before the app ever sees them, so there is no button to
+# tap and nothing for this flow to guard against beyond its absence.
+- assertNotVisible:
+    id: "feature-tour-action"
+- assertVisible: ".*web app.*"
+
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 2 of 6"
+    timeout: 5000
+- assertNotVisible:
+    id: "feature-tour-action"
+- takeScreenshot: "tmp/maestro-screenshots/tour-02-stop-2"
+
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 3 of 6"
+    timeout: 5000
+- assertNotVisible:
+    id: "feature-tour-action"
+- takeScreenshot: "tmp/maestro-screenshots/tour-03-stop-3"
+
+# ---------------------------------------------------------------------------
+# Forward and back
+# ---------------------------------------------------------------------------
+- tapOn:
+    id: "feature-tour-previous"
+- extendedWaitUntil:
+    visible: "Stop 2 of 6"
+    timeout: 5000
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 3 of 6"
+    timeout: 5000
+
+# The remaining stops do have mobile surfaces, so their action button is present.
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 4 of 6"
+    timeout: 5000
+- assertVisible:
+    id: "feature-tour-action"
+- takeScreenshot: "tmp/maestro-screenshots/tour-04-stop-4"
+
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 5 of 6"
+    timeout: 5000
+- takeScreenshot: "tmp/maestro-screenshots/tour-05-stop-5"
+
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    visible: "Stop 6 of 6"
+    timeout: 5000
+- takeScreenshot: "tmp/maestro-screenshots/tour-06-stop-6"
+
+# ---------------------------------------------------------------------------
+# Finishing it stops the automatic offer (FR-007)
+# ---------------------------------------------------------------------------
+- tapOn:
+    id: "feature-tour-next"
+- extendedWaitUntil:
+    notVisible:
+      id: "feature-tour"
+    timeout: 8000
+
+# Relaunch without clearing state: progress is server-side and keyed on the person, so a
+# completed tour stays completed across a restart.
+- runFlow: "../auth/dev-client-relaunch.yaml"
+# The tab bar, not a screen title: a relaunch resumes on whatever tab the person left, so
+# there is no one header to wait for. Tab labels are not exposed as text, so this waits on
+# the tab button's testID.
+- extendedWaitUntil:
+    visible:
+      id: "tab-more"
+    timeout: 30000
+- assertNotVisible:
+    id: "feature-tour-offer"
+- assertNotVisible:
+    id: "feature-tour"

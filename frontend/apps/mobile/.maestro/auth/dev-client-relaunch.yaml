@@ -1,0 +1,27 @@
+appId: com.devguards.TechOffice
+name: "Dev client — relaunch, keeping state"
+# dev-client-bootstrap.yaml's counterpart for flows that need a restart rather than a fresh
+# install: no clearState, no clearKeychain, so the signed-in session survives and the
+# process comes back on the bundle it was already running.
+#
+# Only the developer menu has to be dealt with, and it is shaped differently on each
+# platform — Android labels its close control only with a content description, iOS exposes
+# the SF Symbol as an identifier. Both are conditional rather than waits: on a warm
+# relaunch the menu does not always reappear, and blocking on one that never comes would
+# fail a flow that is actually fine.
+---
+- launchApp
+- runFlow:
+    when:
+      platform: Android
+      visible: "Close"
+    commands:
+      - tapOn: "Close"
+- runFlow:
+    when:
+      platform: iOS
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"

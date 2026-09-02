@@ -55,7 +55,7 @@ Domains are organized into **four tiers**. Dependencies MUST only point **downwa
 | Tier | Role | Domains | May Depend On |
 |------|------|---------|---------------|
 | **T0 — Foundation** | Identity & tenant boundary | `public`, `iam`, `organization`, `department` | Nothing (except `public` for org FK) |
-| **T1 — Support Kernel** | Infrastructure services consumed by business domains | `notification`, `files`, `preference` | T0 only |
+| **T1 — Support Kernel** | Infrastructure services consumed by business domains | `notification`, `files`, `preference`, `tour` | T0 only |
 | **T2 — Core Domain** | Primary business capabilities | `chat`, `docs` | T0, T1 |
 | **T3 — Orchestrator** | High-level features composing multiple core domains | `collaboration`, `voice` | T0, T1, T2 |
 | **T4 — Aggregation** | Cross-domain composition with overlay readers | `calendar` | T0, T1, T3 |
@@ -93,6 +93,7 @@ graph TD
         NOTIF["notification<br/><i>publish, route, SSE,<br/>presence, push</i>"]
         FILES["files<br/><i>upload, access,<br/>PDF, search</i>"]
         PREF["preference<br/><i>theme, user settings</i>"]
+        TOUR["tour<br/><i>orientation tours,<br/>progress</i>"]
     end
 
     subgraph "T2 — Core Domain"
@@ -316,7 +317,7 @@ graph LR
 
 #### `iam` (Identity & Access Management)
 - **Schema**: `iam`
-- **Tables**: `identity`, `user`, `role`, `role_permission`, `employee_role`, `sso_identity`, `password_credential`, `session`, `invitation`, `password_reset_token`, `user_preference`, `credential`, `account_lockout`
+- **Tables**: `identity`, `user`, `role`, `role_permission`, `employee_role`, `sso_identity`, `password_credential`, `session`, `invitation`, `password_reset_token`, `user_preference`, `tour_progress`, `credential`, `account_lockout`
 - **Role**: Authentication (JWT, SSO, password, PIN), authorization (RBAC), session management, org-managed worker account lifecycle
 - **Depends on**: `public.organization` (FK), `organization.employee` (FK for role assignments)
 - **Special**: `iam.user` is **global** (not organization-scoped) — users can belong to multiple orgs

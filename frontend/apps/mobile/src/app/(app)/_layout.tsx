@@ -29,6 +29,7 @@ import { ActiveVoiceCallBar } from "@/components/voice/active-voice-call-bar";
 import { IncomingVoiceCallPrompt } from "@/components/voice/incoming-voice-call-prompt";
 import { OfflineBanner } from "@/components/ui/offline-banner";
 import { TermsGate } from "@/components/compliance/terms-gate";
+import { TourProvider } from "@/providers/tour-provider";
 import { useAppStatePresence } from "@/hooks/use-app-state-presence";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
@@ -326,6 +327,12 @@ export default function AppLayout() {
 
   return (
     <TermsGate>
+    {/*
+      The feature tour (Feature 039). Inside TermsGate and below the authentication guard
+      above, so it can only appear once both mandatory gates are behind the person; the
+      hook additionally holds it back while first-run onboarding is unfinished (FR-008).
+    */}
+    <TourProvider>
     <View style={{ flex: 1 }}>
       <OfflineBanner />
       {incomingVoiceCall ? (
@@ -452,6 +459,7 @@ export default function AppLayout() {
         <Tabs.Screen name="(notifications)" options={{ href: null, headerShown: false }} />
       </Tabs>
     </View>
+    </TourProvider>
     </TermsGate>
   );
 }

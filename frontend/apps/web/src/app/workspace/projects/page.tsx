@@ -15,7 +15,7 @@
 'use client';
 
 import React, { Suspense, useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
 	Box,
 	CircularProgress,
@@ -313,7 +313,14 @@ function ProjectsPageContent() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [searchQuery, setSearchQuery] = useState('');
-	const [createDialogOpen, setCreateDialogOpen] = useState(false);
+	const searchParams = useSearchParams();
+	// FR-013a (Feature 039): ?create=1 lands with the create dialog already open, so the
+	// tour's "Create a project" stop does not deposit someone on an empty list and leave
+	// them to find the button. Read once on mount, not on every searchParams change, so
+	// closing the dialog does not immediately reopen it.
+	const [createDialogOpen, setCreateDialogOpen] = useState(
+		() => searchParams.get('create') === '1'
+	);
 
 	const loadProjects = useCallback(async () => {
 		setLoading(true);

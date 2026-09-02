@@ -1,9 +1,10 @@
 # Workspace Shell & Navigation
 
 The cross-cutting client experience: federated search, canonical cross-platform links, the
-context rail, theme preferences, and the shape of the web and mobile apps.
+context rail, theme preferences, the feature tour, and the shape of the web and mobile
+apps.
 
-**Status date: 2026-09-02.** Supersedes specs 011, 012, 013, 027, 030, 031, 035.
+**Status date: 2026-09-02.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039.
 
 ## Canonical resource links
 
@@ -146,6 +147,98 @@ Client: `packages/apis/src/preference.ts`, `theme-storage.ts`.
 mobile screen imports `lightPalette` by name, and mobile never calls `PreferenceService`
 for theme at all. See [D30](#known-drift).
 
+## Feature tour
+
+Two short card sequences shown once per person per organization on first arrival, and
+replayable on demand. **The tour is server-driven**: which tour, which stops, in what
+order, whether to offer it, and every word of copy come from one `GetTour` call. The
+clients render cards and map a target enum to a route — they evaluate no permissions and
+hold no copy, which is what makes two tours across two platforms cost roughly one tour's
+worth of code.
+
+`TourService` (`internal/tour`) — two RPCs, both inferring employee and org from the auth
+context:
+
+| RPC | Permission | Purpose |
+|---|---|---|
+| `GetTour(platform)` | `tour.view` | the caller's tour, filtered and platform-adapted, plus their progress and whether to offer it |
+| `UpdateTourProgress(status, current_stop)` | `tour.update` | record where they got to |
+
+`tour.view` and `tour.update` are granted to `owner`, `operator` and `employee` alike —
+everyone needs to see their own tour, so unlike most permissions these have no exclusion
+list.
+
+**Audience.** Holding `iam.inviteUser` selects the administrator tour; everyone else gets
+the worker tour. Not a role check: a custom role granted that permission is, for tour
+purposes, an administrator, which is the correct answer rather than an accident. The
+caller cannot ask for the other tour — there is no audience field on the request.
+
+**Content is Go values**, not rows: `internal/tour/content.go`, versioned by a
+`ContentVersion` constant. A tour authoring interface is out of scope, so a content table
+would be a table with a dozen immutable rows nobody can edit. Copy changes ship with a
+backend deploy, which works because all clients here release together. The administrator
+tour is six stops (people, project, ritual, chat, schedule, docs); the worker tour is four
+(today, evidence, chat, alerts).
+
+**Filtering happens on the server**, in this order:
+
+1. A stop whose `RequiredPermission` the caller lacks is **omitted entirely**, not
+   disabled. The returned list is the numbering, so the survivors renumber from zero with
+   no gap.
+2. For a mobile caller, a **web-only** stop has its body replaced by a "this is done on
+   the web" note and its target forced to `TOUR_TARGET_NONE` with an empty action label,
+   so no client can render an action that cannot work. Three administrator stops are
+   web-only: `people`, `project` and `ritual` — the mobile app can list projects and
+   rituals but has no create surface for either.
+3. `current_stop` is **clamped to the filtered list on read and not written back**. The
+   stored index addresses a list whose length depends on permissions, so revoking one can
+   leave it past the end; the clamp keeps `stops[current_stop]` renderable, and leaving
+   the stored value alone means restoring the permission restores the position.
+
+**Progress** lives in `iam.tour_progress`, one row per `(organization_id, employee_id,
+tour_id)`, `ON DELETE CASCADE` to `organization.employee` and swept explicitly by the
+account-deletion path in `internal/iam/logic_account_deletion.go`. Statuses are
+`in_progress`, `completed` and `dismissed`. **"Not started" is the absence of a row** —
+reading the tour never writes one, which keeps workspace entry a read path and keeps the
+completion-rate denominator honest. `content_version` records which wording the person
+actually saw; nothing reads it today.
+
+`should_offer` is true only for not-started and in-progress, and is deliberately
+independent of platform: a tour completed on web is not offered on mobile. Completing and
+dismissing are both terminal for the automatic offer and both re-enterable by a deliberate
+restart, which writes `in_progress` at stop 0. The two tours are remembered independently,
+so a worker promoted mid-tour is offered the administrator tour as not-started while their
+worker progress stays untouched.
+
+**What the clients own**, because only they know it:
+
+- *When* to show the offer — after authentication and the terms gate, after the onboarding
+  redirect on mobile, and never while a deep-link redirect is being followed.
+- *Where* to show it — the tour belongs to one surface, not to the whole app. On web that
+  is the workspace home (`/workspace/calendar`, where `/workspace` redirects); on mobile it
+  is whichever screen the person was on when the tour loaded. Everywhere else it is hidden
+  rather than discarded, so it appears when they arrive somewhere it belongs. Without this
+  the offer is a modal over whatever the person actually came to do — the task they
+  followed a link to, the settings page they opened to delete their account. An explicit
+  "Take the tour" is exempt: that is a request, not an interruption, and it opens where it
+  was asked for.
+- *Reopening after an action* — acting on a stop closes the tour and navigates; returning
+  to the surface it was offered from reopens it at the stored stop, unprompted and with no
+  second progress write.
+- *Route resolution* — `TourTarget` → a platform path. Each client's map is a
+  `Record<TourTarget, ...>`, so a new target added to the proto fails the build until it
+  has a route: `packages/apis/src/tour.ts` converts the enum to a string union, and
+  `apps/web/src/lib/tour-routes.ts` and `apps/mobile/src/lib/tour-routes.ts` map that union
+  (Constitution VIII). The web project, ritual and docs routes land with the create action
+  open rather than on an empty list; the ritual route falls back to project creation when
+  the workspace has no project.
+
+Presentation is purpose-built per platform and shares no code: a centred MUI dialog on web
+(`apps/web/src/components/tour/`), a bottom card sheet on mobile
+(`apps/mobile/src/components/feature-tour.tsx`). Neither anchors to or highlights any live
+element — the stops describe capabilities, not controls. Replay is offered from the web
+user menu and the mobile More tab.
+
 ## Web application
 
 Next.js App Router, MUI v7, in `apps/web/src/app`:
@@ -278,8 +371,14 @@ workspace-address rules `deriveSubdomain` / `isValidSubdomain` / `normalizeSubdo
 
 ## Tests
 
-`integration/canonical_links_test.go`, `context_rail_test.go`, `preference_test.go`;
-`apps/web/e2e/`; Maestro flows for mobile.
+`integration/canonical_links_test.go`, `context_rail_test.go`, `preference_test.go`,
+`feature_tour_test.go`; `apps/web/e2e/`; Maestro flows for mobile, including
+`.maestro/feature-tour/`.
+
+`feature_tour_test.go` also carries `TestTourPermissionIdsExist`, which asserts that every
+permission id named in `internal/tour/content.go` still exists in `public.permission`.
+Those ids are bare strings with no compile-time check, so without it a rename in a later
+migration would flip the tour audience or hide a stop silently.
 
 ## Known drift
 

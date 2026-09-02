@@ -15,9 +15,10 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Menu, MenuItem, ListItemIcon, ListItemText, Divider, Avatar } from '@mui/material';
-import { Settings, Logout, Person } from '@mui/icons-material';
+import { Settings, Logout, Person, Explore } from '@mui/icons-material';
 import type { UserProfile } from '@/lib/auth/types';
 import { useAuth } from '@/lib/auth/hooks';
+import { useTourController } from '@/components/tour/TourProvider';
 
 interface UserMenuProps {
 	user: UserProfile;
@@ -35,6 +36,7 @@ interface UserMenuProps {
 export function UserMenu({ user }: UserMenuProps) {
 	const router = useRouter();
 	const { logout } = useAuth();
+	const tour = useTourController();
 	const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 	const open = Boolean(anchorEl);
 
@@ -54,6 +56,14 @@ export function UserMenu({ user }: UserMenuProps) {
 	const handleProfile = () => {
 		handleClose();
 		router.push('/workspace/profile');
+	};
+
+	// FR-017: available whether or not the tour was ever finished or dismissed. Restart
+	// writes in_progress at stop 0, so a completed tour becomes offerable again — which is
+	// the point: the person asked for it.
+	const handleTakeTour = () => {
+		handleClose();
+		tour?.restart();
 	};
 
 	const handleLogout = async () => {
@@ -131,6 +141,16 @@ export function UserMenu({ user }: UserMenuProps) {
 				</MenuItem>
 
 				<Divider />
+
+				{/* Take the tour — the on-demand entry point (FR-017) */}
+				{tour?.tour && tour.tour.stops.length > 0 ? (
+					<MenuItem onClick={handleTakeTour} data-testid="user-menu-take-the-tour">
+						<ListItemIcon>
+							<Explore fontSize="small" />
+						</ListItemIcon>
+						<ListItemText>Take the tour</ListItemText>
+					</MenuItem>
+				) : null}
 
 				{/* Profile */}
 				<MenuItem onClick={handleProfile} data-testid="user-menu-profile">

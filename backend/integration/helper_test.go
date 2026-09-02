@@ -161,6 +161,7 @@ type testWorld struct {
 	docReaction rpcv1connect.DocumentReactionServiceClient
 	cal         rpcv1connect.CalendarServiceClient
 	compliance  rpcv1connect.ComplianceServiceClient
+	tour        rpcv1connect.TourServiceClient
 }
 
 func newTestWorld(t *testing.T) *testWorld {
@@ -187,6 +188,7 @@ func newTestWorld(t *testing.T) *testWorld {
 		docReaction: rpcv1connect.NewDocumentReactionServiceClient(http.DefaultClient, serverBaseURL),
 		cal:         rpcv1connect.NewCalendarServiceClient(http.DefaultClient, serverBaseURL),
 		compliance:  rpcv1connect.NewComplianceServiceClient(http.DefaultClient, serverBaseURL),
+		tour:        rpcv1connect.NewTourServiceClient(http.DefaultClient, serverBaseURL),
 	}
 }
 
@@ -2185,6 +2187,81 @@ func (w *testWorld) resetPreference(actor testUser) {
 	req := connect.NewRequest(&rpcv1.ResetUserPreferenceRequest{})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	_, err := w.pref.ResetUserPreference(context.Background(), req)
+	require.NoError(w.t, err)
+}
+
+// ---------------------------------------------------------------------------
+// Act: Feature tour
+// ---------------------------------------------------------------------------
+
+func (w *testWorld) getTourResult(actor testUser, platform rpcv1.TourPlatform) (*rpcv1.GetTourResponse, error) {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.GetTourRequest{Platform: platform})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.tour.GetTour(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+func (w *testWorld) getTour(actor testUser, platform rpcv1.TourPlatform) *rpcv1.GetTourResponse {
+	w.t.Helper()
+	msg, err := w.getTourResult(actor, platform)
+	require.NoError(w.t, err)
+	return msg
+}
+
+func (w *testWorld) updateTourProgressResult(actor testUser, status rpcv1.TourStatus, currentStop int32) (*rpcv1.UpdateTourProgressResponse, error) {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.UpdateTourProgressRequest{
+		Status:      status,
+		CurrentStop: currentStop,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.tour.UpdateTourProgress(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+func (w *testWorld) updateTourProgress(actor testUser, status rpcv1.TourStatus, currentStop int32) *rpcv1.UpdateTourProgressResponse {
+	w.t.Helper()
+	msg, err := w.updateTourProgressResult(actor, status, currentStop)
+	require.NoError(w.t, err)
+	return msg
+}
+
+// tourStopKeys is the returned sequence, in order, which is what the ordering and
+// filtering assertions are actually about.
+func tourStopKeys(resp *rpcv1.GetTourResponse) []string {
+	keys := make([]string, 0, len(resp.Stops))
+	for _, stop := range resp.Stops {
+		keys = append(keys, stop.Key)
+	}
+	return keys
+}
+
+// revokePermission removes one permission from every role in an organization, which is
+// how a test makes a person lack it. Permissions are resolved per request with no cache,
+// so the next call sees the change.
+func (w *testWorld) revokePermission(orgID dbuuid.UUID, permissionID string) {
+	w.t.Helper()
+	_, err := globalDB.Exec(context.Background(),
+		`DELETE FROM iam.role_permission WHERE organization_id = $1 AND permission_id = $2`,
+		orgID, permissionID)
+	require.NoError(w.t, err)
+}
+
+// grantPermission puts a permission back on every role in an organization.
+func (w *testWorld) grantPermission(orgID dbuuid.UUID, permissionID string) {
+	w.t.Helper()
+	_, err := globalDB.Exec(context.Background(),
+		`INSERT INTO iam.role_permission (organization_id, role_id, permission_id)
+		 SELECT organization_id, id, $2 FROM iam.role WHERE organization_id = $1
+		 ON CONFLICT (organization_id, role_id, permission_id) DO NOTHING`,
+		orgID, permissionID)
 	require.NoError(w.t, err)
 }
 

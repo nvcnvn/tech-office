@@ -4141,6 +4141,60 @@ func (s *IamSsoIdentity) FieldsMap() map[string]any {
 	}
 }
 
+// How far a person got in a feature tour. One row per employee per tour, written on first engagement and never on read — the absence of a row is "not started". MUST align with backend constants in internal/tour/content.go.
+type IamTourProgress struct {
+	ID             dbuuid.UUID `json:"id"`
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	EmployeeID     dbuuid.UUID `json:"employee_id"`
+	// Which tour: administrator or worker. Derived from the caller's permissions by the server, never sent by a client.
+	TourID string `json:"tour_id"`
+	Status string `json:"status"`
+	// Zero-based index of the first stop not yet completed, addressing the permission-filtered stop list. Clamped to that list on read without being written back.
+	CurrentStop int32 `json:"current_stop"`
+	// The tour content version in force when the row was last written — the record of which copy this person actually saw.
+	ContentVersion string             `json:"content_version"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (s *IamTourProgress) TableName() string {
+	return "iam.tour_progress"
+}
+
+func (s *IamTourProgress) Fields() ([]string, []any) {
+	return []string{
+			"id",
+			"organization_id",
+			"employee_id",
+			"tour_id",
+			"status",
+			"current_stop",
+			"content_version",
+			"updated_at",
+		}, []any{
+			&s.ID,
+			&s.OrganizationID,
+			&s.EmployeeID,
+			&s.TourID,
+			&s.Status,
+			&s.CurrentStop,
+			&s.ContentVersion,
+			&s.UpdatedAt,
+		}
+}
+
+func (s *IamTourProgress) FieldsMap() map[string]any {
+	return map[string]any{
+		"id":              &s.ID,
+		"organization_id": &s.OrganizationID,
+		"employee_id":     &s.EmployeeID,
+		"tour_id":         &s.TourID,
+		"status":          &s.Status,
+		"current_stop":    &s.CurrentStop,
+		"content_version": &s.ContentVersion,
+		"updated_at":      &s.UpdatedAt,
+	}
+}
+
 // Global user accounts. NOT organization-scoped - users can belong to multiple organizations with different roles. Status MUST align with backend constants in internal/iam/constants.go and proto enum rpc.v1.UserStatus.
 type IamUser struct {
 	ID                dbuuid.UUID        `json:"id"`

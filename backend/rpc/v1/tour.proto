@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// TourService serves the feature tour: a short, card-based orientation sequence shown
+// once per person per organization, replayable on demand.
+//
+// The tour is server-driven. GetTour returns the tour this caller should see, already
+// selected by their permissions, already filtered to the stops they can use, and already
+// adapted to the platform that asked. The clients render cards and map a target enum to
+// their own route; they do not evaluate permissions or hold copy.
+//
+// Neither RPC takes an employee or organization id: both are inferred from the auth
+// context (Constitution I).
+service TourService {
+  // GetTour returns the caller's tour, their progress in it, and whether it should be
+  // offered automatically.
+  rpc GetTour(GetTourRequest) returns (GetTourResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["tour.view"]
+    };
+  }
+
+  // UpdateTourProgress records where the caller got to. Upsert on
+  // (organization_id, employee_id, tour_id); the tour id is derived from the caller's
+  // audience, never sent by the client.
+  rpc UpdateTourProgress(UpdateTourProgressRequest) returns (UpdateTourProgressResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["tour.update"]
+    };
+  }
+}
+
+// The client platform asking for the tour. Drives the web-only stop substitution.
+enum TourPlatform {
+  TOUR_PLATFORM_UNSPECIFIED = 0; // Invalid; rejected with invalid_argument
+  TOUR_PLATFORM_WEB = 1;
+  TOUR_PLATFORM_MOBILE = 2;
+}
+
+// Which of the two tours the caller is served. Decided by the server from the caller's
+// permission set; the client cannot ask for the other one.
+enum TourAudience {
+  TOUR_AUDIENCE_UNSPECIFIED = 0;
+  TOUR_AUDIENCE_ADMINISTRATOR = 1;
+  TOUR_AUDIENCE_WORKER = 2;
+}
+
+// Progress state. NOT_STARTED is the absence of a stored row, never a stored value.
+enum TourStatus {
+  TOUR_STATUS_UNSPECIFIED = 0;
+  TOUR_STATUS_NOT_STARTED = 1; // no stored row
+  TOUR_STATUS_IN_PROGRESS = 2;
+  TOUR_STATUS_COMPLETED = 3;
+  TOUR_STATUS_DISMISSED = 4;
+}
+
+// The surface a stop points at. Each client maps this to its own route; a client MUST
+// handle every value, enforced by a test on both clients (Constitution VIII).
+enum TourTarget {
+  TOUR_TARGET_UNSPECIFIED = 0;
+  TOUR_TARGET_NONE = 1; // no action button — used for web-only stops shown on mobile
+  TOUR_TARGET_PEOPLE = 2;
+  TOUR_TARGET_PROJECTS = 3;
+  TOUR_TARGET_RITUALS = 4;
+  TOUR_TARGET_CHAT = 5;
+  TOUR_TARGET_CALENDAR = 6;
+  TOUR_TARGET_DOCS = 7;
+  TOUR_TARGET_TODAY = 8;
+  TOUR_TARGET_ALERTS = 9;
+  TOUR_TARGET_SEARCH = 10;
+}
+
+// One card in the sequence, already filtered and platform-adapted.
+message TourStop {
+  string key = 1;          // stable id, also the client testID suffix
+  string title = 2;
+  string body = 3;         // already substituted for platform
+  string action_label = 4; // empty when target is TOUR_TARGET_NONE
+  TourTarget target = 5;
+}
+
+message GetTourRequest {
+  TourPlatform platform = 1; // required; UNSPECIFIED is rejected
+}
+
+message GetTourResponse {
+  TourAudience audience = 1;
+  string tour_id = 2;          // "administrator" | "worker"
+  string content_version = 3;
+  repeated TourStop stops = 4; // already filtered and adapted; may be shorter than the definition
+  TourStatus status = 5;
+  int32 current_stop = 6;      // index into `stops`, clamped to it; 0 when not started
+  bool should_offer = 7;       // true only when status is NOT_STARTED or IN_PROGRESS
+}
+
+message UpdateTourProgressRequest {
+  TourStatus status = 1;  // IN_PROGRESS, COMPLETED or DISMISSED; NOT_STARTED is rejected
+  int32 current_stop = 2; // ignored unless status is IN_PROGRESS
+}
+
+message UpdateTourProgressResponse {
+  TourStatus status = 1;
+  int32 current_stop = 2;
+}

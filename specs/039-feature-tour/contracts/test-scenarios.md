@@ -36,10 +36,11 @@ func TestFeatureTour(t *testing.T) {
         t.Run("the remaining stops are renumbered from zero with no gap")        // FR-006, FR-011
     })
 
-    // FR-023 — platform adaptation
+    // FR-023 — platform adaptation. The web-only stops are people, project and ritual:
+    // mobile can list projects and rituals but has no create surface for either.
     t.Run("when an owner asks for the tour from mobile", func(t *testing.T) {
-        t.Run("the web-only people stop says the work is done on the web")       // FR-023
-        t.Run("the web-only people stop carries no target and no action label")  // FR-023
+        t.Run("each web-only stop says the work is done on the web")             // FR-023
+        t.Run("each web-only stop carries no target and no action label")        // FR-023
         t.Run("every other stop keeps its target and action label")              // FR-022, FR-023
     })
     t.Run("when the same owner asks for the tour from web", func(t *testing.T) {
@@ -165,7 +166,7 @@ Every interactive element carries `data-testid` (Constitution VII).
 `owner-tour.yaml`
 ```
 US1  sign in as an owner on a fresh install → the administrator tour is offered   // FR-022
-FR-023 reach the people stop → it says the work is done on the web and shows no action button
+FR-023 reach the people, project and ritual stops → each says the work is done on the web and shows no action button
 US1  advance to the end → the tour completes and is not offered on relaunch       // FR-007
 FR-025 every stop renders inside a 360 dp portrait viewport with no clipping      // FR-020
 ```

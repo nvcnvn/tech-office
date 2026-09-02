@@ -39,6 +39,9 @@ Served to anyone holding `iam.inviteUser`. Six stops, matching FR-003's required
 - Required permission: `collab.createProject`
 - **FR-013a**: the route must land with project creation visible — not on a project list that
   is empty in exactly the workspace this stop is written for.
+- **Web-only.** Mobile note: *"Projects are set up on the web app — open TechOffice on a
+  computer to create your first one. You will see the work here on your phone once it
+  exists."* Target becomes `TOUR_TARGET_NONE`; no action button. (FR-023)
 
 ### 3. `ritual` — Set up a checklist that proves itself
 
@@ -54,6 +57,9 @@ Served to anyone holding `iam.inviteUser`. Six stops, matching FR-003's required
 - **FR-013a**: rituals live inside a project, and a brand-new workspace has none. When there
   is no project yet, this stop routes to project creation and says so, rather than to a
   rituals screen that cannot exist.
+- **Web-only.** Mobile note: *"Rituals are defined on the web app. Once one is set up, the
+  runs land on your phone and you can approve the evidence from here."* Target becomes
+  `TOUR_TARGET_NONE`; no action button. (FR-023)
 
 ### 4. `chat` — Keep the conversation attached to the work
 
@@ -168,9 +174,14 @@ stale table is worse than none.
 - **The calendar stop is ungated** because the calendar genuinely has no view permission —
   only `calendar.manageResources` exists. If a view permission is ever added, this stop must
   be gated with it.
-- **The `people` stop is the only web-only stop.** If more administrator surfaces reach
-  mobile later, the `WebOnly` flag is how they stop being web-only — one field, no structural
-  change.
+- **Three stops are web-only: `people`, `project` and `ritual`.** The `people` stop was
+  web-only by design; `project` and `ritual` were added to that list during implementation of
+  Feature 039, because the mobile app has no create surface for either — `grep` finds no
+  `createProject` or `createRitualDefinition` call anywhere in `apps/mobile`. Leaving them
+  actionable on mobile would have shipped a "Create a project" button that opens a list it
+  cannot add to, which is exactly the empty-screen failure the spec's edge cases forbid. If
+  those create surfaces reach mobile later, the `WebOnly` flag is how they stop being
+  web-only — one field, no structural change.
 - **Three administrator stops describe things a new workspace does not have.** Project,
   ritual and docs all point at creation, per FR-013a. The ritual stop is the awkward one: it
   depends on a project existing, so its route is conditional. That conditionality is the only

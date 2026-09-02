@@ -70,6 +70,9 @@ export * from './chat-reactions';
 // Export preference functions
 export * from './preference';
 
+// Export feature tour functions (Feature 039)
+export * from './tour';
+
 // Export file storage functions (Feature 014: basic upload/download)
 export * from './files';
 

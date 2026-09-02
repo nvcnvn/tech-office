@@ -82,6 +82,40 @@ name: "Auth — Sign in with email"
       - tapOn:
           id: "terms-gate-accept"
 
+# Feature 039: the feature tour offers itself over the app the first time a person arrives,
+# and stays out of the way afterwards. Decline it here, in the shared bootstrap, so no
+# screen flow has to know it exists — the same treatment the terms gate gets above. The
+# tour is covered on its own terms by ../feature-tour/.
+#
+# This has to come BEFORE the wait for the tab bar, not after it: the sheet is a modal, and
+# on iOS a modal replaces the visible hierarchy outright, so "Chat" cannot be waited on
+# while it is up.
+#
+# Two shapes have to be closed, not one. Someone who has never answered gets the offer;
+# someone who accepted on an earlier run and did not finish gets the card sequence itself,
+# resumed, with no offer at all. feature-tour-sheet is on both, so the wait is a single
+# element rather than a race between two — and it is optional, because a person who has
+# completed or declined the tour sees neither.
+- extendedWaitUntil:
+    visible:
+      id: "feature-tour-sheet"
+    timeout: 12000
+    optional: true
+- runFlow:
+    when:
+      visible:
+        id: "feature-tour-offer-decline"
+    commands:
+      - tapOn:
+          id: "feature-tour-offer-decline"
+- runFlow:
+    when:
+      visible:
+        id: "feature-tour-dismiss"
+    commands:
+      - tapOn:
+          id: "feature-tour-dismiss"
+
 # Wait for API call to complete and navigate
 - extendedWaitUntil:
     visible: "Chat"

@@ -32,13 +32,13 @@ client wrapper in `frontend/packages/apis/`, and separate purpose-built UI in
 
 **Purpose**: The contract and the schema — everything downstream is generated from or depends on these.
 
-- [ ] T001 Create `backend/rpc/v1/tour.proto` with `TourService` (`GetTour`, `UpdateTourProgress`), the `TourPlatform`, `TourAudience`, `TourStatus` and `TourTarget` enums, and the `TourStop` / request / response messages exactly as specified in [contracts/tour-service.md](contracts/tour-service.md), including the `access_control` options declaring `tour.view` and `tour.update`
-- [ ] T002 Create migration `backend/database/migrations/20260902000001_feature_tour.up.sql` creating `iam.tour_progress` per [data-model.md](data-model.md#iamtour_progress) — composite PK `(organization_id, id)`, unique `(organization_id, employee_id, tour_id)`, composite FK to `iam.employee (organization_id, id)` with `ON DELETE CASCADE`, and the three CHECK constraints — plus `INSERT`s adding `tour.view` and `tour.update` to `public.permission` and granting both to the `owner`, `operator` and `employee` templates in `public.default_role_permission`
-- [ ] T003 Create `backend/database/scripts/tour.query.sql` with `GetTourProgress :one`, `UpsertTourProgress :one` and `DeleteTourProgressForOrganization :exec`, every query pinning `organization_id` to a parameter
-- [ ] T004 Apply and regenerate: `cd backend && ./scripts/migrate.sh && ./scripts/regen-schema.sh && sqlc generate` — `backend/database/scripts/schema.sql` is a generated snapshot and must never be hand-edited (depends on T002, T003)
-- [ ] T005 Run `cd backend && buf generate` to produce `backend/rpc/v1/tour.pb.go`, the `rpcv1connect` handler, and `frontend/packages/rpc/rpc/v1/tour_pb.ts` (depends on T001)
-- [ ] T006 Export the generated module by adding `tour` to the imports and the export list in `frontend/packages/rpc/index.ts` (depends on T005)
-- [ ] T007 Run `make lint-tenancy` and confirm it is green for the new table and query file (depends on T004)
+- [X] T001 Create `backend/rpc/v1/tour.proto` with `TourService` (`GetTour`, `UpdateTourProgress`), the `TourPlatform`, `TourAudience`, `TourStatus` and `TourTarget` enums, and the `TourStop` / request / response messages exactly as specified in [contracts/tour-service.md](contracts/tour-service.md), including the `access_control` options declaring `tour.view` and `tour.update`
+- [X] T002 Create migration `backend/database/migrations/20260902000001_feature_tour.up.sql` creating `iam.tour_progress` per [data-model.md](data-model.md#iamtour_progress) — composite PK `(organization_id, id)`, unique `(organization_id, employee_id, tour_id)`, composite FK to `iam.employee (organization_id, id)` with `ON DELETE CASCADE`, and the three CHECK constraints — plus `INSERT`s adding `tour.view` and `tour.update` to `public.permission` and granting both to the `owner`, `operator` and `employee` templates in `public.default_role_permission`
+- [X] T003 Create `backend/database/scripts/tour.query.sql` with `GetTourProgress :one`, `UpsertTourProgress :one` and `DeleteTourProgressForOrganization :exec`, every query pinning `organization_id` to a parameter
+- [X] T004 Apply and regenerate: `cd backend && ./scripts/migrate.sh && ./scripts/regen-schema.sh && sqlc generate` — `backend/database/scripts/schema.sql` is a generated snapshot and must never be hand-edited (depends on T002, T003)
+- [X] T005 Run `cd backend && buf generate` to produce `backend/rpc/v1/tour.pb.go`, the `rpcv1connect` handler, and `frontend/packages/rpc/rpc/v1/tour_pb.ts` (depends on T001)
+- [X] T006 Export the generated module by adding `tour` to the imports and the export list in `frontend/packages/rpc/index.ts` (depends on T005)
+- [X] T007 Run `make lint-tenancy` and confirm it is green for the new table and query file (depends on T004)
 
 **Checkpoint**: Contract and schema exist; both stacks can compile against them.
 
@@ -50,15 +50,15 @@ client wrapper in `frontend/packages/apis/`, and separate purpose-built UI in
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T008 Create `backend/internal/tour/content.go` defining the `Tour` and `Stop` structs per [data-model.md](data-model.md#tour-definitions--internaltourcontentgo), the `contentVersion` constant `"2026-09-02.1"`, and both tours with the exact copy, targets, required permissions and `WebOnly`/`MobileNote` values from [contracts/tour-content.md](contracts/tour-content.md)
-- [ ] T009 Create `backend/internal/tour/logic.go` implementing the pure logic layer (accepts `tx database.DBTX`, pool-agnostic, per Constitution III): audience selection on `iam.inviteUser`, permission filtering, mobile adaptation of web-only stops, re-indexing of the filtered list, **clamping the stored position to the filtered list on read without writing the clamped value back** (FR-015a, see [contracts/tour-service.md](contracts/tour-service.md)), and progress read/upsert with `slog.DebugContext` at selection and write and `slog.InfoContext` on completion (depends on T004, T008)
-- [ ] T010 Create `backend/internal/tour/service.go` implementing the Connect handlers — extract org and employee from the auth context, read the permission set via `interceptor.UserPermissionsFromContext`, own the `TenantPool`, and translate errors to the Connect codes in [contracts/tour-service.md](contracts/tour-service.md#errors) (depends on T005, T009)
-- [ ] T011 Register the service in `backend/cmd/server.go` alongside the existing preference registration at lines 266–270 (depends on T010)
-- [ ] T012 Add `DeleteTourProgressForOrganization` to the organization teardown in `backend/internal/iam/logic_account_deletion.go`, next to the existing `DeleteUserPreferencesForOrganization` call at line 215 (depends on T004)
-- [ ] T013 [P] Create `frontend/packages/apis/src/tour.ts` exposing `getTour(platform)` and `updateTourProgress(status, currentStop)` with proto enums converted to string unions in the style of `preference.ts`, add `tourClient` to `frontend/packages/apis/src/rpc.ts`, and export the module from `frontend/packages/apis/src/index.ts` (depends on T006)
-- [ ] T014 Create `backend/integration/feature_tour_test.go` containing every `t.Run` scenario from [contracts/test-scenarios.md](contracts/test-scenarios.md#backend--backendintegrationfeature_tour_testgo) as stubs with their `// FR-XXX` traceability comments, using the `testWorld` pattern with `withOwner()` and `withEmployee()`. **Confirm they fail before writing any handler behaviour** (depends on T005)
-- [ ] T015 [P] Create `TestTourPermissionIdsExist` in `backend/integration/feature_tour_test.go` asserting that every permission id referenced by `content.go` exists in `public.permission` and that `iam.inviteUser` is absent from the employee role template. This is the only guard against a later permission rename silently flipping the audience or hiding a stop — the ids are bare strings with no compile-time check (depends on T008, T014)
-- [ ] T016 Fill in the backend scenario implementations until `make test-backend-one T=TestFeatureTour` passes, covering audience selection, permission filtering, platform adaptation, the offer rule, progress persistence and idempotency, cross-platform non-re-offer, restart, malformed-request rejection, cross-tenant isolation and organization teardown (depends on T010, T011, T012, T014)
+- [X] T008 Create `backend/internal/tour/content.go` defining the `Tour` and `Stop` structs per [data-model.md](data-model.md#tour-definitions--internaltourcontentgo), the `contentVersion` constant `"2026-09-02.1"`, and both tours with the exact copy, targets, required permissions and `WebOnly`/`MobileNote` values from [contracts/tour-content.md](contracts/tour-content.md)
+- [X] T009 Create `backend/internal/tour/logic.go` implementing the pure logic layer (accepts `tx database.DBTX`, pool-agnostic, per Constitution III): audience selection on `iam.inviteUser`, permission filtering, mobile adaptation of web-only stops, re-indexing of the filtered list, **clamping the stored position to the filtered list on read without writing the clamped value back** (FR-015a, see [contracts/tour-service.md](contracts/tour-service.md)), and progress read/upsert with `slog.DebugContext` at selection and write and `slog.InfoContext` on completion (depends on T004, T008)
+- [X] T010 Create `backend/internal/tour/service.go` implementing the Connect handlers — extract org and employee from the auth context, read the permission set via `interceptor.UserPermissionsFromContext`, own the `TenantPool`, and translate errors to the Connect codes in [contracts/tour-service.md](contracts/tour-service.md#errors) (depends on T005, T009)
+- [X] T011 Register the service in `backend/cmd/server.go` alongside the existing preference registration at lines 266–270 (depends on T010)
+- [X] T012 Add `DeleteTourProgressForOrganization` to the organization teardown in `backend/internal/iam/logic_account_deletion.go`, next to the existing `DeleteUserPreferencesForOrganization` call at line 215 (depends on T004)
+- [X] T013 [P] Create `frontend/packages/apis/src/tour.ts` exposing `getTour(platform)` and `updateTourProgress(status, currentStop)` with proto enums converted to string unions in the style of `preference.ts`, add `tourClient` to `frontend/packages/apis/src/rpc.ts`, and export the module from `frontend/packages/apis/src/index.ts` (depends on T006)
+- [X] T014 Create `backend/integration/feature_tour_test.go` containing every `t.Run` scenario from [contracts/test-scenarios.md](contracts/test-scenarios.md#backend--backendintegrationfeature_tour_testgo) as stubs with their `// FR-XXX` traceability comments, using the `testWorld` pattern with `withOwner()` and `withEmployee()`. **Confirm they fail before writing any handler behaviour** (depends on T005)
+- [X] T015 [P] Create `TestTourPermissionIdsExist` in `backend/integration/feature_tour_test.go` asserting that every permission id referenced by `content.go` exists in `public.permission` and that `iam.inviteUser` is absent from the employee role template. This is the only guard against a later permission rename silently flipping the audience or hiding a stop — the ids are bare strings with no compile-time check (depends on T008, T014)
+- [X] T016 Fill in the backend scenario implementations until `make test-backend-one T=TestFeatureTour` passes, covering audience selection, permission filtering, platform adaptation, the offer rule, progress persistence and idempotency, cross-platform non-re-offer, restart, malformed-request rejection, cross-tenant isolation and organization teardown (depends on T010, T011, T012, T014)
 
 **Checkpoint**: The whole feature works over RPC and is proven by the behavioural contract — including audience selection, the permission-change clamp and the permission-id guard. The clients are now presentation only.
 
@@ -72,20 +72,20 @@ client wrapper in `frontend/packages/apis/`, and separate purpose-built UI in
 
 ### Tests for User Story 1
 
-- [ ] T017 [P] [US1] Create `frontend/apps/web/e2e/feature-tour.spec.ts` with the US1 and accessibility scenarios from [contracts/test-scenarios.md](contracts/test-scenarios.md#web-e2e--frontendappswebe2efeature-tourspects) as failing specs
-- [ ] T018 [P] [US1] Create `frontend/apps/mobile/.maestro/feature-tour/owner-tour.yaml` with the four owner-tour flows from [contracts/test-scenarios.md](contracts/test-scenarios.md#mobile--frontendappsmobilemaestrofeature-tour)
+- [X] T017 [P] [US1] Create `frontend/apps/web/e2e/feature-tour.spec.ts` with the US1 and accessibility scenarios from [contracts/test-scenarios.md](contracts/test-scenarios.md#web-e2e--frontendappswebe2efeature-tourspects) as failing specs
+- [X] T018 [P] [US1] Create `frontend/apps/mobile/.maestro/feature-tour/owner-tour.yaml` with the four owner-tour flows from [contracts/test-scenarios.md](contracts/test-scenarios.md#mobile--frontendappsmobilemaestrofeature-tour)
 
 ### Implementation for User Story 1
 
-- [ ] T019 [P] [US1] Create `frontend/apps/web/src/lib/tour-routes.ts` mapping every `TourTarget` value to a web path, with a colocated exhaustiveness test that fails when a new enum value has no route (Constitution VIII drift guard, see [research.md](research.md#target-routing)). Per FR-013a, the project, ritual and docs routes must land with the create action visible rather than on an empty list, and the ritual route must fall back to project creation when the workspace has no project yet
-- [ ] T020 [P] [US1] Create `frontend/apps/mobile/src/lib/tour-routes.ts` mapping every `TourTarget` value to an Expo route, with the same exhaustiveness check and the same FR-013a landing rules
-- [ ] T021 [P] [US1] Create `frontend/apps/web/src/components/tour/useFeatureTour.ts` — fetch the tour, decide whether to show the offer, advance/retreat/dismiss/complete, and write progress on each transition through `packages/apis/src/tour.ts`. Acting on a stop closes the tour and navigates; returning to the workspace reopens it at the stored stop with no prompt and no extra progress write (FR-012) (depends on T013)
-- [ ] T022 [P] [US1] Create `frontend/apps/mobile/src/hooks/use-feature-tour.ts` with the same responsibilities for mobile, including the same close-on-action and reopen-on-return behaviour (FR-012) (depends on T013)
-- [ ] T023 [US1] Create `frontend/apps/web/src/components/tour/FeatureTour.tsx` — a dialog-based card sequence with next, previous, a visible "stop N of M" indicator and a dismiss control on every card, no anchoring or highlighting of any live element (FR-018), full keyboard operation with a working Escape and no focus trap, ARIA announcement of the stop position, and `data-testid` on every interactive element (depends on T019, T021)
-- [ ] T024 [US1] Create `frontend/apps/mobile/src/components/feature-tour.tsx` — a purpose-built portrait card sheet sharing no code with the web component (FR-025), large tap targets, readable and dismissible at 360 dp, screen-reader announcement of stop position, and `testID` on every interactive element (depends on T020, T022)
-- [ ] T025 [US1] Mount the tour in `frontend/apps/web/src/app/workspace/layout.tsx` so it renders only after authentication and the terms gate, never while a pending deep-link redirect is being followed, and never before the workspace itself has painted (FR-008, FR-013) (depends on T023)
-- [ ] T026 [US1] Mount the tour in `frontend/apps/mobile/src/app/(app)/_layout.tsx` inside `TermsGate` and after the onboarding redirect, with the same deep-link rule (FR-008, FR-013) (depends on T024)
-- [ ] T027 [US1] Make the web E2E and Maestro owner flows pass: `npx playwright test --config=e2e/playwright.config.ts feature-tour` from `frontend/apps/web` (note: the `make test-frontend-one` target is broken — drift register D36), and `maestro test .maestro/feature-tour/owner-tour.yaml` from `frontend/apps/mobile` (depends on T017, T018, T025, T026)
+- [X] T019 [P] [US1] Create `frontend/apps/web/src/lib/tour-routes.ts` mapping every `TourTarget` value to a web path, with a colocated exhaustiveness test that fails when a new enum value has no route (Constitution VIII drift guard, see [research.md](research.md#target-routing)). Per FR-013a, the project, ritual and docs routes must land with the create action visible rather than on an empty list, and the ritual route must fall back to project creation when the workspace has no project yet
+- [X] T020 [P] [US1] Create `frontend/apps/mobile/src/lib/tour-routes.ts` mapping every `TourTarget` value to an Expo route, with the same exhaustiveness check and the same FR-013a landing rules
+- [X] T021 [P] [US1] Create `frontend/apps/web/src/components/tour/useFeatureTour.ts` — fetch the tour, decide whether to show the offer, advance/retreat/dismiss/complete, and write progress on each transition through `packages/apis/src/tour.ts`. Acting on a stop closes the tour and navigates; returning to the workspace reopens it at the stored stop with no prompt and no extra progress write (FR-012) (depends on T013)
+- [X] T022 [P] [US1] Create `frontend/apps/mobile/src/hooks/use-feature-tour.ts` with the same responsibilities for mobile, including the same close-on-action and reopen-on-return behaviour (FR-012) (depends on T013)
+- [X] T023 [US1] Create `frontend/apps/web/src/components/tour/FeatureTour.tsx` — a dialog-based card sequence with next, previous, a visible "stop N of M" indicator and a dismiss control on every card, no anchoring or highlighting of any live element (FR-018), full keyboard operation with a working Escape and no focus trap, ARIA announcement of the stop position, and `data-testid` on every interactive element (depends on T019, T021)
+- [X] T024 [US1] Create `frontend/apps/mobile/src/components/feature-tour.tsx` — a purpose-built portrait card sheet sharing no code with the web component (FR-025), large tap targets, readable and dismissible at 360 dp, screen-reader announcement of stop position, and `testID` on every interactive element (depends on T020, T022)
+- [X] T025 [US1] Mount the tour in `frontend/apps/web/src/app/workspace/layout.tsx` so it renders only after authentication and the terms gate, never while a pending deep-link redirect is being followed, and never before the workspace itself has painted (FR-008, FR-013) (depends on T023)
+- [X] T026 [US1] Mount the tour in `frontend/apps/mobile/src/app/(app)/_layout.tsx` inside `TermsGate` and after the onboarding redirect, with the same deep-link rule (FR-008, FR-013) (depends on T024)
+- [X] T027 [US1] Make the web E2E and Maestro owner flows pass: `npx playwright test --config=e2e/playwright.config.ts feature-tour` from `frontend/apps/web` (note: the `make test-frontend-one` target is broken — drift register D36), and `maestro test .maestro/feature-tour/owner-tour.yaml` from `frontend/apps/mobile` (depends on T017, T018, T025, T026)
 
 **Checkpoint**: US1 is fully functional on both platforms and independently demonstrable. **This is the MVP** — US2 is the same components serving a different tour, which the server already returns.
 
@@ -101,13 +101,13 @@ client wrapper in `frontend/packages/apis/`, and separate purpose-built UI in
 
 ### Tests for User Story 2
 
-- [ ] T028 [P] [US2] Create `frontend/apps/mobile/.maestro/feature-tour/worker-tour.yaml` with the five worker-tour flows from [contracts/test-scenarios.md](contracts/test-scenarios.md#mobile--frontendappsmobilemaestrofeature-tour), including the PIN-gate scenario that proves the tour waits for a mandatory gate
-- [ ] T029 [P] [US2] Add the US2 worker scenario to `frontend/apps/web/e2e/feature-tour.spec.ts` (depends on T017)
+- [X] T028 [P] [US2] Create `frontend/apps/mobile/.maestro/feature-tour/worker-tour.yaml` with the five worker-tour flows from [contracts/test-scenarios.md](contracts/test-scenarios.md#mobile--frontendappsmobilemaestrofeature-tour), including the PIN-gate scenario that proves the tour waits for a mandatory gate
+- [X] T029 [P] [US2] Add the US2 worker scenario to `frontend/apps/web/e2e/feature-tour.spec.ts` (depends on T017)
 
 ### Implementation for User Story 2
 
-- [ ] T030 [US2] Verify the worker path end to end on both clients and fix what only a permission-limited account reveals — stops omitted by filtering must leave no gap in the "stop N of M" indicator, and no administrator copy may leak into the worker sequence (depends on T027)
-- [ ] T031 [US2] Make the worker flows pass: `maestro test .maestro/feature-tour/worker-tour.yaml` and the web worker spec (depends on T028, T029, T030)
+- [X] T030 [US2] Verify the worker path end to end on both clients and fix what only a permission-limited account reveals — stops omitted by filtering must leave no gap in the "stop N of M" indicator, and no administrator copy may leak into the worker sequence (depends on T027)
+- [X] T031 [US2] Make the worker flows pass: `maestro test .maestro/feature-tour/worker-tour.yaml` and the web worker spec (depends on T028, T029, T030)
 
 **Checkpoint**: Both tours work on both platforms, each serving the correct audience.
 
@@ -121,14 +121,14 @@ client wrapper in `frontend/packages/apis/`, and separate purpose-built UI in
 
 ### Tests for User Story 3
 
-- [ ] T032 [P] [US3] Add the US3 replay scenarios to `frontend/apps/web/e2e/feature-tour.spec.ts` (depends on T017)
-- [ ] T033 [P] [US3] Add the More → Take the tour flow to `frontend/apps/mobile/.maestro/feature-tour/worker-tour.yaml` (depends on T028)
+- [X] T032 [P] [US3] Add the US3 replay scenarios to `frontend/apps/web/e2e/feature-tour.spec.ts` (depends on T017)
+- [X] T033 [P] [US3] Add the More → Take the tour flow to `frontend/apps/mobile/.maestro/feature-tour/worker-tour.yaml` (depends on T028)
 
 ### Implementation for User Story 3
 
-- [ ] T034 [P] [US3] Add a "Take the tour" entry to `frontend/apps/web/src/components/UserMenu.tsx` that restarts the tour by writing `IN_PROGRESS` at stop 0 and opening it (depends on T023)
-- [ ] T035 [P] [US3] Add a "Take the tour" row to the App group in `frontend/apps/mobile/src/app/(app)/(more)/index.tsx`, beside the existing Help row, doing the same (depends on T024)
-- [ ] T036 [US3] Make the replay scenarios pass on both platforms (depends on T032, T033, T034, T035)
+- [X] T034 [P] [US3] Add a "Take the tour" entry to `frontend/apps/web/src/components/UserMenu.tsx` that restarts the tour by writing `IN_PROGRESS` at stop 0 and opening it (depends on T023)
+- [X] T035 [P] [US3] Add a "Take the tour" row to the App group in `frontend/apps/mobile/src/app/(app)/(more)/index.tsx`, beside the existing Help row, doing the same (depends on T024)
+- [X] T036 [US3] Make the replay scenarios pass on both platforms (depends on T032, T033, T034, T035)
 
 **Checkpoint**: All three user stories independently functional.
 
@@ -136,13 +136,13 @@ client wrapper in `frontend/packages/apis/`, and separate purpose-built UI in
 
 ## Phase 6: Polish & Cross-Cutting Concerns
 
-- [ ] T037 [P] Add a "Feature tour" section to `docs/domain/workspace-navigation.md` covering both tours, server-driven selection and filtering, the web-only stop adaptation, and where progress is stored — and delete nothing that is still true (Constitution XII, and `docs/domain/` is the record of behaviour)
-- [ ] T038 [P] Update the index table in `docs/domain/README.md`, and add a drift-register row for anything that shipped differently from [plan.md](plan.md)
-- [ ] T039 Run the accessibility checks in [quickstart.md](quickstart.md#accessibility-check-fr-019-sc-006) by hand on both platforms — keyboard-only on web, VoiceOver or TalkBack on mobile. SC-006 is not satisfied by the automated specs alone
-- [ ] T040 Verify the whole tour renders without clipping at 360 dp portrait on a mid-range Android device, per Constitution XIII and SC-008
-- [ ] T041 Run the full suites — `make test-backend` and `make test-frontend`, not just the new specs — plus `make lint-tenancy`. The Definition of Done is zero failures across the entire suite
-- [ ] T042 **Capture the pre-tour production baseline before release** — the share of workspaces with at least one ritual definition within seven days of registration (SC-003) and the share of first-week workers submitting at least one piece of evidence (SC-004), recorded with the date and the query used. This is the only item in this feature that cannot be done afterwards: once the tour ships there is no un-toured population left to compare against. Not a code change; assign it to whoever owns the release
-- [ ] T043 Walk [quickstart.md](quickstart.md) end to end on a clean database to confirm the documented path actually works for someone who was not here
+- [X] T037 [P] Add a "Feature tour" section to `docs/domain/workspace-navigation.md` covering both tours, server-driven selection and filtering, the web-only stop adaptation, and where progress is stored — and delete nothing that is still true (Constitution XII, and `docs/domain/` is the record of behaviour)
+- [X] T038 [P] Update the index table in `docs/domain/README.md`, and add a drift-register row for anything that shipped differently from [plan.md](plan.md)
+- [ ] T039 **Not done — needs a person.** Run the accessibility checks in [quickstart.md](quickstart.md#accessibility-check-fr-019-sc-006) by hand on both platforms — keyboard-only on web, VoiceOver or TalkBack on mobile. SC-006 is not satisfied by the automated specs alone
+- [ ] T040 **Not done — no Android device attached.** Verified instead on an iPhone SE simulator (375 pt), where every stop of both tours renders without clipping; the Maestro screenshots are in `tmp/maestro-screenshots/`. Verify the whole tour renders without clipping at 360 dp portrait on a mid-range Android device, per Constitution XIII and SC-008
+- [ ] T041 **Run, not green.** `make test-backend` passes in full and `make lint-tenancy` is green. The web E2E suite has four failures that reproduce with `frontend/apps/web` reverted entirely — recorded as D41 in the drift register — plus one load-sensitive flake; all 19 feature-tour specs pass. The zero-failure bar is therefore unmet by pre-existing breakage, not by this feature. Run the full suites — `make test-backend` and `make test-frontend`, not just the new specs — plus `make lint-tenancy`. The Definition of Done is zero failures across the entire suite
+- [ ] T042 **Not done — belongs to whoever owns the release, and cannot be done after it ships.** Capture the pre-tour production baseline before release: — the share of workspaces with at least one ritual definition within seven days of registration (SC-003) and the share of first-week workers submitting at least one piece of evidence (SC-004), recorded with the date and the query used. This is the only item in this feature that cannot be done afterwards: once the tour ships there is no un-toured population left to compare against. Not a code change; assign it to whoever owns the release
+- [X] T043 Walk [quickstart.md](quickstart.md) end to end on a clean database to confirm the documented path actually works for someone who was not here
 
 ---
 

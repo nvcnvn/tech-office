@@ -6,7 +6,7 @@ because they act on the global `iam.user` record); contracts in
 `rpc/v1/compliance.proto` (`ComplianceService`, 11 RPCs) and the deletion and terms
 additions to `rpc/v1/iam.proto`.
 
-**Status date: 2026-08-27.** Introduced by spec 036.
+**Status date: 2026-09-02.** Introduced by spec 036.
 
 ## Why this domain exists separately
 
@@ -51,7 +51,7 @@ cascade-based erase would be a sprawling and fragile thing to maintain. Instead:
   `is_active` → `false`. The organization keeps its messages, files, tasks and
   documents; they stop naming anybody.
 - Per organization, `iam.identity`, `iam.credential`, `iam.employee_role`,
-  `iam.user_preference` and `iam.account_lockout` are **deleted**.
+  `iam.user_preference`, `iam.tour_progress` and `iam.account_lockout` are **deleted**.
 - Once no `iam.identity` row remains anywhere for the person, `iam.user` is
   deleted, which cascades to `iam.sso_identity`, `iam.password_credential`,
   `iam.password_reset_token` and `iam.session`.
