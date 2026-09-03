@@ -1,0 +1,1 @@
+Ritual assignment follows the shift. Add an assignment strategy that picks whoever has a shift calendar event covering the scheduled date, alongside round-robin and least-assigned. The schedule and the checklist exist but are not connected; round-robin assigns the closing count to someone who is not in.

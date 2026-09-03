@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-09-03.**
+**Status date: 2026-09-04.**
 
 ## Shape
 
@@ -68,9 +68,10 @@ missing filter and a join that forgot to carry `organization_id`. Tenant tables 
 discovered from the schema — a table with an `organization_id` column is a tenant table —
 so there is no list to keep in sync.
 
-Eleven queries are legitimately cross-tenant (scheduler sweeps, the delivery retry worker,
+Fourteen queries are legitimately cross-tenant (scheduler sweeps, the delivery retry worker,
 the account-deletion path) and carry a `-- lint:cross-tenant <reason>` marker above their
-`-- name:` line. They must run on `AdminPool`.
+`-- name:` line — above it, not below, because the linter reads the comment block preceding
+each `-- name:`. They must run on `AdminPool`.
 
 The database is a **single PostgreSQL node** and is not sharded — an earlier single-node
 Citus deployment was removed in August 2026, since it imposed real constraints (no
@@ -130,6 +131,7 @@ row rather than multiplying schedules.
 |---|---|---|
 | `ritual_generation_sweep` | every 1 min | one platform-wide pass generating due ritual instances for all orgs (Feature 034) |
 | `ritual_reconciliation_sweep` | every 5 min | one platform-wide pass writing late ritual instances into `overdue`, and one completion window later into the terminal `missed`, notifying on the transition it performs. Bounded at 500 instances per org per pass, oldest deadline first; idempotent, so its `MaxRetries: 2` retry is safe |
+| `ritual_shift_resolution_sweep` | every 2 min | one platform-wide pass binding, rebinding and escalating the pool slots of ritual instances whose department pool uses the `on_shift` strategy. Bounded at 500 slots per org per pass, oldest scheduled date first. Every write is a compare-and-set on `resolution_state`, so overlapping passes assign once and notify once. Registered **after** `collaborationLogic.SetShiftCoverageReader(calendarLogic)` in `cmd/server.go`, so a first pass can never run against a nil reader |
 | `CalendarReminderWorkflow` | every 1 min | polls due `calendar.event_reminder` rows and publishes reminders |
 | `FileValidation` | on demand, concurrency 9 | MIME sniffing + ClamAV scan after upload |
 | `FilePostProcessing` | on demand | PDF conversion / content indexing (partly skeleton) |

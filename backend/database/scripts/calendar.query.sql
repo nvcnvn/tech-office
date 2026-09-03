@@ -376,3 +376,62 @@ WHERE r.status = 'pending'
   AND r.fire_at <= $1
 ORDER BY r.fire_at ASC
 LIMIT $2;
+
+-- =============================================================================
+-- SHIFT COVERAGE (feature 042)
+--
+-- "Which of these employees is working during this interval." Read-only, and the only
+-- calendar surface internal/collaboration reaches — through the ShiftCoverageReader
+-- interface it declares, never through SQL of its own. The candidate list arrives as a
+-- uuid[] so the join stays inside the calendar schema.
+-- =============================================================================
+
+-- name: ListShiftCoverageDirect :many
+-- Concrete shift events overlapping the interval, with the candidate attendees who have
+-- not declined. The organiser is excluded: CreateEvent writes the actor as an attendee
+-- with role = 'organizer', and the actor is the manager publishing the rota, so counting
+-- that row would roster the manager onto every shift they publish. This also covers materialised exception instances of a series, which are
+-- stored as concrete rows with recurrence_rule IS NULL. Bounds are named for the RANGE;
+-- see ListEventsForEmployee.
+SELECT DISTINCT at.employee_id
+FROM calendar.event e
+JOIN calendar.attendee at
+    ON at.organization_id = e.organization_id
+   AND at.event_id = e.id
+WHERE e.organization_id = @organization_id
+  AND e.event_type = 'shift'
+  AND e.cancelled_at IS NULL
+  AND e.recurrence_rule IS NULL
+  AND e.start_time < @range_end
+  AND e.end_time > @range_start
+  AND at.employee_id = ANY(@candidate_ids::uuid[])
+  AND at.rsvp_status <> 'declined'
+  AND at.role <> 'organizer';
+
+-- name: ListShiftCoverageSeries :many
+-- Recurring shift series that could reach the interval, with their non-declined candidate
+-- attendees. Occurrence-level filtering happens in Go: expandInstances + applyExceptions
+-- in internal/calendar/recurrence.go already implement RRULE expansion and the stored
+-- exception rules, and this is their first caller.
+SELECT e.id, e.series_id, e.start_time, e.end_time, e.all_day,
+       e.recurrence_rule, e.recurrence_end, at.employee_id
+FROM calendar.event e
+JOIN calendar.attendee at
+    ON at.organization_id = e.organization_id
+   AND at.event_id = e.id
+WHERE e.organization_id = @organization_id
+  AND e.event_type = 'shift'
+  AND e.cancelled_at IS NULL
+  AND e.recurrence_rule IS NOT NULL
+  AND e.start_time < @range_end
+  AND (e.recurrence_end IS NULL OR e.recurrence_end > @range_start)
+  AND at.employee_id = ANY(@candidate_ids::uuid[])
+  AND at.rsvp_status <> 'declined'
+  AND at.role <> 'organizer'
+ORDER BY e.id;
+
+-- name: ListRecurrenceExceptionsForSeries :many
+SELECT series_id, original_start_time, exception_type, new_event_id
+FROM calendar.recurrence_exception
+WHERE organization_id = @organization_id
+  AND series_id = ANY(@series_ids::uuid[]);

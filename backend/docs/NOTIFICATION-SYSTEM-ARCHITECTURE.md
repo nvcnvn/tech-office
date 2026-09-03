@@ -254,6 +254,18 @@ flowchart TD
 | **Docs** | `doc_mentioned` | direct_targeted | mention | persistent | `document_mention` |
 | **Rituals** | `ritual_instance_overdue` | subscribed_activity | activity | persistent | `task_status` |
 | **Rituals** | `ritual_instance_missed` | subscribed_activity | activity | persistent | `task_status` |
+| **Rituals** | `ritual_instance_unassigned` | subscribed_activity | activity | persistent | `task_status` |
+
+> **Note on `ritual_instance_unassigned`**: published by `internal/collaboration`'s
+> `ritual_shift_resolution_sweep` when an on-shift ritual instance reaches its scheduled
+> date with nobody in the department rostered, so the slot was never assigned to anyone. It
+> reaches the project's owners and admins, and only when the compare-and-set that closed the
+> slot reported a changed row — which is what makes two overlapping passes alert once. It is
+> a separate type from `ritual_instance_missed` on purpose: missed means somebody was asked
+> to do the work and did not, and this means nobody was ever asked, so collapsing the two
+> would tell an owner to chase a person who does not exist. The same sweep reuses
+> `task_assigned` for a newly bound assignee and `task_updated` for a previous assignee whose
+> instance a rota change moved off them; neither needed a new type.
 
 > **Note on the ritual lateness types**: both are published by
 > `internal/collaboration`'s `ritual_reconciliation_sweep`, from inside the single writer of

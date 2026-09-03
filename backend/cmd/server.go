@@ -535,6 +535,33 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	// Register Calendar Service (Feature 026: Calendar System)
 	slog.InfoContext(ctx, "initializing calendar service")
 	calendarLogic := calendar.NewLogic(queries, notificationService, collaborationLogic, docsLogic)
+	// Feature 042: rituals read the rota. The edge points collaboration -> calendar,
+	// which inverts the tier ordering, so it is expressed as an interface collaboration
+	// declares and calendar satisfies. It is a setter because calendar.NewLogic above
+	// already consumes collaborationLogic; a constructor argument here would be a cycle.
+	collaborationLogic.SetShiftCoverageReader(calendarLogic)
+	slog.InfoContext(ctx, "calendar shift coverage injected into collaboration logic for on-shift ritual assignment")
+
+	// Feature 042: the third platform-wide collaboration job. Registered here rather than
+	// beside the other two sweeps because it must not be schedulable before
+	// SetShiftCoverageReader above — a first pass against a nil reader would leave every
+	// slot awaiting for no reason.
+	ritualShiftResolutionWorkflow := &collaboration.RitualShiftResolutionWorkflow{
+		Logic:     collaborationLogic,
+		Queries:   queries,
+		AdminPool: adminPool,
+	}
+	flows.Register(flowsRegistry, ritualShiftResolutionWorkflow)
+	if err := txn.WithTxn(ctx, adminPool, func(ctx context.Context, tx database.DBTX) error {
+		return flows.ScheduleTx(ctx, flowsClient, tx, ritualShiftResolutionWorkflow,
+			&collaboration.RitualShiftResolutionInput{},
+			ritualShiftResolutionWorkflow.Name(), flows.Every(collaboration.RitualShiftResolutionInterval))
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to bootstrap ritual shift resolution sweep schedule", "error", err)
+		return err
+	}
+	slog.InfoContext(ctx, "ritual shift resolution sweep scheduled", "cadence", collaboration.RitualShiftResolutionInterval.String())
+
 	calendarServer := calendar.NewCalendarServiceServer(calendarLogic, tenantPool)
 	mux.Handle(rpcv1connect.NewCalendarServiceHandler(calendarServer, interceptors))
 	slog.InfoContext(ctx, "calendar service registered")

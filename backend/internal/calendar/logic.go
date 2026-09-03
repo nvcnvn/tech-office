@@ -210,6 +210,13 @@ type Logic interface {
 	// ── Cross-Domain Overlays ─────────────────────────────────────────────────
 	ListOverlayItems(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, from, to time.Time, opts *OverlayOptions) ([]*rpcv1.OverlayItem, error)
 
+	// ── Shift Coverage ────────────────────────────────────────────────────────
+	// EmployeesOnShift answers "which of these employees is working during this
+	// interval" for internal/collaboration, which declares the matching
+	// ShiftCoverageReader interface and is injected with this Logic in cmd/server.go.
+	// Read-only, and the only calendar surface collaboration reaches.
+	EmployeesOnShift(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, candidateEmployeeIDs []dbuuid.UUID, dayStart, dayEnd time.Time) ([]dbuuid.UUID, error)
+
 	// ── Search ────────────────────────────────────────────────────────────────
 	SearchEvents(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, req *SearchEventsParams) ([]*rpcv1.CalendarEvent, dbuuid.NullUUID, error)
 }

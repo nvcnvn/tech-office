@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-03.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041 (034 and
+**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 
@@ -210,14 +210,67 @@ safety inspection, a closing procedure.
 
 ### Assignment
 
-Two mechanisms, both resolved at generation time:
+Two mechanisms:
 
-- `ritual_definition_assignee` — named individuals.
+- `ritual_definition_assignee` — named individuals, resolved at generation time.
 - `ritual_definition_department_pool` — a department plus a strategy:
   - `round_robin`, using `last_assigned_employee_id` as a waterline into the sorted member
     list. There is deliberately **no FK** on that column: the employee may have left the
     department mid-cycle and the waterline must survive that.
   - `least_assigned`.
+  - `on_shift` (feature 042) — the assignee is whoever has a shift on the calendar covering
+    the instance's scheduled date. Unlike the other two this is **late-bound**: see below.
+
+#### On-shift assignment (feature 042)
+
+Instances are materialised 30 days ahead while rotas are published a week or two ahead, so
+at generation time most on-shift slots have nobody rostered yet. The strategy is therefore
+resolved by a background sweep rather than once at generation:
+
+`collaboration.ritual_instance_pool_assignment` holds one row per (ritual instance,
+department pool) governed by `on_shift`:
+
+| Column | Meaning |
+|---|---|
+| `resolution_state` | `awaiting_shift` \| `resolved` \| `closed_unresolved` |
+| `closed_reason` | `no_roster` \| `manual_override`; required iff closed |
+| `assigned_employee_id` | who *this feature* put in the slot. No FK, for the same reason `last_assigned_employee_id` has none, and it is what proves the slot was not changed by a person |
+| `resolve_by` | the instant the scheduled date begins in the definition's own timezone. Resolution is attempted only while `now < resolve_by`; escalation fires once `now >= resolve_by` |
+| `resolved_at`, `escalated_at` | when the current assignment was made, and when an owner was alerted |
+
+State machine: `awaiting_shift → resolved` when somebody rostered appears;
+`resolved → awaiting_shift` when the holder's cover disappears and nobody else covers;
+`awaiting_shift → closed_unresolved (no_roster)` when the scheduled date arrives with nobody
+rostered; `resolved → closed_unresolved (manual_override)` when a person changed the
+assignee. `closed_unresolved` is terminal, which is what makes the owner alert fire exactly
+once and what stops the next pass undoing a manager's decision.
+
+**There is no fallback.** A pool set to `on_shift` never falls through to round-robin or
+least-assigned, and never advances `last_assigned_employee_id`. Falling back is the defect
+the strategy exists to remove: it is what put the closing checklist on somebody who was not
+in. A calendar the sweep cannot read, a nil shift-coverage reader and "nobody is rostered"
+all produce the same outcome — the slot waits.
+
+**Choosing among several rostered people**: fewest ritual assignments in the trailing 90
+days, ties broken by lowest employee UUID
+(`GetLeastAssignedEmployeeAmongCandidates`). This runs only when filling an *empty* slot. A
+slot whose holder is still rostered keeps them — re-picking on every pass would move the
+checklist to whoever is currently least loaded every two minutes.
+
+**Reading the rota** goes through `collaboration.ShiftCoverageReader`, an interface
+collaboration declares and `calendar.Logic` implements
+(`internal/calendar/shift_coverage_logic.go`), injected by
+`collaborationLogic.SetShiftCoverageReader(calendarLogic)` in `cmd/server.go`. Collaboration
+never imports calendar. See `docs/domain/calendar.md` for the coverage rules and
+`backend/docs/SYSTEM-ARCHITECTURE.md` for why the edge is inverted.
+
+`Task.pool_assignment_state` (proto enum `RitualPoolAssignmentState`) carries the state to
+clients so an instance can explain that it is waiting for the rota rather than showing an
+unexplained empty assignee. It is filled in with one batched query per page of tasks
+(`ListRitualPoolAssignmentStatesForTasks`) on `GetTask`, `ListTasks` and the ritual
+worklist, and is `UNSPECIFIED` for every task that is not an on-shift ritual instance. An
+instance carrying several pools reports the **least-progressed** state, so a waiting pool is
+not hidden behind one that resolved.
 
 ### Generation — the global sweep (feature 034)
 
@@ -389,6 +442,47 @@ worker about every historical instance at once. The check is against the stored 
 against elapsed time since the state change, so a repeated pass cannot change the answer. The
 suppression is logged.
 
+### Shift resolution — the third global sweep (feature 042)
+
+`ritual_shift_resolution_sweep` (`internal/collaboration/ritual_shift_resolution_workflow.go`)
+is scheduled every **2 minutes** by `flows.ScheduleTx`, with `RetryPolicy{MaxRetries: 2}`.
+The cadence sits between the 1-minute generation sweep and the 5-minute reconciliation sweep,
+so a cadence alone identifies the sweep in a log. It is registered **after**
+`SetShiftCoverageReader` in `cmd/server.go`, so a first pass can never run against a nil
+reader in a live server.
+
+Each pass:
+
+1. `ListOrganizationIDsWithResolvableRitualPoolAssignments` (via `AdminPool` — cross-org,
+   carries the `-- lint:cross-tenant` marker). It selects organizations holding a row in
+   `awaiting_shift` or `resolved` and nothing else.
+2. For each org, `Logic.ResolveRitualShiftAssignments(ctx, adminPool, orgID, now)` reads at
+   most **500** slots ordered by `scheduled_date ASC, task_id ASC, pool_id ASC` and, per
+   slot: skips it when its date has arrived or it already carries evidence (the freeze
+   rules); adopts an instance whose pool has just switched *to* `on_shift`; binds an
+   `awaiting_shift` slot whose date is now covered; re-checks a `resolved` slot and swaps,
+   withdraws or freezes it; and hands a slot over under the pool's current strategy and
+   deletes the row when the pool has switched *away* from `on_shift`.
+3. The same call then closes every `awaiting_shift` slot whose `resolve_by` has passed
+   (`ListRitualPoolAssignmentsDueEscalation`) and alerts the project's owners and admins.
+4. An error on one organization is logged with its ID and the loop continues; an error on
+   one slot is logged with its task ID and the organization's remaining slots are still
+   processed.
+5. Report `{OrganizationsProcessed, SlotsExamined, SlotsAssigned, SlotsReassigned,
+   SlotsWithdrawn, SlotsEscalated}` as one structured log line,
+   `ritual shift resolution sweep complete`.
+
+Every state write is a **compare-and-set** on `resolution_state`
+(`UPDATE ... WHERE resolution_state = @expected_state`), and every notification is published
+only when its compare-and-set reported a changed row. Two overlapping passes therefore
+assign once and notify once. The pass holds no state between runs; its cursor is the
+`resolution_state` column itself. `Sweep(ctx, now)` is exported for the same reason the other
+two sweeps export theirs.
+
+**Backfill horizon.** When `now - resolve_by` exceeds **7 days** — the same horizon
+reconciliation uses — the slot still closes as `no_roster` but the owner alert is suppressed
+and `escalated_at` is left NULL, because `escalated_at` records when an owner was told.
+
 ## Evidence
 
 `collaboration.evidence_requirement` — per definition, ordered by `position`:
@@ -508,7 +602,8 @@ dependency points calendar → collaboration, never the reverse.
 Task: `task_assigned`, `task_status_changed`, `task_commented`, `task_mentioned`,
 `task_description_modified`, `task_updated`. Ritual/evidence: `evidence_submitted`,
 `evidence_approved`, `evidence_rejected`, `ritual_instances_scheduled`,
-`ritual_instance_overdue`, `ritual_instance_missed`. Source domain `projects`.
+`ritual_instance_overdue`, `ritual_instance_missed`, `ritual_instance_unassigned`. Source
+domain `projects`.
 
 `ritual_instances_scheduled` is a **post-loop summary**: one notification per assignee at
 the end of a generation run, listing every instance created for them. It replaced a
@@ -536,7 +631,21 @@ instance with no assignee, reviewer or approver produces no overdue notification
 there is nobody to tell — but its `missed` transition still escalates, which is what closes
 the "unassigned ritual fails silently" hole.
 
-Both carry `priority = 2` (ordinary), `policy_key = task_status`,
+`ritual_instance_unassigned` is published by the **shift resolution** sweep when an
+on-shift slot's scheduled date arrives with nobody in the department rostered. It goes to
+the project's `owner` and `admin` members with focus intent `view_instance`, and is
+published only when the compare-and-set that closed the slot reported a changed row — so
+two overlapping passes alert once. It is deliberately a distinct type from
+`ritual_instance_missed`: missed means somebody was asked to do the work and did not, and
+this means nobody was ever asked. Collapsing the two would tell an owner to chase a person
+who does not exist.
+
+The same sweep sends the ordinary `task_assigned` to a newly bound assignee and
+`task_updated` to a previous assignee whose instance a rota change moved off them. Neither
+is a new type: from the recipient's seat nothing distinguishes "a manager assigned this to
+you" from "the rota did".
+
+All of these carry `priority = 2` (ordinary), `policy_key = task_status`,
 `delivery_class = persistent`, `source_category = activity`, an `action_data` payload of
 `taskId` / `projectId` / `deepLink` / `focusIntent`, and a `projects`/`task` navigation
 target. Because nothing about them is special-cased, do-not-disturb, domain mute and
@@ -560,6 +669,22 @@ always-deliver priority reserved for mentions and incoming calls.
   with no room for the project list or the confirm button. It lifts clear of the keyboard
   when the title is edited.
 - Clients: `packages/apis/src/collaboration.ts`, `collaboration-ritual.ts`.
+
+The on-shift strategy is selectable **web-only**, in the ritual definition editor
+(`workspace/projects/[id]/rituals/[definitionId]/page.tsx`, re-exported at
+`workspace/tasks/[id]/rituals/[definitionId]/page.tsx`), alongside round-robin and
+least-assigned, with helper text stating that it depends on shift events published for that
+department. Mobile has no ritual pool configuration at all, so nothing was removed from it.
+
+The "waiting for the rota" explanation is read-only and appears on every surface that shows
+an instance, keyed on `Task.pool_assignment_state === 'awaiting_shift'`:
+`TaskDetailSidePanel.tsx` (standard and mixed projects),
+`workspace/projects/[id]/tasks/[taskId]/page.tsx` (ritual-mode projects, which never render
+the side panel), and the mobile ritual instance screen
+`app/(app)/(tasks)/[projectId]/task/[taskId].tsx` — which the shared deep-link route
+re-exports, so a notification tap lands on the same banner. It is deliberately **not** shown
+for an instance that simply has no assignee configured: claiming a rota is missing when no
+pool exists would be false.
 
 ## Tests
 

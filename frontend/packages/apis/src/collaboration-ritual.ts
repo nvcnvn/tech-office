@@ -94,7 +94,7 @@ export interface RitualDefinition {
 	scheduleVersion: number;
 }
 
-export type AssignmentStrategy = 'round_robin' | 'least_assigned';
+export type AssignmentStrategy = 'round_robin' | 'least_assigned' | 'on_shift';
 
 export interface RitualDepartmentPool {
 	/** UUID of the pool config row */

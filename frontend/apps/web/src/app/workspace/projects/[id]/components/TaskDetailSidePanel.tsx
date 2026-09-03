@@ -35,6 +35,7 @@ import {
 	Tooltip,
 	Button,
 	TextField,
+	Alert,
 } from '@mui/material';
 import { UserCard } from '@/components/user';
 import CloseIcon from '@mui/icons-material/Close';
@@ -382,6 +383,17 @@ export function TaskDetailSidePanel({
 						{task.title}
 					</Typography>
 				</Box>
+
+				{/* Why this on-shift ritual instance has nobody on it. Shown only for a pool
+				    slot that is genuinely waiting for a rota — an instance with no assignee
+				    configured at all has nothing to explain. */}
+				{task.poolAssignmentState === 'awaiting_shift' && (
+					<Alert severity="info" sx={{ mb: 2 }} data-testid="task-awaiting-shift-banner">
+						Waiting for the rota. Nobody in the department is rostered for this date yet, so this
+						instance is unassigned on purpose. It will be assigned as soon as a covering shift is
+						published.
+					</Alert>
+				)}
 
 				{/* Compact Status + Assignees Row */}
 				<Box sx={{ display: 'flex', gap: 1.5, mb: 2, alignItems: 'flex-start' }}>

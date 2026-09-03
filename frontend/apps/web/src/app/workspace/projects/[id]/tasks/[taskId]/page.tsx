@@ -1171,6 +1171,17 @@ export default function TaskDetailPage() {
 							</Box>
 						)}
 
+						{/* Why an on-shift instance has nobody on it. Shown only for a pool slot
+						    that is genuinely waiting for a rota — an instance with no assignee
+						    configured at all has nothing to explain. */}
+						{task.poolAssignmentState === 'awaiting_shift' && (
+							<Alert severity="info" sx={{ mb: 2 }} data-testid="task-awaiting-shift-banner">
+								Waiting for the rota. Nobody in the department is rostered for this date yet, so this
+								instance is unassigned on purpose. It will be assigned as soon as a covering shift is
+								published.
+							</Alert>
+						)}
+
 						{task.taskKind === 'ritual_instance' && ritualEntrySummary && (
 							<Alert severity={ritualEntrySummary.severity} sx={{ mb: 2 }} data-testid="ritual-worker-flow-summary">
 								{ritualEntrySummary.message}

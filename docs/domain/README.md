@@ -29,10 +29,10 @@ record of behaviour.** Where they disagree, the code wins and the drift is recor
 | [chat.md](chat.md) | Channels, messages, threads, reactions, typing, sidebar config, chat file uploads | `internal/chat`, `rpc/v1/chat.proto` |
 | [voice.md](voice.md) | Voice calls, voice messages, recordings, transcripts, LiveKit integration | `internal/voice` |
 | [notifications-presence.md](notifications-presence.md) | Notification hub, subscriptions, SSE, push, rescue push, presence ping-pong | `internal/notification` |
-| [rituals-tasks.md](rituals-tasks.md) | Projects, tasks, workflow rules, ritual definitions, evidence, the generation and reconciliation sweeps | `internal/collaboration` |
+| [rituals-tasks.md](rituals-tasks.md) | Projects, tasks, workflow rules, ritual definitions, evidence, the generation, reconciliation and shift-resolution sweeps | `internal/collaboration` |
 | [docs-knowledge.md](docs-knowledge.md) | Documents, versions, comments, embeds, collaborative editing | `internal/docs` |
 | [files.md](files.md) | Upload flow, quota, virus scan & validation, access rules, PDF conversion, content index | `internal/files` |
-| [calendar.md](calendar.md) | Events, recurrence, attendees, resources, booking links, delegation, check-in | `internal/calendar` |
+| [calendar.md](calendar.md) | Events, recurrence, attendees, resources, booking links, delegation, check-in, shift coverage | `internal/calendar` |
 | [workspace-navigation.md](workspace-navigation.md) | Federated search, canonical resource links, context rail, theme preferences, feature tour, web & mobile shells | `internal/linking`, `internal/preference`, `internal/tour`, `frontend/apps/*` |
 | [compliance-safety.md](compliance-safety.md) | Content reporting, blocking, account deletion, removal requests, terms acceptance, store manifest | `internal/compliance`, `rpc/v1/compliance.proto` |
 
@@ -79,6 +79,11 @@ problem is fixed, not annotated — the register is a list of open problems, not
 | D44 | Behaviour | [workspace-navigation.md](workspace-navigation.md#known-drift) | Mobile email sign-in bounces back to the workspace picker on the **iOS simulator** for an owner account created through `RegisterOrganizationWithAdminPassword`, sometimes after "Your session is no longer valid". The identical build and credentials sign in on Android, and `Login`, `GetProfile` and `GetOrganizationBySubdomain` all succeed against the backend directly, so the fault is in the iOS sign-in screen's token-then-profile sequence rather than in the API. It prevents arranging a populated mobile fixture on iOS. |
 | D41 | Environment | [platform.md](platform.md#testing) | Four web E2E specs fail against a local backend independently of any feature work, so `make test-frontend` is not green on a clean tree: `context-rail.spec.ts:155` (the rail's live global blocks on the calendar route), `legal-surface.spec.ts:59` and `user-guide-screenshots.spec.ts:626` (both fail in setup: `RegisterOrganizationWithAdminPassword` refuses the terms version the fixtures send with "those are not the terms currently in force", so neither test reaches its assertion), and `voice-communication.spec.ts:157` (the decline is not reflected in the caller's timeline). Verified by reverting `frontend/apps/web` entirely and re-running the four: all four still fail. A fifth, `ritual-ux-redesign.spec.ts:375`, fails only under full-suite load and passes in isolation. |
 
+| D45 | Environment | [platform.md](platform.md#testing) | `ritual-ux-redesign.spec.ts:486` ("Today keeps standard tasks and ritual runs in separate labeled sections") fails for part of every day, wherever the machine's local timezone is ahead of UTC. `api.setStandardTaskDueToday` writes `CURRENT_DATE + interval '6 hour'` in Postgres, whose server timezone is `Etc/UTC`, while `TodayView` computes "today" from the browser's **local** midnight. On a UTC+7 machine the two disagree from 17:00 local until midnight, so the task the fixture just marked due today is filtered out as yesterday's. Reproduced in isolation at 04:00 local (UTC 21:00 the previous day) and diagnosed against `TodayView.tsx:255`; unrelated to feature 042, which does not touch the Today view or the mixed overview. The fix is for the fixture and the view to agree on one clock — either write the due date in the browser's timezone or have the view compare in UTC. |
+
+| D46 | Behaviour | [calendar.md](calendar.md#shift-coverage) | Shift coverage excludes attendees with `role = 'organizer'`, so a manager who genuinely works a shift they published is not seen as covering it and cannot be drawn by an on-shift ritual pool. The exclusion is deliberate and necessary — `CreateEvent` writes the acting user as the organiser attendee, and that actor is normally the manager publishing the rota, so counting the row would roster them onto every shift — but the schema offers no way to distinguish "organised it" from "organised it and is working it". Fixing it properly means letting an event carry the organiser as a second, ordinary attendee row, which is a calendar change, not a ritual one. |
+| D47 | Environment | [platform.md](platform.md#testing) | A `techoffice://` deep link cold-starts the Expo dev client rather than routing inside the running app, and the restarted app lands on the sign-in screen with its session gone. This makes the notification-tap path (`app/(shared)/resource/...`) unverifiable by deep link on a dev build; it has to be reached by navigating in-app instead. Found while verifying the feature 042 banner on the Android emulator. Unknown whether a release build behaves the same way. |
+
 ### Fixed on 2026-08-30
 
 D1 (`upload_context` CHECK), D2 (Go notification-type list vs DB CHECK, now guarded by
@@ -111,6 +116,24 @@ late *instances* rather than active definitions, and drives the same
 diverge. `ritual_instance_overdue` and `ritual_instance_missed` went back into the Go
 constant list and the DB CHECK in one change set, which
 `TestNotificationTypeCheckMatchesGoConstants` enforces.
+
+### Changed on 2026-09-04
+
+Feature 042 adds a third department-pool assignment strategy, `on_shift`, and with it a
+third platform-wide collaboration job, `ritual_shift_resolution_sweep`, on a two-minute
+cadence. Because ritual instances are materialised 30 days ahead and shift rotas are
+published a week or two ahead, the strategy is resolved late: generation records a
+`collaboration.ritual_instance_pool_assignment` row per (instance, pool) and the sweep
+binds, rebinds and finally escalates it. Rituals read the rota through
+`collaboration.ShiftCoverageReader`, an interface collaboration declares and `calendar.Logic`
+implements, injected by a setter in `cmd/server.go` — so the runtime call points
+collaboration → calendar while the import graph still points only calendar → collaboration.
+See [rituals-tasks.md](rituals-tasks.md#on-shift-assignment-feature-042),
+[calendar.md](calendar.md#shift-coverage) and `backend/docs/SYSTEM-ARCHITECTURE.md` §7.
+
+There is deliberately **no** fallback from `on_shift` to another strategy. A pool whose date
+has nobody rostered leaves the instance unassigned and says so, which is the whole point:
+falling back to round-robin is what put the closing checklist on somebody who was not in.
 
 ## Keeping these current
 

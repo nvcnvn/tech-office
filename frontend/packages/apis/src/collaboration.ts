@@ -101,6 +101,18 @@ export interface TaskEvidenceProgressSummary {
 	allRequiredApproved: boolean;
 }
 
+/**
+ * How a ritual instance's department-pool slot stands. Only meaningful for ritual
+ * instances whose definition carries a department pool using the on-shift strategy.
+ * An instance with several pools reports the least-progressed state, so one waiting
+ * pool is not hidden by another that resolved.
+ */
+export type RitualPoolAssignmentState =
+	| 'unspecified'
+	| 'resolved'
+	| 'awaiting_shift'
+	| 'closed_unresolved';
+
 export interface Task {
 	id: string;
 	projectId: string;
@@ -132,6 +144,8 @@ export interface Task {
 	/** Set only when the task was created from a chat message. */
 	sourceChannelId?: string;
 	sourceMessageId?: string;
+	/** Only meaningful for ritual instances with an on-shift department pool. */
+	poolAssignmentState: RitualPoolAssignmentState;
 }
 
 export interface AssignedWorkSummaryItem {
@@ -702,7 +716,21 @@ function protoTaskToNative(t: collaboration.Task): Task {
 			}
 			: undefined,
 		detachedFromRitual: t.detachedFromRitual ?? false,
+		poolAssignmentState: protoPoolAssignmentStateToNative(t.poolAssignmentState),
 	};
+}
+
+const POOL_ASSIGNMENT_STATES: RitualPoolAssignmentState[] = [
+	'unspecified',
+	'resolved',
+	'awaiting_shift',
+	'closed_unresolved',
+];
+
+function protoPoolAssignmentStateToNative(
+	state: collaboration.RitualPoolAssignmentState | undefined,
+): RitualPoolAssignmentState {
+	return POOL_ASSIGNMENT_STATES[state ?? 0] ?? 'unspecified';
 }
 
 function protoWatcherToNative(w: collaboration.TaskWatcher): TaskWatcher {

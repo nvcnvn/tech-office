@@ -58,6 +58,12 @@ const (
 	NotificationTypeRitualInstanceOverdue = "ritual_instance_overdue"
 	NotificationTypeRitualInstanceMissed  = "ritual_instance_missed"
 
+	// Published by internal/collaboration when an on-shift ritual instance reaches its
+	// scheduled date with nobody in the department rostered, so the slot was never
+	// assigned to anyone. Distinct from ritual_instance_missed, which reports work that
+	// somebody was asked to do and did not.
+	NotificationTypeRitualInstanceUnassigned = "ritual_instance_unassigned"
+
 	// Evidence notifications are published by internal/collaboration when a ritual's
 	// evidence requirement is submitted for review, approved or rejected. They live here
 	// rather than in collaboration because this list is the contract the database CHECK
@@ -205,6 +211,7 @@ func IsValidNotificationType(notifType string) bool {
 		NotificationTypeRitualInstancesScheduled,
 		NotificationTypeRitualInstanceOverdue,
 		NotificationTypeRitualInstanceMissed,
+		NotificationTypeRitualInstanceUnassigned,
 		NotificationTypeEvidenceSubmitted,
 		NotificationTypeEvidenceApproved,
 		NotificationTypeEvidenceRejected,
@@ -245,6 +252,7 @@ func AllNotificationTypes() []string {
 		NotificationTypeRitualInstancesScheduled,
 		NotificationTypeRitualInstanceOverdue,
 		NotificationTypeRitualInstanceMissed,
+		NotificationTypeRitualInstanceUnassigned,
 		NotificationTypeEvidenceSubmitted,
 		NotificationTypeEvidenceApproved,
 		NotificationTypeEvidenceRejected,

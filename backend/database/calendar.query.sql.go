@@ -1252,6 +1252,50 @@ func (q *Queries) ListPendingRemindersGlobal(ctx context.Context, db DBTX, arg *
 	return items, nil
 }
 
+const listRecurrenceExceptionsForSeries = `-- name: ListRecurrenceExceptionsForSeries :many
+SELECT series_id, original_start_time, exception_type, new_event_id
+FROM calendar.recurrence_exception
+WHERE organization_id = $1
+  AND series_id = ANY($2::uuid[])
+`
+
+type ListRecurrenceExceptionsForSeriesParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	SeriesIds      []dbuuid.UUID `json:"series_ids"`
+}
+
+type ListRecurrenceExceptionsForSeriesRow struct {
+	SeriesID          dbuuid.UUID        `json:"series_id"`
+	OriginalStartTime pgtype.Timestamptz `json:"original_start_time"`
+	ExceptionType     string             `json:"exception_type"`
+	NewEventID        dbuuid.NullUUID    `json:"new_event_id"`
+}
+
+func (q *Queries) ListRecurrenceExceptionsForSeries(ctx context.Context, db DBTX, arg *ListRecurrenceExceptionsForSeriesParams) ([]*ListRecurrenceExceptionsForSeriesRow, error) {
+	rows, err := db.Query(ctx, listRecurrenceExceptionsForSeries, arg.OrganizationID, arg.SeriesIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListRecurrenceExceptionsForSeriesRow
+	for rows.Next() {
+		var i ListRecurrenceExceptionsForSeriesRow
+		if err := rows.Scan(
+			&i.SeriesID,
+			&i.OriginalStartTime,
+			&i.ExceptionType,
+			&i.NewEventID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listResourceACLEntries = `-- name: ListResourceACLEntries :many
 SELECT id, organization_id, resource_id, employee_id, department_id, can_book, updated_at FROM calendar.resource_acl
 WHERE organization_id = $1 AND resource_id = $2
@@ -1378,6 +1422,145 @@ func (q *Queries) ListResources(ctx context.Context, db DBTX, arg *ListResources
 			&i.Capacity,
 			&i.IsActive,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listShiftCoverageDirect = `-- name: ListShiftCoverageDirect :many
+
+SELECT DISTINCT at.employee_id
+FROM calendar.event e
+JOIN calendar.attendee at
+    ON at.organization_id = e.organization_id
+   AND at.event_id = e.id
+WHERE e.organization_id = $1
+  AND e.event_type = 'shift'
+  AND e.cancelled_at IS NULL
+  AND e.recurrence_rule IS NULL
+  AND e.start_time < $2
+  AND e.end_time > $3
+  AND at.employee_id = ANY($4::uuid[])
+  AND at.rsvp_status <> 'declined'
+  AND at.role <> 'organizer'
+`
+
+type ListShiftCoverageDirectParams struct {
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	RangeEnd       pgtype.Timestamptz `json:"range_end"`
+	RangeStart     pgtype.Timestamptz `json:"range_start"`
+	CandidateIds   []dbuuid.UUID      `json:"candidate_ids"`
+}
+
+// =============================================================================
+// SHIFT COVERAGE (feature 042)
+//
+// "Which of these employees is working during this interval." Read-only, and the only
+// calendar surface internal/collaboration reaches — through the ShiftCoverageReader
+// interface it declares, never through SQL of its own. The candidate list arrives as a
+// uuid[] so the join stays inside the calendar schema.
+// =============================================================================
+// Concrete shift events overlapping the interval, with the candidate attendees who have
+// not declined. The organiser is excluded: CreateEvent writes the actor as an attendee
+// with role = 'organizer', and the actor is the manager publishing the rota, so counting
+// that row would roster the manager onto every shift they publish. This also covers materialised exception instances of a series, which are
+// stored as concrete rows with recurrence_rule IS NULL. Bounds are named for the RANGE;
+// see ListEventsForEmployee.
+func (q *Queries) ListShiftCoverageDirect(ctx context.Context, db DBTX, arg *ListShiftCoverageDirectParams) ([]dbuuid.UUID, error) {
+	rows, err := db.Query(ctx, listShiftCoverageDirect,
+		arg.OrganizationID,
+		arg.RangeEnd,
+		arg.RangeStart,
+		arg.CandidateIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []dbuuid.UUID
+	for rows.Next() {
+		var employee_id dbuuid.UUID
+		if err := rows.Scan(&employee_id); err != nil {
+			return nil, err
+		}
+		items = append(items, employee_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listShiftCoverageSeries = `-- name: ListShiftCoverageSeries :many
+SELECT e.id, e.series_id, e.start_time, e.end_time, e.all_day,
+       e.recurrence_rule, e.recurrence_end, at.employee_id
+FROM calendar.event e
+JOIN calendar.attendee at
+    ON at.organization_id = e.organization_id
+   AND at.event_id = e.id
+WHERE e.organization_id = $1
+  AND e.event_type = 'shift'
+  AND e.cancelled_at IS NULL
+  AND e.recurrence_rule IS NOT NULL
+  AND e.start_time < $2
+  AND (e.recurrence_end IS NULL OR e.recurrence_end > $3)
+  AND at.employee_id = ANY($4::uuid[])
+  AND at.rsvp_status <> 'declined'
+  AND at.role <> 'organizer'
+ORDER BY e.id
+`
+
+type ListShiftCoverageSeriesParams struct {
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	RangeEnd       pgtype.Timestamptz `json:"range_end"`
+	RangeStart     pgtype.Timestamptz `json:"range_start"`
+	CandidateIds   []dbuuid.UUID      `json:"candidate_ids"`
+}
+
+type ListShiftCoverageSeriesRow struct {
+	ID             dbuuid.UUID        `json:"id"`
+	SeriesID       dbuuid.NullUUID    `json:"series_id"`
+	StartTime      pgtype.Timestamptz `json:"start_time"`
+	EndTime        pgtype.Timestamptz `json:"end_time"`
+	AllDay         bool               `json:"all_day"`
+	RecurrenceRule pgtype.Text        `json:"recurrence_rule"`
+	RecurrenceEnd  pgtype.Timestamptz `json:"recurrence_end"`
+	EmployeeID     dbuuid.UUID        `json:"employee_id"`
+}
+
+// Recurring shift series that could reach the interval, with their non-declined candidate
+// attendees. Occurrence-level filtering happens in Go: expandInstances + applyExceptions
+// in internal/calendar/recurrence.go already implement RRULE expansion and the stored
+// exception rules, and this is their first caller.
+func (q *Queries) ListShiftCoverageSeries(ctx context.Context, db DBTX, arg *ListShiftCoverageSeriesParams) ([]*ListShiftCoverageSeriesRow, error) {
+	rows, err := db.Query(ctx, listShiftCoverageSeries,
+		arg.OrganizationID,
+		arg.RangeEnd,
+		arg.RangeStart,
+		arg.CandidateIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListShiftCoverageSeriesRow
+	for rows.Next() {
+		var i ListShiftCoverageSeriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SeriesID,
+			&i.StartTime,
+			&i.EndTime,
+			&i.AllDay,
+			&i.RecurrenceRule,
+			&i.RecurrenceEnd,
+			&i.EmployeeID,
 		); err != nil {
 			return nil, err
 		}

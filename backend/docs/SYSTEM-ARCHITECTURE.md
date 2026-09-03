@@ -1,6 +1,6 @@
 # Tech Office — System Architecture & Domain Dependency Analysis
 
-**Version**: 1.2.0 | **Date**: 2026-05-10
+**Version**: 1.3.0 | **Date**: 2026-09-04
 
 This document describes the domain-driven design (DDD) architecture of the Tech Office multi-tenant SaaS platform, including dependency flow analysis across database schema references and Go code imports. The architecture enforces **inward-pointing, unidirectional dependencies** — no circular references exist between domains.
 
@@ -391,6 +391,7 @@ graph LR
 - **Workflows**: `RitualGenerationWorkflow` (`ritual_generation_sweep`) — one platform-wide job on a fixed 1-minute cadence. It discovers every organization holding at least one unarchived ritual definition and calls `GenerateRitualInstances` once per organization. There is **no** per-ritual-definition schedule: a definition's dates are derived entirely from its stored `recurrence_rule`, `timezone`, `last_generated_date`, and `generation_window_days`, so creating, updating, archiving, unarchiving, or rescheduling a ritual performs zero scheduling operations. Archiving is what stops generation; the discovery query simply stops selecting the definition. A newly created definition is generated inside the creation transaction so its instances exist immediately rather than after the next sweep. A failure on one organization is logged with that organization's ID and the sweep continues; an unparseable recurrence rule skips its own definition only.
 
   `RitualReconciliationWorkflow` (`ritual_reconciliation_sweep`) — the second platform-wide collaboration job, on a fixed 5-minute cadence. It is what makes `overdue` and `missed` real stored states rather than something each client computes for itself. It discovers organizations through late *instances* rather than active definitions, deliberately without joining `ritual_definition`, because an instance outlives its definition's archival and must still be reconciled. Per organization it loads at most 500 candidate instances ordered by `completion_deadline ASC` and calls `reconcileRitualTaskStateForTask` per instance — the same writer the evidence path uses, which is what stops the two paths diverging. The state write is a compare-and-set against the state the decision was made from, so two overlapping passes cannot both transition an instance or both notify. A failure on one organization is logged with its ID and the sweep continues; a failure on one instance is logged with its task ID and the organization's remaining instances are still reconciled. The pass holds no state between runs: its cursor is the state column of the instances themselves.
+  `RitualShiftResolutionWorkflow` (`ritual_shift_resolution_sweep`) — the third platform-wide collaboration job, on a fixed 2-minute cadence, added by feature 042. Ritual instances are materialised 30 days ahead while shift rotas are published a week or two ahead, so a department pool using the `on_shift` strategy cannot be resolved once at generation time. Generation instead records a `collaboration.ritual_instance_pool_assignment` row per (instance, pool), and this sweep binds it as soon as a covering shift appears, follows shift swaps, withdraws an assignment whose cover disappeared, hands the slot over when the pool's strategy changes, and closes it once with an owner alert when the scheduled date arrives with nobody rostered. It reads the rota through the `ShiftCoverageReader` interface (see §7) and is registered *after* that reader is injected, so a first pass can never run against a nil reader. Per organization it processes at most 500 slots ordered by `scheduled_date ASC`. Every state write is a compare-and-set on `resolution_state`, and every notification is published only when its compare-and-set reported a changed row, so two overlapping passes assign once and notify once. A failure on one organization is logged with its ID and the sweep continues; a failure on one slot is logged with its task ID and the organization's remaining slots are still processed. There is deliberately **no** fallback to another assignment strategy — falling back is the defect the strategy exists to remove.
 - **Why orchestrator**: A task owns a chat channel (discussion thread) and a document (description) — both provisioned lazily on first open, as the task's reporter, by `EnsureTaskResources` rather than at creation — and publishes notifications for assignments/updates. Collaboration also owns turning a chat message into a task: it writes the task's origin columns and asks chat to leave a non-notifying threaded announcement on the source message. The dependency runs collaboration → chat only; `internal/chat` knows nothing about tasks.
 
 ### T4 — Aggregation
@@ -400,8 +401,9 @@ graph LR
 - **Tables**: `event`, `attendee`, `recurrence_exception`, `resource`, `resource_acl`, `resource_booking`, `working_hours`, `delegation`, `check_in`, `audit_entry`, `booking_link`, `event_reminder`
 - **Role**: Personal and team calendars, RFC 5545 recurring events with exceptions, meeting room/equipment booking with conflict prevention, scheduling assistant (free/busy + slot suggestion), booking links, delegation (act on behalf), compliance check-in with evidence and audit trail, cross-domain overlays (tasks, rituals, doc deadlines)
 - **Code dependencies**: `notification` (PublishNotification for invite/cancel/change/reminder), `collaboration` (via `CollaborationOverlayReader` for task due dates and ritual instances), `docs` (via `DocsOverlayReader` for document deadlines)
+- **Consumed by collaboration** through `EmployeesOnShift`, satisfying the `ShiftCoverageReader` interface `internal/collaboration` declares (feature 042). Calendar does not import collaboration for this; the wiring is a setter in `cmd/server.go`. See §7, "The inverted collaboration → calendar edge".
 - **Workflows**: `CalendarReminderWorkflow` (`calendar_reminder_poll`) — polls pending reminders every minute and publishes notifications. Presence at event boundaries is **not** a server-side job: since the presence ping-pong protocol, `presence_status` is written only by client pongs.
-- **Why T4 Aggregation**: Calendar reads from T3 (Collaboration) and T2 (Docs) domains through thin read-only overlay interfaces. It is the first domain to compose data from the orchestrator tier, establishing T4 as the aggregation layer. Dependencies are strictly one-directional — neither Collaboration nor Docs import Calendar.
+- **Why T4 Aggregation**: Calendar reads from T3 (Collaboration) and T2 (Docs) domains through thin read-only overlay interfaces. It is the first domain to compose data from the orchestrator tier, establishing T4 as the aggregation layer. **Import** dependencies remain strictly one-directional — neither Collaboration nor Docs import Calendar. Since feature 042 collaboration does *call* into calendar at runtime, but only through an interface it declares itself and is handed in `cmd/server.go`.
 
 #### `compliance` (Compliance & Safety)
 - **Schema**: `compliance`
@@ -498,6 +500,45 @@ iamConnect.SetRemovalRequestResolver(complianceLogic)
 `chat`, `voice` and `iam` each declare the narrow interface they need locally
 (`ContactGuard`, `EraseEnqueuer`, `RemovalRequestResolver`), satisfied structurally. None
 of them imports `internal/compliance`.
+
+#### The inverted collaboration → calendar edge (feature 042)
+
+The tier model puts `collaboration` at T3 and `calendar` at T4, and calendar already depends
+on collaboration through `CollaborationOverlayReader`. Feature 042 needs the opposite
+direction: a ritual's department pool set to the `on_shift` strategy has to know who is
+rostered, and the rota lives in `calendar.event`.
+
+It is expressed the same way every other cycle in this codebase is broken — **the consumer
+declares the interface, the provider satisfies it structurally, `cmd/server.go` wires them**
+— so the *import* graph still points only calendar → collaboration and the tier rule holds:
+
+```go
+// Declared in internal/collaboration/logic.go — the consumer's narrow interface
+type ShiftCoverageReader interface {
+    EmployeesOnShift(ctx context.Context, tx database.DBTX,
+        orgID dbuuid.UUID, candidateEmployeeIDs []dbuuid.UUID,
+        dayStart, dayEnd time.Time) ([]dbuuid.UUID, error)
+}
+
+// Implemented in internal/calendar/shift_coverage_logic.go, injected after both exist
+calendarLogic := calendar.NewLogic(queries, notificationService, collaborationLogic, docsLogic)
+collaborationLogic.SetShiftCoverageReader(calendarLogic)
+```
+
+It is a setter and not a constructor argument because `calendar.NewLogic` on the line above
+already consumes `collaborationLogic`; a constructor argument would be a literal cycle. The
+`ritual_shift_resolution_sweep` bootstrap is registered *after* this line, so a first pass
+can never run against a nil reader in a live server.
+
+Three properties keep the edge cheap:
+
+- **One method, read-only.** The reader never writes a calendar event.
+- **No cross-schema SQL.** The department's member list crosses as a `uuid[]` parameter, so
+  the coverage query joins `calendar.event` to `calendar.attendee` only.
+- **A nil reader is a supported state**, not a bug — the seeder and every pre-existing test
+  harness construct collaboration without a calendar. Callers treat nil exactly as they
+  treat an error: the ritual's pool slot is left awaiting shift resolution and nothing is
+  guessed. There is deliberately no fallback to another assignment strategy.
 
 ### Pattern 3: Event-Driven Decoupling (Notification Hub)
 

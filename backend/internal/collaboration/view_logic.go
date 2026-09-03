@@ -494,6 +494,11 @@ func (l *logicImpl) GetRitualWorklist(
 	now := time.Now()
 	today := startOfOverviewDay(now)
 
+	// The worklist is the ritual surface a manager actually reads, so it carries the
+	// "waiting for the rota" explanation too. Collected first and filled in one batched
+	// query after the loop, never one query per instance.
+	allTasks := make([]*rpcv1.Task, 0, len(rows))
+
 	for _, row := range rows {
 		task := l.taskToProto(row, nil, nil)
 		evidenceProgress := l.buildTaskEvidenceProgressSummary(ctx, tx, orgID, row.ID)
@@ -514,7 +519,10 @@ func (l *logicImpl) GetRitualWorklist(
 		default:
 			worklist.Upcoming = append(worklist.Upcoming, task)
 		}
+		allTasks = append(allTasks, task)
 	}
+
+	l.applyPoolAssignmentStates(ctx, tx, orgID, allTasks)
 
 	return worklist, nil
 }

@@ -1396,3 +1396,187 @@ SET project_id         = EXCLUDED.project_id,
 -- name: ClearChannelTaskDestination :exec
 DELETE FROM collaboration.channel_task_destination
 WHERE organization_id = $1 AND channel_id = $2;
+
+-- =============================================================================
+-- RITUAL INSTANCE POOL ASSIGNMENT QUERIES (feature 042 — on-shift assignment)
+--
+-- One row per (ritual instance, department pool) governed by the on_shift strategy.
+-- Every mutation below is a compare-and-set on resolution_state, which is what makes
+-- two overlapping resolution passes assign once and notify once.
+-- =============================================================================
+
+-- name: UpsertRitualPoolAssignment :one
+-- Written by generation and by the resolution pass's adoption path. ON CONFLICT keeps
+-- generation idempotent: a re-run over a date whose instance already exists must not
+-- create a second slot record.
+INSERT INTO collaboration.ritual_instance_pool_assignment (
+    organization_id, task_id, pool_id, resolution_state,
+    assigned_employee_id, resolve_by, resolved_at, updated_at
+) VALUES (
+    @organization_id, @task_id, @pool_id, @resolution_state,
+    @assigned_employee_id, @resolve_by, @resolved_at, @updated_at
+)
+ON CONFLICT (organization_id, task_id, pool_id) DO NOTHING
+RETURNING *;
+
+-- name: ResolveRitualPoolAssignment :one
+-- Compare-and-set: only a row still in the state the decision was made from is written.
+UPDATE collaboration.ritual_instance_pool_assignment
+SET resolution_state = 'resolved',
+    assigned_employee_id = @assigned_employee_id,
+    resolved_at = @now,
+    closed_reason = NULL,
+    updated_at = @now
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resolution_state = @expected_state
+RETURNING *;
+
+-- name: WithdrawRitualPoolAssignment :one
+-- Back to awaiting: the assignee's covering shift disappeared and nobody else covers.
+UPDATE collaboration.ritual_instance_pool_assignment
+SET resolution_state = 'awaiting_shift',
+    assigned_employee_id = NULL,
+    resolved_at = NULL,
+    updated_at = @now
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resolution_state = 'resolved'
+RETURNING *;
+
+-- name: CloseRitualPoolAssignment :one
+-- The once-only transition. The owner alert is published if and only if this returns a
+-- row, which is what makes two overlapping passes escalate once.
+UPDATE collaboration.ritual_instance_pool_assignment
+SET resolution_state = 'closed_unresolved',
+    closed_reason = @closed_reason,
+    escalated_at = @escalated_at,
+    updated_at = @now
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND resolution_state = @expected_state
+RETURNING *;
+
+-- name: DeleteRitualPoolAssignment :exec
+-- The pool is no longer on-shift; the row has nothing left to describe.
+DELETE FROM collaboration.ritual_instance_pool_assignment
+WHERE organization_id = @organization_id AND id = @id;
+
+-- lint:cross-tenant scheduler sweep — the organization list is the result, not the input.
+-- name: ListOrganizationIDsWithResolvableRitualPoolAssignments :many
+-- System-scope background query for the ritual shift resolution sweep, intentionally NOT
+-- filtered by organization_id: its purpose is to discover which organizations to sweep.
+-- Returns only organization IDs, no tenant row data, and runs on AdminPool. See
+-- Constitution Principle I.
+SELECT DISTINCT organization_id
+FROM collaboration.ritual_instance_pool_assignment
+WHERE resolution_state IN ('awaiting_shift', 'resolved')
+ORDER BY organization_id;
+
+-- name: ListRitualPoolSlotsForResolution :many
+-- One query serves three of the feature's cases, which is why it is a LEFT JOIN:
+--   * a row generation already created            -> a.id IS NOT NULL, awaiting/resolved
+--   * a pool just switched TO on_shift            -> a.id IS NULL, adopt it
+--   * a resolved row whose rota moved             -> a.id IS NOT NULL, state resolved
+-- The scheduled_date floor is a coarse prefilter only: no timezone on earth moves a date
+-- by more than a day, so a genuinely-future instance can never be excluded by it. The
+-- exact "still in the future" test is now < resolve_by, applied in Go.
+SELECT
+    p.id                AS pool_id,
+    p.department_id,
+    p.assignment_strategy,
+    -- Only read when a pool has been switched away from on_shift and its waiting slot has
+    -- to be handed over to the round-robin waterline.
+    p.last_assigned_employee_id,
+    t.id                AS task_id,
+    t.project_id,
+    t.scheduled_date,
+    d.id                AS ritual_definition_id,
+    d.name              AS ritual_name,
+    d.timezone,
+    d.created_by_employee_id,
+    a.id                AS assignment_id,
+    a.resolution_state,
+    a.assigned_employee_id,
+    a.resolve_by,
+    EXISTS (
+        SELECT 1 FROM collaboration.evidence_submission es
+        WHERE es.organization_id = t.organization_id AND es.task_id = t.id
+    ) AS has_evidence
+FROM collaboration.ritual_definition_department_pool p
+JOIN collaboration.ritual_definition d
+    ON d.organization_id = p.organization_id AND d.id = p.ritual_definition_id
+JOIN collaboration.task t
+    ON t.organization_id = d.organization_id AND t.ritual_definition_id = d.id
+LEFT JOIN collaboration.ritual_instance_pool_assignment a
+    ON a.organization_id = t.organization_id AND a.task_id = t.id AND a.pool_id = p.id
+WHERE p.organization_id = @organization_id
+  AND t.task_kind = 'ritual_instance'
+  AND t.is_deleted = FALSE
+  AND t.detached_from_ritual = FALSE
+  AND t.scheduled_date >= @scheduled_date_floor
+  AND (
+        (p.assignment_strategy = 'on_shift'
+             AND (a.id IS NULL OR a.resolution_state IN ('awaiting_shift', 'resolved')))
+     OR (p.assignment_strategy <> 'on_shift' AND a.id IS NOT NULL)
+      )
+ORDER BY t.scheduled_date ASC, t.id ASC, p.id ASC
+LIMIT @slot_limit;
+
+-- name: ListRitualPoolAssignmentsDueEscalation :many
+-- An awaiting slot whose scheduled date has arrived. resolve_by is stored as an instant
+-- in the definition's timezone, so this predicate needs no timezone arithmetic.
+SELECT a.*, t.project_id, d.name AS ritual_name
+FROM collaboration.ritual_instance_pool_assignment a
+JOIN collaboration.task t
+    ON t.organization_id = a.organization_id AND t.id = a.task_id
+LEFT JOIN collaboration.ritual_definition d
+    ON d.organization_id = t.organization_id AND d.id = t.ritual_definition_id
+WHERE a.organization_id = @organization_id
+  AND a.resolution_state = 'awaiting_shift'
+  AND a.resolve_by <= @now
+ORDER BY a.resolve_by ASC, a.id ASC
+LIMIT @slot_limit;
+
+-- name: ListRitualPoolAssignmentStatesForTasks :many
+-- Batched read for the "waiting for the rota" explanation on a task. One query per page
+-- of tasks, never one per task.
+SELECT task_id, resolution_state
+FROM collaboration.ritual_instance_pool_assignment
+WHERE organization_id = @organization_id
+  AND task_id = ANY(@task_ids::uuid[]);
+
+-- name: GetLeastAssignedEmployeeAmongCandidates :one
+-- Fewest ritual instances in the trailing window, ties broken by lowest employee UUID so
+-- a repeated resolution on unchanged data returns the same answer.
+--
+-- Unlike GetLeastAssignedDepartmentEmployee this takes the candidate set as an array, so
+-- it needs no join into organization.department_member — the caller has already applied
+-- both department membership and shift coverage.
+-- The explicit ::uuid cast on the projection is required: sqlc cannot infer a column
+-- type out of UNNEST and would otherwise generate interface{}.
+SELECT c.employee_id::uuid AS employee_id
+FROM UNNEST(@candidate_ids::uuid[]) AS c(employee_id)
+LEFT JOIN (
+    SELECT ta.employee_id, COUNT(*) AS cnt
+    FROM collaboration.task_assignee ta
+    JOIN collaboration.task t
+        ON t.organization_id = ta.organization_id
+       AND t.id = ta.task_id
+    WHERE ta.organization_id = @organization_id
+      AND t.task_kind = 'ritual_instance'
+      AND ta.assigned_at >= @since
+    GROUP BY ta.employee_id
+) recent ON recent.employee_id = c.employee_id
+ORDER BY COALESCE(recent.cnt, 0) ASC, c.employee_id ASC
+LIMIT 1;
+
+-- name: TaskAssigneeExists :one
+-- The manual-override test: is the employee this feature assigned still in the slot?
+SELECT EXISTS (
+    SELECT 1 FROM collaboration.task_assignee
+    WHERE organization_id = @organization_id
+      AND task_id = @task_id
+      AND employee_id = @employee_id
+      AND role = 'assignee'
+);

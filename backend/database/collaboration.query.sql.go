@@ -271,6 +271,55 @@ func (q *Queries) ClearInitialState(ctx context.Context, db DBTX, arg *ClearInit
 	return err
 }
 
+const closeRitualPoolAssignment = `-- name: CloseRitualPoolAssignment :one
+UPDATE collaboration.ritual_instance_pool_assignment
+SET resolution_state = 'closed_unresolved',
+    closed_reason = $1,
+    escalated_at = $2,
+    updated_at = $3
+WHERE organization_id = $4
+  AND id = $5
+  AND resolution_state = $6
+RETURNING id, organization_id, task_id, pool_id, resolution_state, closed_reason, assigned_employee_id, resolve_by, resolved_at, escalated_at, updated_at
+`
+
+type CloseRitualPoolAssignmentParams struct {
+	ClosedReason   pgtype.Text        `json:"closed_reason"`
+	EscalatedAt    pgtype.Timestamptz `json:"escalated_at"`
+	Now            pgtype.Timestamptz `json:"now"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	ID             dbuuid.UUID        `json:"id"`
+	ExpectedState  string             `json:"expected_state"`
+}
+
+// The once-only transition. The owner alert is published if and only if this returns a
+// row, which is what makes two overlapping passes escalate once.
+func (q *Queries) CloseRitualPoolAssignment(ctx context.Context, db DBTX, arg *CloseRitualPoolAssignmentParams) (*CollaborationRitualInstancePoolAssignment, error) {
+	row := db.QueryRow(ctx, closeRitualPoolAssignment,
+		arg.ClosedReason,
+		arg.EscalatedAt,
+		arg.Now,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedState,
+	)
+	var i CollaborationRitualInstancePoolAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TaskID,
+		&i.PoolID,
+		&i.ResolutionState,
+		&i.ClosedReason,
+		&i.AssignedEmployeeID,
+		&i.ResolveBy,
+		&i.ResolvedAt,
+		&i.EscalatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const countEvidenceReviewQueue = `-- name: CountEvidenceReviewQueue :one
 SELECT COUNT(*)::int AS pending_count
 FROM (
@@ -1237,6 +1286,22 @@ func (q *Queries) DeleteProjectState(ctx context.Context, db DBTX, arg *DeletePr
 	return err
 }
 
+const deleteRitualPoolAssignment = `-- name: DeleteRitualPoolAssignment :exec
+DELETE FROM collaboration.ritual_instance_pool_assignment
+WHERE organization_id = $1 AND id = $2
+`
+
+type DeleteRitualPoolAssignmentParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ID             dbuuid.UUID `json:"id"`
+}
+
+// The pool is no longer on-shift; the row has nothing left to describe.
+func (q *Queries) DeleteRitualPoolAssignment(ctx context.Context, db DBTX, arg *DeleteRitualPoolAssignmentParams) error {
+	_, err := db.Exec(ctx, deleteRitualPoolAssignment, arg.OrganizationID, arg.ID)
+	return err
+}
+
 const deleteSavedView = `-- name: DeleteSavedView :exec
 DELETE FROM collaboration.saved_view
 WHERE organization_id = $1 AND id = $2
@@ -1894,6 +1959,45 @@ type GetLeastAssignedDepartmentEmployeeParams struct {
 // Returns the active employee in the department with fewest ritual assignments in the given period.
 func (q *Queries) GetLeastAssignedDepartmentEmployee(ctx context.Context, db DBTX, arg *GetLeastAssignedDepartmentEmployeeParams) (dbuuid.UUID, error) {
 	row := db.QueryRow(ctx, getLeastAssignedDepartmentEmployee, arg.OrganizationID, arg.Since, arg.DepartmentID)
+	var employee_id dbuuid.UUID
+	err := row.Scan(&employee_id)
+	return employee_id, err
+}
+
+const getLeastAssignedEmployeeAmongCandidates = `-- name: GetLeastAssignedEmployeeAmongCandidates :one
+SELECT c.employee_id::uuid AS employee_id
+FROM UNNEST($1::uuid[]) AS c(employee_id)
+LEFT JOIN (
+    SELECT ta.employee_id, COUNT(*) AS cnt
+    FROM collaboration.task_assignee ta
+    JOIN collaboration.task t
+        ON t.organization_id = ta.organization_id
+       AND t.id = ta.task_id
+    WHERE ta.organization_id = $2
+      AND t.task_kind = 'ritual_instance'
+      AND ta.assigned_at >= $3
+    GROUP BY ta.employee_id
+) recent ON recent.employee_id = c.employee_id
+ORDER BY COALESCE(recent.cnt, 0) ASC, c.employee_id ASC
+LIMIT 1
+`
+
+type GetLeastAssignedEmployeeAmongCandidatesParams struct {
+	CandidateIds   []dbuuid.UUID      `json:"candidate_ids"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	Since          pgtype.Timestamptz `json:"since"`
+}
+
+// Fewest ritual instances in the trailing window, ties broken by lowest employee UUID so
+// a repeated resolution on unchanged data returns the same answer.
+//
+// Unlike GetLeastAssignedDepartmentEmployee this takes the candidate set as an array, so
+// it needs no join into organization.department_member — the caller has already applied
+// both department membership and shift coverage.
+// The explicit ::uuid cast on the projection is required: sqlc cannot infer a column
+// type out of UNNEST and would otherwise generate interface{}.
+func (q *Queries) GetLeastAssignedEmployeeAmongCandidates(ctx context.Context, db DBTX, arg *GetLeastAssignedEmployeeAmongCandidatesParams) (dbuuid.UUID, error) {
+	row := db.QueryRow(ctx, getLeastAssignedEmployeeAmongCandidates, arg.CandidateIds, arg.OrganizationID, arg.Since)
 	var employee_id dbuuid.UUID
 	err := row.Scan(&employee_id)
 	return employee_id, err
@@ -3583,6 +3687,38 @@ func (q *Queries) ListOrganizationIDsWithReconcilableRitualInstances(ctx context
 	return items, nil
 }
 
+const listOrganizationIDsWithResolvableRitualPoolAssignments = `-- name: ListOrganizationIDsWithResolvableRitualPoolAssignments :many
+SELECT DISTINCT organization_id
+FROM collaboration.ritual_instance_pool_assignment
+WHERE resolution_state IN ('awaiting_shift', 'resolved')
+ORDER BY organization_id
+`
+
+// lint:cross-tenant scheduler sweep — the organization list is the result, not the input.
+// System-scope background query for the ritual shift resolution sweep, intentionally NOT
+// filtered by organization_id: its purpose is to discover which organizations to sweep.
+// Returns only organization IDs, no tenant row data, and runs on AdminPool. See
+// Constitution Principle I.
+func (q *Queries) ListOrganizationIDsWithResolvableRitualPoolAssignments(ctx context.Context, db DBTX) ([]dbuuid.UUID, error) {
+	rows, err := db.Query(ctx, listOrganizationIDsWithResolvableRitualPoolAssignments)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []dbuuid.UUID
+	for rows.Next() {
+		var organization_id dbuuid.UUID
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectMembers = `-- name: ListProjectMembers :many
 SELECT id, organization_id, project_id, employee_id, role, notification_preference, joined_at, invited_by_employee_id, updated_at FROM collaboration.project_membership
 WHERE organization_id = $1 AND project_id = $2
@@ -3991,6 +4127,231 @@ func (q *Queries) ListRitualInstancesForReconciliation(ctx context.Context, db D
 			&i.DetachedFromRitual,
 			&i.SourceChannelID,
 			&i.SourceMessageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRitualPoolAssignmentStatesForTasks = `-- name: ListRitualPoolAssignmentStatesForTasks :many
+SELECT task_id, resolution_state
+FROM collaboration.ritual_instance_pool_assignment
+WHERE organization_id = $1
+  AND task_id = ANY($2::uuid[])
+`
+
+type ListRitualPoolAssignmentStatesForTasksParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	TaskIds        []dbuuid.UUID `json:"task_ids"`
+}
+
+type ListRitualPoolAssignmentStatesForTasksRow struct {
+	TaskID          dbuuid.UUID `json:"task_id"`
+	ResolutionState string      `json:"resolution_state"`
+}
+
+// Batched read for the "waiting for the rota" explanation on a task. One query per page
+// of tasks, never one per task.
+func (q *Queries) ListRitualPoolAssignmentStatesForTasks(ctx context.Context, db DBTX, arg *ListRitualPoolAssignmentStatesForTasksParams) ([]*ListRitualPoolAssignmentStatesForTasksRow, error) {
+	rows, err := db.Query(ctx, listRitualPoolAssignmentStatesForTasks, arg.OrganizationID, arg.TaskIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListRitualPoolAssignmentStatesForTasksRow
+	for rows.Next() {
+		var i ListRitualPoolAssignmentStatesForTasksRow
+		if err := rows.Scan(&i.TaskID, &i.ResolutionState); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRitualPoolAssignmentsDueEscalation = `-- name: ListRitualPoolAssignmentsDueEscalation :many
+SELECT a.id, a.organization_id, a.task_id, a.pool_id, a.resolution_state, a.closed_reason, a.assigned_employee_id, a.resolve_by, a.resolved_at, a.escalated_at, a.updated_at, t.project_id, d.name AS ritual_name
+FROM collaboration.ritual_instance_pool_assignment a
+JOIN collaboration.task t
+    ON t.organization_id = a.organization_id AND t.id = a.task_id
+LEFT JOIN collaboration.ritual_definition d
+    ON d.organization_id = t.organization_id AND d.id = t.ritual_definition_id
+WHERE a.organization_id = $1
+  AND a.resolution_state = 'awaiting_shift'
+  AND a.resolve_by <= $2
+ORDER BY a.resolve_by ASC, a.id ASC
+LIMIT $3
+`
+
+type ListRitualPoolAssignmentsDueEscalationParams struct {
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	Now            pgtype.Timestamptz `json:"now"`
+	SlotLimit      int32              `json:"slot_limit"`
+}
+
+type ListRitualPoolAssignmentsDueEscalationRow struct {
+	ID                 dbuuid.UUID        `json:"id"`
+	OrganizationID     dbuuid.UUID        `json:"organization_id"`
+	TaskID             dbuuid.UUID        `json:"task_id"`
+	PoolID             dbuuid.UUID        `json:"pool_id"`
+	ResolutionState    string             `json:"resolution_state"`
+	ClosedReason       pgtype.Text        `json:"closed_reason"`
+	AssignedEmployeeID dbuuid.NullUUID    `json:"assigned_employee_id"`
+	ResolveBy          pgtype.Timestamptz `json:"resolve_by"`
+	ResolvedAt         pgtype.Timestamptz `json:"resolved_at"`
+	EscalatedAt        pgtype.Timestamptz `json:"escalated_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ProjectID          dbuuid.UUID        `json:"project_id"`
+	RitualName         pgtype.Text        `json:"ritual_name"`
+}
+
+// An awaiting slot whose scheduled date has arrived. resolve_by is stored as an instant
+// in the definition's timezone, so this predicate needs no timezone arithmetic.
+func (q *Queries) ListRitualPoolAssignmentsDueEscalation(ctx context.Context, db DBTX, arg *ListRitualPoolAssignmentsDueEscalationParams) ([]*ListRitualPoolAssignmentsDueEscalationRow, error) {
+	rows, err := db.Query(ctx, listRitualPoolAssignmentsDueEscalation, arg.OrganizationID, arg.Now, arg.SlotLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListRitualPoolAssignmentsDueEscalationRow
+	for rows.Next() {
+		var i ListRitualPoolAssignmentsDueEscalationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.TaskID,
+			&i.PoolID,
+			&i.ResolutionState,
+			&i.ClosedReason,
+			&i.AssignedEmployeeID,
+			&i.ResolveBy,
+			&i.ResolvedAt,
+			&i.EscalatedAt,
+			&i.UpdatedAt,
+			&i.ProjectID,
+			&i.RitualName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRitualPoolSlotsForResolution = `-- name: ListRitualPoolSlotsForResolution :many
+SELECT
+    p.id                AS pool_id,
+    p.department_id,
+    p.assignment_strategy,
+    -- Only read when a pool has been switched away from on_shift and its waiting slot has
+    -- to be handed over to the round-robin waterline.
+    p.last_assigned_employee_id,
+    t.id                AS task_id,
+    t.project_id,
+    t.scheduled_date,
+    d.id                AS ritual_definition_id,
+    d.name              AS ritual_name,
+    d.timezone,
+    d.created_by_employee_id,
+    a.id                AS assignment_id,
+    a.resolution_state,
+    a.assigned_employee_id,
+    a.resolve_by,
+    EXISTS (
+        SELECT 1 FROM collaboration.evidence_submission es
+        WHERE es.organization_id = t.organization_id AND es.task_id = t.id
+    ) AS has_evidence
+FROM collaboration.ritual_definition_department_pool p
+JOIN collaboration.ritual_definition d
+    ON d.organization_id = p.organization_id AND d.id = p.ritual_definition_id
+JOIN collaboration.task t
+    ON t.organization_id = d.organization_id AND t.ritual_definition_id = d.id
+LEFT JOIN collaboration.ritual_instance_pool_assignment a
+    ON a.organization_id = t.organization_id AND a.task_id = t.id AND a.pool_id = p.id
+WHERE p.organization_id = $1
+  AND t.task_kind = 'ritual_instance'
+  AND t.is_deleted = FALSE
+  AND t.detached_from_ritual = FALSE
+  AND t.scheduled_date >= $2
+  AND (
+        (p.assignment_strategy = 'on_shift'
+             AND (a.id IS NULL OR a.resolution_state IN ('awaiting_shift', 'resolved')))
+     OR (p.assignment_strategy <> 'on_shift' AND a.id IS NOT NULL)
+      )
+ORDER BY t.scheduled_date ASC, t.id ASC, p.id ASC
+LIMIT $3
+`
+
+type ListRitualPoolSlotsForResolutionParams struct {
+	OrganizationID     dbuuid.UUID `json:"organization_id"`
+	ScheduledDateFloor pgtype.Date `json:"scheduled_date_floor"`
+	SlotLimit          int32       `json:"slot_limit"`
+}
+
+type ListRitualPoolSlotsForResolutionRow struct {
+	PoolID                 dbuuid.UUID        `json:"pool_id"`
+	DepartmentID           dbuuid.UUID        `json:"department_id"`
+	AssignmentStrategy     string             `json:"assignment_strategy"`
+	LastAssignedEmployeeID dbuuid.NullUUID    `json:"last_assigned_employee_id"`
+	TaskID                 dbuuid.UUID        `json:"task_id"`
+	ProjectID              dbuuid.UUID        `json:"project_id"`
+	ScheduledDate          pgtype.Date        `json:"scheduled_date"`
+	RitualDefinitionID     dbuuid.UUID        `json:"ritual_definition_id"`
+	RitualName             string             `json:"ritual_name"`
+	Timezone               string             `json:"timezone"`
+	CreatedByEmployeeID    dbuuid.UUID        `json:"created_by_employee_id"`
+	AssignmentID           dbuuid.NullUUID    `json:"assignment_id"`
+	ResolutionState        pgtype.Text        `json:"resolution_state"`
+	AssignedEmployeeID     dbuuid.NullUUID    `json:"assigned_employee_id"`
+	ResolveBy              pgtype.Timestamptz `json:"resolve_by"`
+	HasEvidence            bool               `json:"has_evidence"`
+}
+
+// One query serves three of the feature's cases, which is why it is a LEFT JOIN:
+//   - a row generation already created            -> a.id IS NOT NULL, awaiting/resolved
+//   - a pool just switched TO on_shift            -> a.id IS NULL, adopt it
+//   - a resolved row whose rota moved             -> a.id IS NOT NULL, state resolved
+//
+// The scheduled_date floor is a coarse prefilter only: no timezone on earth moves a date
+// by more than a day, so a genuinely-future instance can never be excluded by it. The
+// exact "still in the future" test is now < resolve_by, applied in Go.
+func (q *Queries) ListRitualPoolSlotsForResolution(ctx context.Context, db DBTX, arg *ListRitualPoolSlotsForResolutionParams) ([]*ListRitualPoolSlotsForResolutionRow, error) {
+	rows, err := db.Query(ctx, listRitualPoolSlotsForResolution, arg.OrganizationID, arg.ScheduledDateFloor, arg.SlotLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListRitualPoolSlotsForResolutionRow
+	for rows.Next() {
+		var i ListRitualPoolSlotsForResolutionRow
+		if err := rows.Scan(
+			&i.PoolID,
+			&i.DepartmentID,
+			&i.AssignmentStrategy,
+			&i.LastAssignedEmployeeID,
+			&i.TaskID,
+			&i.ProjectID,
+			&i.ScheduledDate,
+			&i.RitualDefinitionID,
+			&i.RitualName,
+			&i.Timezone,
+			&i.CreatedByEmployeeID,
+			&i.AssignmentID,
+			&i.ResolutionState,
+			&i.AssignedEmployeeID,
+			&i.ResolveBy,
+			&i.HasEvidence,
 		); err != nil {
 			return nil, err
 		}
@@ -4495,6 +4856,53 @@ func (q *Queries) RememberChannelTaskDestination(ctx context.Context, db DBTX, a
 	return err
 }
 
+const resolveRitualPoolAssignment = `-- name: ResolveRitualPoolAssignment :one
+UPDATE collaboration.ritual_instance_pool_assignment
+SET resolution_state = 'resolved',
+    assigned_employee_id = $1,
+    resolved_at = $2,
+    closed_reason = NULL,
+    updated_at = $2
+WHERE organization_id = $3
+  AND id = $4
+  AND resolution_state = $5
+RETURNING id, organization_id, task_id, pool_id, resolution_state, closed_reason, assigned_employee_id, resolve_by, resolved_at, escalated_at, updated_at
+`
+
+type ResolveRitualPoolAssignmentParams struct {
+	AssignedEmployeeID dbuuid.NullUUID    `json:"assigned_employee_id"`
+	Now                pgtype.Timestamptz `json:"now"`
+	OrganizationID     dbuuid.UUID        `json:"organization_id"`
+	ID                 dbuuid.UUID        `json:"id"`
+	ExpectedState      string             `json:"expected_state"`
+}
+
+// Compare-and-set: only a row still in the state the decision was made from is written.
+func (q *Queries) ResolveRitualPoolAssignment(ctx context.Context, db DBTX, arg *ResolveRitualPoolAssignmentParams) (*CollaborationRitualInstancePoolAssignment, error) {
+	row := db.QueryRow(ctx, resolveRitualPoolAssignment,
+		arg.AssignedEmployeeID,
+		arg.Now,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedState,
+	)
+	var i CollaborationRitualInstancePoolAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TaskID,
+		&i.PoolID,
+		&i.ResolutionState,
+		&i.ClosedReason,
+		&i.AssignedEmployeeID,
+		&i.ResolveBy,
+		&i.ResolvedAt,
+		&i.EscalatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const setChannelTaskDestination = `-- name: SetChannelTaskDestination :exec
 INSERT INTO collaboration.channel_task_destination (
     organization_id, channel_id, project_id, set_by_employee_id, updated_at
@@ -4662,6 +5070,30 @@ func (q *Queries) SoftDeleteTasksByIDs(ctx context.Context, db DBTX, arg *SoftDe
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const taskAssigneeExists = `-- name: TaskAssigneeExists :one
+SELECT EXISTS (
+    SELECT 1 FROM collaboration.task_assignee
+    WHERE organization_id = $1
+      AND task_id = $2
+      AND employee_id = $3
+      AND role = 'assignee'
+)
+`
+
+type TaskAssigneeExistsParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	TaskID         dbuuid.UUID `json:"task_id"`
+	EmployeeID     dbuuid.UUID `json:"employee_id"`
+}
+
+// The manual-override test: is the employee this feature assigned still in the slot?
+func (q *Queries) TaskAssigneeExists(ctx context.Context, db DBTX, arg *TaskAssigneeExistsParams) (bool, error) {
+	row := db.QueryRow(ctx, taskAssigneeExists, arg.OrganizationID, arg.TaskID, arg.EmployeeID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const updateCustomFieldDefinition = `-- name: UpdateCustomFieldDefinition :one
@@ -5654,6 +6086,106 @@ func (q *Queries) UpsertRitualDefinitionDepartmentPool(ctx context.Context, db D
 		&i.DepartmentID,
 		&i.AssignmentStrategy,
 		&i.LastAssignedEmployeeID,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const upsertRitualPoolAssignment = `-- name: UpsertRitualPoolAssignment :one
+
+INSERT INTO collaboration.ritual_instance_pool_assignment (
+    organization_id, task_id, pool_id, resolution_state,
+    assigned_employee_id, resolve_by, resolved_at, updated_at
+) VALUES (
+    $1, $2, $3, $4,
+    $5, $6, $7, $8
+)
+ON CONFLICT (organization_id, task_id, pool_id) DO NOTHING
+RETURNING id, organization_id, task_id, pool_id, resolution_state, closed_reason, assigned_employee_id, resolve_by, resolved_at, escalated_at, updated_at
+`
+
+type UpsertRitualPoolAssignmentParams struct {
+	OrganizationID     dbuuid.UUID        `json:"organization_id"`
+	TaskID             dbuuid.UUID        `json:"task_id"`
+	PoolID             dbuuid.UUID        `json:"pool_id"`
+	ResolutionState    string             `json:"resolution_state"`
+	AssignedEmployeeID dbuuid.NullUUID    `json:"assigned_employee_id"`
+	ResolveBy          pgtype.Timestamptz `json:"resolve_by"`
+	ResolvedAt         pgtype.Timestamptz `json:"resolved_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+// =============================================================================
+// RITUAL INSTANCE POOL ASSIGNMENT QUERIES (feature 042 — on-shift assignment)
+//
+// One row per (ritual instance, department pool) governed by the on_shift strategy.
+// Every mutation below is a compare-and-set on resolution_state, which is what makes
+// two overlapping resolution passes assign once and notify once.
+// =============================================================================
+// Written by generation and by the resolution pass's adoption path. ON CONFLICT keeps
+// generation idempotent: a re-run over a date whose instance already exists must not
+// create a second slot record.
+func (q *Queries) UpsertRitualPoolAssignment(ctx context.Context, db DBTX, arg *UpsertRitualPoolAssignmentParams) (*CollaborationRitualInstancePoolAssignment, error) {
+	row := db.QueryRow(ctx, upsertRitualPoolAssignment,
+		arg.OrganizationID,
+		arg.TaskID,
+		arg.PoolID,
+		arg.ResolutionState,
+		arg.AssignedEmployeeID,
+		arg.ResolveBy,
+		arg.ResolvedAt,
+		arg.UpdatedAt,
+	)
+	var i CollaborationRitualInstancePoolAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TaskID,
+		&i.PoolID,
+		&i.ResolutionState,
+		&i.ClosedReason,
+		&i.AssignedEmployeeID,
+		&i.ResolveBy,
+		&i.ResolvedAt,
+		&i.EscalatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const withdrawRitualPoolAssignment = `-- name: WithdrawRitualPoolAssignment :one
+UPDATE collaboration.ritual_instance_pool_assignment
+SET resolution_state = 'awaiting_shift',
+    assigned_employee_id = NULL,
+    resolved_at = NULL,
+    updated_at = $1
+WHERE organization_id = $2
+  AND id = $3
+  AND resolution_state = 'resolved'
+RETURNING id, organization_id, task_id, pool_id, resolution_state, closed_reason, assigned_employee_id, resolve_by, resolved_at, escalated_at, updated_at
+`
+
+type WithdrawRitualPoolAssignmentParams struct {
+	Now            pgtype.Timestamptz `json:"now"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	ID             dbuuid.UUID        `json:"id"`
+}
+
+// Back to awaiting: the assignee's covering shift disappeared and nobody else covers.
+func (q *Queries) WithdrawRitualPoolAssignment(ctx context.Context, db DBTX, arg *WithdrawRitualPoolAssignmentParams) (*CollaborationRitualInstancePoolAssignment, error) {
+	row := db.QueryRow(ctx, withdrawRitualPoolAssignment, arg.Now, arg.OrganizationID, arg.ID)
+	var i CollaborationRitualInstancePoolAssignment
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TaskID,
+		&i.PoolID,
+		&i.ResolutionState,
+		&i.ClosedReason,
+		&i.AssignedEmployeeID,
+		&i.ResolveBy,
+		&i.ResolvedAt,
+		&i.EscalatedAt,
 		&i.UpdatedAt,
 	)
 	return &i, err

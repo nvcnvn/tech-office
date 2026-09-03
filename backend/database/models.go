@@ -1742,6 +1742,69 @@ func (s *CollaborationRitualDefinitionDepartmentPool) FieldsMap() map[string]any
 	}
 }
 
+// Late-binding record for on-shift department pool slots. One row per (ritual instance, pool); the ritual_shift_resolution_sweep binds, rebinds and escalates it.
+type CollaborationRitualInstancePoolAssignment struct {
+	ID                 dbuuid.UUID        `json:"id"`
+	OrganizationID     dbuuid.UUID        `json:"organization_id"`
+	TaskID             dbuuid.UUID        `json:"task_id"`
+	PoolID             dbuuid.UUID        `json:"pool_id"`
+	ResolutionState    string             `json:"resolution_state"`
+	ClosedReason       pgtype.Text        `json:"closed_reason"`
+	AssignedEmployeeID dbuuid.NullUUID    `json:"assigned_employee_id"`
+	ResolveBy          pgtype.Timestamptz `json:"resolve_by"`
+	ResolvedAt         pgtype.Timestamptz `json:"resolved_at"`
+	EscalatedAt        pgtype.Timestamptz `json:"escalated_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (s *CollaborationRitualInstancePoolAssignment) TableName() string {
+	return "collaboration.ritual_instance_pool_assignment"
+}
+
+func (s *CollaborationRitualInstancePoolAssignment) Fields() ([]string, []any) {
+	return []string{
+			"id",
+			"organization_id",
+			"task_id",
+			"pool_id",
+			"resolution_state",
+			"closed_reason",
+			"assigned_employee_id",
+			"resolve_by",
+			"resolved_at",
+			"escalated_at",
+			"updated_at",
+		}, []any{
+			&s.ID,
+			&s.OrganizationID,
+			&s.TaskID,
+			&s.PoolID,
+			&s.ResolutionState,
+			&s.ClosedReason,
+			&s.AssignedEmployeeID,
+			&s.ResolveBy,
+			&s.ResolvedAt,
+			&s.EscalatedAt,
+			&s.UpdatedAt,
+		}
+}
+
+func (s *CollaborationRitualInstancePoolAssignment) FieldsMap() map[string]any {
+	return map[string]any{
+		"id":                   &s.ID,
+		"organization_id":      &s.OrganizationID,
+		"task_id":              &s.TaskID,
+		"pool_id":              &s.PoolID,
+		"resolution_state":     &s.ResolutionState,
+		"closed_reason":        &s.ClosedReason,
+		"assigned_employee_id": &s.AssignedEmployeeID,
+		"resolve_by":           &s.ResolveBy,
+		"resolved_at":          &s.ResolvedAt,
+		"escalated_at":         &s.EscalatedAt,
+		"updated_at":           &s.UpdatedAt,
+	}
+}
+
 // Saved view configurations for personalized or shared filtering and display settings.
 type CollaborationSavedView struct {
 	ID             dbuuid.UUID `json:"id"`

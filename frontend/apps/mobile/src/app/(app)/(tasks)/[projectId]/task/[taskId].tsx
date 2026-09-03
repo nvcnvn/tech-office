@@ -1742,6 +1742,20 @@ export default function TaskDetailScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={taskQuery.isRefetching} onRefresh={handleRefresh} />}
       >
+        {task.poolAssignmentState === "awaiting_shift" ? (
+          <View style={styles.awaitingShiftBanner} testID="task-awaiting-shift-banner">
+            <View style={styles.awaitingShiftBannerIconWrap}>
+              <SFIcon name="calendar.badge.clock" size={18} color={lightPalette.info.main} />
+            </View>
+            <View style={styles.awaitingShiftBannerCopy}>
+              <Text style={styles.awaitingShiftBannerTitle}>Waiting for the rota</Text>
+              <Text style={styles.awaitingShiftBannerText}>
+                Nobody in the department is rostered for this date yet, so this run is unassigned on
+                purpose. It will be assigned as soon as a covering shift is published.
+              </Text>
+            </View>
+          </View>
+        ) : null}
         {submissionFeedback ? (
           <View style={styles.successBanner}>
             <View style={styles.successBannerIconWrap}>
@@ -2581,6 +2595,44 @@ const styles = StyleSheet.create({
   successBannerText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     color: "#166534",
+    lineHeight: 18,
+  },
+  // Mirrors successBanner rather than sharing it: the two never appear in the same colour,
+  // and a single parameterised banner style would need a prop for every value below.
+  // flexShrink on the icon and flex:1 on the copy are what keep the sentence wrapping
+  // instead of pushing the icon off a narrow Android screen.
+  awaitingShiftBanner: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing[1.5],
+    paddingHorizontal: spacing[2],
+    paddingVertical: spacing[1.5],
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: "#bfdbfe",
+    backgroundColor: "#eff6ff",
+  },
+  awaitingShiftBannerIconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#dbeafe",
+    flexShrink: 0,
+  },
+  awaitingShiftBannerCopy: {
+    flex: 1,
+    gap: spacing[0.5],
+  },
+  awaitingShiftBannerTitle: {
+    fontSize: mobileTypography.listPrimary.fontSize as number,
+    fontWeight: "700" as const,
+    color: "#1e40af",
+  },
+  awaitingShiftBannerText: {
+    fontSize: mobileTypography.listSecondary.fontSize as number,
+    color: "#1e40af",
     lineHeight: 18,
   },
 });

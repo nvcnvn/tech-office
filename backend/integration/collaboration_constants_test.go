@@ -9,6 +9,7 @@ import (
 
 	"github.com/nvcnvn/tech-office/backend/internal/chat"
 	"github.com/nvcnvn/tech-office/backend/internal/collaboration"
+	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -162,6 +163,96 @@ func TestConstantSync(t *testing.T) {
 			assert.Equal(t, len(dbValues)+1, len(rpcv1.ViewType_name))
 		})
 	})
+}
+
+// TestRitualPoolAssignmentConstantSync pins feature 042's vocabulary across the four
+// places it is written down: the database CHECK constraints, the Go constants, the proto
+// enum and the notification type list. It parses the generated schema snapshot rather
+// than restating it, so a value added to one layer and forgotten in another fails here
+// rather than at runtime against a CHECK constraint (Constitution principle VIII).
+func TestRitualPoolAssignmentConstantSync(t *testing.T) {
+	t.Parallel()
+
+	t.Run("the on shift strategy constant matches the database check constraint", func(t *testing.T) {
+		dbValues := checkConstraintLiterals(t, "ritual_definition_department_pool_assignment_strategy_check")
+		goValues := []string{
+			collaboration.AssignmentStrategyRoundRobin,
+			collaboration.AssignmentStrategyLeastAssigned,
+			collaboration.AssignmentStrategyOnShift,
+		}
+
+		assert.Contains(t, dbValues, collaboration.AssignmentStrategyOnShift)
+		assert.ElementsMatch(t, dbValues, goValues)
+	})
+
+	t.Run("every pool assignment state constant matches the database check constraint", func(t *testing.T) {
+		dbValues := checkConstraintLiterals(t, "ritual_instance_pool_assignment_resolution_state_check")
+		goValues := []string{
+			collaboration.PoolAssignmentStateResolved,
+			collaboration.PoolAssignmentStateAwaitingShift,
+			collaboration.PoolAssignmentStateClosedUnresolved,
+		}
+
+		assert.ElementsMatch(t, dbValues, goValues)
+	})
+
+	t.Run("every closed reason constant matches the database check constraint", func(t *testing.T) {
+		dbValues := checkConstraintLiterals(t, "ritual_instance_pool_assignment_closed_reason_check")
+		goValues := []string{
+			collaboration.PoolAssignmentClosedReasonNoRoster,
+			collaboration.PoolAssignmentClosedReasonManualOverride,
+		}
+
+		assert.ElementsMatch(t, dbValues, goValues)
+	})
+
+	t.Run("every pool assignment state constant maps to a RitualPoolAssignmentState enum value", func(t *testing.T) {
+		// The enum carries one extra member, UNSPECIFIED, for every task that is not an
+		// on-shift ritual instance.
+		assert.Equal(t, 3+1, len(rpcv1.RitualPoolAssignmentState_name))
+
+		for _, state := range []string{
+			collaboration.PoolAssignmentStateResolved,
+			collaboration.PoolAssignmentStateAwaitingShift,
+			collaboration.PoolAssignmentStateClosedUnresolved,
+		} {
+			mapped := collaboration.PoolAssignmentStateToProto(state)
+			assert.NotEqual(t, rpcv1.RitualPoolAssignmentState_RITUAL_POOL_ASSIGNMENT_STATE_UNSPECIFIED, mapped,
+				"state %q must map to a concrete enum member", state)
+		}
+
+		assert.Equal(t,
+			rpcv1.RitualPoolAssignmentState_RITUAL_POOL_ASSIGNMENT_STATE_UNSPECIFIED,
+			collaboration.PoolAssignmentStateToProto(""))
+	})
+
+	t.Run("ritual_instance_unassigned is accepted by the notification type check constraint", func(t *testing.T) {
+		const value = "ritual_instance_unassigned"
+
+		assert.Equal(t, value, collaboration.NotificationTypeRitualInstanceUnassigned)
+		assert.True(t, notification.IsValidNotificationType(value))
+		assert.Contains(t, notification.AllNotificationTypes(), value)
+		assert.Contains(t, checkConstraintLiterals(t, "notification_notification_type_valid"), value)
+	})
+}
+
+// checkConstraintLiterals reads the quoted values a named CHECK constraint admits out of
+// the generated schema snapshot, so no expected list is restated in this file.
+func checkConstraintLiterals(t *testing.T, constraintName string) []string {
+	t.Helper()
+	snapshot := readRepoFile(t, "database/scripts/schema.sql")
+
+	idx := strings.Index(snapshot, constraintName)
+	require.NotEqual(t, -1, idx, "%s not found in schema.sql", constraintName)
+	// pg_dump writes one CONSTRAINT per line, so the line is the exact extent of this
+	// constraint. Scanning to the next ";" would swallow the constraints that follow it
+	// inside the same CREATE TABLE.
+	end := strings.Index(snapshot[idx:], "\n")
+	require.NotEqual(t, -1, end, "unterminated CHECK constraint %s in schema.sql", constraintName)
+
+	values := quotedLiterals(snapshot[idx : idx+end])
+	require.NotEmpty(t, values, "no values parsed from %s", constraintName)
+	return values
 }
 
 // TestSystemEventTypeConstantSync pins the chat system event vocabulary across the three

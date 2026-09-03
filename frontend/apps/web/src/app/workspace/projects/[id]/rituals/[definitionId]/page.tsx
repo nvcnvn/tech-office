@@ -1081,7 +1081,7 @@ function DepartmentPoolPicker({ value, onChange }: DepartmentPoolPickerProps) {
 							<Typography variant="body2" sx={{ ...colors.text.primary.style, flex: 1, fontWeight: 500 }}>
 								{slot.dept.name}
 							</Typography>
-							<FormControl size="small" sx={{ minWidth: 140 }}>
+							<FormControl size="small" sx={{ minWidth: 160 }}>
 								<Select
 									value={slot.strategy}
 									onChange={(e) => handleStrategyChange(slot.dept.id, e.target.value as AssignmentStrategy)}
@@ -1089,6 +1089,7 @@ function DepartmentPoolPicker({ value, onChange }: DepartmentPoolPickerProps) {
 								>
 									<MenuItem value="round_robin">Round-robin</MenuItem>
 									<MenuItem value="least_assigned">Least-assigned</MenuItem>
+									<MenuItem value="on_shift">On-shift</MenuItem>
 								</Select>
 							</FormControl>
 							<IconButton size="small" onClick={() => handleRemove(slot.dept.id)} data-testid={`dept-pool-remove-${slot.dept.id}`}>
@@ -1637,6 +1638,11 @@ export default function RitualDefinitionPage() {
 								<br />
 								<strong>Round-robin</strong>: rotates through active members in order.
 								<strong>Least-assigned</strong>: picks the member with fewest recent ritual assignments.
+								<br />
+								<strong>On-shift</strong>: picks a member who has a shift on the calendar covering the
+								instance&apos;s date, so the checklist goes to whoever is actually working. It depends on
+								shift events being published for that department — an instance for a date with no rota
+								yet stays unassigned and is filled in as soon as the shifts appear.
 							</Typography>
 							<DepartmentPoolPicker value={selectedDepartmentPools} onChange={setSelectedDepartmentPools} />
 						</Paper>

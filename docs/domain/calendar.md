@@ -4,7 +4,7 @@ Events, recurrence, RSVP, room/equipment resources, free-busy and slot suggestio
 booking links, delegation, and attendance check-in with evidence. Owned by
 `internal/calendar`; contract in `rpc/v1/calendar.proto` (`CalendarService`, 26 RPCs).
 
-**Status date: 2026-08-22.** Supersedes spec 026.
+**Status date: 2026-09-04.** Supersedes spec 026; shift coverage added by spec 042.
 
 ## Events
 
@@ -29,6 +29,11 @@ an `exception_type` and an optional `new_event_id` for a moved/modified occurren
 the whole series. `EditEventSeries` applies it; every change is recorded in
 `calendar.audit_entry` with its `change_scope`, so "who moved my recurring meeting" is
 answerable.
+
+The RRULE expansion helpers in `internal/calendar/recurrence.go` (`expandInstances`,
+`applyExceptions`) had no caller until feature 042. Range queries such as `ListEvents` still
+do **not** expand recurrence — they return series heads. Shift coverage below is the one read
+that expands occurrences in Go.
 
 ### Attendees
 
@@ -76,12 +81,60 @@ For `event_type = 'shift'` and anything with `requires_check_in`:
 is a separate table — calendar check-in evidence is not
 `collaboration.evidence_submission`.
 
+## Shift coverage
+
+`EmployeesOnShift(ctx, tx, orgID, candidateEmployeeIDs, dayStart, dayEnd)`
+(`internal/calendar/shift_coverage_logic.go`) answers "which of these employees is working
+during this interval". It is read-only and is the **only** calendar surface
+`internal/collaboration` reaches, through the `ShiftCoverageReader` interface collaboration
+declares and this method satisfies. See
+[rituals-tasks.md](rituals-tasks.md#on-shift-assignment-feature-042) for the consumer and
+`backend/docs/SYSTEM-ARCHITECTURE.md` for why the edge is inverted.
+
+The interval is a half-open `[dayStart, dayEnd)` pair of UTC instants the **caller** has
+already resolved from its own timezone, which is what lets a ritual in `Asia/Tokyo` and a
+shift stored in UTC agree without either domain learning the other's rules.
+
+Coverage rules:
+
+| Situation | Covered? |
+|---|---|
+| Non-recurring shift whose `[start, end)` overlaps the interval | yes |
+| All-day shift spanning the date | yes — the stored times already span it |
+| Overnight shift 22:00 Fri → 06:00 Sat | yes, for **both** Friday and Saturday |
+| Occurrence of a recurring shift series | yes — expanded from the RRULE |
+| Occurrence with a `skipped` or `cancelled` recurrence exception | no |
+| Occurrence with a `modified` exception | the replacement event decides, not the original |
+| Event with `cancelled_at IS NOT NULL` | no |
+| Attendee with `rsvp_status = 'declined'` | no |
+| Attendee with `pending`, `accepted` or `tentative` | yes |
+| Attendee with `role = 'organizer'` | **no** — `CreateEvent` writes the actor as the organiser attendee, and the actor is the manager publishing the rota |
+| Event of any `event_type` other than `shift` | no |
+| Private shift | yes — visibility does not change who is working |
+
+Two queries feed it: `ListShiftCoverageDirect` for concrete events (which also covers a
+series' materialised `modified` exception instances, stored as rows with
+`recurrence_rule IS NULL`), and `ListShiftCoverageSeries` for series heads, whose
+occurrences are expanded with `expandInstances` + `applyExceptions`. The expansion window is
+widened backwards by the series' own duration so an overnight occurrence starting before
+`dayStart` is not missed, and the series prefilter is widened by a documented
+`maxShiftDuration` of 24h because `recurrence_end` stores the last occurrence's *start*.
+Exactness is restored by the overlap test in Go, so the widening can only cost an extra row.
+
+The candidate list crosses the boundary as a `uuid[]` parameter, which keeps the join inside
+the `calendar` schema — no cross-schema join into `organization.department_member`. An empty
+candidate list returns empty without touching the database. The result is deduplicated and
+sorted ascending so the caller's tiebreak is reproducible.
+
 ## Overlay
 
 `ListOverlayItems` merges calendar events with items owned by other domains: it calls
 `collaboration.GetTasksDueInRange` and `GetRitualInstancesInRange` so due tasks and ritual
-instances render on the calendar grid. The dependency points calendar → collaboration; the
-collaboration domain knows nothing about the calendar.
+instances render on the calendar grid. The dependency points calendar → collaboration.
+
+That is no longer the only edge between the two. Feature 042 added the opposite direction —
+collaboration reading shift coverage — expressed as an interface collaboration declares and
+calendar implements, so the *import* graph still points only calendar → collaboration.
 
 ## Reminders
 
@@ -131,7 +184,8 @@ domain `calendar`.
 
 `calendar_event_test.go`, `calendar_recurrence_test.go`, `calendar_team_test.go`,
 `calendar_resource_test.go`, `calendar_booking_test.go`, `calendar_checkin_test.go`,
-`calendar_overlay_test.go`, `calendar_notification_test.go`.
+`calendar_overlay_test.go`, `calendar_notification_test.go`,
+`calendar_shift_coverage_test.go`.
 
 ## Known drift
 

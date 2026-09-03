@@ -412,9 +412,10 @@ func (l *logicImpl) GetTask(
 	}
 
 	taskProto := l.taskToProto(task, assignees, customFieldValues)
-	if task.TaskKind == "ritual_instance" {
+	if task.TaskKind == TaskKindRitualInstance {
 		taskProto.EvidenceProgress = l.buildTaskEvidenceProgressSummary(ctx, tx, orgID, taskID)
 	}
+	l.applyPoolAssignmentStates(ctx, tx, orgID, []*rpcv1.Task{taskProto})
 
 	return taskProto, watchers, nil
 }
@@ -843,11 +844,12 @@ func (l *logicImpl) ListTasks(
 		tasks := make([]*rpcv1.Task, len(dbTasks))
 		for i, t := range dbTasks {
 			taskProto := l.taskToProto(t, nil, nil)
-			if t.TaskKind == "ritual_instance" {
+			if t.TaskKind == TaskKindRitualInstance {
 				taskProto.EvidenceProgress = l.buildTaskEvidenceProgressSummary(ctx, tx, orgID, t.ID)
 			}
 			tasks[i] = taskProto
 		}
+		l.applyPoolAssignmentStates(ctx, tx, orgID, tasks)
 		return tasks, nil
 	}
 
@@ -859,11 +861,12 @@ func (l *logicImpl) ListTasks(
 	tasks := make([]*rpcv1.Task, len(dbTasks))
 	for i, t := range dbTasks {
 		taskProto := l.taskToProto(t, nil, nil)
-		if t.TaskKind == "ritual_instance" {
+		if t.TaskKind == TaskKindRitualInstance {
 			taskProto.EvidenceProgress = l.buildTaskEvidenceProgressSummary(ctx, tx, orgID, t.ID)
 		}
 		tasks[i] = taskProto
 	}
+	l.applyPoolAssignmentStates(ctx, tx, orgID, tasks)
 
 	return tasks, nil
 }

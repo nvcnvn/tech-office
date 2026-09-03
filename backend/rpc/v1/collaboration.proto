@@ -672,6 +672,22 @@ enum TaskKind {
   TASK_KIND_RITUAL_INSTANCE = 2;
 }
 
+// How a ritual instance's department-pool slot stands. Present only for ritual
+// instances whose definition carries a department pool using the on-shift strategy; an
+// instance with several pools reports the least-progressed state, so one waiting pool
+// is not hidden by another that resolved.
+enum RitualPoolAssignmentState {
+  RITUAL_POOL_ASSIGNMENT_STATE_UNSPECIFIED = 0;
+  // A rostered employee holds the slot.
+  RITUAL_POOL_ASSIGNMENT_STATE_RESOLVED = 1;
+  // Nobody in the department is rostered for this date yet. The slot is unassigned on
+  // purpose and will be filled as soon as a covering shift appears.
+  RITUAL_POOL_ASSIGNMENT_STATE_AWAITING_SHIFT = 2;
+  // The scheduled date arrived with nobody rostered, or a person took over the slot.
+  // Nothing further will change it automatically.
+  RITUAL_POOL_ASSIGNMENT_STATE_CLOSED_UNRESOLVED = 3;
+}
+
 enum CollaborationMode {
   COLLABORATION_MODE_UNSPECIFIED = 0;
   COLLABORATION_MODE_STANDARD = 1;
@@ -988,6 +1004,9 @@ message Task {
   // chat and is served by GetTaskOrigin, so GetTask stays a single-domain read.
   optional string source_channel_id = 28;
   optional string source_message_id = 29;
+
+  // Feature 042. UNSPECIFIED for every task that is not an on-shift ritual instance.
+  RitualPoolAssignmentState pool_assignment_state = 30;
 }
 
 message TaskAssignee {

@@ -62,6 +62,7 @@ export type NotificationType =
 	| 'doc_mentioned'
 	| 'ritual_instance_overdue'
 	| 'ritual_instance_missed'
+	| 'ritual_instance_unassigned'
 	| 'ritual_instances_scheduled'
 	| 'evidence_submitted'
 	| 'evidence_approved'

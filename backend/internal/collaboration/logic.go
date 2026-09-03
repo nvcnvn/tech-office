@@ -78,6 +78,30 @@ type NotificationPublisher interface {
 	PublishNotification(ctx context.Context, tx database.DBTX, req *rpcv1.PublishNotificationRequest) (*rpcv1.PublishNotificationResponse, error)
 }
 
+// ShiftCoverageReader answers "which of these employees is working during this
+// interval", from shift events on the calendar. Declared here and implemented by
+// calendar.Logic so that collaboration never imports calendar: the tier ordering in
+// backend/docs/SYSTEM-ARCHITECTURE.md puts collaboration below calendar, and the
+// calendar already depends on this package for overlay items.
+//
+// The interval is a half-open [dayStart, dayEnd) pair of UTC instants, already resolved
+// from the ritual definition's own timezone by the caller. Keeping the timezone on this
+// side is what lets a ritual in Asia/Tokyo and a shift stored in UTC agree without
+// either domain learning the other's rules.
+//
+// A nil reader is a supported state, not a bug: seed and test harnesses construct
+// collaboration logic without a calendar. Callers treat nil exactly as they treat an
+// error — the slot is left awaiting shift resolution and nothing is guessed.
+type ShiftCoverageReader interface {
+	EmployeesOnShift(
+		ctx context.Context,
+		tx database.DBTX,
+		orgID dbuuid.UUID,
+		candidateEmployeeIDs []dbuuid.UUID,
+		dayStart, dayEnd time.Time,
+	) ([]dbuuid.UUID, error)
+}
+
 // Logic defines the business logic interface for collaboration operations.
 // This layer is pool-agnostic and receives transactions from the Connect layer.
 type Logic interface {
@@ -197,6 +221,13 @@ type Logic interface {
 	ListEvidenceReviewQueue(ctx context.Context, tx database.DBTX, orgID, reviewerID dbuuid.UUID, req *rpcv1.ListEvidenceReviewQueueRequest) ([]*rpcv1.ReviewQueueEntry, string, error)
 	GetEvidenceReviewQueueCount(ctx context.Context, tx database.DBTX, orgID, reviewerID dbuuid.UUID, req *rpcv1.GetEvidenceReviewQueueCountRequest) (int32, bool, error)
 
+	// SetShiftCoverageReader injects the calendar's shift coverage read. It is a setter
+	// rather than a NewLogic parameter because cmd/server.go constructs collaboration
+	// before calendar — calendar.NewLogic takes collaborationLogic — so a constructor
+	// argument would be a cycle. A nil reader is supported and means on-shift pools
+	// resolve to awaiting_shift and nothing is guessed.
+	SetShiftCoverageReader(reader ShiftCoverageReader)
+
 	// Ritual Scheduler
 	GenerateRitualInstances(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, now time.Time) (int, error)
 
@@ -205,6 +236,14 @@ type Logic interface {
 	// late ritual instances and returns what it changed. It is safe to call repeatedly:
 	// an instance already in its target state is neither rewritten nor re-notified.
 	ReconcileOverdueRitualInstances(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, now time.Time) (RitualReconciliationCounts, error)
+
+	// Ritual Shift Resolution
+	// ResolveRitualShiftAssignments runs one organization's on-shift resolution pass:
+	// it binds slots that were waiting for a rota, follows shift swaps, withdraws
+	// assignments whose cover disappeared, and escalates slots whose scheduled date
+	// arrived with nobody rostered. Safe to call repeatedly: every write is a
+	// compare-and-set, so overlapping passes assign once and notify once.
+	ResolveRitualShiftAssignments(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, now time.Time) (RitualShiftResolutionCounts, error)
 
 	// Operational Health
 	GetOperationalHealth(ctx context.Context, tx database.DBTX, orgID, projectID dbuuid.UUID, startDate, endDate pgtype.Date) (*rpcv1.GetOperationalHealthResponse, error)
@@ -232,6 +271,16 @@ type logicImpl struct {
 	ChatLogic             ChatLogic
 	DocsLogic             DocsLogic
 	NotificationPublisher NotificationPublisher
+
+	// shiftCoverage is injected after construction; see SetShiftCoverageReader. Nil
+	// until wired, and legitimately nil in the seeder and in tests that never touch an
+	// on-shift pool.
+	shiftCoverage ShiftCoverageReader
+}
+
+// SetShiftCoverageReader implements Logic.
+func (l *logicImpl) SetShiftCoverageReader(reader ShiftCoverageReader) {
+	l.shiftCoverage = reader
 }
 
 // NewLogic creates a new collaboration logic layer implementation

@@ -1075,8 +1075,38 @@ CREATE TABLE collaboration.ritual_definition_department_pool (
     assignment_strategy text DEFAULT 'round_robin'::text NOT NULL,
     last_assigned_employee_id uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT ritual_definition_department_pool_assignment_strategy_check CHECK ((assignment_strategy = ANY (ARRAY['round_robin'::text, 'least_assigned'::text])))
+    CONSTRAINT ritual_definition_department_pool_assignment_strategy_check CHECK ((assignment_strategy = ANY (ARRAY['round_robin'::text, 'least_assigned'::text, 'on_shift'::text])))
 );
+
+
+--
+-- Name: ritual_instance_pool_assignment; Type: TABLE; Schema: collaboration; Owner: -
+--
+
+CREATE TABLE collaboration.ritual_instance_pool_assignment (
+    id uuid DEFAULT uuidv7() NOT NULL,
+    organization_id uuid NOT NULL,
+    task_id uuid NOT NULL,
+    pool_id uuid NOT NULL,
+    resolution_state text DEFAULT 'awaiting_shift'::text NOT NULL,
+    closed_reason text,
+    assigned_employee_id uuid,
+    resolve_by timestamp with time zone NOT NULL,
+    resolved_at timestamp with time zone,
+    escalated_at timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT chk_ripa_closed_has_reason CHECK (((resolution_state <> 'closed_unresolved'::text) OR (closed_reason IS NOT NULL))),
+    CONSTRAINT chk_ripa_resolved_has_assignee CHECK (((resolution_state <> 'resolved'::text) OR (assigned_employee_id IS NOT NULL))),
+    CONSTRAINT ritual_instance_pool_assignment_closed_reason_check CHECK ((closed_reason = ANY (ARRAY['no_roster'::text, 'manual_override'::text]))),
+    CONSTRAINT ritual_instance_pool_assignment_resolution_state_check CHECK ((resolution_state = ANY (ARRAY['resolved'::text, 'awaiting_shift'::text, 'closed_unresolved'::text])))
+);
+
+
+--
+-- Name: TABLE ritual_instance_pool_assignment; Type: COMMENT; Schema: collaboration; Owner: -
+--
+
+COMMENT ON TABLE collaboration.ritual_instance_pool_assignment IS 'Late-binding record for on-shift department pool slots. One row per (ritual instance, pool); the ritual_shift_resolution_sweep binds, rebinds and escalates it.';
 
 
 --
@@ -2973,7 +3003,7 @@ CREATE TABLE notification.notification (
     source_category text DEFAULT 'activity'::text NOT NULL,
     updated_at timestamp with time zone DEFAULT now(),
     CONSTRAINT notification_delivery_class_valid CHECK ((delivery_class = ANY (ARRAY['persistent'::text, 'live_only'::text]))),
-    CONSTRAINT notification_notification_type_valid CHECK ((notification_type = ANY (ARRAY['message'::text, 'mention'::text, 'reply'::text, 'typing'::text, 'reaction'::text, 'voice_call_incoming'::text, 'voice_call_started'::text, 'voice_call_updated'::text, 'voice_call_ended'::text, 'task_assigned'::text, 'task_status_changed'::text, 'task_commented'::text, 'task_mentioned'::text, 'task_description_modified'::text, 'task_updated'::text, 'doc_updated'::text, 'doc_commented'::text, 'doc_mentioned'::text, 'evidence_submitted'::text, 'evidence_approved'::text, 'evidence_rejected'::text, 'ritual_instances_scheduled'::text, 'ritual_instance_overdue'::text, 'ritual_instance_missed'::text, 'calendar_event_invite'::text, 'calendar_event_cancel'::text, 'calendar_event_change'::text, 'calendar_event_reminder'::text, 'calendar_check_in_missed'::text, 'calendar_event_digest'::text, 'account_removal_requested'::text]))),
+    CONSTRAINT notification_notification_type_valid CHECK ((notification_type = ANY (ARRAY['message'::text, 'mention'::text, 'reply'::text, 'typing'::text, 'reaction'::text, 'voice_call_incoming'::text, 'voice_call_started'::text, 'voice_call_updated'::text, 'voice_call_ended'::text, 'task_assigned'::text, 'task_status_changed'::text, 'task_commented'::text, 'task_mentioned'::text, 'task_description_modified'::text, 'task_updated'::text, 'doc_updated'::text, 'doc_commented'::text, 'doc_mentioned'::text, 'evidence_submitted'::text, 'evidence_approved'::text, 'evidence_rejected'::text, 'ritual_instances_scheduled'::text, 'ritual_instance_overdue'::text, 'ritual_instance_missed'::text, 'ritual_instance_unassigned'::text, 'calendar_event_invite'::text, 'calendar_event_cancel'::text, 'calendar_event_change'::text, 'calendar_event_reminder'::text, 'calendar_check_in_missed'::text, 'calendar_event_digest'::text, 'account_removal_requested'::text]))),
     CONSTRAINT notification_policy_key_valid CHECK ((policy_key = ANY (ARRAY['persistent_default'::text, 'chat_message'::text, 'chat_mention'::text, 'chat_reply'::text, 'chat_typing_live'::text, 'chat_reaction_live'::text, 'chat_voice_call_incoming'::text, 'chat_voice_call_live'::text, 'chat_voice_call_record'::text, 'task_assignment'::text, 'task_comment'::text, 'task_mention'::text, 'task_status'::text, 'task_description_modified'::text, 'task_update'::text, 'document_update'::text, 'document_comment'::text, 'document_mention'::text, 'calendar_event_invite'::text, 'calendar_event_cancel'::text, 'calendar_event_change'::text, 'calendar_event_reminder'::text, 'calendar_check_in_missed'::text, 'calendar_event_digest'::text]))),
     CONSTRAINT notification_priority_check CHECK ((priority = ANY (ARRAY[0, 1, 2, 4]))),
     CONSTRAINT notification_source_category_valid CHECK ((source_category = ANY (ARRAY['activity'::text, 'mention'::text, 'system'::text]))),
@@ -4075,6 +4105,14 @@ ALTER TABLE ONLY collaboration.evidence_submission
 
 
 --
+-- Name: ritual_instance_pool_assignment pk_ripa; Type: CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.ritual_instance_pool_assignment
+    ADD CONSTRAINT pk_ripa PRIMARY KEY (organization_id, id);
+
+
+--
 -- Name: project_membership project_membership_pkey; Type: CONSTRAINT; Schema: collaboration; Owner: -
 --
 
@@ -4248,6 +4286,14 @@ ALTER TABLE ONLY collaboration.ritual_definition_assignee
 
 ALTER TABLE ONLY collaboration.ritual_definition_department_pool
     ADD CONSTRAINT uq_rddp_unique UNIQUE (organization_id, ritual_definition_id, department_id);
+
+
+--
+-- Name: ritual_instance_pool_assignment uq_ripa_instance_pool; Type: CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.ritual_instance_pool_assignment
+    ADD CONSTRAINT uq_ripa_instance_pool UNIQUE (organization_id, task_id, pool_id);
 
 
 --
@@ -5445,6 +5491,20 @@ CREATE INDEX idx_rda_definition ON collaboration.ritual_definition_assignee USIN
 --
 
 CREATE INDEX idx_rddp_definition ON collaboration.ritual_definition_department_pool USING btree (organization_id, ritual_definition_id);
+
+
+--
+-- Name: idx_ripa_open; Type: INDEX; Schema: collaboration; Owner: -
+--
+
+CREATE INDEX idx_ripa_open ON collaboration.ritual_instance_pool_assignment USING btree (organization_id, resolve_by, id) WHERE (resolution_state = ANY (ARRAY['awaiting_shift'::text, 'resolved'::text]));
+
+
+--
+-- Name: idx_ripa_task; Type: INDEX; Schema: collaboration; Owner: -
+--
+
+CREATE INDEX idx_ripa_task ON collaboration.ritual_instance_pool_assignment USING btree (organization_id, task_id);
 
 
 --
@@ -7160,6 +7220,22 @@ ALTER TABLE ONLY collaboration.ritual_definition_department_pool
 
 
 --
+-- Name: ritual_instance_pool_assignment fk_ripa_pool; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.ritual_instance_pool_assignment
+    ADD CONSTRAINT fk_ripa_pool FOREIGN KEY (organization_id, pool_id) REFERENCES collaboration.ritual_definition_department_pool(organization_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: ritual_instance_pool_assignment fk_ripa_task; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.ritual_instance_pool_assignment
+    ADD CONSTRAINT fk_ripa_task FOREIGN KEY (organization_id, task_id) REFERENCES collaboration.task(organization_id, id) ON DELETE CASCADE;
+
+
+--
 -- Name: ritual_definition fk_ritual_def_creator; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
 --
 
@@ -7349,6 +7425,14 @@ ALTER TABLE ONLY collaboration.ritual_definition_department_pool
 
 ALTER TABLE ONLY collaboration.ritual_definition
     ADD CONSTRAINT ritual_definition_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organization(id);
+
+
+--
+-- Name: ritual_instance_pool_assignment ritual_instance_pool_assignment_organization_id_fkey; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.ritual_instance_pool_assignment
+    ADD CONSTRAINT ritual_instance_pool_assignment_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES public.organization(id);
 
 
 --

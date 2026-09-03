@@ -86,7 +86,7 @@ func (l *logicImpl) GenerateRitualInstances(
 		poolStates := make([]deptPoolState, 0, len(rawPools))
 		for _, p := range rawPools {
 			ps := deptPoolState{pool: p, lastAssignedIdx: -1}
-			if p.AssignmentStrategy == "round_robin" {
+			if p.AssignmentStrategy == AssignmentStrategyRoundRobin {
 				members, _ := l.Queries.ListActiveDepartmentMembers(ctx, tx, &database.ListActiveDepartmentMembersParams{
 					OrganizationID: orgID,
 					DepartmentID:   dbuuid.UUID(p.DepartmentID),
@@ -215,8 +215,17 @@ func (l *logicImpl) GenerateRitualInstances(
 				var empID dbuuid.UUID
 				var resolved bool
 
+				// On-shift is late-bound and does not share the waterline path below:
+				// the instance's slot is recorded either way and the shift resolution
+				// sweep owns it from here. It never falls through to another strategy —
+				// falling through is the defect this strategy exists to remove.
+				if ps.pool.AssignmentStrategy == AssignmentStrategyOnShift {
+					l.recordOnShiftPoolSlot(ctx, tx, orgID, ps.pool, def, taskID, date, loc, now, assignmentCounts)
+					continue
+				}
+
 				switch ps.pool.AssignmentStrategy {
-				case "round_robin":
+				case AssignmentStrategyRoundRobin:
 					if len(ps.members) == 0 {
 						continue
 					}
@@ -224,7 +233,7 @@ func (l *logicImpl) GenerateRitualInstances(
 					empID = ps.members[nextIdx]
 					poolStates[i].lastAssignedIdx = nextIdx
 					resolved = true
-				case "least_assigned":
+				case AssignmentStrategyLeastAssigned:
 					result, err := l.Queries.GetLeastAssignedDepartmentEmployee(ctx, tx, &database.GetLeastAssignedDepartmentEmployeeParams{
 						OrganizationID: orgID,
 						Since:          pgtype.Timestamptz{Time: since90, Valid: true},

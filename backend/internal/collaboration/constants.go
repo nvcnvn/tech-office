@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/nvcnvn/tech-office/backend/internal/notification"
+	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 )
 
 // Re-export source domain constant for collaboration service.
@@ -332,6 +333,81 @@ const (
 	// overdue state, and one completion window later when it writes it into missed.
 	NotificationTypeRitualInstanceOverdue = notification.NotificationTypeRitualInstanceOverdue
 	NotificationTypeRitualInstanceMissed  = notification.NotificationTypeRitualInstanceMissed
+	// Published by the ritual shift resolution sweep when an on-shift slot's scheduled
+	// date arrives with nobody in the department rostered. Distinct from
+	// ritual_instance_missed: nobody failed to do the work, nobody was ever asked.
+	NotificationTypeRitualInstanceUnassigned = notification.NotificationTypeRitualInstanceUnassigned
+)
+
+// Department pool assignment strategies. These MUST match the CHECK constraint on
+// collaboration.ritual_definition_department_pool.assignment_strategy and the
+// AssignmentStrategy union in frontend/packages/apis/src/collaboration-ritual.ts.
+const (
+	AssignmentStrategyRoundRobin    = "round_robin"
+	AssignmentStrategyLeastAssigned = "least_assigned"
+	// AssignmentStrategyOnShift draws the assignee from whoever has a shift covering
+	// the scheduled date. It is late-bound: generation records a slot row and the
+	// ritual shift resolution sweep binds it. See ritual_shift_resolution_logic.go.
+	AssignmentStrategyOnShift = "on_shift"
+)
+
+// Pool assignment resolution states. These MUST match the CHECK constraint on
+// collaboration.ritual_instance_pool_assignment.resolution_state and the
+// RitualPoolAssignmentState proto enum.
+const (
+	PoolAssignmentStateResolved         = "resolved"
+	PoolAssignmentStateAwaitingShift    = "awaiting_shift"
+	PoolAssignmentStateClosedUnresolved = "closed_unresolved"
+)
+
+// Why a closed slot stopped being re-resolved. These MUST match the CHECK constraint
+// on collaboration.ritual_instance_pool_assignment.closed_reason.
+const (
+	// PoolAssignmentClosedReasonNoRoster: the scheduled date arrived with nobody in the
+	// department rostered. The project's owners and admins are alerted once.
+	PoolAssignmentClosedReasonNoRoster = "no_roster"
+	// PoolAssignmentClosedReasonManualOverride: a person changed the slot's assignee, so
+	// the sweep stops touching it. No alert.
+	PoolAssignmentClosedReasonManualOverride = "manual_override"
+)
+
+// PoolAssignmentStateToProto maps the database's resolution_state text to the proto
+// enum. An unrecognised or empty state is UNSPECIFIED, which is what every task that is
+// not an on-shift ritual instance reports.
+func PoolAssignmentStateToProto(state string) rpcv1.RitualPoolAssignmentState {
+	switch state {
+	case PoolAssignmentStateResolved:
+		return rpcv1.RitualPoolAssignmentState_RITUAL_POOL_ASSIGNMENT_STATE_RESOLVED
+	case PoolAssignmentStateAwaitingShift:
+		return rpcv1.RitualPoolAssignmentState_RITUAL_POOL_ASSIGNMENT_STATE_AWAITING_SHIFT
+	case PoolAssignmentStateClosedUnresolved:
+		return rpcv1.RitualPoolAssignmentState_RITUAL_POOL_ASSIGNMENT_STATE_CLOSED_UNRESOLVED
+	default:
+		return rpcv1.RitualPoolAssignmentState_RITUAL_POOL_ASSIGNMENT_STATE_UNSPECIFIED
+	}
+}
+
+// Ritual shift resolution sweep tuning. Constants for the same reason the
+// reconciliation sweep's are: a knob nobody turns is a knob that drifts out of sync
+// with the behaviour it claims to control.
+const (
+	// RitualShiftResolutionInterval is the resolution sweep cadence. Minutes, not hours:
+	// a manager who publishes a rota is watching for the assignment to appear. It sits
+	// between the 1-minute generation sweep and the 5-minute reconciliation sweep, so a
+	// cadence alone identifies the sweep in a log. Exported because
+	// backend/cmd/server.go schedules the job with it.
+	RitualShiftResolutionInterval = 2 * time.Minute
+
+	// ritualShiftResolutionSlotLimit bounds one organization's work in one pass,
+	// matching ritualReconciliationInstanceLimit. Oldest scheduled date first, so a
+	// partially drained backlog progresses strictly.
+	ritualShiftResolutionSlotLimit = 500
+
+	// ritualShiftEscalationBackfillHorizon suppresses the owner alert — but not the
+	// state change — for slots whose scheduled date is further in the past than this.
+	// Copied from ritualReconciliationBackfillHorizon rather than introducing a second
+	// number for the same idea.
+	ritualShiftEscalationBackfillHorizon = 7 * 24 * time.Hour
 )
 
 // Ritual reconciliation sweep tuning. These are constants rather than configuration

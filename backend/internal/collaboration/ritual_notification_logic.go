@@ -476,3 +476,87 @@ func (l *logicImpl) notifyEvidenceRejected(
 		submitterID,
 	)
 }
+
+// ---------------------------------------------------------------------------
+// Feature 042: on-shift assignment notifications
+// ---------------------------------------------------------------------------
+
+// notifyRitualSlotAssigned tells an employee that a ritual instance is now theirs because
+// the rota put them on it.
+//
+// It is a task_assigned notification rather than a new type: from the recipient's seat
+// nothing distinguishes "a manager assigned this to you" from "the rota did", and a
+// second type would mean a second row in every client's notification switch for no
+// behavioural difference.
+//
+// Published only by a caller whose compare-and-set reported a changed row, which is what
+// makes two overlapping resolution passes notify once.
+func (l *logicImpl) notifyRitualSlotAssigned(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	task *database.CollaborationTask,
+	employeeID dbuuid.UUID,
+	ritualName string,
+) {
+	if l.NotificationPublisher == nil {
+		return
+	}
+	l.publishRitualLatenessNotification(ctx, tx, orgID, task, []string{employeeID.String()},
+		NotificationTypeTaskAssigned,
+		"Ritual assigned to you",
+		fmt.Sprintf("%q for %s is yours — you are on shift that day", ritualName, ritualScheduledDateLabel(task)),
+		ritualFocusIntentSubmitRequirement,
+	)
+}
+
+// notifyRitualSlotWithdrawn tells the previous holder of a slot that a rota change moved
+// the instance off them. Without it a shift swap silently removes work from somebody's
+// list, which is exactly the kind of change people discover too late.
+func (l *logicImpl) notifyRitualSlotWithdrawn(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	task *database.CollaborationTask,
+	employeeID dbuuid.UUID,
+	ritualName string,
+) {
+	if l.NotificationPublisher == nil {
+		return
+	}
+	l.publishRitualLatenessNotification(ctx, tx, orgID, task, []string{employeeID.String()},
+		NotificationTypeTaskUpdated,
+		"Ritual no longer yours",
+		fmt.Sprintf("%q for %s is no longer yours — the rota for that day changed", ritualName, ritualScheduledDateLabel(task)),
+		ritualFocusIntentViewInstance,
+	)
+}
+
+// notifyRitualInstanceUnassigned alerts the project's owners and admins that a ritual
+// instance reached its scheduled date with nobody in the department rostered, so it was
+// never assigned to anyone.
+//
+// Deliberately its own notification type rather than reusing ritual_instance_missed:
+// missed means somebody was asked to do the work and did not, and this means nobody was
+// ever asked. Collapsing the two would tell an owner to chase a person who does not exist.
+func (l *logicImpl) notifyRitualInstanceUnassigned(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	task *database.CollaborationTask,
+	ritualName string,
+) {
+	if l.NotificationPublisher == nil {
+		return
+	}
+
+	recipientIDs := l.appendProjectAuthorityRecipients(ctx, tx, orgID, task, nil)
+
+	l.publishRitualLatenessNotification(ctx, tx, orgID, task, recipientIDs,
+		NotificationTypeRitualInstanceUnassigned,
+		"Ritual could not be assigned",
+		fmt.Sprintf("%q for %s has nobody assigned — no one in the department was rostered for that day",
+			ritualName, ritualScheduledDateLabel(task)),
+		ritualFocusIntentViewInstance,
+	)
+}
