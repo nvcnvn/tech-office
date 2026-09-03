@@ -1,0 +1,241 @@
+// Contract delta for feature 043 — "Procedure Document On A Ritual Definition".
+//
+// This file is NOT compiled. It records exactly what changes in
+// `backend/rpc/v1/collaboration.proto` and `backend/rpc/v1/document.proto`, so the contract
+// can be reviewed on its own. Field numbers are the real ones to use; each message below
+// shows only the added members, with the existing ones elided as `// ... unchanged`.
+
+syntax = "proto3";
+
+package rpc.v1;
+
+import "rpc/v1/document.proto"; // NEW import in collaboration.proto, for DocumentStatus.
+                                // collaboration.proto already imports chat.proto and
+                                // files.proto, so a sibling import is the established
+                                // pattern rather than a new one.
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// =============================================================================
+// SERVICE — CollaborationService gains exactly one RPC
+// =============================================================================
+
+service CollaborationService {
+  // GetRitualProcedure returns the content of the workspace document attached to a ritual
+  // definition, for read-only rendering next to an instance.
+  //
+  // This is the ONLY way the content is reachable for a reader without their own grant on
+  // the document, and it is deliberately served here rather than by DocumentService:
+  // `internal/docs` must not learn what a ritual is, and the implicit read must not become
+  // a row in `docs.document_access` that would surface the document in the reader's tree,
+  // search results or followed-document list (FR-021).
+  //
+  // Authorization is two-layer. The interceptor checks `collab.viewTask` — may this caller
+  // use the tasks feature at all. The logic layer then checks project access on the
+  // definition's project with no required role, because "can see an instance" is exactly
+  // "can see the project": a `viewer` and a reader of a public project both pass (FR-018).
+  // A caller outside the project is refused with a bare PermissionDenied and no error
+  // detail, for the same reason the evidence decision path is: naming the project or the
+  // ritual would disclose work the caller may not know exists.
+  //
+  // It grants nothing else. Commenting, reacting, editing and version history stay on
+  // DocumentService, where the reader's own access decides (FR-019). The grant does not
+  // extend to child pages or to documents this one links to.
+  rpc GetRitualProcedure(GetRitualProcedureRequest) returns (GetRitualProcedureResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
+    };
+  }
+}
+
+// =============================================================================
+// MESSAGES — the resolved attachment
+// =============================================================================
+
+// RitualProcedure is the resolved form of `ritual_definition.procedure_document_id`. It is
+// derived on every read and stored nowhere, which is what makes FR-016 true by construction:
+// there is no snapshot that could go stale, so correcting the document corrects every open
+// and future instance at once with no instance regeneration.
+//
+// Absent (not set) means the definition has no procedure. That is distinct from present with
+// `is_available = false`, which means a procedure was attached and can no longer be
+// resolved. Clients MUST render those two states differently — the first shows nothing at
+// all (FR-017), the second shows an explicit unavailable state (FR-022). Collapsing them
+// would tell a worker there was never a procedure for a ritual that has one.
+message RitualProcedure {
+  // Always set when the definition carries an attachment, including when the document can
+  // no longer be resolved. This is what lets a client tell "deleted" from "never attached".
+  string document_id = 1;
+
+  // The document's CURRENT title (FR-012) — renaming the document relabels every entry
+  // point with no further action. Empty when `is_available` is false.
+  string title = 2;
+
+  // The document's slug, for a manager on web who may open it in the documents feature with
+  // their own access. Readers relying on the implicit grant do not use it: their entry point
+  // opens the in-product overlay, not a docs route. Empty when unavailable.
+  string slug = 3;
+
+  // ACTIVE, OUTDATED or ARCHIVED. Shown to the reader, because an archived procedure is
+  // usually one somebody forgot to unarchive and is still better than none (FR-024).
+  // UNSPECIFIED when unavailable.
+  DocumentStatus status = 4;
+
+  // False when the document has been deleted or cannot be resolved. An unavailable
+  // procedure never blocks evidence submission, evidence decisions, instance state
+  // transitions or instance completion (FR-023).
+  bool is_available = 5;
+}
+
+// =============================================================================
+// MESSAGES — ritual definition
+// =============================================================================
+
+message RitualDefinition {
+  // ... fields 1-14 unchanged (id, project_id, name, description, recurrence_rule,
+  // completion_window_hours, timezone, is_archived, created_by_employee_id,
+  // default_assignee_ids, evidence_requirements, updated_at, schedule_version,
+  // default_department_pools).
+  //
+  // `description` in particular is retained and still shown: the procedure document
+  // supplements the free-text description, it does not replace it (FR-005).
+
+  // Absent when no procedure is attached. Populated by GetRitualDefinition and
+  // ListRitualDefinitions.
+  //
+  // It rides here rather than on Task because every ritual instance detail surface on both
+  // clients already fetches the definition (`hydrateRitualTask` in
+  // packages/apis/src/collaboration-ritual.ts), so the entry point and its label cost no
+  // additional client request. Putting it on Task would make every ListTasks page pay a
+  // batched document read for a label that list rows do not show.
+  optional RitualProcedure procedure = 15;
+}
+
+message CreateRitualDefinitionRequest {
+  // ... fields 1-9 unchanged.
+
+  // Optional. Must be an existing `workspace_doc` in the caller's organization; a
+  // `task_description` or `project_brief` document is refused, because those are owned by a
+  // task or a project and are reached through their owner (FR-003).
+  //
+  // Rejection is InvalidArgument with a google.rpc.BadRequest field violation naming this
+  // field. A document in another organization is indistinguishable from one that does not
+  // exist, and produces the same violation.
+  optional string procedure_document_id = 10;
+}
+
+message UpdateRitualDefinitionRequest {
+  // ... fields 1-8 unchanged.
+
+  // Three-valued, using proto3 field presence:
+  //
+  //   absent            → the existing attachment is left exactly as it is
+  //   present, empty    → detach. The document itself is NOT deleted, archived or otherwise
+  //                       modified and remains in the workspace (FR-009); the ritual's
+  //                       instances stop showing a procedure and the implicit read it
+  //                       granted ends immediately (FR-020)
+  //   present, non-empty→ attach, or replace an existing attachment. A definition never
+  //                       carries two procedures — the field is singular, so a second one
+  //                       has nowhere to go (FR-001)
+  //
+  // Attaching, replacing or removing is NOT a schedule change: no instance is created,
+  // deleted, detached or reassigned, `schedule_version` is not bumped, no schedule-change
+  // impact is reported and no assignee is notified (FR-010, SC-006). That holds because
+  // UpdateRitualDefinition performs no scheduling work at all — instance regeneration lives
+  // only in ChangeRitualDefinitionSchedule, which this feature does not touch.
+  optional string procedure_document_id = 9;
+}
+
+// =============================================================================
+// MESSAGES — reading the procedure
+// =============================================================================
+
+message GetRitualProcedureRequest {
+  // The definition, not the instance. An instance resolves its procedure through its
+  // definition and holds no reference of its own, which is exactly why a corrected procedure
+  // reaches every open instance at once. A client holding only a task passes
+  // `task.ritual_definition_id`; a task with none (a standard task, or an instance detached
+  // from its ritual) has no procedure to ask for and does not call this.
+  string ritual_definition_id = 1;
+}
+
+message GetRitualProcedureResponse {
+  // Absent when the definition has no procedure attached. Present with
+  // `is_available = false` when one is attached but unresolvable.
+  optional RitualProcedure procedure = 1;
+
+  // TipTap/ProseMirror JSON, as `docs.document.content_json` holds it — the same shape
+  // DocumentService returns, so both clients render it with the renderer they already have.
+  //
+  // Always the document's current content: no instance-time or submission-time snapshot of
+  // a procedure is kept anywhere (FR-016).
+  //
+  // Empty when `procedure` is absent or unavailable. A client MUST distinguish empty content
+  // on an available document (a procedure somebody has not written yet) from an unavailable
+  // one (a procedure that was deleted) using `is_available`, never by testing this string.
+  string content_json = 2;
+}
+
+// =============================================================================
+// MESSAGES — evidence review queue (feature 041)
+// =============================================================================
+
+message ReviewQueueEntry {
+  // ... fields 1-25ish unchanged (evidence_submission_id, task_*, project_*,
+  // ritual_definition_id, ritual_name, evidence_requirement_*, requirement_unresolved,
+  // submitted_by_*, timestamps, evidence payload, instance state and deadline).
+
+  // The procedure attached to this submission's ritual definition, or empty when there is
+  // none. The id only — deliberately not a resolved RitualProcedure.
+  //
+  // It comes from the `ritual_definition` join the queue projection already performs for
+  // `ritual_name`, so a page of entries costs zero additional queries. Resolving the title
+  // here would cost one document read per distinct definition per page, and FR-014 — unlike
+  // FR-012 — asks only that the entry point be present on the decision surface, not that it
+  // carry the document's title. The reviewer's control is labelled "Procedure" and fetches
+  // title and content from GetRitualProcedure when it is opened.
+  //
+  // Empty for an entry whose `requirement_unresolved` is true and whose definition could not
+  // be resolved. Such an entry stays listed and stays decidable, exactly as today.
+  string procedure_document_id = 26;
+}
+
+// =============================================================================
+// MESSAGES — document.proto
+// =============================================================================
+
+message Document {
+  // ... fields 1-15 unchanged.
+
+  // The document's type. Already stored (`docs.document.document_type`) and already load
+  // bearing — `ListRootDocuments` and `ListChildDocuments` filter on it so that
+  // task-description and project-brief documents never appear in the workspace tree — but
+  // not previously carried on the wire.
+  //
+  // Feature 043 needs it to refuse attaching a non-workspace document (FR-003) through the
+  // DocsLogic interface, and it is generally useful to any caller that needs to know whether
+  // a document is reached through the tree or through its owning resource.
+  DocumentType document_type = 16;
+}
+
+// Mirrors the CHECK constraint on `docs.document.document_type`.
+enum DocumentType {
+  DOCUMENT_TYPE_UNSPECIFIED = 0;
+  DOCUMENT_TYPE_WORKSPACE_DOC = 1;
+  DOCUMENT_TYPE_TASK_DESCRIPTION = 2;
+  DOCUMENT_TYPE_PROJECT_BRIEF = 3;
+}
+
+// =============================================================================
+// NOT in this contract, and why
+// =============================================================================
+//
+// - No `RemoveRitualProcedure` RPC. Detaching is an empty string on the update field; a
+//   separate RPC would be a second way to reach the same one-column write.
+// - No `procedure` field on `Task`. See RitualDefinition.procedure above.
+// - No change to DocumentService. The implicit read is served by collaboration so that the
+//   dependency stays collaboration → docs, and so the grant never becomes a row.
+// - No new notification type. A procedure being attached or changed is not an event a worker
+//   needs pushed to them; they see it the next time they open the instance.
+// - No revision pinning on EvidenceSubmission. FR-016 forbids it; audit-grade "which
+//   procedure was live when this was signed off" is a separate feature.
