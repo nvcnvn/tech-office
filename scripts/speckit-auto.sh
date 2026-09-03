@@ -18,9 +18,11 @@
 # --status prints a tick per finished step, and is safe to run while a run is
 # in progress. Progress lives in .specify/auto/, keyed by position in the file:
 # never comment out or delete a finished task, append new ones at the end.
+# Markers and logs are labelled with the spec number the task produces, which
+# continues the specs/ series (with specs/039-* on disk, task 1 is 040).
 #
 # Follow a running step:
-#   tail -f .specify/auto/logs/2-implement.log |
+#   tail -f .specify/auto/logs/041-implement.log |
 #     jq -r --unbuffered '.message.content[]? | .text // ("· " + (.name // ""))'
 #
 # Resumable: each finished step drops a marker in .specify/auto/, so re-running
@@ -79,6 +81,15 @@ step_name() {
     printf '%s' "${n#speckit-}"
 }
 
+# The number the next spec directory will get: specs/039-* on disk means the
+# first task in the job file is feature 040. 3-6 digits, so timestamp-prefixed
+# directories (YYYYMMDD-HHMMSS-) cannot be read as a feature number.
+next_spec_number() {
+    local highest
+    highest=$(ls "$1" 2>/dev/null | sed -n 's/^\([0-9]\{3,6\}\)-.*/\1/p' | sort -n | tail -1)
+    echo $(( 10#${highest:-0} + 1 ))
+}
+
 # scripts/speckit-auto.sh --self-test
 if [ "${1:-}" = "--self-test" ]; then
     now=1700000000
@@ -107,6 +118,13 @@ FIX
     grep -qE "$TRANSIENT_RE" "$tmp" || { echo "FAIL 529 not treated as transient"; exit 1; }
     printf '%s\n' 'the handler returns a 500 error when the upload fails' > "$tmp"
     grep -qE "$TRANSIENT_RE" "$tmp" && { echo "FAIL prose read as transient"; exit 1; }
+
+    tmpd=$(mktemp -d)
+    [ "$(next_spec_number "$tmpd")" = 1 ]      || { echo "FAIL empty specs"; exit 1; }
+    mkdir "$tmpd/039-feature-tour" "$tmpd/007-old" "$tmpd/20260824-090000-ts"
+    touch "$tmpd/mobile-ui-design.md"
+    [ "$(next_spec_number "$tmpd")" = 40 ]     || { echo "FAIL next spec number"; exit 1; }
+    rm -rf "$tmpd"
 
     [ "$(step_name '/speckit-plan')" = plan ]            || { echo "FAIL step name compat"; exit 1; }
     [ "$(step_name '/speckit-specify {}')" = specify ]   || { echo "FAIL step name arg"; exit 1; }
@@ -150,6 +168,12 @@ STATE="$ROOT/.specify/auto"
 [ "$(basename "$FEATURES_FILE")" = features.yaml ] ||
     STATE="$STATE-$(printf '%s' "$(basename "$FEATURES_FILE")" | tr -cs 'A-Za-z0-9' '-')"
 mkdir -p "$STATE/logs"
+
+# Label tasks with the feature number they produce, not their position in the
+# file, so logs and markers line up with specs/. Recorded once per state dir:
+# specs/ grows as the run proceeds and a resume must keep the same labels.
+[ -s "$STATE/base" ] || next_spec_number "$ROOT/specs" > "$STATE/base"
+BASE=$(cat "$STATE/base")
 
 # Two concurrent runs would race on .specify/feature.json and hand a step the
 # wrong feature. mkdir is atomic, so it makes a usable lock.
@@ -223,7 +247,7 @@ if [ -n "${DONE:-}" ]; then
         { echo "[auto] $FEATURES_FILE has no task $n" >&2; exit 1; }
     [ -z "$dir" ] || [ -d "$ROOT/$dir" ] || [ -d "$dir" ] ||
         { echo "[auto] no such directory: $dir" >&2; exit 1; }
-    slot="$STATE/$(printf '%02d' "$n")"
+    slot="$STATE/$(printf '%03d' "$((BASE + n - 1))")"
     printf '%s' "${FEATURES[$((n - 1))]}" > "$slot.desc"
     [ -n "$dir" ] && printf '%s\n' "$dir" > "$slot.dir"
     while IFS= read -r p <&3; do
@@ -294,13 +318,14 @@ for desc in "${FEATURES[@]}"; do
     # ONLY=3 runs just the third feature, e.g. to watch one epic all the way
     # through before turning the rest loose.
     [ -n "${ONLY:-}" ] && [ "$i" != "$ONLY" ] && continue
-    slot="$STATE/$(printf '%02d' "$i")"
+    num=$(printf '%03d' "$((BASE + i - 1))")
+    slot="$STATE/$num"
     marks=""
-    $STATUS || echo "=== [$i/${#FEATURES[@]}] $desc"
+    $STATUS || echo "=== [$num — $i/${#FEATURES[@]}] $desc"
     # Markers are keyed by position, so inserting or reordering a line would
     # silently attach one feature's progress to another. Fail loudly instead.
     if [ -f "$slot.desc" ] && [ "$(cat "$slot.desc")" != "$desc" ]; then
-        echo "[auto] feature $i is not the one that ran before — append new features to the end of" >&2
+        echo "[auto] feature $num is not the one that ran before — append new features to the end of" >&2
         echo "       $FEATURES_FILE, or delete $slot.* to run this line from scratch." >&2
         exit 1
     fi
@@ -333,8 +358,8 @@ for desc in "${FEATURES[@]}"; do
                    echo "       .specify/feature.json ($(jq -r .feature_directory "$ROOT/.specify/feature.json" 2>/dev/null))" >&2
                fi ;;
         esac
-        run_claude "$prompt" "$STATE/logs/$i-$step.log" || {
-            echo "[auto] step '$step' failed for task $i, see $STATE/logs/$i-$step.log" >&2
+        run_claude "$prompt" "$STATE/logs/$num-$step.log" || {
+            echo "[auto] step '$step' failed for task $i, see $STATE/logs/$num-$step.log" >&2
             exit 1
         }
         $DRY_RUN && continue
@@ -344,7 +369,7 @@ for desc in "${FEATURES[@]}"; do
         esac
         touch "$slot.$step.done"
     done 3<<< "$STEPS"
-    $STATUS && { printf '%2d %s %.60s\n' "$i" "$marks" "$desc"; continue; }
+    $STATUS && { printf '%s %s %.60s\n' "$num" "$marks" "$desc"; continue; }
 
     # One commit per epic, so an overnight run leaves a history that can be
     # reviewed and reverted epic by epic instead of one undifferentiated pile.
@@ -353,13 +378,13 @@ for desc in "${FEATURES[@]}"; do
     if [ "$DRY_RUN" = false ] && [ -n "$(git -C "$ROOT" status --porcelain)" ]; then
         git -C "$ROOT" add -A
         git -C "$ROOT" commit -q -F - <<COMMIT
-Epic $i: $(printf '%s' "${desc%%:*}" | cut -c1-60)
+Epic $num: $(printf '%s' "${desc%%:*}" | cut -c1-60)
 
 $desc
 
 Co-Authored-By: Claude Opus 5 (1M context) <noreply@anthropic.com>
 COMMIT
-        echo "[auto] committed epic $i: $(git -C "$ROOT" log --oneline -1)"
+        echo "[auto] committed epic $num: $(git -C "$ROOT" log --oneline -1)"
     fi
 done
 $STATUS && printf '   %s\n' "$(printf '%s\n' "$STEPS" | while IFS= read -r p; do
