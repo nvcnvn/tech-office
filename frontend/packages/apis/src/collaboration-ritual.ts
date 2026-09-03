@@ -8,7 +8,7 @@ import { collaborationClient } from './rpc';
 import rpcCall from './rpcWrapper';
 import { protoTimestampToDate, dateToProtoTimestamp } from './proto-utils';
 import { collaboration } from 'rpc';
-import type { CollaborationMode, RitualInstanceTask, Task } from './collaboration';
+import type { CollaborationMode, ProjectState, RitualInstanceTask, Task } from './collaboration';
 import { getTask, isRitualInstanceTask, listTasks } from './collaboration';
 
 // =============================================================================
@@ -206,6 +206,7 @@ export interface EmployeeComplianceSummary {
 
 export interface RitualWorklistBuckets {
 	overdue: RitualInstanceTask[];
+	missed: RitualInstanceTask[];
 	today: RitualInstanceTask[];
 	upcoming: RitualInstanceTask[];
 	needsResubmission: RitualInstanceTask[];
@@ -217,6 +218,7 @@ export interface MixedOverviewSummary {
 	standardTaskCount: number;
 	ritualTaskCount: number;
 	overdueRitualCount: number;
+	missedRitualCount: number;
 	todayRitualCount: number;
 	pendingReviewCount: number;
 	needsAttentionNow: Array<{
@@ -687,7 +689,32 @@ function startOfDay(date: Date): Date {
 	return normalized;
 }
 
-function classifyRitualTaskBucket(task: RitualInstanceTask, now: Date): keyof RitualWorklistBuckets {
+/**
+ * Buckets one ritual instance for the worklist.
+ *
+ * Lateness is read from the instance's stored state category, never recomputed here. The
+ * server's reconciliation sweep is the single authority on whether an instance is overdue
+ * or missed, and a browser comparing `completionDeadline` against its own clock is exactly
+ * how two screens end up disagreeing about the same instance.
+ *
+ * Only `today` and `upcoming` are still derived client-side, because they are questions
+ * about the calendar rather than about lateness.
+ */
+function classifyRitualTaskBucket(
+	task: RitualInstanceTask,
+	states: ProjectState[],
+	now: Date
+): keyof RitualWorklistBuckets {
+	const category = states.find((state) => state.id === task.stateId)?.category;
+
+	if (category === 'missed') {
+		return 'missed';
+	}
+
+	if (category === 'overdue') {
+		return 'overdue';
+	}
+
 	if ((task.evidenceProgress?.rejectedCount ?? 0) > 0) {
 		return 'needsResubmission';
 	}
@@ -698,11 +725,6 @@ function classifyRitualTaskBucket(task: RitualInstanceTask, now: Date): keyof Ri
 
 	const today = startOfDay(now).getTime();
 	const scheduled = task.scheduledDate ? startOfDay(new Date(task.scheduledDate)).getTime() : undefined;
-	const deadline = task.completionDeadline?.getTime();
-
-	if ((deadline !== undefined && deadline < now.getTime()) || (scheduled !== undefined && scheduled < today)) {
-		return 'overdue';
-	}
 
 	if (scheduled !== undefined && scheduled === today) {
 		return 'today';
@@ -713,10 +735,12 @@ function classifyRitualTaskBucket(task: RitualInstanceTask, now: Date): keyof Ri
 
 export function groupRitualWorklistBuckets(
 	tasks: Array<Task | RitualInstanceTask>,
+	states: ProjectState[],
 	now: Date = new Date()
 ): RitualWorklistBuckets {
 	const buckets: RitualWorklistBuckets = {
 		overdue: [],
+		missed: [],
 		today: [],
 		upcoming: [],
 		needsResubmission: [],
@@ -728,7 +752,7 @@ export function groupRitualWorklistBuckets(
 			continue;
 		}
 
-		const bucket = classifyRitualTaskBucket(task, now);
+		const bucket = classifyRitualTaskBucket(task, states, now);
 		buckets[bucket].push(task);
 	}
 
@@ -738,9 +762,10 @@ export function groupRitualWorklistBuckets(
 export function buildMixedOverviewSummary(
 	projectId: string,
 	tasks: Array<Task | RitualInstanceTask>,
+	states: ProjectState[],
 	now: Date = new Date()
 ): MixedOverviewSummary {
-	const ritualBuckets = groupRitualWorklistBuckets(tasks, now);
+	const ritualBuckets = groupRitualWorklistBuckets(tasks, states, now);
 	const standardTasks = tasks.filter((task) => task.taskKind === 'standard');
 	const ritualTasks = tasks.filter(isRitualInstanceTask);
 	const today = startOfDay(now).getTime();
@@ -762,6 +787,7 @@ export function buildMixedOverviewSummary(
 		standardTaskCount: standardTasks.length,
 		ritualTaskCount: ritualTasks.length,
 		overdueRitualCount: ritualBuckets.overdue.length,
+		missedRitualCount: ritualBuckets.missed.length,
 		todayRitualCount: ritualBuckets.today.length,
 		pendingReviewCount: ritualBuckets.pendingReview.length,
 		needsAttentionNow,

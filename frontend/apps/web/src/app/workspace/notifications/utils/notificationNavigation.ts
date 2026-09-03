@@ -45,9 +45,13 @@ function mapNotificationTypeToFocusIntent(notificationType: string | undefined):
 			return RITUAL_FOCUS_INTENT_REVIEW_PENDING;
 		case 'evidence_rejected':
 			return RITUAL_FOCUS_INTENT_SUBMIT_REQUIREMENT;
+		case 'ritual_instance_overdue':
+			// Overdue is still recoverable, so the notification opens ready to submit.
+			return RITUAL_FOCUS_INTENT_SUBMIT_REQUIREMENT;
 		case 'evidence_approved':
-		case 'ritual_instance_assigned':
+		case 'ritual_instance_missed':
 		case 'ritual_instances_scheduled':
+			// Missed is terminal: there is nothing left to submit.
 			return RITUAL_FOCUS_INTENT_VIEW_INSTANCE;
 		default:
 			return undefined;

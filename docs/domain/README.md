@@ -1,6 +1,6 @@
 # Domain Snapshots
 
-**Status date: 2026-09-02** · Branch at capture: `038-chat-task-quick-action`
+**Status date: 2026-09-03** · Branch at capture: `040-ritual-overdue-missed`
 
 These documents describe **what the system does today**, domain by domain, derived by
 reading the code, the proto contracts and `backend/database/scripts/schema.sql` — not by
@@ -29,7 +29,7 @@ record of behaviour.** Where they disagree, the code wins and the drift is recor
 | [chat.md](chat.md) | Channels, messages, threads, reactions, typing, sidebar config, chat file uploads | `internal/chat`, `rpc/v1/chat.proto` |
 | [voice.md](voice.md) | Voice calls, voice messages, recordings, transcripts, LiveKit integration | `internal/voice` |
 | [notifications-presence.md](notifications-presence.md) | Notification hub, subscriptions, SSE, push, rescue push, presence ping-pong | `internal/notification` |
-| [rituals-tasks.md](rituals-tasks.md) | Projects, tasks, workflow rules, ritual definitions, evidence, the global generation sweep | `internal/collaboration` |
+| [rituals-tasks.md](rituals-tasks.md) | Projects, tasks, workflow rules, ritual definitions, evidence, the generation and reconciliation sweeps | `internal/collaboration` |
 | [docs-knowledge.md](docs-knowledge.md) | Documents, versions, comments, embeds, collaborative editing | `internal/docs` |
 | [files.md](files.md) | Upload flow, quota, virus scan & validation, access rules, PDF conversion, content index | `internal/files` |
 | [calendar.md](calendar.md) | Events, recurrence, attendees, resources, booking links, delegation, check-in | `internal/calendar` |
@@ -74,8 +74,8 @@ problem is fixed, not annotated — the register is a list of open problems, not
 | D38 | Contract | [workspace-navigation.md](workspace-navigation.md#feature-tour) | The administrator tour's `project` and `ritual` stops are web-only, which `specs/039-feature-tour/contracts/tour-content.md` originally reserved for the `people` stop alone. The mobile app can list projects and rituals but creates neither — no `createProject` or `createRitualDefinition` call exists anywhere in `apps/mobile` — so an actionable "Create a project" there would open a list it cannot add to, which is the empty-screen failure the spec's edge cases forbid. The contract was updated to match before the code was. Clearing the flag is one field per stop once those create screens exist. |
 | D39 | Contract | [workspace-navigation.md](workspace-navigation.md#feature-tour) | FR-013a describes the tour's ritual stop falling back to project creation "when the workspace has no project yet", but organization registration seeds a default project (`internal/organization/logic.go`), so a freshly registered workspace always has one. The fallback is still reachable — default-project creation is allowed to fail without failing registration, and a workspace can archive its last project — and both branches are covered in `apps/web/e2e/feature-tour.spec.ts`, but the ordinary new-workspace path takes the non-fallback branch, not the one the requirement is written around. |
 | D40 | Environment | [workspace-navigation.md](workspace-navigation.md#feature-tour) | The fixture credentials in `frontend/apps/mobile/.maestro/.env` are rejected by the local backend with `invalid email or password`, and the unmodified `auth/signin.yaml` bootstrap fails on them identically, so every Maestro flow in the repository is unrunnable as configured. The feature-tour flows were verified against a throwaway organisation created through the API instead, which is not a repeatable arrangement. Restoring the fixture account — an owner or operator for `owner-tour.yaml`, an account without `iam.inviteUser` for `worker-tour.yaml` — is what makes the standing suite runnable again. |
+| D42 | Contract | [platform.md](platform.md#testing) | `ritual-ux-redesign.spec.ts`'s "if a board is available it is not the default route" assertion builds its pattern with `new RegExp('/workspace/tasks/.+\?view=review')`. In a single-quoted string `\?` is just `?`, so the compiled pattern is `.+?view=review` — a lazy quantifier followed by a literal `view=review`, not an escaped query separator. The negative assertion still passes for the right reason today, but it is looser than it reads and would not catch a URL that reached `view=review` by another path. Pre-existing; found while extending the same spec for feature 040 and left alone rather than silently changing an unrelated assertion's meaning. |
 | D41 | Environment | [platform.md](platform.md#testing) | Four web E2E specs fail against a local backend independently of any feature work, so `make test-frontend` is not green on a clean tree: `context-rail.spec.ts:155` (the rail's live global blocks on the calendar route), `legal-surface.spec.ts:59` (the signup submit button is not disabled before the terms box is ticked), `user-guide-screenshots.spec.ts:626` (sign-in screens, fails in 0 ms — a setup dependency, not the assertion), and `voice-communication.spec.ts:157` (the decline is not reflected in the caller's timeline). Verified by reverting `frontend/apps/web` entirely and re-running the four: all four still fail. A fifth, `ritual-ux-redesign.spec.ts:375`, fails only under full-suite load and passes in isolation. |
-| D29 | Behaviour | [rituals-tasks.md](rituals-tasks.md#known-drift) | Nothing sweeps a ritual instance into `overdue` or `missed`. `overdue` is derived only when an evidence write triggers `reconcileRitualTaskState`; an instance whose deadline passes with no evidence activity stays in `todo` and nobody is notified. Making these real states needs a reconciliation sweep of its own and the notification types put back in the Go list and the DB CHECK together. |
 
 ### Fixed on 2026-08-30
 
@@ -99,6 +99,16 @@ D31 and D32, the two deferred halves of feature 038. The message→task chip
 (`ListTasksBySourceMessages`), the task origin block (`GetTaskOrigin`) and the channel's
 remembered destination (`GetChannelTaskDestination`, `SetChannelTaskDestination`) all have
 logic-layer implementations, Connect handlers and callers on both clients now.
+
+### Fixed on 2026-09-03
+
+D29. Feature 040 makes `overdue` and `missed` real stored states. A second platform-wide
+job, `ritual_reconciliation_sweep`, runs every five minutes, discovers organizations through
+late *instances* rather than active definitions, and drives the same
+`reconcileRitualTaskStateForTask` writer the evidence path uses — so the two paths cannot
+diverge. `ritual_instance_overdue` and `ritual_instance_missed` went back into the Go
+constant list and the DB CHECK in one change set, which
+`TestNotificationTypeCheckMatchesGoConstants` enforces.
 
 ## Keeping these current
 

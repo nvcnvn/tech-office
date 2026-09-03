@@ -240,7 +240,7 @@ func (l *logicImpl) SubmitEvidence(
 		return nil, fmt.Errorf("failed to create evidence submission: %w", err)
 	}
 
-	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, taskID); reconcileErr != nil {
+	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, taskID, time.Now()); reconcileErr != nil {
 		return nil, reconcileErr
 	}
 
@@ -277,7 +277,7 @@ func (l *logicImpl) ApproveEvidence(
 		return nil, fmt.Errorf("failed to approve evidence: %w", err)
 	}
 
-	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, sub.TaskID); reconcileErr != nil {
+	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, sub.TaskID, time.Now()); reconcileErr != nil {
 		return nil, reconcileErr
 	}
 
@@ -312,7 +312,7 @@ func (l *logicImpl) RejectEvidence(
 		return nil, fmt.Errorf("failed to reject evidence: %w", err)
 	}
 
-	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, sub.TaskID); reconcileErr != nil {
+	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, sub.TaskID, time.Now()); reconcileErr != nil {
 		return nil, reconcileErr
 	}
 

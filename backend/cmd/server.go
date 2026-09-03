@@ -479,6 +479,25 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	}
 	slog.InfoContext(ctx, "ritual generation sweep scheduled", "cadence", "1m")
 
+	// Feature 040: the second platform-wide collaboration job. Generation creates ritual
+	// instances; reconciliation is what makes overdue and missed real stored states with
+	// alerts rather than something each client computes for itself.
+	ritualReconciliationWorkflow := &collaboration.RitualReconciliationWorkflow{
+		Logic:     collaborationLogic,
+		Queries:   queries,
+		AdminPool: adminPool,
+	}
+	flows.Register(flowsRegistry, ritualReconciliationWorkflow)
+	if err := txn.WithTxn(ctx, adminPool, func(ctx context.Context, tx database.DBTX) error {
+		return flows.ScheduleTx(ctx, flowsClient, tx, ritualReconciliationWorkflow,
+			&collaboration.RitualReconciliationInput{},
+			ritualReconciliationWorkflow.Name(), flows.Every(collaboration.RitualReconciliationInterval))
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to bootstrap ritual reconciliation sweep schedule", "error", err)
+		return err
+	}
+	slog.InfoContext(ctx, "ritual reconciliation sweep scheduled", "cadence", collaboration.RitualReconciliationInterval.String())
+
 	collaborationConnect := collaboration.NewCollaborationServiceConnect(
 		collaborationLogic,
 		tenantPool,

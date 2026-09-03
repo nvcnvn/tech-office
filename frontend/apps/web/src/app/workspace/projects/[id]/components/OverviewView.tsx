@@ -48,15 +48,15 @@ function buildTaskHref(projectId: string, task: Task): string {
 
 export default function OverviewView() {
 	const colors = useThemeColors();
-	const { project, tasks } = useProjectContext();
+	const { project, tasks, states } = useProjectContext();
 
 	const overview = useMemo(() => {
 		if (!project) {
 			return null;
 		}
 
-		return buildMixedOverviewSummary(project.id, tasks);
-	}, [project, tasks]);
+		return buildMixedOverviewSummary(project.id, tasks, states);
+	}, [project, tasks, states]);
 
 	const todayStandardTasks = useMemo(() => {
 		const today = new Date();

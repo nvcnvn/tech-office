@@ -229,6 +229,18 @@ export default function TaskDetailPage() {
 			return null;
 		}
 
+		// The stored state category outranks evidence progress. A missed instance is
+		// terminal, so telling the worker to "start with the highlighted proof step" would
+		// be asking for work the system will no longer accept.
+		const stateCategory = states.find((state) => state.id === task.stateId)?.category;
+		if (stateCategory === 'missed') {
+			return {
+				severity: 'error' as const,
+				message:
+					'Missed. The completion window closed on this ritual run and it can no longer be completed. It has been reported to the people responsible for this project.',
+			};
+		}
+
 		if (ritualSectionTarget === 'review') {
 			return {
 				severity: 'warning' as const,
@@ -238,6 +250,14 @@ export default function TaskDetailPage() {
 		}
 
 		const progress = task.evidenceProgress;
+		if (stateCategory === 'overdue') {
+			return {
+				severity: 'error' as const,
+				message:
+					'Overdue. This ritual run passed its deadline but can still be completed — submit the missing proof below before the completion window closes.',
+			};
+		}
+
 		if ((progress?.rejectedCount ?? 0) > 0) {
 			return {
 				severity: 'error' as const,
@@ -266,7 +286,7 @@ export default function TaskDetailPage() {
 			severity: 'success' as const,
 			message: 'This live ritual instance already has the required proof in place. Review the recorded outcome below.',
 		};
-	}, [ritualSectionTarget, task]);
+	}, [ritualSectionTarget, states, task]);
 
 	// Re-triggers EnsureTaskResources on the backend by calling getTask again.
 	// Used when a ritual instance task was opened but resource provisioning failed.

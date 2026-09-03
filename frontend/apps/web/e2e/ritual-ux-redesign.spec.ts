@@ -119,6 +119,7 @@ test.describe('Ritual UX Redesign', () => {
 		let worker: TestUser;
 		let projectId: string;
 		let overdueTaskId: string;
+		let missedTaskId: string;
 		let todayTaskId: string;
 		let rejectedTaskId: string;
 		let pendingTaskId: string;
@@ -155,6 +156,7 @@ test.describe('Ritual UX Redesign', () => {
 			);
 			todayTaskId = primarySeries.todayTask.id as string;
 			overdueTaskId = primarySeries.futureTasks[0].id as string;
+			missedTaskId = primarySeries.futureTasks[1].id as string;
 
 			const rejectedDefinition = await api.createRitualDefinition(owner, {
 				projectId,
@@ -189,7 +191,11 @@ test.describe('Ritual UX Redesign', () => {
 			);
 			pendingTaskId = pendingSeries.todayTask.id as string;
 
-			api.forceRitualTaskOverdue(overdueTaskId);
+			// Seed the two stored lateness states the reconciliation sweep produces. Every
+			// surface reads the state category now, so backdating the deadline alone would
+			// leave both instances looking on time.
+			api.forceRitualTaskLateness(overdueTaskId, 'overdue');
+			api.forceRitualTaskLateness(missedTaskId, 'missed');
 			await waitForRitualTaskState(
 				owner,
 				overdueTaskId,
@@ -197,6 +203,14 @@ test.describe('Ritual UX Redesign', () => {
 					typeof task.scheduledDate === 'string' &&
 					task.scheduledDate.slice(0, 10) < new Date().toISOString().slice(0, 10),
 				'overdue schedule change'
+			);
+			await waitForRitualTaskState(
+				owner,
+				missedTaskId,
+				(task) =>
+					typeof task.scheduledDate === 'string' &&
+					task.scheduledDate.slice(0, 10) < new Date().toISOString().slice(0, 10),
+				'missed schedule change'
 			);
 
 			const rejectedSubmission = await api.submitEvidence(worker, {
@@ -246,6 +260,35 @@ test.describe('Ritual UX Redesign', () => {
 			await expect(page.getByTestId(`today-task-card-${rejectedTaskId}`)).toBeVisible();
 			await expect(page.getByTestId('today-ritual-section-today')).toContainText('Due Today');
 			await expect(page.getByTestId(`today-task-card-${todayTaskId}`)).toBeVisible();
+		});
+
+		test('overdue and missed are read from the stored state, and missed has its own section', async ({ page }) => {
+			// FR-022, SC-005: the browser no longer decides what "late" means. Both
+			// instances carry a past deadline; only their stored state tells them apart.
+			await loginAs(page, worker);
+			await page.goto(`/workspace/tasks/${projectId}`);
+
+			await expect(page.getByTestId('today-ritual-section-missed')).toContainText('Missed');
+			await expect(page.getByTestId(`today-task-card-${missedTaskId}`)).toBeVisible();
+			await expect(page.getByTestId('today-ritual-section-overdue')).toContainText('Overdue');
+			await expect(page.getByTestId(`today-task-card-${overdueTaskId}`)).toBeVisible();
+
+			// A missed instance must not also appear as overdue, and vice versa — two
+			// screens disagreeing about one instance is the failure this feature closes.
+			await expect(
+				page.getByTestId('today-ritual-section-overdue').getByTestId(`today-task-card-${missedTaskId}`)
+			).toHaveCount(0);
+			await expect(
+				page.getByTestId('today-ritual-section-missed').getByTestId(`today-task-card-${overdueTaskId}`)
+			).toHaveCount(0);
+		});
+
+		test('the task detail page agrees with the section the instance was listed in', async ({ page }) => {
+			await loginAs(page, worker);
+			await page.goto(`/workspace/tasks/${projectId}/tasks/${missedTaskId}`);
+
+			await expect(page.getByTestId('ritual-worker-flow-summary')).toBeVisible();
+			await expect(page.getByTestId('ritual-worker-flow-summary')).toContainText('Missed');
 		});
 
 		test('pending-review items remain a secondary awareness cue rather than replacing worker action groups', async ({ page }) => {

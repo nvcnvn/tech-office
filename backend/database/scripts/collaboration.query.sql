@@ -277,6 +277,20 @@ SET state_id = $3, updated_at = $4
 WHERE organization_id = $1 AND id = $2 AND is_deleted = FALSE
 RETURNING *;
 
+-- name: UpdateRitualTaskStateIfUnchanged :one
+-- Compare-and-set used by ritual reconciliation. The expected_state_id predicate is what
+-- makes two overlapping passes safe without a lock or an advisory table: the second pass
+-- matches zero rows, so it neither rewrites the state nor publishes a second notification.
+-- Without it, two passes that read the same row before either wrote would both perform the
+-- transition and the recipient would be told twice.
+UPDATE collaboration.task
+SET state_id = @state_id, updated_at = @updated_at
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND state_id = @expected_state_id
+  AND is_deleted = FALSE
+RETURNING *;
+
 -- name: AppendTaskFileID :one
 UPDATE collaboration.task
 SET file_ids = array_append(file_ids, @file_id::uuid), updated_at = @updated_at
@@ -329,8 +343,11 @@ SELECT
   COUNT(*) FILTER (WHERE urgency_bucket = 'due_today')::int AS due_today_count,
   COUNT(*) FILTER (WHERE urgency_bucket = 'overdue')::int AS overdue_count
 FROM (
+  -- A ritual instance's lateness is its stored state, not a date comparison: the
+  -- reconciliation sweep is the authority. The OR keeps standard tasks working
+  -- unchanged, since standard projects have no 'overdue' state to match.
   SELECT CASE
-    WHEN t.due_date < sqlc.arg(as_of_date)::date THEN 'overdue'
+    WHEN ps.category = 'overdue' OR t.due_date < sqlc.arg(as_of_date)::date THEN 'overdue'
     ELSE 'due_today'
   END AS urgency_bucket
   FROM collaboration.task t
@@ -357,8 +374,9 @@ SELECT
   p.key AS project_key,
   t.title,
   t.due_date,
+  -- Same rule as GetAssignedWorkSummaryCounts: the stored state wins for rituals.
   CASE
-    WHEN t.due_date < sqlc.arg(as_of_date)::date THEN 'overdue'
+    WHEN ps.category = 'overdue' OR t.due_date < sqlc.arg(as_of_date)::date THEN 'overdue'
     ELSE 'due_today'
   END AS urgency_bucket,
   ps.name AS state_name
@@ -381,7 +399,7 @@ WHERE t.organization_id = sqlc.arg(organization_id)
   AND t.due_date <= sqlc.arg(as_of_date)::date
   AND (sqlc.arg(include_ritual_instances)::boolean OR t.task_kind <> 'ritual_instance')
 ORDER BY
-  CASE WHEN t.due_date < sqlc.arg(as_of_date)::date THEN 0 ELSE 1 END,
+  CASE WHEN ps.category = 'overdue' OR t.due_date < sqlc.arg(as_of_date)::date THEN 0 ELSE 1 END,
   t.due_date ASC,
   t.updated_at DESC,
   t.id DESC
@@ -798,6 +816,62 @@ FROM collaboration.ritual_definition
 WHERE is_archived = FALSE
 GROUP BY organization_id
 ORDER BY organization_id;
+
+-- lint:cross-tenant reconciliation sweep — the organization list is the result, so it cannot be the input
+-- name: ListOrganizationIDsWithReconcilableRitualInstances :many
+-- System-scope background query for the ritual reconciliation sweep. Intentionally NOT
+-- filtered by organization_id: its purpose is to discover which organizations to sweep.
+-- Returns only organization IDs, no tenant row data, and runs on AdminPool. See
+-- Constitution Principle I ("Use AdminPool ONLY for system operations (requires documented
+-- justification)").
+--
+-- The shared candidate predicate, used verbatim by ListRitualInstancesForReconciliation:
+--   task_kind = 'ritual_instance'   standard tasks are never reconciled
+--   is_deleted = FALSE              deleted instances are not work
+--   detached_from_ritual = FALSE    FR-004: a detached instance is no longer a ritual
+--   completion_deadline IS NOT NULL FR-005: no deadline means never late
+--   completion_deadline < now       the lateness threshold itself
+--   ps.category IN (scheduled, todo, in_progress, overdue)
+--       'submitted' is absent because fully submitted evidence awaiting review is the
+--       reviewer's delay, not the worker's; 'verified', 'missed' and 'skipped' are
+--       terminal (FR-003, FR-004); 'overdue' is present because that is how an instance
+--       reaches 'missed'.
+--
+-- There is deliberately NO join to collaboration.ritual_definition: an instance outlives
+-- its definition's archival and must still be reconciled (FR-009).
+-- ponytail: cross-shard scan each sweep; cost scales with the number of late instances.
+-- If it becomes measurable, add a partial index on (organization_id, completion_deadline)
+-- WHERE task_kind = 'ritual_instance' AND is_deleted = FALSE.
+SELECT DISTINCT t.organization_id
+FROM collaboration.task t
+JOIN collaboration.project_state ps
+  ON ps.organization_id = t.organization_id AND ps.id = t.state_id
+WHERE t.task_kind = 'ritual_instance'
+  AND t.is_deleted = FALSE
+  AND t.detached_from_ritual = FALSE
+  AND t.completion_deadline IS NOT NULL
+  AND t.completion_deadline < @now
+  AND ps.category IN ('scheduled', 'todo', 'in_progress', 'overdue')
+ORDER BY t.organization_id;
+
+-- name: ListRitualInstancesForReconciliation :many
+-- Organization-scoped counterpart to ListOrganizationIDsWithReconcilableRitualInstances.
+-- Same candidate predicate (documented in full on that query), plus the per-pass bound.
+-- Ascending completion_deadline makes a partially drained backlog progress strictly:
+-- the oldest late instances are always reconciled first (FR-013).
+SELECT t.*
+FROM collaboration.task t
+JOIN collaboration.project_state ps
+  ON ps.organization_id = t.organization_id AND ps.id = t.state_id
+WHERE t.organization_id = @organization_id
+  AND t.task_kind = 'ritual_instance'
+  AND t.is_deleted = FALSE
+  AND t.detached_from_ritual = FALSE
+  AND t.completion_deadline IS NOT NULL
+  AND t.completion_deadline < @now
+  AND ps.category IN ('scheduled', 'todo', 'in_progress', 'overdue')
+ORDER BY t.completion_deadline ASC, t.id ASC
+LIMIT @instance_limit;
 
 -- name: UpdateRitualDefinitionLastGenerated :exec
 UPDATE collaboration.ritual_definition

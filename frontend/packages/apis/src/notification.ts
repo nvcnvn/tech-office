@@ -60,7 +60,6 @@ export type NotificationType =
 	| 'doc_updated'
 	| 'doc_commented'
 	| 'doc_mentioned'
-	| 'ritual_instance_assigned'
 	| 'ritual_instance_overdue'
 	| 'ritual_instance_missed'
 	| 'ritual_instances_scheduled'

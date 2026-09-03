@@ -56,17 +56,22 @@ function urgencyLabel(hours: number | null): string {
 // Task Card (handles both ritual and standard tasks)
 // =============================================================================
 
-type RitualBucketId = 'overdue' | 'needsResubmission' | 'today' | 'upcoming';
+type RitualBucketId = 'missed' | 'overdue' | 'needsResubmission' | 'today' | 'upcoming';
 
-const RITUAL_BUCKET_ORDER: RitualBucketId[] = ['overdue', 'needsResubmission', 'today', 'upcoming'];
+const RITUAL_BUCKET_ORDER: RitualBucketId[] = ['missed', 'overdue', 'needsResubmission', 'today', 'upcoming'];
 
 const RITUAL_BUCKET_META: Record<
 	RitualBucketId,
 	{ title: string; description: string; empty: string }
 > = {
+	missed: {
+		title: 'Missed',
+		description: 'Ritual runs the completion window closed on. These cannot be recovered.',
+		empty: 'Nothing has been missed.',
+	},
 	overdue: {
 		title: 'Overdue',
-		description: 'Ritual runs that are already past their completion window.',
+		description: 'Ritual runs that are already past their deadline but can still be completed.',
 		empty: 'Nothing is overdue right now.',
 	},
 	needsResubmission: {
@@ -240,7 +245,7 @@ function TaskCard({ task, showKind, projectId, actionLabel }: TaskCardProps) {
 
 export default function TodayView() {
 	const colors = useThemeColors();
-	const { project } = useProjectContext();
+	const { project, states } = useProjectContext();
 	const [tasks, setTasks] = useState<Task[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -311,9 +316,11 @@ export default function TodayView() {
 		return { ritualGroups: groups, ritualTasks: rituals, standardTasks: standard };
 	}, [tasks]);
 
+	// The buckets read each instance's stored state category, so this view agrees with the
+	// board, the task detail page and the Health tab by construction rather than by luck.
 	const ritualBuckets = useMemo(
-		() => (isRitualOnly ? groupRitualWorklistBuckets(tasks) : null),
-		[isRitualOnly, tasks]
+		() => (isRitualOnly ? groupRitualWorklistBuckets(tasks, states) : null),
+		[isRitualOnly, tasks, states]
 	);
 
 	const pendingReviewCount = ritualBuckets?.pendingReview.length ?? 0;
@@ -379,11 +386,11 @@ export default function TodayView() {
 							return (
 								<Box key={bucketId} data-testid={`today-ritual-section-${bucketId}`}>
 									<Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.75 }}>
-										<RepeatIcon sx={{ fontSize: 18, color: bucketId === 'needsResubmission' ? 'error.main' : bucketId === 'overdue' ? 'warning.main' : 'primary.main' }} />
+										<RepeatIcon sx={{ fontSize: 18, color: bucketId === 'missed' || bucketId === 'needsResubmission' ? 'error.main' : bucketId === 'overdue' ? 'warning.main' : 'primary.main' }} />
 										<Typography variant="subtitle1" sx={{ fontWeight: 600, ...colors.text.primary.style, flex: 1 }}>
 											{meta.title}
 										</Typography>
-										<Chip label={sectionTasks.length} size="small" color={bucketId === 'needsResubmission' ? 'error' : bucketId === 'overdue' ? 'warning' : 'default'} />
+										<Chip label={sectionTasks.length} size="small" color={bucketId === 'missed' || bucketId === 'needsResubmission' ? 'error' : bucketId === 'overdue' ? 'warning' : 'default'} />
 									</Box>
 									<Typography variant="body2" sx={{ ...colors.text.secondary.style, mb: 1.5 }}>
 										{meta.description}

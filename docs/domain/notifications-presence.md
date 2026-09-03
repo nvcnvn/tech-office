@@ -4,7 +4,7 @@ The delivery backbone every other domain publishes into, plus the presence signa
 decides how something gets delivered. Owned by `internal/notification`; contract in
 `rpc/v1/notification.proto` (`NotificationService`, 19 RPCs + one server-streaming RPC).
 
-**Status date: 2026-08-29.** Supersedes specs 007, 008, 012, 019, 021, 033, 037. Deeper
+**Status date: 2026-09-03.** Supersedes specs 007, 008, 012, 019, 021, 033, 037, 040. Deeper
 references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 `NOTIFICATION-RESCUE-PUSH-DESIGN.md`, `NOTIFICATION-RULES.md`, `FCM-SETUP.md`.
 
@@ -349,11 +349,21 @@ than inferring from loose IDs.
 
 ## Notification types
 
-29 values, grouped: chat (`message`, `mention`, `reply`, `typing`, `reaction`), voice (4),
-task (6), docs (3), ritual/evidence (4 — `evidence_submitted`, `evidence_approved`,
-`evidence_rejected`, `ritual_instances_scheduled`), calendar (6), and
-`account_removal_requested`. Source domains: `chat`, `crm`, `projects`, `hr`, `support`,
-`finance`, `docs`, `system`, `calendar`.
+31 values, grouped: chat (`message`, `mention`, `reply`, `typing`, `reaction`), voice (4),
+task (6), docs (3), ritual/evidence (6 — `evidence_submitted`, `evidence_approved`,
+`evidence_rejected`, `ritual_instances_scheduled`, `ritual_instance_overdue`,
+`ritual_instance_missed`), calendar (6), and `account_removal_requested`. Source domains:
+`chat`, `crm`, `projects`, `hr`, `support`, `finance`, `docs`, `system`, `calendar`.
+
+`ritual_instance_overdue` and `ritual_instance_missed` were removed on 2026-08-30 as dead
+values and restored by feature 040, which gave them a producer: the ritual reconciliation
+sweep, described in
+[rituals-tasks.md](rituals-tasks.md#reconciliation--the-second-global-sweep-feature-040).
+There is deliberately no `ritual_instance_assigned` — the per-instance assignment
+notification was replaced by the `ritual_instances_scheduled` summary and has no producer.
+Both new types are ordinary `priority = 2` / `policy_key = task_status` /
+`delivery_class = persistent` notifications on the `projects` domain, so do-not-disturb,
+domain mute and presence apply to them through the generic path with no special case.
 
 `notification.AllNotificationTypes()` and the DB CHECK are one list in two places, and
 `TestNotificationTypeCheckMatchesGoConstants` reads the constraint out of the live schema

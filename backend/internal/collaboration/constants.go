@@ -14,6 +14,7 @@ package collaboration
 
 import (
 	"errors"
+	"time"
 
 	"github.com/nvcnvn/tech-office/backend/internal/notification"
 )
@@ -317,10 +318,8 @@ const (
 // Ritual notification type constants. Aliases of the notification package's own
 // definitions, which are the single list the database CHECK is asserted against.
 //
-// There is deliberately no ritual_instance_assigned / _overdue / _missed here: the
-// per-instance assignment notification was replaced by the ritual_instances_scheduled
-// summary, and nothing sweeps a ritual into an overdue or missed state — overdue is
-// derived when an evidence write triggers state reconciliation, not published.
+// There is deliberately no ritual_instance_assigned here: the per-instance assignment
+// notification was replaced by the ritual_instances_scheduled summary and has no producer.
 const (
 	NotificationTypeEvidenceSubmitted = notification.NotificationTypeEvidenceSubmitted
 	NotificationTypeEvidenceApproved  = notification.NotificationTypeEvidenceApproved
@@ -329,6 +328,31 @@ const (
 	// generation run completes, so a scheduler run that creates many instances produces
 	// one notification per person rather than one per instance.
 	NotificationTypeRitualInstancesScheduled = notification.NotificationTypeRitualInstancesScheduled
+	// Published by the ritual reconciliation sweep when it writes an instance into the
+	// overdue state, and one completion window later when it writes it into missed.
+	NotificationTypeRitualInstanceOverdue = notification.NotificationTypeRitualInstanceOverdue
+	NotificationTypeRitualInstanceMissed  = notification.NotificationTypeRitualInstanceMissed
+)
+
+// Ritual reconciliation sweep tuning. These are constants rather than configuration
+// because no operator has asked to vary them and a knob nobody turns is a knob that
+// drifts out of sync with the behaviour it claims to control.
+const (
+	// ritualReconciliationInstanceLimit bounds one organization's work in one pass, so a
+	// large backlog produces more passes rather than one pass that times out (FR-013).
+	ritualReconciliationInstanceLimit = 500
+
+	// ritualReconciliationBackfillHorizon suppresses notifications for instances whose
+	// deadline is further in the past than this. The first deployment of the sweep would
+	// otherwise alert on every historical instance at once (FR-021). The state transition
+	// still happens; only the notification is withheld.
+	ritualReconciliationBackfillHorizon = 7 * 24 * time.Hour
+
+	// RitualReconciliationInterval is the sweep cadence. Five minutes keeps SC-002
+	// ("notified within 10 minutes of the deadline") true with room for run time.
+	// Exported because backend/cmd/server.go schedules the job with it, so the cadence
+	// the code claims and the cadence the scheduler uses cannot drift apart.
+	RitualReconciliationInterval = 5 * time.Minute
 )
 
 // Ritual-specific errors

@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-02.** Supersedes specs 017, 022, 023, 028, 029, 034, 038 (034 and
+**Status date: 2026-09-03.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 
@@ -311,20 +311,83 @@ no DB access, fully unit-testable — partitioning future instances by `isUntouc
 ### Instance state
 
 `determineRitualTaskStateCategory` (`ritual_task_state.go`) derives a category from the
-evidence snapshot, in this precedence order:
+evidence snapshot, the completion deadline and a grace window, in this precedence order:
 
 1. all required evidence approved → `verified`
 2. all required submitted, none rejected → `submitted`
-3. any submission → `in_progress`
-4. `completion_deadline` passed → `overdue`
-5. `scheduled_date` in the future → `scheduled`
-6. otherwise → `todo`
+3. `now > completion_deadline + graceWindow` → `missed`
+4. `now > completion_deadline` → `overdue`
+5. any submission → `in_progress`
+6. `scheduled_date` in the future → `scheduled`
+7. otherwise → `todo`
+
+`graceWindow` is the definition's `completion_window_hours`. Rows 3 and 4 sit **above**
+`in_progress` deliberately: partial progress must not hide lateness. A zero grace window —
+which is what an unloadable definition yields — makes row 3 unreachable while leaving row 4
+live, so a missing definition can flag an instance late but never silently write it into a
+terminal state. A `NULL` `completion_deadline` makes both unreachable: no deadline means
+never late.
 
 `SkipRitualInstance` records a `skip_reason` and moves the instance to `skipped`.
 
-**Reconciliation is evidence-driven only.** `reconcileRitualTaskState` is called from
-`SubmitEvidence`, `ApproveEvidence` and `RejectEvidence` — nowhere else. See
-[Known drift](#known-drift).
+**Terminal categories.** `verified`, `missed` and `skipped` are terminal: no automatic
+transition leaves them, which is also what stops a missed instance being re-notified.
+
+**One writer, two callers.** `reconcileRitualTaskStateForTask` is the only thing that writes
+ritual instance state. It is called from `SubmitEvidence`, `ApproveEvidence` and
+`RejectEvidence` on the evidence path, and per instance by the reconciliation sweep below.
+Because both paths call the same derivation function and the same writer, an instance's
+state never depends on which path last touched it. The overdue/missed notification is
+published *inside* that writer, on the transition it performs, for the same reason.
+
+The write is a compare-and-set (`UpdateRitualTaskStateIfUnchanged`) against the state the
+decision was made from. Two overlapping passes can both read a row before either writes; the
+predicate makes the loser match zero rows, so it neither rewrites the state nor publishes a
+duplicate notification.
+
+If the project holds no state row in the target category — a project whose ritual states were
+never seeded or were deleted — the instance is left where it is and the condition is logged at
+WARN with the project ID and the category.
+
+### Reconciliation — the second global sweep (feature 040)
+
+`ritual_reconciliation_sweep` (`internal/collaboration/ritual_reconciliation_workflow.go`) is
+scheduled every **5 minutes** by `flows.ScheduleTx` at server start, alongside the generation
+sweep, with `RetryPolicy{MaxRetries: 2}`. A retried pass is safe because the pass is
+idempotent.
+
+Each pass:
+
+1. `ListOrganizationIDsWithReconcilableRitualInstances` (via `AdminPool` — cross-org),
+   unfiltered by `organization_id` because its purpose is to *discover* which organizations to
+   sweep. It returns organization IDs and nothing else. It deliberately does **not** join
+   `ritual_definition`: an instance outlives its definition's archival and must still be
+   reconciled.
+2. For each org, `Logic.ReconcileOverdueRitualInstances(ctx, adminPool, orgID, now)` lists at
+   most **500** candidate instances ordered by `completion_deadline ASC, id ASC` and calls the
+   shared writer per instance. Oldest-first ordering makes a partially drained backlog
+   progress strictly; a large backlog produces more passes rather than one failed pass.
+3. An error on one organization is logged with its ID and the loop continues; an error on one
+   instance is logged with its task ID and the organization's remaining instances are still
+   reconciled.
+4. Report `{OrganizationsProcessed, InstancesExamined, MarkedOverdue, MarkedMissed}` as one
+   structured log line, `ritual reconciliation sweep complete`.
+
+The candidate predicate is `task_kind = 'ritual_instance'`, not deleted, not
+`detached_from_ritual`, `completion_deadline IS NOT NULL AND < now`, and state category in
+(`scheduled`, `todo`, `in_progress`, `overdue`). `submitted` is absent because fully submitted
+evidence awaiting review is the reviewer's delay, not the worker's; `overdue` is present
+because that is how an instance reaches `missed`.
+
+The pass holds no state between runs — its cursor is the state column of the instances
+themselves. No advisory lock, no `processed_at` marker, no dedup table. `Sweep(ctx, now)` is
+exported so integration tests can drive a cycle with an injected clock instead of sleeping.
+
+**Backfill horizon.** When `now - completion_deadline` exceeds **7 days** the state transition
+still happens and **no notification is published**, so a first deployment does not alert every
+worker about every historical instance at once. The check is against the stored deadline, never
+against elapsed time since the state change, so a repeated pass cannot change the answer. The
+suppression is logged.
 
 ## Evidence
 
@@ -358,7 +421,11 @@ RPCs: `SubmitEvidence`, `ApproveEvidence`, `RejectEvidence`, `ListEvidenceSubmis
 - `ExportRitualComplianceCSV` — the same data as CSV, name column first.
 - `GetAssignedWorkSummary` — "what's on my plate": due-today and overdue counts plus up to
   20 items bucketed by urgency. Backs the context rail; see
-  [workspace-navigation.md](workspace-navigation.md#context-rail).
+  [workspace-navigation.md](workspace-navigation.md#context-rail). The urgency bucket is
+  `ps.category = 'overdue' OR t.due_date < as_of_date`: the `OR` keeps standard tasks
+  bucketing on the date while making ritual instances agree with their stored state. A
+  `missed` instance drops out of the summary with no query change, because the seeded
+  `Missed` state is `is_closed = true` and both queries already filter `is_closed = FALSE`.
 
 ## Calendar overlay
 
@@ -370,12 +437,33 @@ dependency points calendar → collaboration, never the reverse.
 
 Task: `task_assigned`, `task_status_changed`, `task_commented`, `task_mentioned`,
 `task_description_modified`, `task_updated`. Ritual/evidence: `evidence_submitted`,
-`evidence_approved`, `evidence_rejected`, `ritual_instances_scheduled`. Source domain
-`projects`.
+`evidence_approved`, `evidence_rejected`, `ritual_instances_scheduled`,
+`ritual_instance_overdue`, `ritual_instance_missed`. Source domain `projects`.
 
 `ritual_instances_scheduled` is a **post-loop summary**: one notification per assignee at
 the end of a generation run, listing every instance created for them. It replaced a
 per-instance flood — generating 30 days of a daily ritual used to mean 30 notifications.
+
+`ritual_instance_overdue` and `ritual_instance_missed` are published by the reconciliation
+sweep, from inside the shared state writer, only on a transition it performed:
+
+| | Recipients | Focus intent |
+|---|---|---|
+| `ritual_instance_overdue` | task `assignee`, `reviewer`, `approver`, deduplicated by employee ID | `submit_requirement` — the work is still recoverable |
+| `ritual_instance_missed` | the same, **plus** the project's `owner` and `admin` members when the task has no reviewer and no approver | `view_instance` — the state is terminal |
+
+Project owners are deliberately *not* added on the overdue path: escalating every late
+checklist to them is how an alert becomes noise, and noise is how the alert gets muted. An
+instance with no assignee, reviewer or approver produces no overdue notification at all —
+there is nobody to tell — but its `missed` transition still escalates, which is what closes
+the "unassigned ritual fails silently" hole.
+
+Both carry `priority = 2` (ordinary), `policy_key = task_status`,
+`delivery_class = persistent`, `source_category = activity`, an `action_data` payload of
+`taskId` / `projectId` / `deepLink` / `focusIntent`, and a `projects`/`task` navigation
+target. Because nothing about them is special-cased, do-not-disturb, domain mute and
+presence apply through the ordinary pipeline. They deliberately do **not** use the
+always-deliver priority reserved for mentions and incoming calls.
 
 ## Client surfaces
 
@@ -407,21 +495,6 @@ per-instance flood — generating 30 days of a daily ritual used to mean 30 noti
 `ritual_schedule_change_test.go` and `task_from_message_logic_test.go`.
 
 ## Known drift
-
-**Nothing ever marks a ritual overdue or missed.** `overdue` is only *derived*, and only
-when an evidence write triggers `reconcileRitualTaskState`. An instance whose deadline
-passes with **no** evidence activity is never reconciled: it stays in `todo`, nobody is
-notified, and it shows as overdue only where a query computes urgency at read time
-(`GetAssignedWorkSummary`, health reports). `missed` is a valid `state_category` and a
-`StateCategory` enum value, but no transition anywhere writes it.
-
-The notification types that would have announced those transitions —
-`ritual_instance_overdue`, `ritual_instance_missed`, and the per-instance
-`ritual_instance_assigned` that `ritual_instances_scheduled` replaced — used to sit in the
-code and the DB CHECK with no caller. `20260830000001_drift_register_fixes.up.sql` removed
-all three so the CHECK describes what the product can actually produce. If overdue and
-missed are ever made real states, they need a sweep of their own plus their notification
-types put back in both places; the 034 sweep only generates, it does not reconcile.
 
 **Tasks from chat messages are only partly built.** Creating one works end to end, and the
 origin columns are written; the two RPCs that read them back (`ListTasksBySourceMessages`,

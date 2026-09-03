@@ -190,6 +190,12 @@ type Logic interface {
 	// Ritual Scheduler
 	GenerateRitualInstances(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, now time.Time) (int, error)
 
+	// Ritual Reconciliation
+	// ReconcileOverdueRitualInstances applies the lateness rules to one organization's
+	// late ritual instances and returns what it changed. It is safe to call repeatedly:
+	// an instance already in its target state is neither rewritten nor re-notified.
+	ReconcileOverdueRitualInstances(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, now time.Time) (RitualReconciliationCounts, error)
+
 	// Operational Health
 	GetOperationalHealth(ctx context.Context, tx database.DBTX, orgID, projectID dbuuid.UUID, startDate, endDate pgtype.Date) (*rpcv1.GetOperationalHealthResponse, error)
 	GetRitualComplianceSummary(ctx context.Context, tx database.DBTX, orgID, projectID dbuuid.UUID, startDate, endDate pgtype.Date) (*rpcv1.GetRitualComplianceSummaryResponse, error)

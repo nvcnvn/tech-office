@@ -252,6 +252,18 @@ flowchart TD
 | **Docs** | `doc_updated` | subscribed_activity | activity | persistent | `document_update` |
 | **Docs** | `doc_commented` | subscribed_activity | activity | persistent | `document_comment` |
 | **Docs** | `doc_mentioned` | direct_targeted | mention | persistent | `document_mention` |
+| **Rituals** | `ritual_instance_overdue` | subscribed_activity | activity | persistent | `task_status` |
+| **Rituals** | `ritual_instance_missed` | subscribed_activity | activity | persistent | `task_status` |
+
+> **Note on the ritual lateness types**: both are published by
+> `internal/collaboration`'s `ritual_reconciliation_sweep`, from inside the single writer of
+> ritual instance state, and only on a transition that writer performed. They carry
+> `priority = 2` deliberately: the alert most worth reading must not be the one people mute,
+> so they are subject to do-not-disturb, domain mute and presence through the ordinary
+> pipeline with no special case anywhere. `ritual_instance_overdue` reaches the task's
+> assignees, reviewers and approvers; `ritual_instance_missed` reaches the same set plus the
+> project's owners and admins when the task has no reviewer and no approver, so a terminal
+> failure always lands with someone who has the authority to act on it.
 
 > **Note on Event Class**: The "Event Class" column (`subscribed_activity`, `direct_targeted`, `live_ephemeral`) is a logical classification used in this document for clarity. It is not represented as a code constant. In implementation, the combination of `delivery_class` + `source_category` + `priority` determines routing behavior.
 

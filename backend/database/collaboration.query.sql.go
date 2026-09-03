@@ -1401,8 +1401,11 @@ SELECT
   COUNT(*) FILTER (WHERE urgency_bucket = 'due_today')::int AS due_today_count,
   COUNT(*) FILTER (WHERE urgency_bucket = 'overdue')::int AS overdue_count
 FROM (
+  -- A ritual instance's lateness is its stored state, not a date comparison: the
+  -- reconciliation sweep is the authority. The OR keeps standard tasks working
+  -- unchanged, since standard projects have no 'overdue' state to match.
   SELECT CASE
-    WHEN t.due_date < $1::date THEN 'overdue'
+    WHEN ps.category = 'overdue' OR t.due_date < $1::date THEN 'overdue'
     ELSE 'due_today'
   END AS urgency_bucket
   FROM collaboration.task t
@@ -2830,8 +2833,9 @@ SELECT
   p.key AS project_key,
   t.title,
   t.due_date,
+  -- Same rule as GetAssignedWorkSummaryCounts: the stored state wins for rituals.
   CASE
-    WHEN t.due_date < $1::date THEN 'overdue'
+    WHEN ps.category = 'overdue' OR t.due_date < $1::date THEN 'overdue'
     ELSE 'due_today'
   END AS urgency_bucket,
   ps.name AS state_name
@@ -2854,7 +2858,7 @@ WHERE t.organization_id = $2
   AND t.due_date <= $1::date
   AND ($4::boolean OR t.task_kind <> 'ritual_instance')
 ORDER BY
-  CASE WHEN t.due_date < $1::date THEN 0 ELSE 1 END,
+  CASE WHEN ps.category = 'overdue' OR t.due_date < $1::date THEN 0 ELSE 1 END,
   t.due_date ASC,
   t.updated_at DESC,
   t.id DESC
@@ -3223,6 +3227,65 @@ func (q *Queries) ListOrganizationIDsWithActiveRitualDefinitions(ctx context.Con
 	return items, nil
 }
 
+const listOrganizationIDsWithReconcilableRitualInstances = `-- name: ListOrganizationIDsWithReconcilableRitualInstances :many
+SELECT DISTINCT t.organization_id
+FROM collaboration.task t
+JOIN collaboration.project_state ps
+  ON ps.organization_id = t.organization_id AND ps.id = t.state_id
+WHERE t.task_kind = 'ritual_instance'
+  AND t.is_deleted = FALSE
+  AND t.detached_from_ritual = FALSE
+  AND t.completion_deadline IS NOT NULL
+  AND t.completion_deadline < $1
+  AND ps.category IN ('scheduled', 'todo', 'in_progress', 'overdue')
+ORDER BY t.organization_id
+`
+
+// lint:cross-tenant reconciliation sweep — the organization list is the result, so it cannot be the input
+// System-scope background query for the ritual reconciliation sweep. Intentionally NOT
+// filtered by organization_id: its purpose is to discover which organizations to sweep.
+// Returns only organization IDs, no tenant row data, and runs on AdminPool. See
+// Constitution Principle I ("Use AdminPool ONLY for system operations (requires documented
+// justification)").
+//
+// The shared candidate predicate, used verbatim by ListRitualInstancesForReconciliation:
+//
+//	task_kind = 'ritual_instance'   standard tasks are never reconciled
+//	is_deleted = FALSE              deleted instances are not work
+//	detached_from_ritual = FALSE    FR-004: a detached instance is no longer a ritual
+//	completion_deadline IS NOT NULL FR-005: no deadline means never late
+//	completion_deadline < now       the lateness threshold itself
+//	ps.category IN (scheduled, todo, in_progress, overdue)
+//	    'submitted' is absent because fully submitted evidence awaiting review is the
+//	    reviewer's delay, not the worker's; 'verified', 'missed' and 'skipped' are
+//	    terminal (FR-003, FR-004); 'overdue' is present because that is how an instance
+//	    reaches 'missed'.
+//
+// There is deliberately NO join to collaboration.ritual_definition: an instance outlives
+// its definition's archival and must still be reconciled (FR-009).
+// ponytail: cross-shard scan each sweep; cost scales with the number of late instances.
+// If it becomes measurable, add a partial index on (organization_id, completion_deadline)
+// WHERE task_kind = 'ritual_instance' AND is_deleted = FALSE.
+func (q *Queries) ListOrganizationIDsWithReconcilableRitualInstances(ctx context.Context, db DBTX, now pgtype.Timestamptz) ([]dbuuid.UUID, error) {
+	rows, err := db.Query(ctx, listOrganizationIDsWithReconcilableRitualInstances, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []dbuuid.UUID
+	for rows.Next() {
+		var organization_id dbuuid.UUID
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectMembers = `-- name: ListProjectMembers :many
 SELECT id, organization_id, project_id, employee_id, role, notification_preference, joined_at, invited_by_employee_id, updated_at FROM collaboration.project_membership
 WHERE organization_id = $1 AND project_id = $2
@@ -3555,6 +3618,82 @@ func (q *Queries) ListRitualDefinitions(ctx context.Context, db DBTX, arg *ListR
 			&i.GenerationWindowDays,
 			&i.UpdatedAt,
 			&i.ScheduleVersion,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRitualInstancesForReconciliation = `-- name: ListRitualInstancesForReconciliation :many
+SELECT t.id, t.organization_id, t.project_id, t.identifier, t.title, t.parent_task_id, t.depth, t.path, t.level_id, t.state_id, t.start_date, t.due_date, t.estimated_hours, t.channel_id, t.description_document_id, t.file_ids, t.reporter_employee_id, t.child_count, t.comment_count, t.is_deleted, t.updated_at, t.task_kind, t.ritual_definition_id, t.scheduled_date, t.completion_deadline, t.skip_reason, t.detached_from_ritual, t.source_channel_id, t.source_message_id
+FROM collaboration.task t
+JOIN collaboration.project_state ps
+  ON ps.organization_id = t.organization_id AND ps.id = t.state_id
+WHERE t.organization_id = $1
+  AND t.task_kind = 'ritual_instance'
+  AND t.is_deleted = FALSE
+  AND t.detached_from_ritual = FALSE
+  AND t.completion_deadline IS NOT NULL
+  AND t.completion_deadline < $2
+  AND ps.category IN ('scheduled', 'todo', 'in_progress', 'overdue')
+ORDER BY t.completion_deadline ASC, t.id ASC
+LIMIT $3
+`
+
+type ListRitualInstancesForReconciliationParams struct {
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	Now            pgtype.Timestamptz `json:"now"`
+	InstanceLimit  int32              `json:"instance_limit"`
+}
+
+// Organization-scoped counterpart to ListOrganizationIDsWithReconcilableRitualInstances.
+// Same candidate predicate (documented in full on that query), plus the per-pass bound.
+// Ascending completion_deadline makes a partially drained backlog progress strictly:
+// the oldest late instances are always reconciled first (FR-013).
+func (q *Queries) ListRitualInstancesForReconciliation(ctx context.Context, db DBTX, arg *ListRitualInstancesForReconciliationParams) ([]*CollaborationTask, error) {
+	rows, err := db.Query(ctx, listRitualInstancesForReconciliation, arg.OrganizationID, arg.Now, arg.InstanceLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*CollaborationTask
+	for rows.Next() {
+		var i CollaborationTask
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Identifier,
+			&i.Title,
+			&i.ParentTaskID,
+			&i.Depth,
+			&i.Path,
+			&i.LevelID,
+			&i.StateID,
+			&i.StartDate,
+			&i.DueDate,
+			&i.EstimatedHours,
+			&i.ChannelID,
+			&i.DescriptionDocumentID,
+			&i.FileIds,
+			&i.ReporterEmployeeID,
+			&i.ChildCount,
+			&i.CommentCount,
+			&i.IsDeleted,
+			&i.UpdatedAt,
+			&i.TaskKind,
+			&i.RitualDefinitionID,
+			&i.ScheduledDate,
+			&i.CompletionDeadline,
+			&i.SkipReason,
+			&i.DetachedFromRitual,
+			&i.SourceChannelID,
+			&i.SourceMessageID,
 		); err != nil {
 			return nil, err
 		}
@@ -4758,6 +4897,72 @@ func (q *Queries) UpdateRitualDefinitionSchedule(ctx context.Context, db DBTX, a
 		&i.GenerationWindowDays,
 		&i.UpdatedAt,
 		&i.ScheduleVersion,
+	)
+	return &i, err
+}
+
+const updateRitualTaskStateIfUnchanged = `-- name: UpdateRitualTaskStateIfUnchanged :one
+UPDATE collaboration.task
+SET state_id = $1, updated_at = $2
+WHERE organization_id = $3
+  AND id = $4
+  AND state_id = $5
+  AND is_deleted = FALSE
+RETURNING id, organization_id, project_id, identifier, title, parent_task_id, depth, path, level_id, state_id, start_date, due_date, estimated_hours, channel_id, description_document_id, file_ids, reporter_employee_id, child_count, comment_count, is_deleted, updated_at, task_kind, ritual_definition_id, scheduled_date, completion_deadline, skip_reason, detached_from_ritual, source_channel_id, source_message_id
+`
+
+type UpdateRitualTaskStateIfUnchangedParams struct {
+	StateID         dbuuid.UUID        `json:"state_id"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	OrganizationID  dbuuid.UUID        `json:"organization_id"`
+	ID              dbuuid.UUID        `json:"id"`
+	ExpectedStateID dbuuid.UUID        `json:"expected_state_id"`
+}
+
+// Compare-and-set used by ritual reconciliation. The expected_state_id predicate is what
+// makes two overlapping passes safe without a lock or an advisory table: the second pass
+// matches zero rows, so it neither rewrites the state nor publishes a second notification.
+// Without it, two passes that read the same row before either wrote would both perform the
+// transition and the recipient would be told twice.
+func (q *Queries) UpdateRitualTaskStateIfUnchanged(ctx context.Context, db DBTX, arg *UpdateRitualTaskStateIfUnchangedParams) (*CollaborationTask, error) {
+	row := db.QueryRow(ctx, updateRitualTaskStateIfUnchanged,
+		arg.StateID,
+		arg.UpdatedAt,
+		arg.OrganizationID,
+		arg.ID,
+		arg.ExpectedStateID,
+	)
+	var i CollaborationTask
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Identifier,
+		&i.Title,
+		&i.ParentTaskID,
+		&i.Depth,
+		&i.Path,
+		&i.LevelID,
+		&i.StateID,
+		&i.StartDate,
+		&i.DueDate,
+		&i.EstimatedHours,
+		&i.ChannelID,
+		&i.DescriptionDocumentID,
+		&i.FileIds,
+		&i.ReporterEmployeeID,
+		&i.ChildCount,
+		&i.CommentCount,
+		&i.IsDeleted,
+		&i.UpdatedAt,
+		&i.TaskKind,
+		&i.RitualDefinitionID,
+		&i.ScheduledDate,
+		&i.CompletionDeadline,
+		&i.SkipReason,
+		&i.DetachedFromRitual,
+		&i.SourceChannelID,
+		&i.SourceMessageID,
 	)
 	return &i, err
 }

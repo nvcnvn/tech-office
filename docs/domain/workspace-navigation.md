@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-02.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039.
+**Status date: 2026-09-03.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040.
 
 ## Canonical resource links
 
@@ -120,6 +120,11 @@ Two backend feeds:
   `due_today_count`, `overdue_count`, and up to `limit` items (default 5, max 20) each with
   project key, title, state name, due date and an `urgency_bucket`.
   `include_ritual_instances` toggles whether ritual instances count.
+  The bucket is `ps.category = 'overdue' OR t.due_date < as_of_date`: standard tasks bucket
+  on the date, ritual instances on the state the reconciliation sweep wrote, so the rail
+  cannot disagree with the ritual surfaces. A `missed` instance leaves the rail entirely,
+  because the seeded `Missed` state is `is_closed = true` and the query already filters
+  closed states out.
   (`internal/collaboration/context_rail_logic.go`)
 - **`ChatService.GetChannelContextSummary`** — the channel-scoped block: what the current
   channel is linked to.

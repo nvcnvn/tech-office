@@ -3569,6 +3569,64 @@ func (w *testWorld) runRitualGenerationSweepAt(now time.Time) *collaboration.Rit
 	return out
 }
 
+// runRitualReconciliationSweep drives one cycle of the ritual reconciliation sweep
+// in-process. Like the generation sweep it is platform-wide, so it also reconciles
+// organizations other tests own — reconciliation is idempotent, so that is harmless.
+// Scope assertions to the caller's own organizations.
+func (w *testWorld) runRitualReconciliationSweep() *collaboration.RitualReconciliationOutput {
+	w.t.Helper()
+	return w.runRitualReconciliationSweepAt(time.Now())
+}
+
+// runRitualReconciliationSweepAt drives one sweep cycle with a custom "now". Time is
+// injected rather than slept for, so "the deadline passed three days ago" costs nothing.
+//
+// Unlike the generation sweep helper this wires a real notification publisher, because the
+// notifications are half the behaviour under test. The publisher resolves its system token
+// from the organization on each request, since the sweep crosses organizations.
+func (w *testWorld) runRitualReconciliationSweepAt(now time.Time) *collaboration.RitualReconciliationOutput {
+	w.t.Helper()
+	sweep := &collaboration.RitualReconciliationWorkflow{
+		Logic:     collaboration.NewLogic(globalQ, nil, nil, &crossOrgNotificationPublisher{}),
+		Queries:   globalQ,
+		AdminPool: globalDB,
+	}
+	out, err := sweep.Sweep(context.Background(), now)
+	require.NoError(w.t, err)
+	return out
+}
+
+// reconcileOrganizationAt drives reconciliation for one organization only. Preferred over
+// the platform-wide sweep in tests that assert exact notification counts, because two
+// parallel tests each driving a global sweep would both reconcile each other's
+// organizations and make "exactly one notification" a race rather than an assertion.
+func (w *testWorld) reconcileOrganizationAt(actor testUser, now time.Time) collaboration.RitualReconciliationCounts {
+	w.t.Helper()
+	logic := collaboration.NewLogic(globalQ, nil, nil, &crossOrgNotificationPublisher{})
+	counts, err := logic.ReconcileOverdueRitualInstances(context.Background(), globalDB, actor.OrgID, now)
+	require.NoError(w.t, err)
+	return counts
+}
+
+// crossOrgNotificationPublisher publishes on behalf of whichever organization the request
+// names, which is what a platform-wide sweep needs and what rpcNotificationPublisher —
+// pinned to one organization at construction — cannot do.
+type crossOrgNotificationPublisher struct{}
+
+func (p *crossOrgNotificationPublisher) PublishNotification(ctx context.Context, tx database.DBTX, req *rpcv1.PublishNotificationRequest) (*rpcv1.PublishNotificationResponse, error) {
+	orgID, err := dbuuid.Parse(req.GetOrganizationId())
+	if err != nil {
+		return nil, err
+	}
+	rpcReq := connect.NewRequest(req)
+	rpcReq.Header().Set("Authorization", "Bearer "+generateSystemTokenForOrg(orgID))
+	resp, err := rpcv1connect.NewNotificationServiceClient(http.DefaultClient, serverBaseURL).PublishNotification(ctx, rpcReq)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
 type rpcNotificationPublisher struct {
 	orgID dbuuid.UUID
 }

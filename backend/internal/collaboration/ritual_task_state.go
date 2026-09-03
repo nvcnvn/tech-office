@@ -2,9 +2,12 @@ package collaboration
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nvcnvn/tech-office/backend/database"
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
@@ -95,11 +98,20 @@ func (l *logicImpl) loadTaskEvidenceSnapshot(
 	return snapshot, nil
 }
 
+// ritualStateOutcome reports what reconcileRitualTaskStateForTask actually did, so a caller
+// sweeping many instances can count transitions without re-reading every row.
+type ritualStateOutcome struct {
+	Changed bool
+	From    string // state category before
+	To      string // state category after
+}
+
 func (l *logicImpl) reconcileRitualTaskState(
 	ctx context.Context,
 	tx database.DBTX,
 	orgID dbuuid.UUID,
 	taskID dbuuid.UUID,
+	now time.Time,
 ) error {
 	task, err := l.Queries.GetTask(ctx, tx, &database.GetTaskParams{
 		OrganizationID: orgID,
@@ -109,17 +121,24 @@ func (l *logicImpl) reconcileRitualTaskState(
 		return fmt.Errorf("failed to get ritual task for state reconciliation: %w", err)
 	}
 
-	return l.reconcileRitualTaskStateForTask(ctx, tx, orgID, task)
+	_, err = l.reconcileRitualTaskStateForTask(ctx, tx, orgID, task, now)
+	return err
 }
 
+// reconcileRitualTaskStateForTask is the single writer of ritual instance state. The
+// evidence path (submit/approve/reject) and the reconciliation sweep both go through it,
+// which is why an instance's state never depends on which path last touched it (FR-007),
+// and why the overdue/missed notification is published here rather than at either call
+// site (FR-020).
 func (l *logicImpl) reconcileRitualTaskStateForTask(
 	ctx context.Context,
 	tx database.DBTX,
 	orgID dbuuid.UUID,
 	task *database.CollaborationTask,
-) error {
+	now time.Time,
+) (ritualStateOutcome, error) {
 	if task.TaskKind != TaskKindRitualInstance || task.DetachedFromRitual {
-		return nil
+		return ritualStateOutcome{}, nil
 	}
 
 	states, err := l.Queries.ListProjectStates(ctx, tx, &database.ListProjectStatesParams{
@@ -127,49 +146,136 @@ func (l *logicImpl) reconcileRitualTaskStateForTask(
 		ProjectID:      dbuuid.UUID(task.ProjectID),
 	})
 	if err != nil {
-		return fmt.Errorf("failed to list ritual project states: %w", err)
+		return ritualStateOutcome{}, fmt.Errorf("failed to list ritual project states: %w", err)
 	}
 
 	currentState := findProjectStateByID(states, dbuuid.UUID(task.StateID))
 	if currentState == nil {
-		return nil
+		return ritualStateOutcome{}, nil
 	}
 
+	// verified, missed and skipped are terminal: nothing automatic moves an instance out
+	// of them, which is also what stops a missed instance being re-notified (FR-003).
 	if currentState.Category == StateCategoryVerified || currentState.Category == StateCategoryMissed || currentState.Category == StateCategorySkipped {
-		return nil
+		return ritualStateOutcome{}, nil
 	}
 
 	snapshot, err := l.loadTaskEvidenceSnapshot(ctx, tx, orgID, task)
 	if err != nil {
-		return err
+		return ritualStateOutcome{}, err
 	}
 
-	targetCategory := determineRitualTaskStateCategory(task, snapshot, time.Now())
+	graceWindow, ritualName := l.ritualLatenessContext(ctx, tx, orgID, task)
+
+	targetCategory := determineRitualTaskStateCategory(task, snapshot, graceWindow, now)
 	if targetCategory == "" || targetCategory == currentState.Category {
-		return nil
+		return ritualStateOutcome{}, nil
 	}
 
 	targetState := findProjectStateByCategory(states, targetCategory)
 	if targetState == nil {
-		return nil
+		// A project whose ritual states were never seeded, or were deleted, cannot hold
+		// the instance's correct state. Leaving it where it is is the safe outcome, but
+		// silence here is what made this class of breakage invisible before.
+		slog.WarnContext(ctx, "ritual reconciliation: project has no state for target category",
+			"orgID", orgID,
+			"projectID", dbuuid.UUID(task.ProjectID),
+			"taskID", task.ID,
+			"targetCategory", targetCategory,
+		)
+		return ritualStateOutcome{}, nil
 	}
 
-	_, err = l.Queries.UpdateTaskState(ctx, tx, &database.UpdateTaskStateParams{
-		OrganizationID: orgID,
-		ID:             task.ID,
-		StateID:        dbuuid.UUID(targetState.ID),
-		UpdatedAt:      pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	// Compare-and-set on the state we decided from. Two overlapping passes can both read
+	// the row before either writes; the predicate makes the loser match zero rows, so it
+	// neither rewrites the state nor publishes a duplicate notification.
+	_, err = l.Queries.UpdateRitualTaskStateIfUnchanged(ctx, tx, &database.UpdateRitualTaskStateIfUnchangedParams{
+		OrganizationID:  orgID,
+		ID:              task.ID,
+		StateID:         dbuuid.UUID(targetState.ID),
+		ExpectedStateID: dbuuid.UUID(task.StateID),
+		UpdatedAt:       pgtype.Timestamptz{Time: now, Valid: true},
 	})
 	if err != nil {
-		return fmt.Errorf("failed to update ritual task state: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Another pass got there first. Its transition is the one that counts.
+			return ritualStateOutcome{}, nil
+		}
+		return ritualStateOutcome{}, fmt.Errorf("failed to update ritual task state: %w", err)
 	}
 
-	return nil
+	outcome := ritualStateOutcome{Changed: true, From: currentState.Category, To: targetCategory}
+
+	l.notifyRitualLatenessTransition(ctx, tx, orgID, task, ritualName, outcome, now)
+
+	return outcome, nil
 }
 
+// ritualLatenessContext resolves the two things the lateness rules need from the instance's
+// ritual definition: the grace window between overdue and missed, and the definition name
+// used in the notification body.
+//
+// A definition that cannot be loaded yields a zero grace window, which makes the "missed"
+// row of the precedence table unreachable while leaving "overdue" live — an instance whose
+// definition has gone missing can still be flagged late, but is never silently written into
+// a terminal state on incomplete information.
+func (l *logicImpl) ritualLatenessContext(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	task *database.CollaborationTask,
+) (graceWindow time.Duration, ritualName string) {
+	ritualName = task.Title
+
+	if !task.RitualDefinitionID.Valid {
+		return 0, ritualName
+	}
+
+	def, err := l.Queries.GetRitualDefinition(ctx, tx, &database.GetRitualDefinitionParams{
+		OrganizationID: orgID,
+		ID:             dbuuid.UUID(task.RitualDefinitionID.UUID),
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "ritual reconciliation: failed to load definition for grace window",
+			"error", err,
+			"orgID", orgID,
+			"taskID", task.ID,
+			"ritualDefinitionID", dbuuid.UUID(task.RitualDefinitionID.UUID),
+		)
+		return 0, ritualName
+	}
+
+	if def.Name != "" {
+		ritualName = def.Name
+	}
+
+	return time.Duration(def.CompletionWindowHours) * time.Hour, ritualName
+}
+
+// determineRitualTaskStateCategory is the single authority on what state a ritual instance
+// belongs in. Both the evidence path and the reconciliation sweep call it, which is what
+// makes an instance's state independent of which path last touched it (FR-007).
+//
+// The precedence is deliberate and order-sensitive:
+//
+//  1. verified     all required evidence approved; nothing outranks a finished ritual
+//  2. submitted    all required evidence in and none rejected; the reviewer owes the
+//     next move, so lateness is not the worker's fault
+//  3. missed       the deadline and the whole grace window elapsed, evidence incomplete
+//  4. overdue      the deadline elapsed, evidence incomplete
+//  5. in_progress  some evidence submitted, deadline not yet passed. This sits BELOW
+//     rows 3 and 4 (FR-006): partial progress does not hide lateness.
+//  6. scheduled    the instance is for a future day
+//  7. todo         everything else
+//
+// graceWindow is the definition's completion_window_hours. A zero or negative graceWindow
+// means "no grace period is known" — row 3 becomes unreachable while row 4 stays live, so an
+// unloadable definition can make an instance overdue but never silently terminal.
+// A NULL completion_deadline makes both rows unreachable: no deadline means never late (FR-005).
 func determineRitualTaskStateCategory(
 	task *database.CollaborationTask,
 	snapshot *taskEvidenceSnapshot,
+	graceWindow time.Duration,
 	now time.Time,
 ) string {
 	if snapshot == nil || snapshot.progress == nil {
@@ -184,12 +290,18 @@ func determineRitualTaskStateCategory(
 		return StateCategorySubmitted
 	}
 
-	if snapshot.progress.SubmittedCount > 0 {
-		return StateCategoryInProgress
+	if task.CompletionDeadline.Valid {
+		deadline := task.CompletionDeadline.Time
+		if graceWindow > 0 && now.After(deadline.Add(graceWindow)) {
+			return StateCategoryMissed
+		}
+		if now.After(deadline) {
+			return StateCategoryOverdue
+		}
 	}
 
-	if task.CompletionDeadline.Valid && task.CompletionDeadline.Time.Before(now) {
-		return StateCategoryOverdue
+	if snapshot.progress.SubmittedCount > 0 {
+		return StateCategoryInProgress
 	}
 
 	if task.ScheduledDate.Valid {
@@ -201,6 +313,61 @@ func determineRitualTaskStateCategory(
 	}
 
 	return StateCategoryTodo
+}
+
+// shouldSuppressRitualLatenessNotification decides whether a lateness transition happens
+// quietly. It answers "is this instance older than we are willing to shout about", and the
+// question is asked of the stored completion_deadline, never of how long ago the state
+// changed — so the answer is deterministic and a repeated pass cannot flip it (FR-021).
+//
+// Without this, the first deployment of the sweep would alert every worker about every
+// historical instance at once, and the alert would be muted before it ever did its job.
+func shouldSuppressRitualLatenessNotification(task *database.CollaborationTask, now time.Time) bool {
+	if !task.CompletionDeadline.Valid {
+		return false
+	}
+	return now.Sub(task.CompletionDeadline.Time) > ritualReconciliationBackfillHorizon
+}
+
+// notifyRitualLatenessTransition publishes the notification for a transition that
+// reconcileRitualTaskStateForTask has just performed — and only for one it performed.
+//
+// This lives inside the writer rather than at its call sites so a transition caused by an
+// evidence write and one caused by the sweep notify identically (FR-020). An instance
+// already in the target state never reaches here, because the caller returns before
+// writing, which is what makes repeated passes silent (FR-010).
+func (l *logicImpl) notifyRitualLatenessTransition(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	task *database.CollaborationTask,
+	ritualName string,
+	outcome ritualStateOutcome,
+	now time.Time,
+) {
+	if !outcome.Changed {
+		return
+	}
+	if outcome.To != StateCategoryOverdue && outcome.To != StateCategoryMissed {
+		return
+	}
+
+	if shouldSuppressRitualLatenessNotification(task, now) {
+		slog.InfoContext(ctx, "ritual reconciliation: lateness notification suppressed by backfill horizon",
+			"orgID", orgID,
+			"taskID", task.ID,
+			"from", outcome.From,
+			"to", outcome.To,
+		)
+		return
+	}
+
+	switch outcome.To {
+	case StateCategoryOverdue:
+		l.notifyRitualInstanceOverdue(ctx, tx, orgID, task, ritualName, now)
+	case StateCategoryMissed:
+		l.notifyRitualInstanceMissed(ctx, tx, orgID, task, ritualName, now)
+	}
 }
 
 func findProjectStateByID(states []*database.CollaborationProjectState, stateID dbuuid.UUID) *database.CollaborationProjectState {

@@ -378,18 +378,39 @@ export async function deleteTask(user: TestUser, taskId: string, deleteChildren 
   });
 }
 
-export function forceRitualTaskOverdue(taskId: string) {
+/**
+ * Puts a ritual instance into the stored lateness state the reconciliation sweep would
+ * have written, and backdates its deadline to match.
+ *
+ * Both halves matter. Every surface now reads the instance's state category rather than
+ * comparing a deadline against the browser's clock, so backdating alone would leave the
+ * instance looking perfectly on time.
+ *
+ * The two categories land on different days because one instance per definition per day is
+ * a unique constraint, and seeding an overdue and a missed run of the same ritual would
+ * otherwise collide. Missed being the older of the two also matches how they arise.
+ */
+export function forceRitualTaskLateness(taskId: string, category: 'overdue' | 'missed') {
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) {
     throw new Error(`Invalid ritual task id: ${taskId}`);
   }
 
+  const daysLate = category === 'missed' ? 2 : 1;
+
   const sql = `
-UPDATE collaboration.task
-SET scheduled_date = CURRENT_DATE - 1,
-    completion_deadline = now() - interval '1 hour',
+UPDATE collaboration.task t
+SET scheduled_date = CURRENT_DATE - ${daysLate},
+    completion_deadline = now() - interval '${daysLate} day',
+    state_id = (
+      SELECT ps.id FROM collaboration.project_state ps
+      WHERE ps.organization_id = t.organization_id
+        AND ps.project_id = t.project_id
+        AND ps.category = '${category}'
+      LIMIT 1
+    ),
     updated_at = now()
-WHERE id = '${taskId}'::uuid
-  AND task_kind = 'ritual_instance';
+WHERE t.id = '${taskId}'::uuid
+  AND t.task_kind = 'ritual_instance';
 
 SELECT scheduled_date::text, completion_deadline::text
 FROM collaboration.task
@@ -422,7 +443,7 @@ WHERE id = '${taskId}'::uuid;
   );
 
   if (!output.includes('UPDATE 1')) {
-    throw new Error(`Failed to force ritual task overdue: ${output}`);
+    throw new Error(`Failed to force ritual task into ${category}: ${output}`);
   }
 }
 

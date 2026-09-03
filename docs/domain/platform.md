@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-09-02.**
+**Status date: 2026-09-03.**
 
 ## Shape
 
@@ -129,6 +129,7 @@ row rather than multiplying schedules.
 | Workflow | Cadence | Purpose |
 |---|---|---|
 | `ritual_generation_sweep` | every 1 min | one platform-wide pass generating due ritual instances for all orgs (Feature 034) |
+| `ritual_reconciliation_sweep` | every 5 min | one platform-wide pass writing late ritual instances into `overdue`, and one completion window later into the terminal `missed`, notifying on the transition it performs. Bounded at 500 instances per org per pass, oldest deadline first; idempotent, so its `MaxRetries: 2` retry is safe |
 | `CalendarReminderWorkflow` | every 1 min | polls due `calendar.event_reminder` rows and publishes reminders |
 | `FileValidation` | on demand, concurrency 9 | MIME sniffing + ClamAV scan after upload |
 | `FilePostProcessing` | on demand | PDF conversion / content indexing (partly skeleton) |

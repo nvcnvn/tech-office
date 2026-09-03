@@ -45,6 +45,7 @@ by schedule ID, so all instances and every restart converge on exactly one row p
 | Schedule ID | Workflow | Cadence | What it does |
 | --- | --- | --- | --- |
 | `ritual_generation_sweep` | `RitualGenerationWorkflow` | every 1 minute | Generates due ritual task instances for every organization that has at least one unarchived ritual definition |
+| `ritual_reconciliation_sweep` | `RitualReconciliationWorkflow` | every 5 minutes | Writes late ritual instances into `overdue`, and one completion window later into the terminal `missed`, publishing `ritual_instance_overdue` / `ritual_instance_missed` on the transition it performs. Bounded at 500 instances per organization per pass, oldest deadline first. Idempotent, so the `MaxRetries: 2` retry is safe |
 | `calendar_reminder_poll` | `CalendarReminderWorkflow` | every 1 minute | Publishes notifications for `calendar.event_reminder` rows whose `fire_at` has passed, and marks them `sent` |
 
 **`flows.Register` alone does not schedule a workflow.** Registration only makes a workflow
@@ -53,6 +54,14 @@ name resolvable by the worker; nothing runs until a matching `flows.ScheduleTx` 
 consequently never ran in production — event reminders never fired. Any new recurring job
 must add a `ScheduleTx` bootstrap in `backend/cmd/server.go` next to its `Register` call, and
 a row in the table above.
+
+A healthy reconciliation pass emits one structured line per run,
+`ritual reconciliation sweep complete`, carrying `organizations_processed`,
+`instances_examined`, `marked_overdue` and `marked_missed`. A pass that examined instances
+and moved none is deliberately distinguishable from one that found nothing to examine.
+Notifications for instances whose deadline passed more than 7 days ago are suppressed — the
+state transition still happens — so a first deployment does not alert every worker about
+every historical instance at once.
 
 To verify a deployment:
 

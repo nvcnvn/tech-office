@@ -52,6 +52,12 @@ const (
 	// previous per-instance ritual_instance_assigned flood.
 	NotificationTypeRitualInstancesScheduled = "ritual_instances_scheduled"
 
+	// Published by internal/collaboration when the reconciliation sweep moves a ritual
+	// instance past its completion deadline, and one completion window later when it
+	// gives up on the instance entirely.
+	NotificationTypeRitualInstanceOverdue = "ritual_instance_overdue"
+	NotificationTypeRitualInstanceMissed  = "ritual_instance_missed"
+
 	// Evidence notifications are published by internal/collaboration when a ritual's
 	// evidence requirement is submitted for review, approved or rejected. They live here
 	// rather than in collaboration because this list is the contract the database CHECK
@@ -197,6 +203,8 @@ func IsValidNotificationType(notifType string) bool {
 		NotificationTypeCalendarCheckInMissed,
 		NotificationTypeCalendarEventDigest,
 		NotificationTypeRitualInstancesScheduled,
+		NotificationTypeRitualInstanceOverdue,
+		NotificationTypeRitualInstanceMissed,
 		NotificationTypeEvidenceSubmitted,
 		NotificationTypeEvidenceApproved,
 		NotificationTypeEvidenceRejected,
@@ -235,6 +243,8 @@ func AllNotificationTypes() []string {
 		NotificationTypeCalendarCheckInMissed,
 		NotificationTypeCalendarEventDigest,
 		NotificationTypeRitualInstancesScheduled,
+		NotificationTypeRitualInstanceOverdue,
+		NotificationTypeRitualInstanceMissed,
 		NotificationTypeEvidenceSubmitted,
 		NotificationTypeEvidenceApproved,
 		NotificationTypeEvidenceRejected,
