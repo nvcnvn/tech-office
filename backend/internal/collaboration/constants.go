@@ -362,6 +362,26 @@ var (
 	ErrEvidenceSubmissionNotFound  = errors.New("evidence submission not found")
 	ErrNotRitualInstance           = errors.New("task is not a ritual instance")
 	ErrRitualDefinitionArchived    = errors.New("ritual definition is archived")
+
+	// ErrEvidenceAlreadyDecided reports a submission whose approval_status is no longer
+	// `pending_review`. The refusal carries who decided it and when, so the losing client
+	// can say more than "that failed". Wrap it with evidenceAlreadyDecided to attach the
+	// decider.
+	ErrEvidenceAlreadyDecided = errors.New("evidence submission has already been decided")
+
+	// ErrEvidenceOutOfScope reports a submission whose task's project the caller does not
+	// hold non-`viewer` membership on. It translates to a bare PermissionDenied with no
+	// detail: the refusal must not disclose the project's existence, its name or the task.
+	ErrEvidenceOutOfScope = errors.New("evidence submission is outside the caller's review scope")
+
+	// ErrRejectReasonRequired reports a rejection whose comment is empty after trimming.
+	// A reason that never reaches the submitter makes the rejection unactionable.
+	ErrRejectReasonRequired = errors.New("a reason is required to reject evidence")
+
+	// ErrInvalidReviewQueueCursor reports a page cursor the server cannot read. It is an
+	// invalid argument rather than a silent restart from the first page, which would show
+	// the reviewer rows they have already cleared.
+	ErrInvalidReviewQueueCursor = errors.New("invalid review queue cursor")
 )
 
 // Default task levels created with new projects

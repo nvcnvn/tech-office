@@ -974,14 +974,137 @@ SELECT * FROM collaboration.evidence_submission
 WHERE organization_id = @organization_id AND id = @id;
 
 -- name: UpdateEvidenceSubmissionApproval :one
+-- Compare-and-set: the `approval_status = 'pending_review'` predicate is what makes a
+-- second decider lose rather than silently overwrite the first. Zero rows now means "no
+-- longer pending", not "not found" — the caller distinguishes the two by having read the
+-- row earlier in the same transaction with GetEvidenceSubmissionForReview.
 UPDATE collaboration.evidence_submission
 SET approval_status = @approval_status,
     reviewed_by_employee_id = @reviewed_by_employee_id,
     reviewed_at = @reviewed_at,
     reviewer_comment = @reviewer_comment,
     updated_at = @updated_at
-WHERE organization_id = @organization_id AND id = @id
+WHERE organization_id = @organization_id
+  AND id = @id
+  AND approval_status = 'pending_review'
 RETURNING *;
+
+-- name: GetEvidenceSubmissionForReview :one
+-- Step 1 of the decision transaction: the submission plus the project the scope check
+-- needs, plus the current decision fields so an already-decided refusal can name who
+-- decided it and when.
+SELECT
+  es.*,
+  t.project_id,
+  t.title AS task_title,
+  reviewer.given_name AS reviewer_given_name,
+  reviewer.family_name AS reviewer_family_name
+FROM collaboration.evidence_submission es
+JOIN collaboration.task t
+  ON (t.organization_id, t.id) = (es.organization_id, es.task_id)
+LEFT JOIN organization.employee reviewer
+  ON (reviewer.organization_id, reviewer.id) = (es.organization_id, es.reviewed_by_employee_id)
+WHERE es.organization_id = @organization_id
+  AND es.id = @id;
+
+-- ============================================================
+-- EVIDENCE REVIEW QUEUE QUERIES
+-- ============================================================
+--
+-- The queue is a read-only projection: every pending submission the caller is entitled to
+-- decide, across all rituals and all projects. The `project_membership` inner join with
+-- `role <> 'viewer'` IS the reviewer scope, and the decision path evaluates the identical
+-- predicate through CheckProjectAccess — so nothing appears here that the actions would
+-- refuse, and nothing the actions accept is hidden.
+--
+-- `urgency_rank` is computed once in the CTE so the keyset WHERE and the ORDER BY reference
+-- the same expression. The sort tuple `(urgency_rank, server_timestamp, id)` is total: the
+-- `id` leg is a UUID v7 primary key, so no two rows tie and the page boundary can neither
+-- duplicate nor skip within a snapshot.
+
+-- name: ListEvidenceReviewQueue :many
+WITH queue AS (
+  SELECT
+    es.id AS evidence_submission_id,
+    es.task_id,
+    t.identifier AS task_identifier,
+    t.title AS task_title,
+    t.project_id,
+    p.name AS project_name,
+    t.ritual_definition_id,
+    COALESCE(rd.name, '')::text AS ritual_name,
+    es.evidence_requirement_id,
+    COALESCE(er.name, '')::text AS evidence_requirement_name,
+    COALESCE(er.position, 0)::int AS evidence_requirement_position,
+    COALESCE(er.is_required, FALSE)::boolean AS evidence_requirement_is_required,
+    (er.id IS NULL OR rd.id IS NULL)::boolean AS requirement_unresolved,
+    es.submitted_by_employee_id,
+    (emp.given_name || ' ' || emp.family_name)::text AS submitted_by_display_name,
+    es.server_timestamp,
+    es.device_timestamp,
+    es.evidence_type,
+    es.file_id,
+    es.text_content,
+    es.link_url,
+    es.gps_latitude,
+    es.gps_longitude,
+    es.gps_accuracy_meters,
+    ps.category AS instance_state_category,
+    t.completion_deadline AS instance_completion_deadline,
+    (CASE WHEN ps.category IN ('overdue', 'missed') THEN 0 ELSE 1 END)::int AS urgency_rank
+  FROM collaboration.evidence_submission es
+  JOIN collaboration.task t
+    ON (t.organization_id, t.id) = (es.organization_id, es.task_id)
+  JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+  JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+  JOIN collaboration.project_membership pm
+    ON (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+  JOIN organization.employee emp
+    ON (emp.organization_id, emp.id) = (es.organization_id, es.submitted_by_employee_id)
+  LEFT JOIN collaboration.ritual_definition rd
+    ON (rd.organization_id, rd.id) = (t.organization_id, t.ritual_definition_id)
+  LEFT JOIN collaboration.evidence_requirement er
+    ON (er.organization_id, er.id) = (es.organization_id, es.evidence_requirement_id)
+  WHERE es.organization_id = @organization_id
+    AND es.approval_status = 'pending_review'
+    AND t.task_kind = 'ritual_instance'
+    AND t.is_deleted = FALSE
+    AND t.detached_from_ritual = FALSE
+    AND pm.employee_id = @reviewer_employee_id
+    AND pm.role <> 'viewer'
+    AND (sqlc.narg('project_id')::uuid IS NULL OR t.project_id = sqlc.narg('project_id')::uuid)
+)
+SELECT * FROM queue
+WHERE sqlc.narg('cursor_submission_id')::uuid IS NULL
+   OR (urgency_rank, server_timestamp, evidence_submission_id)
+      > (sqlc.narg('cursor_urgency_rank')::int, sqlc.narg('cursor_server_timestamp')::timestamptz, sqlc.narg('cursor_submission_id')::uuid)
+ORDER BY urgency_rank, server_timestamp, evidence_submission_id
+LIMIT @page_limit;
+
+-- name: CountEvidenceReviewQueue :one
+-- Identical predicate to ListEvidenceReviewQueue, wrapped in a bounded subquery so a
+-- reviewer returning from leave with 4 000 pending items costs the same as one with 100.
+-- `is_capped` is derived client-side from `pending_count >= cap`.
+SELECT COUNT(*)::int AS pending_count
+FROM (
+  SELECT 1
+  FROM collaboration.evidence_submission es
+  JOIN collaboration.task t
+    ON (t.organization_id, t.id) = (es.organization_id, es.task_id)
+  JOIN collaboration.project_membership pm
+    ON (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+  WHERE es.organization_id = @organization_id
+    AND es.approval_status = 'pending_review'
+    AND t.task_kind = 'ritual_instance'
+    AND t.is_deleted = FALSE
+    AND t.detached_from_ritual = FALSE
+    AND pm.employee_id = @reviewer_employee_id
+    AND pm.role <> 'viewer'
+    AND (sqlc.narg('project_id')::uuid IS NULL OR t.project_id = sqlc.narg('project_id')::uuid)
+  LIMIT @count_cap
+) capped;
 
 -- name: ListEvidenceSubmissions :many
 SELECT * FROM collaboration.evidence_submission

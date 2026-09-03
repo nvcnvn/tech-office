@@ -2,8 +2,10 @@ package collaboration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"time"
 
 	"connectrpc.com/connect"
@@ -11,6 +13,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/database"
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
 	"github.com/nvcnvn/tech-office/backend/database/txn"
+	"github.com/nvcnvn/tech-office/backend/internal/interceptor"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -410,6 +413,105 @@ func (s *CollaborationServiceConnect) RejectEvidence(
 
 	return connect.NewResponse(&rpcv1.RejectEvidenceResponse{
 		EvidenceSubmission: sub,
+	}), nil
+}
+
+// ---------------------------------------------------------------------------
+// Evidence Review Queue
+// ---------------------------------------------------------------------------
+
+// reviewEvidencePermission is the permission the queue reads rather than declares. Both
+// queue RPCs deliberately carry `access_control = {}` in the proto: a caller without the
+// permission must receive an empty queue, not PERMISSION_DENIED, and the interceptor
+// rejects before the handler runs, so a declared permission would make that unreachable.
+const reviewEvidencePermission = "collab.reviewEvidence"
+
+// callerCanReviewEvidence reports whether the caller's effective permission set carries
+// the evidence-review permission.
+func callerCanReviewEvidence(ctx context.Context) bool {
+	permissions, ok := interceptor.UserPermissionsFromContext(ctx)
+	if !ok {
+		return false
+	}
+	return slices.Contains(permissions, reviewEvidencePermission)
+}
+
+func (s *CollaborationServiceConnect) ListEvidenceReviewQueue(
+	ctx context.Context,
+	req *connect.Request[rpcv1.ListEvidenceReviewQueueRequest],
+) (*connect.Response[rpcv1.ListEvidenceReviewQueueResponse], error) {
+	slog.DebugContext(ctx, "ListEvidenceReviewQueue RPC called")
+
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Having nothing to review is not a failure, so neither is not being a reviewer:
+	// the surface is hidden by the same permission on the client, and an error here
+	// would be indistinguishable from a real one (FR-012).
+	if !callerCanReviewEvidence(ctx) {
+		return connect.NewResponse(&rpcv1.ListEvidenceReviewQueueResponse{}), nil
+	}
+
+	var entries []*rpcv1.ReviewQueueEntry
+	var nextCursor string
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		entries, nextCursor, txErr = s.Logic.ListEvidenceReviewQueue(ctx, tx, organizationID, employeeID, req.Msg)
+		return txErr
+	})
+	if err != nil {
+		if errors.Is(err, ErrInvalidReviewQueueCursor) {
+			slog.WarnContext(ctx, "evidence review queue cursor rejected",
+				"error", err,
+				"employeeID", employeeID.String(),
+			)
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		return nil, handleError(err)
+	}
+
+	resp := &rpcv1.ListEvidenceReviewQueueResponse{Entries: entries}
+	if nextCursor != "" {
+		resp.NextCursor = &nextCursor
+	}
+	return connect.NewResponse(resp), nil
+}
+
+func (s *CollaborationServiceConnect) GetEvidenceReviewQueueCount(
+	ctx context.Context,
+	req *connect.Request[rpcv1.GetEvidenceReviewQueueCountRequest],
+) (*connect.Response[rpcv1.GetEvidenceReviewQueueCountResponse], error) {
+	slog.DebugContext(ctx, "GetEvidenceReviewQueueCount RPC called")
+
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if !callerCanReviewEvidence(ctx) {
+		// Zero, and `can_review: false` so the client can tell "not a reviewer" apart from
+		// "a reviewer who is up to date" — one hides the entry point, the other says
+		// plainly that there is nothing waiting.
+		return connect.NewResponse(&rpcv1.GetEvidenceReviewQueueCountResponse{}), nil
+	}
+
+	var count int32
+	var isCapped bool
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		count, isCapped, txErr = s.Logic.GetEvidenceReviewQueueCount(ctx, tx, organizationID, employeeID, req.Msg)
+		return txErr
+	})
+	if err != nil {
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(&rpcv1.GetEvidenceReviewQueueCountResponse{
+		PendingCount: count,
+		IsCapped:     isCapped,
+		CanReview:    true,
 	}), nil
 }
 

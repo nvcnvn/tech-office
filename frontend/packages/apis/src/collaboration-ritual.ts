@@ -158,21 +158,6 @@ export interface RitualTaskHydrationResult {
 	latestSubmissionByRequirementId: Record<string, EvidenceSubmission>;
 }
 
-export interface RitualReviewBacklogItem {
-	taskId: string;
-	projectId: string;
-	taskIdentifier: string;
-	taskTitle: string;
-	ritualDefinitionId: string;
-	ritualName: string;
-	completionDeadline?: Date;
-	pendingReviewCount: number;
-	pendingRequirementNames: string[];
-	focusRequirementId?: string;
-	latestPendingSubmission?: EvidenceSubmission;
-	assigneeEmployeeIds: string[];
-}
-
 export interface OperationalHealthSummary {
 	projectId: string;
 	totalInstances: number;
@@ -575,112 +560,6 @@ export async function hydrateRitualTask(
 		evidenceSubmissions,
 		latestSubmissionByRequirementId: buildLatestSubmissionByRequirementId(evidenceSubmissions),
 	};
-}
-
-export async function listRitualReviewBacklog(
-	projectId: string
-): Promise<RitualReviewBacklogItem[]> {
-	const { tasks } = await listTasks({
-		projectId,
-		taskKind: 'ritual_instance',
-		rootOnly: false,
-	});
-
-	const ritualTasks = tasks.filter(isRitualInstanceTask);
-
-	if (ritualTasks.length === 0) {
-		return [];
-	}
-
-	const uniqueDefinitionIds = Array.from(
-		new Set(ritualTasks.map((task) => task.ritualDefinitionId))
-	);
-	const definitions = await Promise.all(
-		uniqueDefinitionIds.map(async (definitionId) => [
-			definitionId,
-			await getRitualDefinition(definitionId),
-		] as const)
-	);
-	const definitionMap = new Map(definitions);
-
-	const backlogItems = await Promise.all(
-		ritualTasks.map(async (task) => {
-			const ritualDefinition = definitionMap.get(task.ritualDefinitionId);
-			if (!ritualDefinition) {
-				return null;
-			}
-
-			const pendingSubmissions = (await listEvidenceSubmissions(task.id)).filter(
-				(submission) => submission.approvalStatus === 'pending_review'
-			);
-
-			if (pendingSubmissions.length === 0) {
-				return null;
-			}
-
-			const requirementNameById = new Map(
-				ritualDefinition.evidenceRequirements.map((requirement) => [
-					requirement.id,
-					requirement.name,
-				] as const)
-			);
-			const sortedPendingSubmissions = pendingSubmissions
-				.slice()
-				.sort(
-					(left, right) =>
-						(right.serverTimestamp?.getTime() ?? 0) - (left.serverTimestamp?.getTime() ?? 0)
-				);
-			const latestPendingSubmission = sortedPendingSubmissions[0];
-			const focusRequirementId = latestPendingSubmission?.evidenceRequirementId;
-			const backlogItem: RitualReviewBacklogItem = {
-				taskId: task.id,
-				projectId: task.projectId,
-				taskIdentifier: task.identifier,
-				taskTitle: task.title,
-				ritualDefinitionId: ritualDefinition.id,
-				ritualName: ritualDefinition.name,
-				completionDeadline: task.completionDeadline,
-				pendingReviewCount: sortedPendingSubmissions.length,
-				pendingRequirementNames: Array.from(
-					new Set(
-						sortedPendingSubmissions.map(
-							(submission) =>
-								requirementNameById.get(submission.evidenceRequirementId) ??
-								'Pending evidence'
-						)
-					)
-				),
-				assigneeEmployeeIds: task.assignees.map((assignee) => assignee.employeeId),
-			};
-
-			if (focusRequirementId) {
-				backlogItem.focusRequirementId = focusRequirementId;
-			}
-
-			if (latestPendingSubmission) {
-				backlogItem.latestPendingSubmission = latestPendingSubmission;
-			}
-
-			return backlogItem;
-		})
-	);
-
-	return backlogItems
-		.filter((item): item is RitualReviewBacklogItem => item !== null)
-		.sort((left, right) => {
-			const leftDeadline = left.completionDeadline?.getTime() ?? Number.MAX_SAFE_INTEGER;
-			const rightDeadline = right.completionDeadline?.getTime() ?? Number.MAX_SAFE_INTEGER;
-
-			if (leftDeadline !== rightDeadline) {
-				return leftDeadline - rightDeadline;
-			}
-
-			if (left.pendingReviewCount !== right.pendingReviewCount) {
-				return right.pendingReviewCount - left.pendingReviewCount;
-			}
-
-			return left.taskIdentifier.localeCompare(right.taskIdentifier);
-		});
 }
 
 function startOfDay(date: Date): Date {

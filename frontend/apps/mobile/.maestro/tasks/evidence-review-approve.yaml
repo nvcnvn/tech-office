@@ -1,0 +1,62 @@
+appId: com.devguards.TechOffice
+name: "Evidence Review Queue — approve from the phone"
+tags:
+  - reviews
+  - happy-path
+# Feature 041. The whole point of the mobile queue is that a manager on the floor can clear
+# a decision without opening a laptop, so the flow asserts the loop end to end: the entry
+# point is on the tasks tab, the queue lists the submission, approving it removes it.
+#
+# Arrange through the API before running this — one pending evidence submission on a
+# project where MAESTRO_TEST_EMAIL is a non-viewer member and holds collab.reviewEvidence.
+# The flow deliberately reads the first entry rather than a named one, so it does not
+# depend on a fixture's wording.
+---
+- runFlow: "../auth/signin.yaml"
+
+- tapOn:
+    id: "tab-tasks"
+- extendedWaitUntil:
+    visible: "Focus"
+    timeout: 8000
+
+# The entry point is only rendered for someone who reviews evidence at all, so its presence
+# is itself the permission assertion (FR-021).
+- extendedWaitUntil:
+    visible:
+      id: "review-queue-entry-card"
+    timeout: 8000
+- tapOn:
+    id: "review-queue-entry-card"
+
+- extendedWaitUntil:
+    visible:
+      id: "review-queue-list"
+    timeout: 10000
+- assertVisible:
+    id: "review-approve-button"
+    index: 0
+
+# Approving decides the submission and the entry leaves the queue with no manual refresh
+# (FR-017). Either the list is now empty or the first row is a different submission; the
+# assertion that holds in both cases is that this decision's approve button count dropped,
+# which the empty state makes unambiguous when the fixture seeds exactly one entry.
+- tapOn:
+    id: "review-approve-button"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "review-queue-empty-state"
+    timeout: 12000
+- assertVisible: "Nothing to review"
+
+# Going back, the tasks-tab entry point now says there is nothing waiting rather than
+# carrying a stale badge (FR-024).
+- back
+- extendedWaitUntil:
+    visible:
+      id: "review-queue-entry-card"
+    timeout: 8000
+- assertVisible: "Nothing to review right now."
+- assertNotVisible:
+    id: "review-queue-entry-card-badge"

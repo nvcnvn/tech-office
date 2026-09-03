@@ -34,6 +34,7 @@ import {
   useNotificationPopup,
   type NotificationPopup as NotificationPopupType,
 } from "@/hooks/useNotificationPopup";
+import { getEvidenceReviewQueueCount } from "apis";
 import NotificationPopup from "@/components/NotificationPopup";
 import { NotificationPermissionBanner } from "@/components/NotificationPermissionBanner";
 import { NotificationStreamProvider } from "./providers/NotificationStreamProvider";
@@ -66,6 +67,7 @@ type DomainTab =
   | "files"
   | "docs"
   | "calendar"
+  | "reviews"
   | "crm"
   | "finance"
   | "hr";
@@ -143,11 +145,20 @@ const tabs: TabConfig[] = [
     permission: "iam.inviteUser",
   },
   {
+    id: "reviews",
+    label: "Reviews",
+    emoji: "✅",
+    path: "/workspace/reviews",
+    shortcut: "⌘8",
+    enabled: true,
+    permission: "collab.reviewEvidence",
+  },
+  {
     id: "crm",
     label: "CRM",
     emoji: "🤝",
     path: "/workspace/crm",
-    shortcut: "⌘8",
+    shortcut: "⌘9",
     enabled: false,
   },
   {
@@ -155,7 +166,7 @@ const tabs: TabConfig[] = [
     label: "Finance",
     emoji: "💰",
     path: "/workspace/finance",
-    shortcut: "⌘9",
+    shortcut: "⌘-",
     enabled: false,
   },
   {
@@ -163,7 +174,7 @@ const tabs: TabConfig[] = [
     label: "HR",
     emoji: "👤",
     path: "/workspace/hr",
-    shortcut: "⌘-",
+    shortcut: "⌘=",
     enabled: false,
   },
 ];
@@ -533,6 +544,42 @@ function WorkspaceUI({
   } = useContextRail();
   const shouldRenderGlobalBlocks = pageRegistration?.showGlobalBlocks !== false;
 
+  // The Reviews tab's count. Fetched separately from the queue itself so the badge
+  // appears without the reviewer opening the surface, and bounded server-side so a large
+  // backlog renders "99+" rather than an exact figure nobody acts on.
+  const canReviewEvidence = user.permissionIds.includes("collab.reviewEvidence");
+  const [reviewQueueBadge, setReviewQueueBadge] = useState<string | undefined>(
+    undefined,
+  );
+
+  useEffect(() => {
+    if (!canReviewEvidence) {
+      setReviewQueueBadge(undefined);
+      return;
+    }
+    let cancelled = false;
+    getEvidenceReviewQueueCount()
+      .then(({ pendingCount, isCapped }) => {
+        if (cancelled) return;
+        if (pendingCount <= 0) {
+          setReviewQueueBadge(undefined);
+          return;
+        }
+        setReviewQueueBadge(isCapped ? "99+" : String(pendingCount));
+      })
+      .catch(() => {
+        // A badge that cannot be fetched is simply absent. Surfacing an error in the
+        // top nav for a count would be louder than the information is worth.
+        if (!cancelled) setReviewQueueBadge(undefined);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // Refetched on navigation so a decision made on the queue is reflected when the
+    // reviewer moves away from it.
+  }, [canReviewEvidence, pathname]);
+
+
   // Check if we're on the chat page
   const isChatPage = pathname.startsWith("/workspace/chat");
 
@@ -586,6 +633,15 @@ function WorkspaceUI({
                 href={tab.path}
                 shortcut={tab.shortcut}
                 disabled={!tab.enabled}
+                testId={`workspace-tab-${tab.id}`}
+                badge={
+                  tab.id === "reviews" && reviewQueueBadge
+                    ? {
+                        label: reviewQueueBadge,
+                        testId: "workspace-tab-reviews-badge",
+                      }
+                    : undefined
+                }
                 className="px-3 py-1.5 rounded-lg text-sm"
                 activeClassName={`${colors.primary.light.className} ${colors.primary.text.className}`}
                 inactiveClassName={`${colors.text.secondary.className} ${colors.bg.hover}`}

@@ -91,6 +91,9 @@ export * from './collaboration';
 // Export ritual task functions (Feature 022: recurring-ritual-tasks-system)
 export * from './collaboration-ritual';
 
+// Export evidence review queue functions (Feature 041: evidence-review-queue)
+export * from './collaboration-review-queue';
+
 // Export calendar functions (Feature 026: calendar-system)
 export * from './calendar';
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -251,6 +252,135 @@ func (l *logicImpl) SubmitEvidence(
 	return evidenceSubmissionToProto(sub), nil
 }
 
+// evidenceDecision is the shared body of ApproveEvidence and RejectEvidence.
+//
+// The two differ only in the status they write, the validation they apply to the comment
+// and the notification they send. Everything that makes a decision correct — the project
+// scope check, the already-decided refusal, the compare-and-set, and routing state
+// through the single ritual state writer — lives here, once, so the queue and the task
+// detail view cannot drift apart (FR-016).
+//
+// The order of the steps is the contract:
+//
+//  1. read the submission (and the project the scope check needs)
+//  2. project scope  -> PERMISSION_DENIED, nothing written, nothing disclosed
+//  3. status check   -> FAILED_PRECONDITION naming who decided it and when
+//  4. comment rules  -> INVALID_ARGUMENT on `comment`
+//  5. compare-and-set -> a racing transaction that won between 1 and 5 loses here
+//  6. reconcile      -> the single writer re-derives instance state
+//  7. notify
+//
+// Steps 3 and 5 are both required. Step 3 gives the common case a message worth reading;
+// step 5 closes the TOCTOU window step 3 leaves open. Any failure rolls the transaction
+// back, so a failed decision records no partial state (FR-018).
+func (l *logicImpl) evidenceDecision(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, reviewerID, submissionID dbuuid.UUID,
+	status, comment string,
+	notify func(taskID dbuuid.UUID, taskTitle string, submitterID dbuuid.UUID),
+) (*rpcv1.EvidenceSubmission, error) {
+	current, err := l.Queries.GetEvidenceSubmissionForReview(ctx, tx, &database.GetEvidenceSubmissionForReviewParams{
+		OrganizationID: orgID,
+		ID:             submissionID,
+	})
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrEvidenceSubmissionNotFound
+		}
+		return nil, fmt.Errorf("failed to load evidence submission for review: %w", err)
+	}
+
+	// Holding `collab.reviewEvidence` says the caller reviews evidence somewhere; it does
+	// not say which projects. Without this check any holder could decide any submission in
+	// the organization by supplying its id directly (FR-011).
+	allowed, err := l.CheckProjectAccess(ctx, tx, orgID, current.ProjectID, reviewerID, []string{ProjectMemberRoleMember})
+	if err != nil {
+		return nil, fmt.Errorf("failed to check project access for evidence decision: %w", err)
+	}
+	if !allowed {
+		slog.WarnContext(ctx, "evidence decision refused: outside reviewer scope",
+			"submissionID", submissionID.String(),
+			"reviewerID", reviewerID.String(),
+		)
+		return nil, ErrEvidenceOutOfScope
+	}
+
+	if current.ApprovalStatus != ApprovalStatusPendingReview {
+		slog.InfoContext(ctx, "evidence decision refused: already decided",
+			"submissionID", submissionID.String(),
+			"reviewerID", reviewerID.String(),
+			"currentStatus", current.ApprovalStatus,
+		)
+		return nil, alreadyDecidedError(current)
+	}
+
+	if status == ApprovalStatusRejected {
+		// A rejection whose reason never reaches the submitter leaves them nothing to act
+		// on, so an all-whitespace comment is refused rather than stored (FR-014).
+		comment = strings.TrimSpace(comment)
+		if comment == "" {
+			slog.InfoContext(ctx, "evidence rejection refused: no reason given",
+				"submissionID", submissionID.String(),
+				"reviewerID", reviewerID.String(),
+			)
+			return nil, ErrRejectReasonRequired
+		}
+	}
+
+	now := time.Now()
+	sub, err := l.Queries.UpdateEvidenceSubmissionApproval(ctx, tx, &database.UpdateEvidenceSubmissionApprovalParams{
+		OrganizationID:       orgID,
+		ID:                   submissionID,
+		ApprovalStatus:       status,
+		ReviewedByEmployeeID: dbuuid.UUIDToNullUUID(reviewerID),
+		ReviewedAt:           pgtype.Timestamptz{Time: now, Valid: true},
+		ReviewerComment:      pgtype.Text{String: comment, Valid: comment != ""},
+		UpdatedAt:            pgtype.Timestamptz{Time: now, Valid: true},
+	})
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			// The row was pending at step 1 and is not now: a concurrent decision won.
+			// Re-read so the refusal can still name the winner.
+			slog.InfoContext(ctx, "evidence decision lost a concurrent race",
+				"submissionID", submissionID.String(),
+				"reviewerID", reviewerID.String(),
+			)
+			winner, readErr := l.Queries.GetEvidenceSubmissionForReview(ctx, tx, &database.GetEvidenceSubmissionForReviewParams{
+				OrganizationID: orgID,
+				ID:             submissionID,
+			})
+			if readErr != nil {
+				return nil, ErrEvidenceAlreadyDecided
+			}
+			return nil, alreadyDecidedError(winner)
+		}
+		return nil, fmt.Errorf("failed to record evidence decision: %w", err)
+	}
+
+	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, sub.TaskID, now); reconcileErr != nil {
+		return nil, reconcileErr
+	}
+
+	notify(sub.TaskID, current.TaskTitle, current.SubmittedByEmployeeID)
+
+	return evidenceSubmissionToProto(sub), nil
+}
+
+// alreadyDecidedError wraps ErrEvidenceAlreadyDecided with the prior decision, so the
+// losing client can say "already approved by Mai at 09:14" rather than a bare failure.
+func alreadyDecidedError(current *database.GetEvidenceSubmissionForReviewRow) error {
+	decider := "another reviewer"
+	if current.ReviewerGivenName.Valid || current.ReviewerFamilyName.Valid {
+		decider = strings.TrimSpace(current.ReviewerGivenName.String + " " + current.ReviewerFamilyName.String)
+	}
+	when := "an earlier time"
+	if current.ReviewedAt.Valid {
+		when = current.ReviewedAt.Time.UTC().Format(time.RFC3339)
+	}
+	return fmt.Errorf("%w: %s by %s at %s", ErrEvidenceAlreadyDecided, current.ApprovalStatus, decider, when)
+}
+
 // ApproveEvidence approves an evidence submission.
 func (l *logicImpl) ApproveEvidence(
 	ctx context.Context,
@@ -258,32 +388,13 @@ func (l *logicImpl) ApproveEvidence(
 	orgID, reviewerID dbuuid.UUID,
 	req *rpcv1.ApproveEvidenceRequest,
 ) (*rpcv1.EvidenceSubmission, error) {
-	submissionID := dbuuid.MustParse(req.GetEvidenceSubmissionId())
-	comment := req.GetComment()
-
-	sub, err := l.Queries.UpdateEvidenceSubmissionApproval(ctx, tx, &database.UpdateEvidenceSubmissionApprovalParams{
-		OrganizationID:       orgID,
-		ID:                   submissionID,
-		ApprovalStatus:       ApprovalStatusApproved,
-		ReviewedByEmployeeID: dbuuid.UUIDToNullUUID(reviewerID),
-		ReviewedAt:           pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		ReviewerComment:      pgtype.Text{String: comment, Valid: comment != ""},
-		UpdatedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	})
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, ErrEvidenceSubmissionNotFound
-		}
-		return nil, fmt.Errorf("failed to approve evidence: %w", err)
-	}
-
-	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, sub.TaskID, time.Now()); reconcileErr != nil {
-		return nil, reconcileErr
-	}
-
-	l.notifyEvidenceApproved(ctx, tx, orgID, sub.TaskID, reviewerID, "")
-
-	return evidenceSubmissionToProto(sub), nil
+	return l.evidenceDecision(ctx, tx, orgID, reviewerID,
+		dbuuid.MustParse(req.GetEvidenceSubmissionId()),
+		ApprovalStatusApproved, req.GetComment(),
+		func(taskID dbuuid.UUID, taskTitle string, submitterID dbuuid.UUID) {
+			l.notifyEvidenceApproved(ctx, tx, orgID, taskID, reviewerID, submitterID, taskTitle, req.GetComment())
+		},
+	)
 }
 
 // RejectEvidence rejects an evidence submission.
@@ -293,32 +404,14 @@ func (l *logicImpl) RejectEvidence(
 	orgID, reviewerID dbuuid.UUID,
 	req *rpcv1.RejectEvidenceRequest,
 ) (*rpcv1.EvidenceSubmission, error) {
-	submissionID := dbuuid.MustParse(req.GetEvidenceSubmissionId())
-	comment := req.GetComment()
-
-	sub, err := l.Queries.UpdateEvidenceSubmissionApproval(ctx, tx, &database.UpdateEvidenceSubmissionApprovalParams{
-		OrganizationID:       orgID,
-		ID:                   submissionID,
-		ApprovalStatus:       ApprovalStatusRejected,
-		ReviewedByEmployeeID: dbuuid.UUIDToNullUUID(reviewerID),
-		ReviewedAt:           pgtype.Timestamptz{Time: time.Now(), Valid: true},
-		ReviewerComment:      pgtype.Text{String: comment, Valid: comment != ""},
-		UpdatedAt:            pgtype.Timestamptz{Time: time.Now(), Valid: true},
-	})
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, ErrEvidenceSubmissionNotFound
-		}
-		return nil, fmt.Errorf("failed to reject evidence: %w", err)
-	}
-
-	if reconcileErr := l.reconcileRitualTaskState(ctx, tx, orgID, sub.TaskID, time.Now()); reconcileErr != nil {
-		return nil, reconcileErr
-	}
-
-	l.notifyEvidenceRejected(ctx, tx, orgID, sub.TaskID, reviewerID, "")
-
-	return evidenceSubmissionToProto(sub), nil
+	return l.evidenceDecision(ctx, tx, orgID, reviewerID,
+		dbuuid.MustParse(req.GetEvidenceSubmissionId()),
+		ApprovalStatusRejected, req.GetComment(),
+		func(taskID dbuuid.UUID, taskTitle string, submitterID dbuuid.UUID) {
+			l.notifyEvidenceRejected(ctx, tx, orgID, taskID, reviewerID, submitterID, taskTitle,
+				strings.TrimSpace(req.GetComment()))
+		},
+	)
 }
 
 // ListEvidenceSubmissions lists evidence submissions for a task.

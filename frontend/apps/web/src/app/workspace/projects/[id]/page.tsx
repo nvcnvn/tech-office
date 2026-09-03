@@ -14,6 +14,7 @@
 
 import React, { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import NextLink from 'next/link';
 import {
 	Alert,
 	Box,
@@ -52,7 +53,6 @@ import {
 	HealthDashboard,
 	ListView,
 	OverviewView,
-	RitualReviewBacklog,
 	SettingsView,
 	TaskDetailSidePanel,
 	TodayView,
@@ -435,8 +435,22 @@ function ProjectDetailContent() {
 					)}
 					{activeSurface === 'analytics' && <AnalyticsView />}
 					{activeSurface === 'review' && (
-						<Box data-testid="project-review-view">
-							<RitualReviewBacklog />
+						<Box data-testid="project-review-view" sx={{ p: 3 }}>
+							{/* One queue, filtered. The per-project backlog panel this replaced
+							    listed every ritual task then filtered pending submissions in the
+							    browser — two answers to "what is waiting for review" that
+							    disagreed whenever project scope and reviewer scope differed. */}
+							<Typography variant="body1" sx={{ mb: 2 }}>
+								Pending evidence for this project is part of your review queue.
+							</Typography>
+							<Button
+								variant="contained"
+								component={NextLink}
+								href={`/workspace/reviews?projectId=${projectId}`}
+								data-testid="project-review-queue-link"
+							>
+								Open review queue for this project
+							</Button>
 						</Box>
 					)}
 					{activeSurface === 'settings' && <SettingsView />}

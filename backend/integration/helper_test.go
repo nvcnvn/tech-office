@@ -3419,6 +3419,120 @@ func (w *testWorld) rejectEvidence(actor testUser, submissionID, comment string)
 	return resp.Msg.EvidenceSubmission
 }
 
+func (w *testWorld) approveEvidenceError(actor testUser, submissionID, comment string) error {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.ApproveEvidenceRequest{
+		EvidenceSubmissionId: submissionID,
+		Comment:              comment,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.collab.ApproveEvidence(context.Background(), req)
+	return err
+}
+
+func (w *testWorld) rejectEvidenceError(actor testUser, submissionID, comment string) error {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.RejectEvidenceRequest{
+		EvidenceSubmissionId: submissionID,
+		Comment:              comment,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.collab.RejectEvidence(context.Background(), req)
+	return err
+}
+
+func (w *testWorld) submitFileEvidence(actor testUser, taskID, requirementID, fileID string, evidenceType rpcv1.EvidenceType) *rpcv1.EvidenceSubmission {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.SubmitEvidenceRequest{
+		TaskId:                taskID,
+		EvidenceRequirementId: requirementID,
+		EvidenceType:          evidenceType,
+		FileId:                fileID,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.collab.SubmitEvidence(context.Background(), req)
+	require.NoError(w.t, err)
+	return resp.Msg.EvidenceSubmission
+}
+
+func (w *testWorld) submitLinkEvidence(actor testUser, taskID, requirementID, linkURL string) *rpcv1.EvidenceSubmission {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.SubmitEvidenceRequest{
+		TaskId:                taskID,
+		EvidenceRequirementId: requirementID,
+		EvidenceType:          rpcv1.EvidenceType_EVIDENCE_TYPE_LINK,
+		LinkUrl:               linkURL,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.collab.SubmitEvidence(context.Background(), req)
+	require.NoError(w.t, err)
+	return resp.Msg.EvidenceSubmission
+}
+
+// ---------------------------------------------------------------------------
+// Act: Collaboration — Evidence Review Queue
+// ---------------------------------------------------------------------------
+
+func (w *testWorld) listEvidenceReviewQueue(actor testUser, msg *rpcv1.ListEvidenceReviewQueueRequest) *rpcv1.ListEvidenceReviewQueueResponse {
+	w.t.Helper()
+	req := connect.NewRequest(msg)
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.collab.ListEvidenceReviewQueue(context.Background(), req)
+	require.NoError(w.t, err)
+	return resp.Msg
+}
+
+func (w *testWorld) listEvidenceReviewQueueError(actor testUser, msg *rpcv1.ListEvidenceReviewQueueRequest) error {
+	w.t.Helper()
+	req := connect.NewRequest(msg)
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.collab.ListEvidenceReviewQueue(context.Background(), req)
+	return err
+}
+
+func (w *testWorld) getEvidenceReviewQueueCount(actor testUser, projectID *string) *rpcv1.GetEvidenceReviewQueueCountResponse {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.GetEvidenceReviewQueueCountRequest{ProjectId: projectID})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.collab.GetEvidenceReviewQueueCount(context.Background(), req)
+	require.NoError(w.t, err)
+	return resp.Msg
+}
+
+// reviewQueueSubmissionIDs is what nearly every queue assertion is actually about: which
+// submissions came back, in what order. Comparing id slices makes an ordering failure
+// print the two orders rather than "expected true, got false".
+func reviewQueueSubmissionIDs(resp *rpcv1.ListEvidenceReviewQueueResponse) []string {
+	ids := make([]string, 0, len(resp.Entries))
+	for _, e := range resp.Entries {
+		ids = append(ids, e.EvidenceSubmissionId)
+	}
+	return ids
+}
+
+// reviewQueueEntry finds one entry by submission id, or nil when the queue omitted it.
+func reviewQueueEntry(resp *rpcv1.ListEvidenceReviewQueueResponse, submissionID string) *rpcv1.ReviewQueueEntry {
+	for _, e := range resp.Entries {
+		if e.EvidenceSubmissionId == submissionID {
+			return e
+		}
+	}
+	return nil
+}
+
+// evidenceApprovalStatus reads a submission's stored decision straight from the database.
+// The queue omits decided rows by design, so a test that must prove "unchanged after a
+// refusal" cannot read it back through the queue.
+func (w *testWorld) evidenceApprovalStatus(submissionID string) string {
+	w.t.Helper()
+	var status string
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT approval_status FROM collaboration.evidence_submission WHERE id = $1`,
+		dbuuid.MustParse(submissionID)).Scan(&status)
+	require.NoError(w.t, err)
+	return status
+}
+
 func (w *testWorld) listEvidenceSubmissions(actor testUser, taskID string) []*rpcv1.EvidenceSubmission {
 	w.t.Helper()
 	req := connect.NewRequest(&rpcv1.ListEvidenceSubmissionsRequest{TaskId: taskID})

@@ -187,6 +187,16 @@ type Logic interface {
 	RejectEvidence(ctx context.Context, tx database.DBTX, orgID, reviewerID dbuuid.UUID, req *rpcv1.RejectEvidenceRequest) (*rpcv1.EvidenceSubmission, error)
 	ListEvidenceSubmissions(ctx context.Context, tx database.DBTX, orgID, taskID dbuuid.UUID) ([]*rpcv1.EvidenceSubmission, error)
 
+	// Evidence Review Queue
+	//
+	// Both take the reviewer's employee id because reviewer scope — non-`viewer`
+	// membership on the submission's project — is evaluated inside the query, so the
+	// queue and the decision actions cannot disagree about who may decide what.
+	// Neither checks the `collab.reviewEvidence` permission: that lives at the Connect
+	// layer, which returns an empty page rather than an error when it is absent.
+	ListEvidenceReviewQueue(ctx context.Context, tx database.DBTX, orgID, reviewerID dbuuid.UUID, req *rpcv1.ListEvidenceReviewQueueRequest) ([]*rpcv1.ReviewQueueEntry, string, error)
+	GetEvidenceReviewQueueCount(ctx context.Context, tx database.DBTX, orgID, reviewerID dbuuid.UUID, req *rpcv1.GetEvidenceReviewQueueCountRequest) (int32, bool, error)
+
 	// Ritual Scheduler
 	GenerateRitualInstances(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, now time.Time) (int, error)
 

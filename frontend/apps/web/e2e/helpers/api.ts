@@ -494,6 +494,68 @@ WHERE id = '${taskId}'::uuid;
   }
 }
 
+/**
+ * Runs one statement against the dev database through the compose postgres container.
+ *
+ * Some fixtures cannot be arranged through the API: server_timestamp is set to NOW() at
+ * submission, and permissions are seeded per organization with no RPC to remove one.
+ * Both are inputs the behaviour under test reads, so a test that asserts on them has to
+ * be able to choose them.
+ */
+function execSql(sql: string): string {
+  return execFileSync(
+    'docker',
+    [
+      'compose',
+      '-f',
+      BACKEND_COMPOSE_FILE,
+      'exec',
+      '-T',
+      'postgres',
+      'psql',
+      '-U',
+      'postgres',
+      '-d',
+      'tech_office_db',
+      '-v',
+      'ON_ERROR_STOP=1',
+      '-c',
+      sql,
+    ],
+    { cwd: REPO_ROOT, encoding: 'utf8' },
+  );
+}
+
+/**
+ * Removes one permission from every role in an organization, which is how a test makes
+ * a person lack it. Permissions are resolved per request with no cache, so the next call
+ * sees the change.
+ */
+export function revokeOrganizationPermission(organizationId: string, permissionId: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(organizationId)) {
+    throw new Error(`Invalid organization id: ${organizationId}`);
+  }
+  execSql(
+    `DELETE FROM iam.role_permission WHERE organization_id = '${organizationId}'::uuid AND permission_id = '${permissionId.replace(/'/g, "''")}';`,
+  );
+}
+
+/**
+ * Rewrites the server's record of when a submission arrived — the queue's ordering key.
+ * `minutesAgo` counts backwards from now, so a smaller number is a newer submission.
+ */
+export function backdateEvidenceSubmission(submissionId: string, minutesAgo: number) {
+  if (!/^[0-9a-f-]{36}$/i.test(submissionId)) {
+    throw new Error(`Invalid evidence submission id: ${submissionId}`);
+  }
+  const output = execSql(
+    `UPDATE collaboration.evidence_submission SET server_timestamp = now() - interval '${Math.round(minutesAgo)} minutes' WHERE id = '${submissionId}'::uuid;`,
+  );
+  if (!output.includes('UPDATE 1')) {
+    throw new Error(`Failed to backdate evidence submission ${submissionId}: ${output}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Collaboration — Rituals and Evidence
 // ---------------------------------------------------------------------------

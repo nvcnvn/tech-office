@@ -1199,6 +1199,13 @@ func (l *logicImpl) registerTaskResourceSurfaces(
 	}
 }
 
+// notifyTaskWatchers publishes a task notification to the task's active subscribers,
+// excluding the actor.
+//
+// alwaysNotify names people who must receive it whether or not they subscribe — the
+// submitter of the evidence being decided, for instance, who is waiting on the answer.
+// They are still subject to actor exclusion, so deciding your own submission notifies
+// nobody, and still deduplicated against the subscriber set.
 func (l *logicImpl) notifyTaskWatchers(
 	ctx context.Context,
 	tx database.DBTX,
@@ -1207,6 +1214,7 @@ func (l *logicImpl) notifyTaskWatchers(
 	priority int32,
 	isMention bool,
 	title, message string,
+	alwaysNotify ...dbuuid.UUID,
 ) {
 	if l.NotificationPublisher == nil {
 		return
@@ -1229,7 +1237,8 @@ func (l *logicImpl) notifyTaskWatchers(
 	}
 
 	// Build recipient set from active subscribers, excluding the actor.
-	recipientIDs := make([]string, 0, len(subscribers))
+	recipientIDs := make([]string, 0, len(subscribers)+len(alwaysNotify))
+	included := make(map[dbuuid.UUID]bool, len(subscribers)+len(alwaysNotify))
 	for _, sub := range subscribers {
 		empID := dbuuid.UUID(sub.EmployeeID)
 		if empID == actorID {
@@ -1251,6 +1260,15 @@ func (l *logicImpl) notifyTaskWatchers(
 			}
 		}
 		recipientIDs = append(recipientIDs, sub.EmployeeID.String())
+		included[empID] = true
+	}
+
+	for _, empID := range alwaysNotify {
+		if empID == actorID || empID == (dbuuid.UUID{}) || included[empID] {
+			continue
+		}
+		included[empID] = true
+		recipientIDs = append(recipientIDs, empID.String())
 	}
 
 	slog.DebugContext(ctx, "task notification recipient resolution",

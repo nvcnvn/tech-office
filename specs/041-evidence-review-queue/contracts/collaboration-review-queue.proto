@@ -1,0 +1,218 @@
+// Evidence Review Queue — additions to backend/rpc/v1/collaboration.proto
+//
+// This file is a CONTRACT EXCERPT, not a standalone proto. Every message and RPC below is
+// merged into the existing `rpc.v1` package and the existing `CollaborationService` during
+// implementation. Types referenced but not defined here (EvidenceType, ApprovalStatus,
+// GpsCoordinates, EvidenceSubmission) already exist in collaboration.proto and are unchanged.
+
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/access_control.proto";
+
+// =============================================================================
+// SERVICE ADDITIONS — CollaborationService
+// =============================================================================
+
+service CollaborationServiceReviewQueueAdditions {
+  // ---------------------------------------------------------------------------
+  // Evidence Review Queue
+  // ---------------------------------------------------------------------------
+
+  // ListEvidenceReviewQueue returns every evidence submission awaiting the caller's
+  // decision, across all rituals and all projects, without the caller naming a task or a
+  // project (FR-001).
+  //
+  // Authorization is deliberately NOT declared here. FR-012 requires a caller who lacks
+  // `collab.reviewEvidence` to receive an EMPTY QUEUE rather than PERMISSION_DENIED, and the
+  // interceptor rejects before the handler runs, so a declared permission would make that
+  // behaviour unreachable. The handler reads the caller's effective permission set and
+  // returns an empty page when the permission is absent. Per-entry scoping (non-`viewer`
+  // project membership) is enforced in the query itself, so entries the caller may not see
+  // are omitted rather than redacted (FR-007, FR-010).
+  rpc ListEvidenceReviewQueue(ListEvidenceReviewQueueRequest) returns (ListEvidenceReviewQueueResponse) {
+    option (rpc.v1.access_control) = {};
+  }
+
+  // GetEvidenceReviewQueueCount returns the number of submissions awaiting the caller's
+  // review, without fetching the entries (FR-006). The count is bounded server-side so an
+  // unbounded backlog costs the same as a small one; `is_capped` tells the client to render
+  // "99+" instead of an exact figure.
+  //
+  // Same deliberate absence of `required_permissions` as ListEvidenceReviewQueue: a caller
+  // without the permission gets zero, not an error.
+  rpc GetEvidenceReviewQueueCount(GetEvidenceReviewQueueCountRequest) returns (GetEvidenceReviewQueueCountResponse) {
+    option (rpc.v1.access_control) = {};
+  }
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+// ReviewUrgency is the queue's sort bucket, derived from the ritual instance's current state
+// category. It is a proto enum rather than a string so the three layers cannot drift
+// (Principle VIII).
+enum ReviewUrgency {
+  REVIEW_URGENCY_UNSPECIFIED = 0;
+
+  // The ritual instance is late — its state category is `overdue` or `missed`. These sort
+  // ahead of everything else (FR-005, US5).
+  REVIEW_URGENCY_LATE = 1;
+
+  // The ritual instance is not late. Ordered oldest-submission-first within this bucket.
+  REVIEW_URGENCY_NORMAL = 2;
+}
+
+// =============================================================================
+// MESSAGES — Queue entry
+// =============================================================================
+
+// ReviewQueueEntry is a projection, not a stored row: one pending evidence submission joined
+// to the context a reviewer needs to decide it without a further request (FR-003, FR-004).
+message ReviewQueueEntry {
+  // --- Identity of the thing being decided -----------------------------------
+  // The submission id. This is what ApproveEvidence / RejectEvidence take.
+  string evidence_submission_id = 1;
+
+  // --- Where it came from -----------------------------------------------------
+  string task_id = 2;
+  string task_identifier = 3;   // e.g. "OPS-142"
+  string task_title = 4;
+  string project_id = 5;
+  string project_name = 6;
+  string ritual_definition_id = 7;
+  string ritual_name = 8;
+
+  // --- Which requirement it answers -------------------------------------------
+  string evidence_requirement_id = 9;
+  string evidence_requirement_name = 10;
+  int32 evidence_requirement_position = 11;
+  bool evidence_requirement_is_required = 12;
+
+  // True when the requirement or the ritual definition could not be resolved. The entry is
+  // still listed and still decidable; the client states that the requirement is no longer
+  // defined rather than failing the page (spec edge case).
+  bool requirement_unresolved = 13;
+
+  // --- Who submitted it, and when ---------------------------------------------
+  string submitted_by_employee_id = 14;
+  string submitted_by_display_name = 15;
+
+  // Server's record of arrival. This is the ordering key — never the device clock, so a
+  // phone with a wrong clock cannot jump or sink in the queue (spec edge case).
+  google.protobuf.Timestamp server_timestamp = 16;
+  google.protobuf.Timestamp device_timestamp = 17;
+
+  // --- The evidence itself (FR-004) --------------------------------------------
+  EvidenceType evidence_type = 18;
+
+  // Set for photo, voice memo, PDF and file. The client resolves a viewable URL through the
+  // existing files download path; the queue does not mint URLs, because they expire.
+  string file_id = 19;
+
+  // Set for EVIDENCE_TYPE_TEXT_NOTE.
+  string text_content = 20;
+
+  // Set for EVIDENCE_TYPE_LINK.
+  string link_url = 21;
+
+  // Set for EVIDENCE_TYPE_GPS_CHECKIN.
+  GpsCoordinates gps_coordinates = 22;
+
+  // --- Urgency and deadline (FR-003, FR-005, US5) -------------------------------
+  // The ritual instance's current state category: one of the collaboration.project_state
+  // category strings (`todo`, `in_progress`, `submitted`, `verified`, `overdue`, `missed`,
+  // `scheduled`, `skipped`, `done`, `cancelled`).
+  string instance_state_category = 23;
+
+  // The instance's completion deadline, absent when the ritual defines none.
+  google.protobuf.Timestamp instance_completion_deadline = 24;
+
+  ReviewUrgency urgency = 25;
+}
+
+// =============================================================================
+// MESSAGES — Requests / Responses
+// =============================================================================
+
+message ListEvidenceReviewQueueRequest {
+  // Opaque keyset cursor from the previous page's `next_cursor`. Absent on the first page.
+  // Encodes the full sort tuple (urgency, server_timestamp, submission id) so the page
+  // boundary is total and non-duplicating (FR-005, Principle IX).
+  optional string cursor = 1;
+
+  // Defaults to 25 when unset or zero; clamped to 100.
+  int32 page_size = 2;
+
+  // Optional narrowing to a single project — used by the link from a project page. It only
+  // ever narrows the caller's reviewer scope; it can never widen it.
+  optional string project_id = 3;
+}
+
+message ListEvidenceReviewQueueResponse {
+  // Ordered: late instances first, then oldest server_timestamp first, then submission id.
+  repeated ReviewQueueEntry entries = 1;
+
+  // Absent when this is the last page. An empty `entries` with an absent `next_cursor` is the
+  // empty state, which clients MUST render explicitly and distinguishably from loading and
+  // from failure (FR-008).
+  optional string next_cursor = 2;
+}
+
+message GetEvidenceReviewQueueCountRequest {
+  // Same optional narrowing as the list request, so a project-scoped badge stays consistent
+  // with the list it labels.
+  optional string project_id = 1;
+}
+
+message GetEvidenceReviewQueueCountResponse {
+  // Number of submissions awaiting the caller's review, counted up to the server-side cap.
+  int32 pending_count = 1;
+
+  // True when the real backlog is at least `pending_count`, i.e. the cap was reached. Clients
+  // render "99+" rather than an exact figure (spec edge case: a very large backlog).
+  bool is_capped = 2;
+}
+
+// =============================================================================
+// BEHAVIOURAL CONTRACT — changes to EXISTING RPCs (no message shape change)
+// =============================================================================
+//
+// ApproveEvidence and RejectEvidence keep their existing request and response messages and
+// keep `required_permissions: ["collab.reviewEvidence"]`. Their BEHAVIOUR changes, and the
+// change is breaking by design (FR-011, US4):
+//
+//   1. PROJECT SCOPING (new). Both now refuse a submission whose task's project the caller
+//      does not hold non-`viewer` membership on, even when the submission id is supplied
+//      directly. Previously they checked only the org-wide permission, which let any holder
+//      decide any submission in the organization.
+//      -> connect.CodePermissionDenied, with NO error detail: the refusal must not disclose
+//         the project's existence, its name, or the task (FR-007).
+//
+//   2. ALREADY-DECIDED REFUSAL (new). A submission whose approval_status is no longer
+//      `pending_review` is refused instead of overwritten (FR-015).
+//      -> connect.CodeFailedPrecondition, with a google.rpc.PreconditionFailure detail:
+//           type    = "EVIDENCE_ALREADY_DECIDED"
+//           subject = "<evidence_submission_id>"
+//           description = "<approved|rejected> by <display name> at <RFC3339>"
+//         The detail is what lets the losing client say "already decided, and by whom"
+//         instead of a bare error (Principle X, SC-008).
+//
+//   3. REJECTION REASON REQUIRED (new). RejectEvidence trims whitespace from `comment` and
+//      refuses an empty result (FR-014).
+//      -> connect.CodeInvalidArgument, with a google.rpc.BadRequest detail carrying one
+//         FieldViolation on field "comment".
+//
+//   4. NOTIFICATION FIDELITY (fix). Both now deliver the real task title, both add the
+//      submission's submitter to the recipient set, and RejectEvidence carries the reviewer's
+//      reason into the notification body so it reaches the submitter (FR-014, FR-016).
+//      The actor is still excluded from their own notification, so a self-approval notifies
+//      nobody while still recording who decided (FR-019, spec edge case).
+//
+//   5. UNCHANGED, DELIBERATELY. Both still route ritual instance state through
+//      reconcileRitualTaskState — the single writer. No parallel decision path is created,
+//      which is what makes a queue decision indistinguishable from a task-detail decision
+//      (FR-016, SC-007).

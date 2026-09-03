@@ -271,6 +271,49 @@ func (q *Queries) ClearInitialState(ctx context.Context, db DBTX, arg *ClearInit
 	return err
 }
 
+const countEvidenceReviewQueue = `-- name: CountEvidenceReviewQueue :one
+SELECT COUNT(*)::int AS pending_count
+FROM (
+  SELECT 1
+  FROM collaboration.evidence_submission es
+  JOIN collaboration.task t
+    ON (t.organization_id, t.id) = (es.organization_id, es.task_id)
+  JOIN collaboration.project_membership pm
+    ON (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+  WHERE es.organization_id = $1
+    AND es.approval_status = 'pending_review'
+    AND t.task_kind = 'ritual_instance'
+    AND t.is_deleted = FALSE
+    AND t.detached_from_ritual = FALSE
+    AND pm.employee_id = $2
+    AND pm.role <> 'viewer'
+    AND ($3::uuid IS NULL OR t.project_id = $3::uuid)
+  LIMIT $4
+) capped
+`
+
+type CountEvidenceReviewQueueParams struct {
+	OrganizationID     dbuuid.UUID     `json:"organization_id"`
+	ReviewerEmployeeID dbuuid.UUID     `json:"reviewer_employee_id"`
+	ProjectID          dbuuid.NullUUID `json:"project_id"`
+	CountCap           int32           `json:"count_cap"`
+}
+
+// Identical predicate to ListEvidenceReviewQueue, wrapped in a bounded subquery so a
+// reviewer returning from leave with 4 000 pending items costs the same as one with 100.
+// `is_capped` is derived client-side from `pending_count >= cap`.
+func (q *Queries) CountEvidenceReviewQueue(ctx context.Context, db DBTX, arg *CountEvidenceReviewQueueParams) (int32, error) {
+	row := db.QueryRow(ctx, countEvidenceReviewQueue,
+		arg.OrganizationID,
+		arg.ReviewerEmployeeID,
+		arg.ProjectID,
+		arg.CountCap,
+	)
+	var pending_count int32
+	err := row.Scan(&pending_count)
+	return pending_count, err
+}
+
 const createCustomFieldDefinition = `-- name: CreateCustomFieldDefinition :one
 INSERT INTO collaboration.custom_field_definition (
     id, organization_id, project_id, name, description, field_type,
@@ -1707,6 +1750,87 @@ func (q *Queries) GetEvidenceSubmission(ctx context.Context, db DBTX, arg *GetEv
 	return &i, err
 }
 
+const getEvidenceSubmissionForReview = `-- name: GetEvidenceSubmissionForReview :one
+SELECT
+  es.id, es.organization_id, es.task_id, es.evidence_requirement_id, es.submitted_by_employee_id, es.evidence_type, es.file_id, es.text_content, es.link_url, es.device_timestamp, es.server_timestamp, es.gps_latitude, es.gps_longitude, es.gps_accuracy_meters, es.approval_status, es.reviewed_by_employee_id, es.reviewed_at, es.reviewer_comment, es.updated_at,
+  t.project_id,
+  t.title AS task_title,
+  reviewer.given_name AS reviewer_given_name,
+  reviewer.family_name AS reviewer_family_name
+FROM collaboration.evidence_submission es
+JOIN collaboration.task t
+  ON (t.organization_id, t.id) = (es.organization_id, es.task_id)
+LEFT JOIN organization.employee reviewer
+  ON (reviewer.organization_id, reviewer.id) = (es.organization_id, es.reviewed_by_employee_id)
+WHERE es.organization_id = $1
+  AND es.id = $2
+`
+
+type GetEvidenceSubmissionForReviewParams struct {
+	OrganizationID dbuuid.UUID `json:"organization_id"`
+	ID             dbuuid.UUID `json:"id"`
+}
+
+type GetEvidenceSubmissionForReviewRow struct {
+	ID                    dbuuid.UUID        `json:"id"`
+	OrganizationID        dbuuid.UUID        `json:"organization_id"`
+	TaskID                dbuuid.UUID        `json:"task_id"`
+	EvidenceRequirementID dbuuid.UUID        `json:"evidence_requirement_id"`
+	SubmittedByEmployeeID dbuuid.UUID        `json:"submitted_by_employee_id"`
+	EvidenceType          string             `json:"evidence_type"`
+	FileID                dbuuid.NullUUID    `json:"file_id"`
+	TextContent           pgtype.Text        `json:"text_content"`
+	LinkUrl               pgtype.Text        `json:"link_url"`
+	DeviceTimestamp       pgtype.Timestamptz `json:"device_timestamp"`
+	ServerTimestamp       pgtype.Timestamptz `json:"server_timestamp"`
+	GpsLatitude           pgtype.Numeric     `json:"gps_latitude"`
+	GpsLongitude          pgtype.Numeric     `json:"gps_longitude"`
+	GpsAccuracyMeters     pgtype.Numeric     `json:"gps_accuracy_meters"`
+	ApprovalStatus        string             `json:"approval_status"`
+	ReviewedByEmployeeID  dbuuid.NullUUID    `json:"reviewed_by_employee_id"`
+	ReviewedAt            pgtype.Timestamptz `json:"reviewed_at"`
+	ReviewerComment       pgtype.Text        `json:"reviewer_comment"`
+	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ProjectID             dbuuid.UUID        `json:"project_id"`
+	TaskTitle             string             `json:"task_title"`
+	ReviewerGivenName     pgtype.Text        `json:"reviewer_given_name"`
+	ReviewerFamilyName    pgtype.Text        `json:"reviewer_family_name"`
+}
+
+// Step 1 of the decision transaction: the submission plus the project the scope check
+// needs, plus the current decision fields so an already-decided refusal can name who
+// decided it and when.
+func (q *Queries) GetEvidenceSubmissionForReview(ctx context.Context, db DBTX, arg *GetEvidenceSubmissionForReviewParams) (*GetEvidenceSubmissionForReviewRow, error) {
+	row := db.QueryRow(ctx, getEvidenceSubmissionForReview, arg.OrganizationID, arg.ID)
+	var i GetEvidenceSubmissionForReviewRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.TaskID,
+		&i.EvidenceRequirementID,
+		&i.SubmittedByEmployeeID,
+		&i.EvidenceType,
+		&i.FileID,
+		&i.TextContent,
+		&i.LinkUrl,
+		&i.DeviceTimestamp,
+		&i.ServerTimestamp,
+		&i.GpsLatitude,
+		&i.GpsLongitude,
+		&i.GpsAccuracyMeters,
+		&i.ApprovalStatus,
+		&i.ReviewedByEmployeeID,
+		&i.ReviewedAt,
+		&i.ReviewerComment,
+		&i.UpdatedAt,
+		&i.ProjectID,
+		&i.TaskTitle,
+		&i.ReviewerGivenName,
+		&i.ReviewerFamilyName,
+	)
+	return &i, err
+}
+
 const getInitialState = `-- name: GetInitialState :one
 SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, updated_at, state_type FROM collaboration.project_state
 WHERE organization_id = $1 AND project_id = $2 AND is_initial = TRUE
@@ -3053,6 +3177,179 @@ func (q *Queries) ListEvidenceRequirements(ctx context.Context, db DBTX, arg *Li
 			&i.Position,
 			&i.DeadlineOffsetHours,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listEvidenceReviewQueue = `-- name: ListEvidenceReviewQueue :many
+
+WITH queue AS (
+  SELECT
+    es.id AS evidence_submission_id,
+    es.task_id,
+    t.identifier AS task_identifier,
+    t.title AS task_title,
+    t.project_id,
+    p.name AS project_name,
+    t.ritual_definition_id,
+    COALESCE(rd.name, '')::text AS ritual_name,
+    es.evidence_requirement_id,
+    COALESCE(er.name, '')::text AS evidence_requirement_name,
+    COALESCE(er.position, 0)::int AS evidence_requirement_position,
+    COALESCE(er.is_required, FALSE)::boolean AS evidence_requirement_is_required,
+    (er.id IS NULL OR rd.id IS NULL)::boolean AS requirement_unresolved,
+    es.submitted_by_employee_id,
+    (emp.given_name || ' ' || emp.family_name)::text AS submitted_by_display_name,
+    es.server_timestamp,
+    es.device_timestamp,
+    es.evidence_type,
+    es.file_id,
+    es.text_content,
+    es.link_url,
+    es.gps_latitude,
+    es.gps_longitude,
+    es.gps_accuracy_meters,
+    ps.category AS instance_state_category,
+    t.completion_deadline AS instance_completion_deadline,
+    (CASE WHEN ps.category IN ('overdue', 'missed') THEN 0 ELSE 1 END)::int AS urgency_rank
+  FROM collaboration.evidence_submission es
+  JOIN collaboration.task t
+    ON (t.organization_id, t.id) = (es.organization_id, es.task_id)
+  JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+  JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+  JOIN collaboration.project_membership pm
+    ON (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+  JOIN organization.employee emp
+    ON (emp.organization_id, emp.id) = (es.organization_id, es.submitted_by_employee_id)
+  LEFT JOIN collaboration.ritual_definition rd
+    ON (rd.organization_id, rd.id) = (t.organization_id, t.ritual_definition_id)
+  LEFT JOIN collaboration.evidence_requirement er
+    ON (er.organization_id, er.id) = (es.organization_id, es.evidence_requirement_id)
+  WHERE es.organization_id = $5
+    AND es.approval_status = 'pending_review'
+    AND t.task_kind = 'ritual_instance'
+    AND t.is_deleted = FALSE
+    AND t.detached_from_ritual = FALSE
+    AND pm.employee_id = $6
+    AND pm.role <> 'viewer'
+    AND ($7::uuid IS NULL OR t.project_id = $7::uuid)
+)
+SELECT evidence_submission_id, task_id, task_identifier, task_title, project_id, project_name, ritual_definition_id, ritual_name, evidence_requirement_id, evidence_requirement_name, evidence_requirement_position, evidence_requirement_is_required, requirement_unresolved, submitted_by_employee_id, submitted_by_display_name, server_timestamp, device_timestamp, evidence_type, file_id, text_content, link_url, gps_latitude, gps_longitude, gps_accuracy_meters, instance_state_category, instance_completion_deadline, urgency_rank FROM queue
+WHERE $1::uuid IS NULL
+   OR (urgency_rank, server_timestamp, evidence_submission_id)
+      > ($2::int, $3::timestamptz, $1::uuid)
+ORDER BY urgency_rank, server_timestamp, evidence_submission_id
+LIMIT $4
+`
+
+type ListEvidenceReviewQueueParams struct {
+	CursorSubmissionID    dbuuid.NullUUID    `json:"cursor_submission_id"`
+	CursorUrgencyRank     pgtype.Int4        `json:"cursor_urgency_rank"`
+	CursorServerTimestamp pgtype.Timestamptz `json:"cursor_server_timestamp"`
+	PageLimit             int32              `json:"page_limit"`
+	OrganizationID        dbuuid.UUID        `json:"organization_id"`
+	ReviewerEmployeeID    dbuuid.UUID        `json:"reviewer_employee_id"`
+	ProjectID             dbuuid.NullUUID    `json:"project_id"`
+}
+
+type ListEvidenceReviewQueueRow struct {
+	EvidenceSubmissionID          dbuuid.UUID        `json:"evidence_submission_id"`
+	TaskID                        dbuuid.UUID        `json:"task_id"`
+	TaskIdentifier                string             `json:"task_identifier"`
+	TaskTitle                     string             `json:"task_title"`
+	ProjectID                     dbuuid.UUID        `json:"project_id"`
+	ProjectName                   string             `json:"project_name"`
+	RitualDefinitionID            dbuuid.NullUUID    `json:"ritual_definition_id"`
+	RitualName                    string             `json:"ritual_name"`
+	EvidenceRequirementID         dbuuid.UUID        `json:"evidence_requirement_id"`
+	EvidenceRequirementName       string             `json:"evidence_requirement_name"`
+	EvidenceRequirementPosition   int32              `json:"evidence_requirement_position"`
+	EvidenceRequirementIsRequired bool               `json:"evidence_requirement_is_required"`
+	RequirementUnresolved         bool               `json:"requirement_unresolved"`
+	SubmittedByEmployeeID         dbuuid.UUID        `json:"submitted_by_employee_id"`
+	SubmittedByDisplayName        string             `json:"submitted_by_display_name"`
+	ServerTimestamp               pgtype.Timestamptz `json:"server_timestamp"`
+	DeviceTimestamp               pgtype.Timestamptz `json:"device_timestamp"`
+	EvidenceType                  string             `json:"evidence_type"`
+	FileID                        dbuuid.NullUUID    `json:"file_id"`
+	TextContent                   pgtype.Text        `json:"text_content"`
+	LinkUrl                       pgtype.Text        `json:"link_url"`
+	GpsLatitude                   pgtype.Numeric     `json:"gps_latitude"`
+	GpsLongitude                  pgtype.Numeric     `json:"gps_longitude"`
+	GpsAccuracyMeters             pgtype.Numeric     `json:"gps_accuracy_meters"`
+	InstanceStateCategory         string             `json:"instance_state_category"`
+	InstanceCompletionDeadline    pgtype.Timestamptz `json:"instance_completion_deadline"`
+	UrgencyRank                   int32              `json:"urgency_rank"`
+}
+
+// ============================================================
+// EVIDENCE REVIEW QUEUE QUERIES
+// ============================================================
+//
+// The queue is a read-only projection: every pending submission the caller is entitled to
+// decide, across all rituals and all projects. The `project_membership` inner join with
+// `role <> 'viewer'` IS the reviewer scope, and the decision path evaluates the identical
+// predicate through CheckProjectAccess — so nothing appears here that the actions would
+// refuse, and nothing the actions accept is hidden.
+//
+// `urgency_rank` is computed once in the CTE so the keyset WHERE and the ORDER BY reference
+// the same expression. The sort tuple `(urgency_rank, server_timestamp, id)` is total: the
+// `id` leg is a UUID v7 primary key, so no two rows tie and the page boundary can neither
+// duplicate nor skip within a snapshot.
+func (q *Queries) ListEvidenceReviewQueue(ctx context.Context, db DBTX, arg *ListEvidenceReviewQueueParams) ([]*ListEvidenceReviewQueueRow, error) {
+	rows, err := db.Query(ctx, listEvidenceReviewQueue,
+		arg.CursorSubmissionID,
+		arg.CursorUrgencyRank,
+		arg.CursorServerTimestamp,
+		arg.PageLimit,
+		arg.OrganizationID,
+		arg.ReviewerEmployeeID,
+		arg.ProjectID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListEvidenceReviewQueueRow
+	for rows.Next() {
+		var i ListEvidenceReviewQueueRow
+		if err := rows.Scan(
+			&i.EvidenceSubmissionID,
+			&i.TaskID,
+			&i.TaskIdentifier,
+			&i.TaskTitle,
+			&i.ProjectID,
+			&i.ProjectName,
+			&i.RitualDefinitionID,
+			&i.RitualName,
+			&i.EvidenceRequirementID,
+			&i.EvidenceRequirementName,
+			&i.EvidenceRequirementPosition,
+			&i.EvidenceRequirementIsRequired,
+			&i.RequirementUnresolved,
+			&i.SubmittedByEmployeeID,
+			&i.SubmittedByDisplayName,
+			&i.ServerTimestamp,
+			&i.DeviceTimestamp,
+			&i.EvidenceType,
+			&i.FileID,
+			&i.TextContent,
+			&i.LinkUrl,
+			&i.GpsLatitude,
+			&i.GpsLongitude,
+			&i.GpsAccuracyMeters,
+			&i.InstanceStateCategory,
+			&i.InstanceCompletionDeadline,
+			&i.UrgencyRank,
 		); err != nil {
 			return nil, err
 		}
@@ -4518,7 +4815,9 @@ SET approval_status = $1,
     reviewed_at = $3,
     reviewer_comment = $4,
     updated_at = $5
-WHERE organization_id = $6 AND id = $7
+WHERE organization_id = $6
+  AND id = $7
+  AND approval_status = 'pending_review'
 RETURNING id, organization_id, task_id, evidence_requirement_id, submitted_by_employee_id, evidence_type, file_id, text_content, link_url, device_timestamp, server_timestamp, gps_latitude, gps_longitude, gps_accuracy_meters, approval_status, reviewed_by_employee_id, reviewed_at, reviewer_comment, updated_at
 `
 
@@ -4532,6 +4831,10 @@ type UpdateEvidenceSubmissionApprovalParams struct {
 	ID                   dbuuid.UUID        `json:"id"`
 }
 
+// Compare-and-set: the `approval_status = 'pending_review'` predicate is what makes a
+// second decider lose rather than silently overwrite the first. Zero rows now means "no
+// longer pending", not "not found" — the caller distinguishes the two by having read the
+// row earlier in the same transaction with GetEvidenceSubmissionForReview.
 func (q *Queries) UpdateEvidenceSubmissionApproval(ctx context.Context, db DBTX, arg *UpdateEvidenceSubmissionApprovalParams) (*CollaborationEvidenceSubmission, error) {
 	row := db.QueryRow(ctx, updateEvidenceSubmissionApproval,
 		arg.ApprovalStatus,

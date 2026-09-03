@@ -5308,10 +5308,10 @@ CREATE INDEX idx_evidence_req_definition ON collaboration.evidence_requirement U
 
 
 --
--- Name: idx_evidence_sub_pending; Type: INDEX; Schema: collaboration; Owner: -
+-- Name: idx_evidence_sub_pending_queue; Type: INDEX; Schema: collaboration; Owner: -
 --
 
-CREATE INDEX idx_evidence_sub_pending ON collaboration.evidence_submission USING btree (organization_id, approval_status) WHERE (approval_status = 'pending_review'::text);
+CREATE INDEX idx_evidence_sub_pending_queue ON collaboration.evidence_submission USING btree (organization_id, server_timestamp, id) WHERE (approval_status = 'pending_review'::text);
 
 
 --

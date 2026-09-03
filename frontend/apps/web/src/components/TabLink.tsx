@@ -27,6 +27,10 @@ export interface TabLinkProps {
 	activeClassName?: string;
 	inactiveClassName?: string;
 	onClick?: (id: string) => void;
+	/** Stable selector for E2E. Without one a tab can only be found by its label text. */
+	testId?: string;
+	/** Unread-style count rendered after the label; hidden when absent or empty. */
+	badge?: { label: string; testId?: string };
 }
 
 export default function TabLink({
@@ -42,6 +46,8 @@ export default function TabLink({
 	activeClassName,
 	inactiveClassName,
 	onClick,
+	testId,
+	badge,
 }: TabLinkProps) {
 	const pathname = usePathname();
 	const colors = useThemeColors();
@@ -76,6 +82,7 @@ export default function TabLink({
 			<button
 				disabled
 				className={baseClassName}
+				data-testid={testId}
 			>
 				{(icon || emoji) && <span className="text-base">{icon || emoji}</span>}
 				<span>{label}</span>
@@ -90,9 +97,18 @@ export default function TabLink({
 			onClick={handleClick}
 			className={baseClassName}
 			aria-current={isActive ? 'page' : undefined}
+			data-testid={testId}
 		>
 			{(icon || emoji) && <span className="text-base">{icon || emoji}</span>}
 			<span>{label}</span>
+			{badge?.label ? (
+				<span
+					className="ml-1 min-w-[18px] px-1.5 rounded-full text-[11px] leading-[18px] font-semibold text-center bg-red-600 text-white"
+					data-testid={badge.testId}
+				>
+					{badge.label}
+				</span>
+			) : null}
 			{shortcut && <span className="text-xs opacity-60 ml-1">{shortcut}</span>}
 		</Link>
 	);

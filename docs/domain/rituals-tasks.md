@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-03.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040 (034 and
+**Status date: 2026-09-03.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 
@@ -409,8 +409,78 @@ for `gps_checkin`, and `approval_status IN ('pending_review','approved','rejecte
 reviewer, timestamp and comment.
 
 RPCs: `SubmitEvidence`, `ApproveEvidence`, `RejectEvidence`, `ListEvidenceSubmissions`,
-`RequestEvidenceFileUpload`, `ConfirmEvidenceFileUpload`. Submitting needs
-`collab.submitEvidence`; approving needs `collab.reviewEvidence`.
+`RequestEvidenceFileUpload`, `ConfirmEvidenceFileUpload`, `ListEvidenceReviewQueue`,
+`GetEvidenceReviewQueueCount`. Submitting needs `collab.submitEvidence`; approving needs
+`collab.reviewEvidence`.
+
+### Deciding a submission
+
+`ApproveEvidence` and `RejectEvidence` are the only decision path. Both check three things
+before writing, in this order:
+
+1. **Permission** — `collab.reviewEvidence`, declared on the RPC.
+2. **Project scope** — `CheckProjectAccess` against the submission's project, requiring
+   non-`viewer` membership. An org-wide permission holder who is not a member of the
+   submission's project, or is only a `viewer` on it, is refused with a bare
+   `PermissionDenied` and **no** error detail: naming the project or the task would
+   disclose the existence of work the caller cannot see. Project `visibility = 'public'`
+   grants reading, never deciding — it is equivalent to `viewer` here.
+3. **Not already decided** — the submission is read first, and the `UPDATE` itself carries
+   `AND approval_status = 'pending_review'`. Two reviewers deciding the same submission
+   converge on exactly one winner; the loser gets `FailedPrecondition` with a
+   `google.rpc.PreconditionFailure` detail of type `EVIDENCE_ALREADY_DECIDED` naming who
+   decided and when, rather than silently overwriting the first decision.
+
+A rejection requires a reason. An empty or whitespace-only `comment` is refused with
+`InvalidArgument` and a `google.rpc.BadRequest` field violation on `comment`; the reason is
+appended to the rejection notification body so it reaches the submitter, who is included in
+the recipient set alongside the task's assignee, reviewer and approver.
+
+Every decision routes through `reconcileRitualTaskState`, so a decision made from the queue
+and one made from the task detail view produce the same instance state and the same
+notification.
+
+### Review queue
+
+`ListEvidenceReviewQueue` is a **read-only projection** — no queue table, no claim, no
+per-reviewer marker. It returns every `pending_review` submission the caller may decide,
+across all their projects, joined to the context needed to decide it without a second
+request: ritual name, task identifier and title, project, submitter's display name, the
+requirement's position and required flag, the evidence content itself, and the ritual
+instance's state category and completion deadline.
+
+Ordering is `(urgency_rank, server_timestamp, id)`: `urgency_rank` is `0` when the
+instance's `project_state.category` is `overdue` or `missed` and `1` otherwise, so late work
+sorts first, then oldest-first within each bucket, with the UUID v7 primary key as the total
+tiebreak. The cursor is an opaque base64 encoding of that whole tuple, which is what keeps
+the page boundary total across the bucket transition. Page size defaults to 25 and is
+clamped to 100.
+
+Scope comes from an inner join on `project_membership` where `role <> 'viewer'` — the same
+rule `CheckProjectAccess` applies to the decision, so nothing is listed that would be
+refused and nothing is accepted that is hidden. A caller without `collab.reviewEvidence`
+gets an empty page and a zero count, not an authorization failure; having nothing to review
+is not an error, and the clients hide the entry point on the same signal.
+
+Entries survive degraded data rather than disappearing: a submission whose requirement or
+definition no longer resolves is still listed with `requirement_unresolved` set, and a
+submission whose file cannot be retrieved is still listed and still decidable. Dropping
+either would let a broken upload silently clear the queue.
+
+`GetEvidenceReviewQueueCount` backs the badge. It runs the identical predicate inside a
+bounded subquery (`LIMIT 100`), so an unbounded backlog costs the same as a small one, and
+returns `is_capped` for the client to render "99+". It also returns `can_review`, which is
+what lets a client tell "not a reviewer" from "a reviewer who is up to date" — a count of
+zero alone cannot.
+
+Both RPCs declare `option (rpc.v1.access_control) = {}` deliberately: the permission is read
+from the caller's effective permissions in the handler and turned into an empty result
+rather than a refusal.
+
+Clients: the web **Reviews** tab at `/workspace/reviews` (with `?projectId=` narrowing from
+a project page), and a full-screen queue in the mobile tasks area reached from an entry-point
+card on the tasks tab. See
+[workspace-navigation.md](workspace-navigation.md#review-queue-entry-points).
 
 ## Compliance and health
 
@@ -444,6 +514,14 @@ Task: `task_assigned`, `task_status_changed`, `task_commented`, `task_mentioned`
 the end of a generation run, listing every instance created for them. It replaced a
 per-instance flood — generating 30 days of a daily ritual used to mean 30 notifications.
 
+`evidence_approved` and `evidence_rejected` go to the task's watchers **plus the submitter,
+named explicitly** — they are the person waiting on the answer, and whether they happen to
+hold a subscription on the task is beside the point. Actor exclusion still applies, so a
+reviewer deciding their own submission notifies nobody while the decision is still recorded
+against them. Both bodies carry the real task title, and the reviewer's comment is appended
+to it: a rejection reason that stops at the database tells the submitter nothing about what
+to fix, which is the whole reason one is required.
+
 `ritual_instance_overdue` and `ritual_instance_missed` are published by the reconciliation
 sweep, from inside the shared state writer, only on a transition it performed:
 
@@ -472,7 +550,9 @@ always-deliver priority reserved for mentions and incoming calls.
   action menu — `workspace/chat/components/CreateTaskFromMessageDialog.tsx`.
 - Mobile: `app/(app)/(tasks)/` — project list, `[projectId]/index`,
   `[projectId]/[taskId]`, `[projectId]/create`, `[projectId]/settings`,
-  `rituals/[definitionId]`; plus `app/(shared)/resource/tasks/` for deep links. Evidence
+  `rituals/[definitionId]`, `review/index` (the evidence review queue, reached from an
+  entry-point card on the tasks tab); plus `app/(shared)/resource/tasks/` for deep links.
+  Evidence
   capture uses `src/lib/evidence-media.ts`. Turning a message into a task is a
   purpose-built bottom sheet reached from the chat long-press action sheet —
   `src/components/chat/create-task-sheet.tsx`. The sheet does not take focus on open: the

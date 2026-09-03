@@ -199,6 +199,17 @@ func handleError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, ErrEvidenceSubmissionNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, ErrEvidenceOutOfScope):
+		// Deliberately bare. Naming the project, its name or the task would disclose the
+		// existence of work the caller is not entitled to see, which is the same leak the
+		// queue avoids by omitting the row rather than redacting it (FR-007).
+		return connect.NewError(connect.CodePermissionDenied, ErrEvidenceOutOfScope)
+	case errors.Is(err, ErrEvidenceAlreadyDecided):
+		return evidenceAlreadyDecided(err)
+	case errors.Is(err, ErrRejectReasonRequired):
+		// Named field, so the reject dialog can mark its reason input rather than showing
+		// a whole-request error the reviewer has to interpret (Principle X).
+		return fieldViolation(connect.CodeInvalidArgument, err, "comment", err.Error())
 	case errors.Is(err, ErrNotRitualInstance):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, ErrRitualDefinitionArchived):
@@ -1683,6 +1694,41 @@ func fieldViolation(code connect.Code, err error, field, description string) *co
 		cErr.AddDetail(d)
 	}
 	return cErr
+}
+
+// evidenceAlreadyDecided reports a submission someone else has already decided.
+//
+// The PreconditionFailure carries who decided it and when, which is what lets the losing
+// client say "already approved by Mai at 09:14" instead of a bare failure the reviewer
+// cannot distinguish from a bug (FR-015, SC-008).
+func evidenceAlreadyDecided(err error) *connect.Error {
+	cErr := connect.NewError(connect.CodeFailedPrecondition, err)
+	subject, description := splitAlreadyDecided(err)
+	pf := &errdetails.PreconditionFailure{
+		Violations: []*errdetails.PreconditionFailure_Violation{
+			{
+				Type:        "EVIDENCE_ALREADY_DECIDED",
+				Subject:     subject,
+				Description: description,
+			},
+		},
+	}
+	if d, detailErr := connect.NewErrorDetail(pf); detailErr == nil {
+		cErr.AddDetail(d)
+	}
+	return cErr
+}
+
+// splitAlreadyDecided pulls the "<status> by <name> at <time>" tail off the wrapped
+// sentinel. The logic layer builds that phrase because only it has the prior decider;
+// the Connect layer only has to place it.
+func splitAlreadyDecided(err error) (subject, description string) {
+	msg := err.Error()
+	prefix := ErrEvidenceAlreadyDecided.Error() + ": "
+	if idx := strings.Index(msg, prefix); idx >= 0 {
+		return "evidence_submission", msg[idx+len(prefix):]
+	}
+	return "evidence_submission", msg
 }
 
 // destinationUnusable reports a destination project that can no longer receive tasks.

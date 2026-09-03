@@ -20,5 +20,4 @@ export { default as CreateTaskDialog } from './CreateTaskDialog';
 export { default as RitualDefinitionsSettings } from './RitualDefinitionsSettings';
 export { default as TodayView } from './TodayView';
 export { default as HealthDashboard } from './HealthDashboard';
-export { default as RitualReviewBacklog } from './RitualReviewBacklog';
 export { default as OverviewView } from './OverviewView';

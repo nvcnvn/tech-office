@@ -18,7 +18,14 @@ import {
 import { Link, Stack, useFocusEffect } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project, ProjectState, RitualDefinition, Task, TaskAssignee } from "apis";
-import { listProjects, listProjectStates, listRitualDefinitions, listTasks } from "apis";
+import {
+  getEvidenceReviewQueueCount,
+  listProjects,
+  listProjectStates,
+  listRitualDefinitions,
+  listTasks,
+} from "apis";
+import { reviewQueueCountQueryKey } from "@/components/review/review-queue-keys";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -717,6 +724,61 @@ function TasksOverviewCard({
   );
 }
 
+/**
+ * Entry point to the evidence review queue (Feature 041).
+ *
+ * Reviewing is day-to-day operational work, so it belongs on the tasks tab rather than
+ * behind settings — but only for the people who do it. `canReview` is what distinguishes
+ * "not a reviewer" from "a reviewer who is up to date"; a count of zero alone cannot, and
+ * showing an empty queue to everyone would be noise on every employee's home screen.
+ */
+function ReviewQueueEntryCard() {
+  const { data } = useQuery({
+    queryKey: reviewQueueCountQueryKey,
+    queryFn: async () => await getEvidenceReviewQueueCount(),
+    staleTime: 30_000,
+  });
+
+  if (!data?.canReview) {
+    return null;
+  }
+
+  const hasPending = data.pendingCount > 0;
+  const countLabel = data.isCapped ? "99+" : String(data.pendingCount);
+
+  return (
+    <Link href={withNavigationContext("/(app)/(tasks)/review")} asChild>
+      <Pressable
+        testID="review-queue-entry-card"
+        onPressIn={triggerSelectionHaptic}
+        style={styles.reviewEntryCard}
+      >
+        <View style={styles.reviewEntryIconWrap} testID="review-queue-entry-card-icon">
+          <SFIcon
+            name={hasPending ? "checkmark.circle.fill" : "checkmark.circle"}
+            size={18}
+            color={hasPending ? statusColors.warning.light.text : lightPalette.text.secondary}
+          />
+        </View>
+        <View style={styles.reviewEntryCopy}>
+          <Text style={styles.reviewEntryTitle}>Needs your review</Text>
+          <Text style={styles.reviewEntrySubtitle}>
+            {hasPending
+              ? "Evidence waiting on your decision, across every project."
+              : "Nothing to review right now."}
+          </Text>
+        </View>
+        {hasPending ? (
+          <View style={styles.reviewEntryBadge} testID="review-queue-entry-card-badge">
+            <Text style={styles.reviewEntryBadgeText}>{countLabel}</Text>
+          </View>
+        ) : null}
+        <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+      </Pressable>
+    </Link>
+  );
+}
+
 function ProjectRow({ item }: { item: ProjectOverviewItem }) {
   const memberLabel = item.project.memberCount === 1 ? "1 member" : `${item.project.memberCount} members`;
   const openTaskLabel = item.openCount === 1 ? "1 open task" : `${item.openCount} open tasks`;
@@ -1311,6 +1373,7 @@ export default function TasksScreen() {
             secondaryCount={quietProjectCount}
             secondaryLabel="Quiet"
           />
+          <ReviewQueueEntryCard />
 
           {(projectOverviewItems?.length ?? 0) === 0 ? (
             <EmptyState
@@ -1365,6 +1428,7 @@ export default function TasksScreen() {
           secondaryCount={todayVisibleCount}
           secondaryLabel="Today"
         />
+        <ReviewQueueEntryCard />
         <FocusFilterRow value={focusFilter} onChange={setFocusFilter} />
 
         {visibleTaskSections.length === 0 ? (
@@ -1406,6 +1470,57 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  reviewEntryCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: mobileLayout.iconTextGap,
+    marginHorizontal: mobileLayout.screenPadding,
+    marginBottom: mobileLayout.cardGap,
+    padding: mobileLayout.cardPadding,
+    minHeight: mobileLayout.listRowHeight,
+    borderRadius: taskScreenLayout.cardRadius,
+    borderCurve: "continuous",
+    borderWidth: border.thin,
+    borderColor: lightPalette.divider,
+    backgroundColor: lightPalette.background.paper,
+  },
+  reviewEntryIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: lightPalette.background.default,
+  },
+  reviewEntryCopy: {
+    flex: 1,
+    gap: taskScreenLayout.contentGap,
+  },
+  reviewEntryTitle: {
+    ...mobileTypography.listPrimary,
+    fontWeight: "600",
+    color: lightPalette.text.primary,
+  },
+  reviewEntrySubtitle: {
+    ...mobileTypography.caption,
+    color: lightPalette.text.secondary,
+  },
+  reviewEntryBadge: {
+    minWidth: 28,
+    paddingHorizontal: spacing[1],
+    paddingVertical: spacing[0.5],
+    borderRadius: radius.xl,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: statusColors.warning.light.bg,
+    borderWidth: border.thin,
+    borderColor: statusColors.warning.light.border,
+  },
+  reviewEntryBadgeText: {
+    ...mobileTypography.badge,
+    color: statusColors.warning.light.text,
+  },
   container: {
     flex: 1,
     backgroundColor: lightPalette.background.default,

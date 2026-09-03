@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-03.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040.
+**Status date: 2026-09-03.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041.
 
 ## Canonical resource links
 
@@ -255,7 +255,7 @@ Next.js App Router, MUI v7, in `apps/web/src/app`:
   stores require a policy URL anyone can open, and the mobile app links to these rather
   than carrying a second copy of the text.
 - **Canonical** — `/o/[tenantKey]/r/[...slug]`.
-- **Workspace** — `/workspace/{chat, projects, tasks, docs, files, calendar,
+- **Workspace** — `/workspace/{chat, projects, tasks, reviews, docs, files, calendar,
   notifications, organization, profile, search, voice,
   settings/{notifications, presence, blocked, reports, removal-requests}}`.
   The last three are administrative or personal-safety surfaces added with the compliance
@@ -263,6 +263,28 @@ Next.js App Router, MUI v7, in `apps/web/src/app`:
   permissions on the RPCs rather than by hiding the links.
 
 E2E with Playwright in `apps/web/e2e`; `make test-frontend`.
+
+### Review queue entry points
+
+The **Reviews** tab (`/workspace/reviews`, ⌘8, `data-testid="workspace-tab-reviews"`) is
+gated on the `collab.reviewEvidence` permission and is absent for anyone without it, which
+pushed CRM to ⌘9. Its badge (`workspace-tab-reviews-badge`) comes from
+`GetEvidenceReviewQueueCount`, fetched separately from the queue itself so the count does
+not wait on the list, and renders "99+" when the server reports the count was capped. A
+project page links into the same surface narrowed to itself, `/workspace/reviews?projectId=`,
+rather than carrying its own per-project backlog component.
+
+On mobile the queue is a stack route in the tasks area, `(app)/(tasks)/review`, **not** a
+fifth bottom tab — reviewing is part of running the work, and a fifth tab would cost every
+employee screen width for a surface only reviewers can open. It is reached from an
+entry-point card on the tasks tab (`testID="review-queue-entry-card"`) that carries the same
+count, is hidden entirely when `can_review` is false, and says "Nothing to review right now"
+when the caller reviews evidence but has an empty queue. The card and the queue are
+purpose-built for a phone: one full-width card per submission, the photo rendered at device
+width with a full-screen tap target, and approve/reject as the only primary actions, so a
+decision never needs a second screen. Behaviour is described in
+[rituals-tasks.md](rituals-tasks.md#review-queue).
+
 
 ## Mobile application
 
@@ -386,6 +408,26 @@ Those ids are bare strings with no compile-time check, so without it a rename in
 migration would flip the tour audience or hide a stop silently.
 
 ## Known drift
+
+**D43 — `Link asChild` silently drops a function `style` on mobile.** Under expo-router 55,
+a `Pressable` nested in `<Link asChild>` with `style={({ pressed }) => [...]}` renders with
+no style at all; the same component with a plain style object renders correctly. The review
+queue's tasks-tab entry card was written the first way, shipped looking like unstyled text
+on a real device, and was switched to a plain object. `ProjectRow`, `FocusTaskRow` and
+`RitualFocusRow` in `app/(app)/(tasks)/index.tsx` still use the function form and are
+presumably affected the same way; they were left alone rather than changed as a side effect
+of an unrelated feature. Nothing catches this statically — the props typecheck — so only
+looking at the screen finds it.
+
+**D44 — mobile email sign-in bounces on the iOS simulator for a freshly created
+organization.** An owner account created through `RegisterOrganizationWithAdminPassword`
+signs in normally on Android and through the web app, and its `Login`, `GetProfile` and
+`GetOrganizationBySubdomain` calls all succeed against the backend directly, but on the iOS
+simulator the app returns to the workspace picker, sometimes after showing "Your session is
+no longer valid". The same build and the same credentials work on Android, so this is
+iOS-specific and lives somewhere in the sign-in screen's token-then-profile sequence rather
+than in the API. It blocks arranging a populated mobile fixture on iOS, which is how mobile
+work ends up verified on Android only.
 
 **D37 — Maestro cannot drive a physical iPhone.** 2.3.0's `test` does not enumerate
 connected iPhones; 2.8.0 and 2.10.0 do, but fail to build their XCUITest driver because the

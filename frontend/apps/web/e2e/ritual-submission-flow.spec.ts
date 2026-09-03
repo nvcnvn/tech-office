@@ -186,6 +186,7 @@ test.describe('Ritual Submission Flow', () => {
 		let secondTaskId: string;
 		let firstRequirementId: string;
 		let secondRequirementId: string;
+		let firstSubmissionId: string;
 		let secondSubmissionId: string;
 
 		test.beforeAll(async () => {
@@ -230,11 +231,12 @@ test.describe('Ritual Submission Flow', () => {
 			firstTaskId = firstTask.id;
 			secondTaskId = secondTask.id;
 
-			await api.submitEvidence(worker, {
+			const firstSubmission = await api.submitEvidence(worker, {
 				taskId: firstTaskId,
 				evidenceRequirementId: firstRequirementId,
 				textContent: 'Night shift completed',
 			});
+			firstSubmissionId = firstSubmission.evidenceSubmission.id;
 			const secondSubmission = await api.submitEvidence(worker, {
 				taskId: secondTaskId,
 				evidenceRequirementId: secondRequirementId,
@@ -244,25 +246,35 @@ test.describe('Ritual Submission Flow', () => {
 		});
 
 		test('the reviewer can identify pending submissions without opening every task', async ({ page }) => {
+			// Feature 041 replaced the per-project backlog panel with the cross-project
+			// review queue, narrowed to the project. The project surface now points at it
+			// rather than answering "what is waiting for review" a second, divergent way.
 			await loginAs(page, owner);
 			await page.goto(`/workspace/tasks/${projectId}?view=review`);
 
 			await expect(page.getByTestId('tab-review')).toBeVisible();
-			await expect(page.getByTestId('ritual-review-backlog')).toBeVisible();
-			await expect(page.getByTestId(`ritual-review-backlog-row-${firstTaskId}`)).toBeVisible();
-			await expect(page.getByTestId(`ritual-review-backlog-row-${secondTaskId}`)).toBeVisible();
+			await page.getByTestId('project-review-queue-link').click();
+
+			await expect(page).toHaveURL(new RegExp(`/workspace/reviews/?\\?projectId=${projectId}`));
+			await expect(page.getByTestId('review-queue-list')).toBeVisible();
+			await expect(page.getByTestId(`review-queue-row-${firstSubmissionId}`)).toBeVisible();
+			await expect(page.getByTestId(`review-queue-row-${secondSubmissionId}`)).toBeVisible();
 		});
 
 		test('rejecting proof from the review surface returns actionable feedback to the worker', async ({ page }) => {
+			// The decision is made in the queue now, but it is the same RPC the task detail
+			// view calls, so the worker must see the identical outcome on the task — which is
+			// what this asserts across the two surfaces.
 			await loginAs(page, owner);
-			await page.goto(`/workspace/tasks/${projectId}?view=review`);
-			await page.getByTestId(`open-review-backlog-item-${secondTaskId}`).click();
+			await page.goto(`/workspace/reviews?projectId=${projectId}`);
 
-			await expect(page.getByTestId(`evidence-req-row-${secondRequirementId}`)).toBeVisible();
-			await page.getByTestId(`review-note-input-${secondSubmissionId}`).fill('Add more detail about the safety check');
-			await page.getByTestId(`reject-evidence-btn-${secondSubmissionId}`).click();
+			const row = page.getByTestId(`review-queue-row-${secondSubmissionId}`);
+			await expect(row).toBeVisible();
+			await row.getByTestId('review-queue-reject-btn').click();
+			await page.getByTestId('review-queue-reject-reason-input').fill('Add more detail about the safety check');
+			await page.getByTestId('review-queue-reject-confirm-btn').click();
 
-			await expect(page.getByTestId(`evidence-req-row-${secondRequirementId}`)).toContainText('Add more detail about the safety check');
+			await expect(row).toHaveCount(0);
 
 			await loginAs(page, worker);
 			await page.goto(`/workspace/tasks/${projectId}/tasks/${secondTaskId}`);

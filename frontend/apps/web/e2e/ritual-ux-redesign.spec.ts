@@ -372,8 +372,9 @@ test.describe('Ritual UX Redesign', () => {
 
 			await page.getByTestId('tab-review').click();
 			await expect(page.getByTestId('project-review-view')).toBeVisible();
-			await expect(page.getByTestId('ritual-review-backlog')).toBeVisible();
-			await expect(page.getByTestId('ritual-review-section-ready')).toContainText('Ready for Review');
+			// Feature 041: the review surface is the entry point to the one cross-project
+			// queue narrowed to this project, not a second backlog computed in the browser.
+			await expect(page.getByTestId('project-review-queue-link')).toBeVisible();
 
 			await page.getByTestId('tab-health').click();
 			await expect(page.getByTestId('health-dashboard')).toBeVisible();

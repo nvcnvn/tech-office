@@ -431,19 +431,48 @@ func (l *logicImpl) notifyEvidenceSubmitted(ctx context.Context, tx database.DBT
 }
 
 // notifyEvidenceApproved sends a notification when evidence is approved.
-func (l *logicImpl) notifyEvidenceApproved(ctx context.Context, tx database.DBTX, orgID, taskID, actorID dbuuid.UUID, taskTitle string) {
+//
+// The submitter is named explicitly rather than left to the task's watcher list: they are
+// the person waiting on the answer, and whether they happen to hold a subscription on the
+// task is beside the point. Actor exclusion still applies, so a reviewer approving their
+// own submission notifies nobody while the decision is still recorded against them.
+func (l *logicImpl) notifyEvidenceApproved(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, taskID, actorID, submitterID dbuuid.UUID,
+	taskTitle, reviewerComment string,
+) {
+	message := fmt.Sprintf("Evidence has been approved for: %s", taskTitle)
+	if reviewerComment != "" {
+		message = fmt.Sprintf("%s — %s", message, reviewerComment)
+	}
 	l.notifyTaskWatchers(ctx, tx, orgID, taskID, actorID,
 		NotificationTypeEvidenceApproved, 2, false,
 		"Evidence Approved",
-		fmt.Sprintf("Evidence has been approved for: %s", taskTitle),
+		message,
+		submitterID,
 	)
 }
 
 // notifyEvidenceRejected sends a notification when evidence is rejected.
-func (l *logicImpl) notifyEvidenceRejected(ctx context.Context, tx database.DBTX, orgID, taskID, actorID dbuuid.UUID, taskTitle string) {
+//
+// The reviewer's reason is carried into the body. A rejection reason that stops at the
+// database tells the submitter nothing about what to fix, which is the whole point of
+// requiring one.
+func (l *logicImpl) notifyEvidenceRejected(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, taskID, actorID, submitterID dbuuid.UUID,
+	taskTitle, reason string,
+) {
+	message := fmt.Sprintf("Evidence has been rejected for: %s", taskTitle)
+	if reason != "" {
+		message = fmt.Sprintf("%s — %s", message, reason)
+	}
 	l.notifyTaskWatchers(ctx, tx, orgID, taskID, actorID,
 		NotificationTypeEvidenceRejected, 2, false,
 		"Evidence Rejected",
-		fmt.Sprintf("Evidence has been rejected for: %s", taskTitle),
+		message,
+		submitterID,
 	)
 }

@@ -2,6 +2,7 @@ import { ConnectError } from "@connectrpc/connect";
 import {
 	BadRequestSchema,
 	ErrorInfoSchema,
+	PreconditionFailureSchema,
 	ResourceInfoSchema,
 	RetryInfoSchema,
 } from "@buf/googleapis_googleapis.bufbuild_es/google/rpc/error_details_pb";
@@ -182,4 +183,40 @@ export function extractSoleOwnerBlocksDeletion(error: unknown): BlockingOrganiza
 		organizationName: org.organizationName,
 		memberCount: org.memberCount,
 	}));
+}
+
+export interface PreconditionViolation {
+	type: string;
+	subject: string;
+	description: string;
+}
+
+/**
+ * Extract PreconditionFailure violations from a ConnectError.
+ *
+ * A FAILED_PRECONDITION on its own only says "not now". The violation says which
+ * precondition failed and about what, which is the difference between "that didn't work"
+ * and "already decided by Mai at 09:14".
+ */
+export function extractPreconditionViolations(error: unknown): PreconditionViolation[] {
+	const cErr = ConnectError.from(error);
+	const details = cErr.findDetails(PreconditionFailureSchema);
+	if (details.length === 0) return [];
+	return details.flatMap((d) =>
+		d.violations.map((v) => ({
+			type: v.type,
+			subject: v.subject,
+			description: v.description,
+		}))
+	);
+}
+
+/**
+ * The violation of a given type, or undefined when the error carries none.
+ */
+export function preconditionViolation(
+	error: unknown,
+	type: string
+): PreconditionViolation | undefined {
+	return extractPreconditionViolations(error).find((v) => v.type === type);
 }

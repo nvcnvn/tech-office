@@ -228,6 +228,12 @@ const (
 	// CollaborationServiceListEvidenceSubmissionsProcedure is the fully-qualified name of the
 	// CollaborationService's ListEvidenceSubmissions RPC.
 	CollaborationServiceListEvidenceSubmissionsProcedure = "/rpc.v1.CollaborationService/ListEvidenceSubmissions"
+	// CollaborationServiceListEvidenceReviewQueueProcedure is the fully-qualified name of the
+	// CollaborationService's ListEvidenceReviewQueue RPC.
+	CollaborationServiceListEvidenceReviewQueueProcedure = "/rpc.v1.CollaborationService/ListEvidenceReviewQueue"
+	// CollaborationServiceGetEvidenceReviewQueueCountProcedure is the fully-qualified name of the
+	// CollaborationService's GetEvidenceReviewQueueCount RPC.
+	CollaborationServiceGetEvidenceReviewQueueCountProcedure = "/rpc.v1.CollaborationService/GetEvidenceReviewQueueCount"
 	// CollaborationServiceRequestEvidenceFileUploadProcedure is the fully-qualified name of the
 	// CollaborationService's RequestEvidenceFileUpload RPC.
 	CollaborationServiceRequestEvidenceFileUploadProcedure = "/rpc.v1.CollaborationService/RequestEvidenceFileUpload"
@@ -330,6 +336,26 @@ type CollaborationServiceClient interface {
 	ApproveEvidence(context.Context, *connect.Request[v1.ApproveEvidenceRequest]) (*connect.Response[v1.ApproveEvidenceResponse], error)
 	RejectEvidence(context.Context, *connect.Request[v1.RejectEvidenceRequest]) (*connect.Response[v1.RejectEvidenceResponse], error)
 	ListEvidenceSubmissions(context.Context, *connect.Request[v1.ListEvidenceSubmissionsRequest]) (*connect.Response[v1.ListEvidenceSubmissionsResponse], error)
+	// ListEvidenceReviewQueue returns every evidence submission awaiting the caller's
+	// decision, across all rituals and all projects, without the caller naming a task or a
+	// project.
+	//
+	// Authorization is deliberately NOT declared here. A caller who lacks
+	// `collab.reviewEvidence` must receive an EMPTY QUEUE rather than PERMISSION_DENIED, and
+	// the interceptor rejects before the handler runs, so a declared permission would make
+	// that behaviour unreachable. The handler reads the caller's effective permission set and
+	// returns an empty page when the permission is absent. Per-entry scoping (non-`viewer`
+	// project membership) is enforced in the query itself, so entries the caller may not see
+	// are omitted rather than redacted.
+	ListEvidenceReviewQueue(context.Context, *connect.Request[v1.ListEvidenceReviewQueueRequest]) (*connect.Response[v1.ListEvidenceReviewQueueResponse], error)
+	// GetEvidenceReviewQueueCount returns the number of submissions awaiting the caller's
+	// review, without fetching the entries. The count is bounded server-side so an unbounded
+	// backlog costs the same as a small one; `is_capped` tells the client to render "99+"
+	// instead of an exact figure.
+	//
+	// Same deliberate absence of `required_permissions` as ListEvidenceReviewQueue: a caller
+	// without the permission gets zero, not an error.
+	GetEvidenceReviewQueueCount(context.Context, *connect.Request[v1.GetEvidenceReviewQueueCountRequest]) (*connect.Response[v1.GetEvidenceReviewQueueCountResponse], error)
 	RequestEvidenceFileUpload(context.Context, *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error)
 	ConfirmEvidenceFileUpload(context.Context, *connect.Request[v1.ConfirmEvidenceFileUploadRequest]) (*connect.Response[v1.ConfirmEvidenceFileUploadResponse], error)
 	SkipRitualInstance(context.Context, *connect.Request[v1.SkipRitualInstanceRequest]) (*connect.Response[v1.SkipRitualInstanceResponse], error)
@@ -741,6 +767,18 @@ func NewCollaborationServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(collaborationServiceMethods.ByName("ListEvidenceSubmissions")),
 			connect.WithClientOptions(opts...),
 		),
+		listEvidenceReviewQueue: connect.NewClient[v1.ListEvidenceReviewQueueRequest, v1.ListEvidenceReviewQueueResponse](
+			httpClient,
+			baseURL+CollaborationServiceListEvidenceReviewQueueProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("ListEvidenceReviewQueue")),
+			connect.WithClientOptions(opts...),
+		),
+		getEvidenceReviewQueueCount: connect.NewClient[v1.GetEvidenceReviewQueueCountRequest, v1.GetEvidenceReviewQueueCountResponse](
+			httpClient,
+			baseURL+CollaborationServiceGetEvidenceReviewQueueCountProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("GetEvidenceReviewQueueCount")),
+			connect.WithClientOptions(opts...),
+		),
 		requestEvidenceFileUpload: connect.NewClient[v1.RequestEvidenceFileUploadRequest, v1.RequestEvidenceFileUploadResponse](
 			httpClient,
 			baseURL+CollaborationServiceRequestEvidenceFileUploadProcedure,
@@ -859,6 +897,8 @@ type collaborationServiceClient struct {
 	approveEvidence                *connect.Client[v1.ApproveEvidenceRequest, v1.ApproveEvidenceResponse]
 	rejectEvidence                 *connect.Client[v1.RejectEvidenceRequest, v1.RejectEvidenceResponse]
 	listEvidenceSubmissions        *connect.Client[v1.ListEvidenceSubmissionsRequest, v1.ListEvidenceSubmissionsResponse]
+	listEvidenceReviewQueue        *connect.Client[v1.ListEvidenceReviewQueueRequest, v1.ListEvidenceReviewQueueResponse]
+	getEvidenceReviewQueueCount    *connect.Client[v1.GetEvidenceReviewQueueCountRequest, v1.GetEvidenceReviewQueueCountResponse]
 	requestEvidenceFileUpload      *connect.Client[v1.RequestEvidenceFileUploadRequest, v1.RequestEvidenceFileUploadResponse]
 	confirmEvidenceFileUpload      *connect.Client[v1.ConfirmEvidenceFileUploadRequest, v1.ConfirmEvidenceFileUploadResponse]
 	skipRitualInstance             *connect.Client[v1.SkipRitualInstanceRequest, v1.SkipRitualInstanceResponse]
@@ -1194,6 +1234,16 @@ func (c *collaborationServiceClient) ListEvidenceSubmissions(ctx context.Context
 	return c.listEvidenceSubmissions.CallUnary(ctx, req)
 }
 
+// ListEvidenceReviewQueue calls rpc.v1.CollaborationService.ListEvidenceReviewQueue.
+func (c *collaborationServiceClient) ListEvidenceReviewQueue(ctx context.Context, req *connect.Request[v1.ListEvidenceReviewQueueRequest]) (*connect.Response[v1.ListEvidenceReviewQueueResponse], error) {
+	return c.listEvidenceReviewQueue.CallUnary(ctx, req)
+}
+
+// GetEvidenceReviewQueueCount calls rpc.v1.CollaborationService.GetEvidenceReviewQueueCount.
+func (c *collaborationServiceClient) GetEvidenceReviewQueueCount(ctx context.Context, req *connect.Request[v1.GetEvidenceReviewQueueCountRequest]) (*connect.Response[v1.GetEvidenceReviewQueueCountResponse], error) {
+	return c.getEvidenceReviewQueueCount.CallUnary(ctx, req)
+}
+
 // RequestEvidenceFileUpload calls rpc.v1.CollaborationService.RequestEvidenceFileUpload.
 func (c *collaborationServiceClient) RequestEvidenceFileUpload(ctx context.Context, req *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error) {
 	return c.requestEvidenceFileUpload.CallUnary(ctx, req)
@@ -1310,6 +1360,26 @@ type CollaborationServiceHandler interface {
 	ApproveEvidence(context.Context, *connect.Request[v1.ApproveEvidenceRequest]) (*connect.Response[v1.ApproveEvidenceResponse], error)
 	RejectEvidence(context.Context, *connect.Request[v1.RejectEvidenceRequest]) (*connect.Response[v1.RejectEvidenceResponse], error)
 	ListEvidenceSubmissions(context.Context, *connect.Request[v1.ListEvidenceSubmissionsRequest]) (*connect.Response[v1.ListEvidenceSubmissionsResponse], error)
+	// ListEvidenceReviewQueue returns every evidence submission awaiting the caller's
+	// decision, across all rituals and all projects, without the caller naming a task or a
+	// project.
+	//
+	// Authorization is deliberately NOT declared here. A caller who lacks
+	// `collab.reviewEvidence` must receive an EMPTY QUEUE rather than PERMISSION_DENIED, and
+	// the interceptor rejects before the handler runs, so a declared permission would make
+	// that behaviour unreachable. The handler reads the caller's effective permission set and
+	// returns an empty page when the permission is absent. Per-entry scoping (non-`viewer`
+	// project membership) is enforced in the query itself, so entries the caller may not see
+	// are omitted rather than redacted.
+	ListEvidenceReviewQueue(context.Context, *connect.Request[v1.ListEvidenceReviewQueueRequest]) (*connect.Response[v1.ListEvidenceReviewQueueResponse], error)
+	// GetEvidenceReviewQueueCount returns the number of submissions awaiting the caller's
+	// review, without fetching the entries. The count is bounded server-side so an unbounded
+	// backlog costs the same as a small one; `is_capped` tells the client to render "99+"
+	// instead of an exact figure.
+	//
+	// Same deliberate absence of `required_permissions` as ListEvidenceReviewQueue: a caller
+	// without the permission gets zero, not an error.
+	GetEvidenceReviewQueueCount(context.Context, *connect.Request[v1.GetEvidenceReviewQueueCountRequest]) (*connect.Response[v1.GetEvidenceReviewQueueCountResponse], error)
 	RequestEvidenceFileUpload(context.Context, *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error)
 	ConfirmEvidenceFileUpload(context.Context, *connect.Request[v1.ConfirmEvidenceFileUploadRequest]) (*connect.Response[v1.ConfirmEvidenceFileUploadResponse], error)
 	SkipRitualInstance(context.Context, *connect.Request[v1.SkipRitualInstanceRequest]) (*connect.Response[v1.SkipRitualInstanceResponse], error)
@@ -1717,6 +1787,18 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 		connect.WithSchema(collaborationServiceMethods.ByName("ListEvidenceSubmissions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	collaborationServiceListEvidenceReviewQueueHandler := connect.NewUnaryHandler(
+		CollaborationServiceListEvidenceReviewQueueProcedure,
+		svc.ListEvidenceReviewQueue,
+		connect.WithSchema(collaborationServiceMethods.ByName("ListEvidenceReviewQueue")),
+		connect.WithHandlerOptions(opts...),
+	)
+	collaborationServiceGetEvidenceReviewQueueCountHandler := connect.NewUnaryHandler(
+		CollaborationServiceGetEvidenceReviewQueueCountProcedure,
+		svc.GetEvidenceReviewQueueCount,
+		connect.WithSchema(collaborationServiceMethods.ByName("GetEvidenceReviewQueueCount")),
+		connect.WithHandlerOptions(opts...),
+	)
 	collaborationServiceRequestEvidenceFileUploadHandler := connect.NewUnaryHandler(
 		CollaborationServiceRequestEvidenceFileUploadProcedure,
 		svc.RequestEvidenceFileUpload,
@@ -1897,6 +1979,10 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 			collaborationServiceRejectEvidenceHandler.ServeHTTP(w, r)
 		case CollaborationServiceListEvidenceSubmissionsProcedure:
 			collaborationServiceListEvidenceSubmissionsHandler.ServeHTTP(w, r)
+		case CollaborationServiceListEvidenceReviewQueueProcedure:
+			collaborationServiceListEvidenceReviewQueueHandler.ServeHTTP(w, r)
+		case CollaborationServiceGetEvidenceReviewQueueCountProcedure:
+			collaborationServiceGetEvidenceReviewQueueCountHandler.ServeHTTP(w, r)
 		case CollaborationServiceRequestEvidenceFileUploadProcedure:
 			collaborationServiceRequestEvidenceFileUploadHandler.ServeHTTP(w, r)
 		case CollaborationServiceConfirmEvidenceFileUploadProcedure:
@@ -2180,6 +2266,14 @@ func (UnimplementedCollaborationServiceHandler) RejectEvidence(context.Context, 
 
 func (UnimplementedCollaborationServiceHandler) ListEvidenceSubmissions(context.Context, *connect.Request[v1.ListEvidenceSubmissionsRequest]) (*connect.Response[v1.ListEvidenceSubmissionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.ListEvidenceSubmissions is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) ListEvidenceReviewQueue(context.Context, *connect.Request[v1.ListEvidenceReviewQueueRequest]) (*connect.Response[v1.ListEvidenceReviewQueueResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.ListEvidenceReviewQueue is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) GetEvidenceReviewQueueCount(context.Context, *connect.Request[v1.GetEvidenceReviewQueueCountRequest]) (*connect.Response[v1.GetEvidenceReviewQueueCountResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.GetEvidenceReviewQueueCount is not implemented"))
 }
 
 func (UnimplementedCollaborationServiceHandler) RequestEvidenceFileUpload(context.Context, *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error) {

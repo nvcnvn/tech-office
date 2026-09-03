@@ -13,6 +13,10 @@ export default function TasksLayout() {
         options={{ title: "My Tasks" }}
       />
       <Stack.Screen
+        name="review/index"
+        options={{ title: "Needs your review" }}
+      />
+      <Stack.Screen
         name="[projectId]/index"
         options={{ title: "Tasks" }}
       />
