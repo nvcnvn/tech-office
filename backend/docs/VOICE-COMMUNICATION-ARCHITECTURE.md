@@ -132,11 +132,10 @@ make voice-dev-infra-up
 make voice-dev-backend
 ```
 
-Override `TECH_OFFICE_HOST_IP` when you want the backend to return a LAN-reachable LiveKit URL for a physical device:
+`backend/scripts/dev/voice-env.sh` sets `PUBLIC_LIVEKIT_URL` to `ws://<LAN IP>:7880`, resolving the IP from the default route with the same `resolve-ip.sh` the mobile dev scripts use, so a physical device reaches LiveKit without any pinned address. `make test-backend*` source the same script so the test process expects the URL the server hands out. Override the host when the auto-detected interface is wrong:
 
 ```sh
-TECH_OFFICE_HOST_IP=192.168.1.178 make voice-dev-infra-up
-TECH_OFFICE_HOST_IP=192.168.1.178 make voice-dev-backend
+TECH_OFFICE_HOST_IP=192.168.1.50 make voice-dev-backend
 ```
 
 Under the hood the backend Compose file includes a local LiveKit service with built-in TURN-over-TLS enabled:
@@ -152,7 +151,7 @@ LiveKit listens on:
 - `50000-50100/udp`: UDP RTC port range
 - `5349/tcp`: LiveKit built-in TURN over TLS
 
-The local config uses `devkey` / `devsecretdevsecretdevsecretdevsecret` for LiveKit. Set `TECH_OFFICE_HOST_IP` to your LAN IP when testing from a physical device so the backend returns a reachable LiveKit URL.
+The local config uses `devkey` / `devsecretdevsecretdevsecretdevsecret` for LiveKit. Do not pin `PUBLIC_LIVEKIT_URL` in `backend/.env`; it goes stale on the next network change and the exported value from `voice-env.sh` overrides it anyway.
 
 ## Production LiveKit transport runbook
 

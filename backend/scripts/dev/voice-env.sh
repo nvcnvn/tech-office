@@ -5,7 +5,16 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 backend_dir="$(cd "${script_dir}/../.." && pwd)"
 
-host_ip="${TECH_OFFICE_HOST_IP:-127.0.0.1}"
+# Client-facing LiveKit URL. A real phone on the LAN cannot reach 127.0.0.1, so the
+# default is this Mac's LAN IP from the same resolver the mobile dev scripts use — one
+# host for Metro, the API and LiveKit, never a pinned IP that rots on the next network.
+# Override with TECH_OFFICE_HOST_IP (or METRO_HOST, which the mobile scripts honour too).
+if [[ -z "${TECH_OFFICE_HOST_IP:-}" ]]; then
+	# shellcheck source=../../../frontend/apps/mobile/scripts/resolve-ip.sh
+	source "${backend_dir}/../frontend/apps/mobile/scripts/resolve-ip.sh" 2>/dev/null || true
+	TECH_OFFICE_HOST_IP="${METRO_HOST:-127.0.0.1}"
+fi
+host_ip="$TECH_OFFICE_HOST_IP"
 livekit_url="${LIVEKIT_URL:-ws://localhost:7880}"
 public_livekit_url="${PUBLIC_LIVEKIT_URL:-ws://${host_ip}:7880}"
 

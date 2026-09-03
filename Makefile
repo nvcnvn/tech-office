@@ -111,15 +111,19 @@ lint-tenancy:
 	cd backend && go test ./tools/tenancylint/ && go run ./tools/tenancylint/
 
 
+# Both test targets source voice-env.sh so the test process expects the same
+# PUBLIC_LIVEKIT_URL the server (started by voice-dev-backend) hands to clients.
 test-backend: check-postgres check-backend
 	@echo "\n=== Running backend integration tests ==="
-	cd backend && go test -v -count=1 -parallel $(BACKEND_TEST_PARALLEL) -timeout $(BACKEND_TEST_TIMEOUT) ./integration/...
+	@eval "$$(bash backend/scripts/dev/voice-env.sh)"; \
+		cd backend && go test -v -count=1 -parallel $(BACKEND_TEST_PARALLEL) -timeout $(BACKEND_TEST_TIMEOUT) ./integration/...
 
 # Run a single backend test by name: make test-backend-one T=TestTaskLifecycle
 .PHONY: test-backend-one
 test-backend-one: check-postgres check-backend
 	@echo "\n=== Running backend test: $(T) ==="
-	cd backend && go test -v -count=1 -parallel $(BACKEND_TEST_PARALLEL) -timeout $(BACKEND_TEST_TIMEOUT) -run "$(T)" ./integration/...
+	@eval "$$(bash backend/scripts/dev/voice-env.sh)"; \
+		cd backend && go test -v -count=1 -parallel $(BACKEND_TEST_PARALLEL) -timeout $(BACKEND_TEST_TIMEOUT) -run "$(T)" ./integration/...
 
 # Purge organisations left behind by past integration runs. TestMain cleans up each run
 # from now on, so this is for clearing a pre-existing backlog.

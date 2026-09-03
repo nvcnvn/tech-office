@@ -182,7 +182,9 @@ Posting produces a `chat.message` with `message_kind = 'voice'`.
 | `TRANSCRIPTION_ENABLED`, Whisper API key | off | transcription silently disabled when unset |
 
 `make voice-dev-infra-up` / `voice-dev-backend` / `voice-dev-print-env` bring up a local
-LiveKit for development.
+LiveKit for development. They set `PUBLIC_LIVEKIT_URL` to `ws://<LAN IP>:7880`, resolved
+from the default route (override with `TECH_OFFICE_HOST_IP`), so a physical phone on the
+same network can reach it; `make test-backend*` source the same script.
 
 ## Notifications produced
 
@@ -455,9 +457,9 @@ callee never learns anyone tried. This satisfies FR-006/SC-006 (an immediate ver
 instead of a 45-second ring) at the cost of the trail an offline callee used to get.
 Whether they should still see a missed call is an open product decision, not an oversight.
 
-**`PUBLIC_LIVEKIT_URL` goes stale silently.** A developer's local `backend/.env` pins a LAN
-IP and the file is gitignored, so it rots whenever the machine changes network. Clients
-then receive join credentials aimed at an unreachable host and the call connects with no
-audio — the same symptom as an audio-session bug, with a completely different cause.
-`TestVoiceLiveKitConnectivity` is the test that catches it; treat its failure as a config
-problem before suspecting code.
+**`PUBLIC_LIVEKIT_URL` must not be pinned in a local `backend/.env`.** The dev targets
+(`make voice-dev-backend`, `make test-backend*`) derive it from the machine's current LAN
+IP via `backend/scripts/dev/voice-env.sh`, which reuses the mobile scripts' resolver. A
+value exported that way wins over `.env`, so a pinned IP in `.env` is silently ignored by
+the server but still read by the test process, and `TestVoiceLiveKitConnectivity` fails on
+the URL mismatch. Treat that failure as a config problem before suspecting code.
