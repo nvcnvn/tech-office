@@ -1,0 +1,1 @@
+Overdue and missed rituals become real states with alerts. Add a reconciliation sweep so a ritual instance whose deadline passes with no evidence moves to overdue and later to missed, and notify the assignee and the reviewer. Today an owner only learns a checklist was skipped by opening a health report; the headline promise depends on the worker volunteering. Clears drift D29.
