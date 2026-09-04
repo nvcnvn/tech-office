@@ -144,6 +144,8 @@ export * from './iam-employee-list';
 export * from './rpc';
 
 // Export token functions
+export * from './linking';
+
 export * from './token';
 
 // Export type definitions

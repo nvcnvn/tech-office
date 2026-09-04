@@ -4,7 +4,7 @@ Events, recurrence, RSVP, room/equipment resources, free-busy and slot suggestio
 booking links, delegation, and attendance check-in with evidence. Owned by
 `internal/calendar`; contract in `rpc/v1/calendar.proto` (`CalendarService`, 26 RPCs).
 
-**Status date: 2026-09-04.** Supersedes specs 026 and 045; shift coverage added by spec 042.
+**Status date: 2026-09-04.** Supersedes specs 026, 045 and 046; shift coverage added by spec 042.
 
 ## Events
 
@@ -18,6 +18,18 @@ booking links, delegation, and attendance check-in with evidence. Owned by
   `discussion_channel_id` → `chat.channel`
 - operational flags: `requires_check_in`, `requires_evidence`
 - cancellation is a soft state: `cancelled_at` + `cancelled_by_id`, never a delete
+
+**Link previews honour that visibility.** `ListEventPreviews` — the query behind an event
+card in chat, see [workspace-navigation.md](workspace-navigation.md#previews) — uses the
+same predicate as `SearchEvents`: organiser, attendee, or `visibility IN ('team',
+'org_wide')`. `personal_shared` is deliberately outside the third arm, because it means
+organiser-and-attendees-only. A cancelled event has nothing to preview and is excluded.
+This replaces an earlier existence-only check on the preview path, which would have
+disclosed the title of any event whose id somebody happened to hold.
+
+The card carries `start_time` as an RFC3339 **instant** and an `all_day` flag; the client
+formats it in the reader's own zone, because a server-rendered wall clock would be wrong
+for anyone travelling.
 
 ### Recurrence
 

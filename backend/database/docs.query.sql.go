@@ -1374,6 +1374,93 @@ func (q *Queries) ListDocumentEmbeds(ctx context.Context, db DBTX, arg *ListDocu
 	return items, nil
 }
 
+const listDocumentPreviews = `-- name: ListDocumentPreviews :many
+SELECT
+    d.id,
+    d.title,
+    d.parent_document_id,
+    parent.title AS parent_title
+FROM docs.document d
+LEFT JOIN docs.document parent
+    ON (parent.organization_id, parent.id) = (d.organization_id, d.parent_document_id)
+   AND parent.is_deleted = FALSE
+WHERE d.organization_id = $1
+  AND d.id = ANY($2::uuid[])
+  AND d.is_deleted = FALSE
+  AND (
+    d.owner_employee_id = $3
+    OR COALESCE(
+         (SELECT a.access_level
+            FROM docs.document_access a
+           WHERE a.organization_id = d.organization_id
+             AND a.document_id     = d.id
+             AND a.grantee_type    = 'employee'
+             AND a.grantee_id      = $3),
+         (SELECT a.access_level
+            FROM docs.document_access a
+            JOIN organization.department_member dm
+              ON (dm.organization_id, dm.department_id) = (a.organization_id, a.grantee_id)
+           WHERE a.organization_id = d.organization_id
+             AND a.document_id     = d.id
+             AND a.grantee_type    = 'department'
+             AND dm.employee_id    = $3
+           ORDER BY CASE a.access_level
+                      WHEN 'write_update' THEN 2
+                      WHEN 'read_comment' THEN 1
+                      ELSE 0
+                    END DESC
+           LIMIT 1),
+         CASE WHEN d.visibility = 'public' THEN 'write_update' ELSE 'none' END
+       ) <> 'none'
+  )
+`
+
+type ListDocumentPreviewsParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	DocumentIds    []dbuuid.UUID `json:"document_ids"`
+	EmployeeID     dbuuid.UUID   `json:"employee_id"`
+}
+
+type ListDocumentPreviewsRow struct {
+	ID               dbuuid.UUID     `json:"id"`
+	Title            string          `json:"title"`
+	ParentDocumentID dbuuid.NullUUID `json:"parent_document_id"`
+	ParentTitle      pgtype.Text     `json:"parent_title"`
+}
+
+// Document cards (feature 046, FR-002): the document's own title, plus the parent it
+// lives under as the supporting line.
+//
+// The access predicate is copied verbatim from SearchDocuments INCLUDING ITS PRECEDENCE,
+// which is the part that is easy to get wrong: an explicit employee grant of 'none' is a
+// deny that stops the chain, so it must be a COALESCE over scalar sub-selects and not an
+// OR-chain. It is evaluated on the linked document only; the parent contributes a name,
+// never access.
+func (q *Queries) ListDocumentPreviews(ctx context.Context, db DBTX, arg *ListDocumentPreviewsParams) ([]*ListDocumentPreviewsRow, error) {
+	rows, err := db.Query(ctx, listDocumentPreviews, arg.OrganizationID, arg.DocumentIds, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListDocumentPreviewsRow
+	for rows.Next() {
+		var i ListDocumentPreviewsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.ParentDocumentID,
+			&i.ParentTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEmbedsBySource = `-- name: ListEmbedsBySource :many
 SELECT id, organization_id, source_document_id, target_document_id
 FROM docs.section_embed

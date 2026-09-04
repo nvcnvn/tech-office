@@ -510,16 +510,19 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	mux.Handle(rpcv1connect.NewCollaborationServiceHandler(collaborationConnect, interceptors))
 	slog.InfoContext(ctx, "collaboration service registered")
 
+	// Preview providers live in the domain whose rows they read (Principle IV); only
+	// booking, which reads no row, stays in internal/linking. Assignee names cross the
+	// collaboration/organization boundary through an interface, never a join.
 	linkingService, err := linking.NewService(
 		cfg.WebappURL,
 		queries,
 		adminPool,
-		collaboration.NewTaskPreviewProvider(),
-		docs.NewPreviewProvider(),
-		linking.NewProjectPreviewProvider(),
-		linking.NewChatChannelPreviewProvider(),
-		linking.NewChatThreadPreviewProvider(),
-		linking.NewCalendarEventPreviewProvider(),
+		tenantPool,
+		collaboration.NewTaskPreviewProvider(queries, orgLogic),
+		collaboration.NewProjectPreviewProvider(queries),
+		docs.NewDocumentPreviewProvider(queries),
+		calendar.NewEventPreviewProvider(queries),
+		chat.NewChatPreviewProvider(queries),
 		linking.NewBookingPreviewProvider(),
 	)
 	if err != nil {

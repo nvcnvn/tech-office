@@ -7,7 +7,7 @@
  * itself was blank.
  */
 
-import React, { useEffect, useState } from "react";
+import React, { useMemo } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -28,16 +28,17 @@ import {
   documentContentToText,
 } from "@/components/docs/document-content";
 import {
+  buildCanonicalLinkPreviewDisplay,
   extractCanonicalResourceLinks,
-  getCanonicalLinkPreviewDisplay,
   removeCanonicalResourceLinksFromContent,
+  type CanonicalLinkPreview,
   type CanonicalLinkPreviewDisplay,
 } from "@tech-office/links";
 import {
-  fetchCanonicalPreview,
   generateCanonicalUrl,
   getCanonicalInAppRoute,
 } from "@/lib/canonical-links";
+import { useCanonicalLinkPreviews } from "@/lib/canonical-link-previews";
 import {
   border,
   lightPalette,
@@ -49,43 +50,20 @@ import {
 } from "@tech-office/theme-tokens";
 
 /** Small preview card for a canonical resource link in the document */
-function CanonicalLinkPreviewCard({ url }: { url: string }) {
+function CanonicalLinkPreviewCard({
+  url,
+  preview,
+}: {
+  url: string;
+  preview: CanonicalLinkPreview;
+}) {
   const router = useRouter();
-  const [display, setDisplay] = useState<CanonicalLinkPreviewDisplay | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    fetchCanonicalPreview(url)
-      .then((result) => {
-        if (cancelled) return;
-        setDisplay(getCanonicalLinkPreviewDisplay(result?.preview ?? null, url));
-        setLoading(false);
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setDisplay(getCanonicalLinkPreviewDisplay(null, url));
-        setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
+  const display: CanonicalLinkPreviewDisplay = buildCanonicalLinkPreviewDisplay(preview);
 
   const handlePress = async () => {
     const route = await getCanonicalInAppRoute(url, { preferRecoverableFallback: true });
     if (route) router.push(route as any);
   };
-
-  if (loading) {
-    return (
-      <View style={styles.linkCard}>
-        <ActivityIndicator size="small" color={lightPalette.text.secondary} />
-      </View>
-    );
-  }
-  if (!display) return null;
 
   return (
     <Pressable
@@ -93,19 +71,25 @@ function CanonicalLinkPreviewCard({ url }: { url: string }) {
       style={({ pressed }) => [styles.linkCard, pressed && styles.pressed]}
     >
       <Text style={styles.linkBadge}>{display.badge}</Text>
-      {display.title ? (
-        <Text style={styles.linkTitle} numberOfLines={2}>
-          {display.title}
+      <Text style={styles.linkTitle} numberOfLines={2}>
+        {display.title}
+      </Text>
+      {display.lines.map((line, index) => (
+        <Text key={index} style={styles.linkSubtitle} numberOfLines={1}>
+          {line}
         </Text>
-      ) : null}
-      {display.subtitle ? (
-        <Text style={styles.linkSubtitle} numberOfLines={1}>
-          {display.subtitle}
-        </Text>
-      ) : null}
+      ))}
     </Pressable>
   );
 }
+
+// The route segment is a slug when the reader came from the docs list or search, and a
+// document id when they came from a canonical link or a notification. GetDocument takes
+// either, so the shape of the segment picks the field rather than every caller having to
+// resolve an id to a slug first.
+// Deliberately shape-only: the ids this receives are UUIDv7, so pinning the version and
+// variant nibbles would reject every one of them. No slug has this shape.
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function DocViewerScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>();
@@ -114,15 +98,28 @@ export default function DocViewerScreen() {
   const { data: doc, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["doc", slug],
     queryFn: async () => {
-      const result = await getDocument({ slug: slug!, includeContent: true });
+      const result = await getDocument(
+        UUID_PATTERN.test(slug!)
+          ? { id: slug!, includeContent: true }
+          : { slug: slug!, includeContent: true },
+      );
       return result.document;
     },
     enabled: !!slug,
   });
 
+  // One preview lookup for the whole document, before the early returns so the hook order
+  // is stable. Nothing is fabricated from a URL: a link the reader may not open gets no
+  // card and keeps its raw text.
+  const documentTexts = useMemo(
+    () => [documentContentToText(doc?.contentJson)],
+    [doc],
+  );
+  const linkPreviews = useCanonicalLinkPreviews(documentTexts);
+
   const handleShare = async () => {
     if (!doc) return;
-    const d = doc as any;
+    const d = doc;
     const title = d.title || "Document";
 
     // generateCanonicalUrl sends the auth token; this screen used to hand-roll
@@ -167,15 +164,14 @@ export default function DocViewerScreen() {
     );
   }
 
-  const d = doc as any;
-  const bodyText = documentContentToText(d?.content);
+  const d = doc;
+  const bodyText = documentContentToText(doc?.contentJson);
 
+  // Only a link that produced a card is stripped from the body; anything the reader may
+  // not preview keeps its raw text (FR-016).
   const canonicalLinks = extractCanonicalResourceLinks(bodyText);
-  const displayBodyText = (
-    canonicalLinks.length > 0
-      ? removeCanonicalResourceLinksFromContent(bodyText)
-      : bodyText
-  ).trim();
+  const cardedLinks = canonicalLinks.filter((url) => linkPreviews.has(url));
+  const displayBodyText = removeCanonicalResourceLinksFromContent(bodyText, cardedLinks).trim();
 
   return (
     <ScrollView
@@ -203,7 +199,6 @@ export default function DocViewerScreen() {
       {d?.updatedAt ? (
         <Text style={styles.meta}>
           Last updated {formatDistanceToNow(new Date(d.updatedAt), { addSuffix: true })}
-          {d?.updatedByName ? ` by ${d.updatedByName}` : ""}
         </Text>
       ) : null}
 
@@ -217,11 +212,11 @@ export default function DocViewerScreen() {
         />
       ) : null}
 
-      {canonicalLinks.length > 0 ? (
+      {cardedLinks.length > 0 ? (
         <View style={styles.linksSection}>
           <Text style={styles.linksHeader}>Linked Resources</Text>
-          {canonicalLinks.map((url) => (
-            <CanonicalLinkPreviewCard key={url} url={url} />
+          {cardedLinks.map((url) => (
+            <CanonicalLinkPreviewCard key={url} url={url} preview={linkPreviews.get(url)!} />
           ))}
         </View>
       ) : null}

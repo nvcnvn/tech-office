@@ -37,7 +37,8 @@ import React, { useRef, useState, useEffect, useCallback, useMemo } from 'react'
 import { Virtuoso, VirtuosoHandle } from 'react-virtuoso';
 import { Box, CircularProgress, Button } from '@mui/material';
 import MessageItem from './MessageItem';
-import { listTasksBySourceMessages, type MessageTaskLink } from 'apis';
+import { fetchCanonicalPreviews, listTasksBySourceMessages, MAX_PREVIEW_URLS_PER_REQUEST, type MessageTaskLink } from 'apis';
+import { extractCanonicalResourceLinks, type CanonicalLinkPreview } from '@tech-office/links';
 import { codeToEmoji } from '../utils/emoji';
 
 // Local type for proto reaction objects until generated types are available
@@ -114,6 +115,12 @@ function convertTimestamp(ts?: { seconds: bigint | string | number }): Date {
 const MAX_TASK_LINK_LOOKUP = 200;
 
 /**
+ * Distinct canonical urls looked up for one rendered page. Matches the backend's request
+ * bound, which rejects rather than truncates — so exceeding it here would be a client bug.
+ */
+const MAX_PREVIEW_LOOKUP = MAX_PREVIEW_URLS_PER_REQUEST;
+
+/**
  * Resolve, in one call, which of the rendered messages have become tasks.
  *
  * This is the single place the chip lookup happens. Doing it per message would issue one
@@ -172,6 +179,51 @@ function useMessageTaskLinks(messages: VirtualizedMessage[]): {
 	return { linksByMessage, refresh };
 }
 
+/**
+ * One preview lookup for the whole rendered page (Feature 046).
+ *
+ * The cost of a page is proportional to the distinct resources it links, not to the
+ * number of messages: fifty messages pointing at five resources issue one request
+ * carrying five urls (FR-020, SC-005). The map starts empty and the list renders message
+ * text without waiting on it, so a slow lookup never delays reading (FR-022).
+ */
+function useCanonicalLinkPreviews(messages: VirtualizedMessage[]): Map<string, CanonicalLinkPreview> {
+	const [previews, setPreviews] = useState<Map<string, CanonicalLinkPreview>>(new Map());
+
+	// Keyed on the urls themselves, so scrolling within an already-resolved page does not
+	// re-request while a page of new messages does.
+	const urlKey = useMemo(() => {
+		// Newest first. `messages` is oldest-first and a reader opens a channel at the
+		// bottom, so filling the cap from the front would spend it on history nobody is
+		// looking at and leave the message just posted without a card — the same reason
+		// the chip lookup above takes the tail.
+		const urls = new Set<string>();
+		for (let i = messages.length - 1; i >= 0 && urls.size < MAX_PREVIEW_LOOKUP; i--) {
+			for (const url of extractCanonicalResourceLinks(messages[i].messageText || '')) {
+				urls.add(url);
+				if (urls.size >= MAX_PREVIEW_LOOKUP) break;
+			}
+		}
+		return Array.from(urls).join('\n');
+	}, [messages]);
+
+	useEffect(() => {
+		if (!urlKey) {
+			setPreviews(new Map());
+			return;
+		}
+		let cancelled = false;
+		fetchCanonicalPreviews(urlKey.split('\n')).then((resolved) => {
+			if (!cancelled) setPreviews(resolved);
+		});
+		return () => {
+			cancelled = true;
+		};
+	}, [urlKey]);
+
+	return previews;
+}
+
 function voiceCallIdForMessage(message: VirtualizedMessage): string | null {
 	if (message.messageKind !== 'system' || !message.metadataJson) {
 		return null;
@@ -228,6 +280,8 @@ export default function VirtualizedMessageList({
 
 	// One chip lookup for the whole rendered page (Feature 038).
 	const { linksByMessage, refresh: refreshTaskLinks } = useMessageTaskLinks(visibleMessages);
+	// One preview lookup for the whole rendered page (Feature 046).
+	const linkPreviews = useCanonicalLinkPreviews(visibleMessages);
 
 	// ── Scroll / bottom tracking ──────────────────────────────────────
 	const [atBottom, setAtBottom] = useState(true);
@@ -410,6 +464,7 @@ export default function VirtualizedMessageList({
 							metadataJson={message.metadataJson}
 							mentionedEmployeeIds={message.mentionedEmployeeIds || []}
 							taskLinks={linksByMessage.get(messageId) || []}
+							linkPreviews={linkPreviews}
 							onTaskCreated={refreshTaskLinks}
 							onReply={!isLocalOnly && onReply ? () => onReply(messageId) : undefined}
 							onReact={!isLocalOnly && onReact ? (emoji, shouldRemove) => onReact(messageId, emoji, shouldRemove) : undefined}

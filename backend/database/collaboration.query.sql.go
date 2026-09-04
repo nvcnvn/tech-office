@@ -3780,6 +3780,68 @@ func (q *Queries) ListProjectMembers(ctx context.Context, db DBTX, arg *ListProj
 	return items, nil
 }
 
+const listProjectPreviews = `-- name: ListProjectPreviews :many
+SELECT
+    p.id,
+    p.name,
+    p.key,
+    p.is_archived
+FROM collaboration.project p
+WHERE p.organization_id = $1
+  AND p.id = ANY($2::uuid[])
+  AND (
+      p.visibility <> 'private'
+      OR p.owner_employee_id = $3
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+           WHERE pm.organization_id = p.organization_id
+             AND pm.project_id      = p.id
+             AND pm.employee_id     = $3
+      )
+  )
+`
+
+type ListProjectPreviewsParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	ProjectIds     []dbuuid.UUID `json:"project_ids"`
+	EmployeeID     dbuuid.UUID   `json:"employee_id"`
+}
+
+type ListProjectPreviewsRow struct {
+	ID         dbuuid.UUID `json:"id"`
+	Name       string      `json:"name"`
+	Key        string      `json:"key"`
+	IsArchived bool        `json:"is_archived"`
+}
+
+// Project cards (feature 046, FR-004). The predicate mirrors
+// Service.resolveProjectStatus: a private project is visible to its owner and its members.
+// An archived project still previews — it exists and the reader may open it.
+func (q *Queries) ListProjectPreviews(ctx context.Context, db DBTX, arg *ListProjectPreviewsParams) ([]*ListProjectPreviewsRow, error) {
+	rows, err := db.Query(ctx, listProjectPreviews, arg.OrganizationID, arg.ProjectIds, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListProjectPreviewsRow
+	for rows.Next() {
+		var i ListProjectPreviewsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Key,
+			&i.IsArchived,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectStates = `-- name: ListProjectStates :many
 SELECT id, organization_id, project_id, name, color, category, position, is_initial, is_closed, updated_at, state_type FROM collaboration.project_state
 WHERE organization_id = $1 AND project_id = $2
@@ -4496,6 +4558,110 @@ func (q *Queries) ListTaskLevels(ctx context.Context, db DBTX, arg *ListTaskLeve
 			&i.Color,
 			&i.Depth,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskPreviews = `-- name: ListTaskPreviews :many
+SELECT
+    t.id,
+    t.identifier,
+    t.title,
+    t.project_id,
+    ps.name     AS state_name,
+    ps.category AS state_category,
+    COALESCE(primary_assignee.employee_id, '00000000-0000-0000-0000-000000000000'::uuid) AS primary_assignee_id,
+    (SELECT count(*)
+       FROM collaboration.task_assignee ta
+      WHERE ta.organization_id = t.organization_id
+        AND ta.task_id         = t.id
+        AND ta.role            = 'assignee') AS assignee_count
+FROM collaboration.task t
+JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+LEFT JOIN LATERAL (
+    SELECT ta.employee_id
+      FROM collaboration.task_assignee ta
+     WHERE ta.organization_id = t.organization_id
+       AND ta.task_id         = t.id
+       AND ta.role            = 'assignee'
+     ORDER BY ta.assigned_at, ta.id
+     LIMIT 1
+) primary_assignee ON TRUE
+WHERE t.organization_id = $1
+  AND t.id = ANY($2::uuid[])
+  AND t.is_deleted = FALSE
+  -- Project access — same predicate as ListTasksBySourceMessages.
+  AND (
+      p.visibility = 'public'
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+           WHERE pm.organization_id = t.organization_id
+             AND pm.project_id      = t.project_id
+             AND pm.employee_id     = $3
+      )
+  )
+`
+
+type ListTaskPreviewsParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	TaskIds        []dbuuid.UUID `json:"task_ids"`
+	EmployeeID     dbuuid.UUID   `json:"employee_id"`
+}
+
+type ListTaskPreviewsRow struct {
+	ID                dbuuid.UUID `json:"id"`
+	Identifier        string      `json:"identifier"`
+	Title             string      `json:"title"`
+	ProjectID         dbuuid.UUID `json:"project_id"`
+	StateName         string      `json:"state_name"`
+	StateCategory     string      `json:"state_category"`
+	PrimaryAssigneeID dbuuid.UUID `json:"primary_assignee_id"`
+	AssigneeCount     int64       `json:"assignee_count"`
+}
+
+// Task cards for a page of chat link previews (feature 046, FR-001).
+//
+// The access predicate is the one ListTasksBySourceMessages and SearchTasks already
+// share, so "which tasks may this reader see" keeps a single definition. A task the
+// reader cannot see is absent from the result rather than flagged — that absence is what
+// makes access_denied and not_found indistinguishable to the caller (FR-010).
+//
+// The earliest assignee comes from a LATERAL taking one row, and the count from a
+// correlated sub-select, rather than from a join on task_assignee: a task with three
+// assignees must still produce exactly one row.
+//
+// The assignee id is COALESCEd to the nil uuid because sqlc infers a LEFT JOIN'd NOT NULL
+// column as non-nullable, and scanning a real NULL into dbuuid.UUID fails the whole batch.
+// The nil uuid is not a valid employee id; the Go side reads assignee_count, not the id,
+// to decide whether there is an assignee at all.
+func (q *Queries) ListTaskPreviews(ctx context.Context, db DBTX, arg *ListTaskPreviewsParams) ([]*ListTaskPreviewsRow, error) {
+	rows, err := db.Query(ctx, listTaskPreviews, arg.OrganizationID, arg.TaskIds, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListTaskPreviewsRow
+	for rows.Next() {
+		var i ListTaskPreviewsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Identifier,
+			&i.Title,
+			&i.ProjectID,
+			&i.StateName,
+			&i.StateCategory,
+			&i.PrimaryAssigneeID,
+			&i.AssigneeCount,
 		); err != nil {
 			return nil, err
 		}

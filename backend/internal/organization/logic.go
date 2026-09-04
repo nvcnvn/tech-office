@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -40,6 +41,11 @@ type OrganizationLogic interface {
 	AutocompleteEmployees(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, prefix string, limit int32) ([]*database.AutocompleteEmployeesRow, error)
 	AutocompleteDepartments(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, prefix string, limit int32) ([]*database.AutocompleteDepartmentsRow, error)
 
+	// ListEmployeeNames resolves display names for a batch of employees. It exists so a
+	// caller outside this domain — the task link preview card (feature 046) — can name an
+	// assignee without joining organization.employee from its own schema.
+	ListEmployeeNames(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, ids []dbuuid.UUID) (map[dbuuid.UUID]string, error)
+
 	// SetCollaborationLogic injects collaboration logic for default project creation
 	SetCollaborationLogic(collaborationLogic CollaborationLogic)
 }
@@ -71,6 +77,36 @@ func NewOrganizationLogic(queries *database.Queries, webappURL string) Organizat
 		Queries:   queries,
 		WebappURL: webappURL,
 	}
+}
+
+// ListEmployeeNames returns one display name per employee id that exists in this
+// organization. An id with no row is simply absent from the map: a caller asking about an
+// employee it may not name gets nothing back rather than an error.
+func (s *organizationLogicImpl) ListEmployeeNames(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	ids []dbuuid.UUID,
+) (map[dbuuid.UUID]string, error) {
+	names := make(map[dbuuid.UUID]string, len(ids))
+	if len(ids) == 0 {
+		return names, nil
+	}
+	cards, err := s.Queries.GetEmployeeCardsByIDs(ctx, tx, &database.GetEmployeeCardsByIDsParams{
+		Column1:        ids,
+		OrganizationID: orgID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, card := range cards {
+		name := strings.TrimSpace(card.GivenName + " " + card.FamilyName)
+		if name == "" {
+			continue
+		}
+		names[card.ID] = name
+	}
+	return names, nil
 }
 
 // SetCollaborationLogic injects collaboration logic for default project creation

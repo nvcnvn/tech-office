@@ -45,6 +45,8 @@ import { useAuth } from "@/hooks/use-auth";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { generateCanonicalUrl } from "@/lib/canonical-links";
 import { ChatMessageBody } from "@/components/chat/chat-message-body";
+import { useCanonicalLinkPreviews } from "@/lib/canonical-link-previews";
+import type { CanonicalLinkPreview } from "@tech-office/links";
 import { SFIcon } from "@/components/ui/sf-icon";
 import * as Haptics from "expo-haptics";
 import { UserAvatar } from "@/components/common/user-avatar";
@@ -255,6 +257,7 @@ function ReplyItem({
   item,
   channelId,
   contentWidth,
+  linkPreviews,
   isHighlighted,
   onLongPress,
   onReactionPress,
@@ -262,6 +265,7 @@ function ReplyItem({
   item: ThreadReply;
   channelId?: string | null;
   contentWidth: number;
+  linkPreviews?: Map<string, CanonicalLinkPreview>;
   isHighlighted?: boolean;
   onLongPress: (message: ThreadReply) => void;
   onReactionPress: (messageId: string, emojiCode: string, currentlyReacted: boolean) => void;
@@ -299,6 +303,7 @@ function ReplyItem({
             messageTimestamp={msgDate}
             contentWidth={contentWidth}
             textStyle={styles.replyText}
+            linkPreviews={linkPreviews}
           />
           {(item.reactions ?? []).length > 0 ? (
             <View style={styles.reactionsRow}>
@@ -339,6 +344,7 @@ function ParentMessageCard({
   item,
   channelId,
   contentWidth,
+  linkPreviews,
   isHighlighted,
   onPress,
   onLongPress,
@@ -347,6 +353,7 @@ function ParentMessageCard({
   item: ThreadReply;
   channelId?: string | null;
   contentWidth: number;
+  linkPreviews?: Map<string, CanonicalLinkPreview>;
   isHighlighted?: boolean;
   onPress: () => void;
   onLongPress: (message: ThreadReply) => void;
@@ -394,6 +401,7 @@ function ParentMessageCard({
             messageTimestamp={msgDate}
             contentWidth={contentWidth}
             textStyle={styles.replyText}
+            linkPreviews={linkPreviews}
           />
           {(item.reactions ?? []).length > 0 ? (
             <View style={styles.reactionsRow}>
@@ -559,6 +567,14 @@ export default function ThreadScreen() {
   const parentMessage = parentMessageData?.message ?? null;
   const isInitialLoading = isLoadingRouteMessage || isLoading;
   const displayedReplies = data ?? [];
+
+  // Feature 046: one preview lookup for the thread root plus its replies, not one per
+  // message. The map starts empty so the replies render without waiting on it.
+  const threadMessageTexts = useMemo(
+    () => [parentMessage?.messageText, ...displayedReplies.map((reply) => reply.messageText)],
+    [displayedReplies, parentMessage?.messageText],
+  );
+  const linkPreviews = useCanonicalLinkPreviews(threadMessageTexts);
 
   const { data: profileData } = useQuery({
     queryKey: ["profile", "thread-share"],
@@ -1058,6 +1074,7 @@ export default function ThreadScreen() {
           ListHeaderComponent={
             parentMessage ? (
               <ParentMessageCard
+                linkPreviews={linkPreviews}
                 item={parentMessage}
                 channelId={parentChannelId}
                 contentWidth={contentWidth}
@@ -1086,6 +1103,7 @@ export default function ThreadScreen() {
           ListHeaderComponentStyle={parentMessage ? styles.listHeader : undefined}
           renderItem={({ item }) => (
             <ReplyItem
+              linkPreviews={linkPreviews}
               item={item}
               channelId={parentChannelId}
               contentWidth={contentWidth}

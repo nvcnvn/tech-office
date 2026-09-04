@@ -14,33 +14,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nvcnvn/tech-office/backend/database"
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
-	"github.com/nvcnvn/tech-office/backend/internal/linking"
 	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-type taskPreviewProvider struct{}
-
-func NewTaskPreviewProvider() linking.PreviewProvider {
-	return taskPreviewProvider{}
-}
-
-func (taskPreviewProvider) Preview(target linking.CanonicalLinkTarget, canonicalURL string) (*linking.LinkPreviewMetadata, bool) {
-	if target.ResourceType != linking.ResourceTypeTaskInstance {
-		return nil, false
-	}
-	subtitle := "Task"
-	if target.FocusIntent != "" {
-		subtitle = fmt.Sprintf("Task • %s", strings.ReplaceAll(target.FocusIntent, "_", " "))
-	}
-	return &linking.LinkPreviewMetadata{
-		Title:        fmt.Sprintf("Task %s", target.ResourceID),
-		Subtitle:     subtitle,
-		ResourceType: target.ResourceType,
-		Href:         canonicalURL,
-	}, true
-}
 
 // CreateTask creates a new task with cross-domain integrations
 func (l *logicImpl) CreateTask(

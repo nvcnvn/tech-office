@@ -146,7 +146,7 @@ test-frontend: check-backend check-frontend
 .PHONY: test-frontend-one
 test-frontend-one: check-backend check-frontend
 	@echo "\n=== Running frontend E2E: $(F).spec.ts ==="
-	cd frontend && pnpm --filter web exec playwright test --config=apps/web/e2e/playwright.config.ts "$(F)"
+	cd frontend && pnpm --filter web exec playwright test --config=e2e/playwright.config.ts "$(F)"
 
 # Run with headed browser for debugging
 .PHONY: test-frontend-headed
@@ -208,9 +208,19 @@ MAESTRO_DEV_CLIENT_URL ?= $(shell \
 	. frontend/apps/mobile/scripts/resolve-ip.sh >/dev/null 2>&1; \
 	printf 'techoffice://expo-development-client/?url=http%%3A%%2F%%2F%s%%3A18082' "$$METRO_HOST")
 
+# Target a specific simulator/emulator. Without it Maestro picks whichever device it finds
+# first, so the iOS half of a cross-platform check cannot be asked for by name:
+#   make test-mobile-one F=chat-link-previews MAESTRO_DEVICE=<simulator-udid>
+MAESTRO_DEVICE ?=
+MAESTRO_DEVICE_FLAG = $(if $(MAESTRO_DEVICE),--device $(MAESTRO_DEVICE),)
+
 # Build -e KEY=VALUE flags from .env file
+# Values are single-quoted: a fixture title such as "Zarquon Closing Procedure" contains
+# spaces, and an unquoted -e KEY=value splits into two arguments and Maestro reads the tail
+# as a flow path. run-maestro-suite.sh builds the same flags as a shell array and never had
+# the problem.
 MAESTRO_ENV_FLAGS = $(shell test -f $(MAESTRO_ENV) && \
-	grep -v '^\#' $(MAESTRO_ENV) | grep '=.' | sed 's/^/-e /' | tr '\n' ' ') \
+	grep -v '^\#' $(MAESTRO_ENV) | grep '=.' | sed "s/^/-e '/; s/$$/'/" | tr '\n' ' ') \
 	-e MAESTRO_RUN_ID=$(MAESTRO_RUN_ID) \
 	-e MAESTRO_DEV_CLIENT_URL=$(MAESTRO_DEV_CLIENT_URL)
 
@@ -244,6 +254,24 @@ check-maestro-canonical-env: check-maestro-env
 	fi
 	@echo "✓ canonical Maestro vars loaded"
 
+.PHONY: check-maestro-link-preview-env
+check-maestro-link-preview-env: check-maestro-env
+	@missing_vars=""; \
+	for var in \
+		MAESTRO_CANONICAL_TASK_LINK \
+		MAESTRO_CANONICAL_TASK_TITLE \
+		MAESTRO_CANONICAL_TASK_IDENTIFIER \
+		MAESTRO_CANONICAL_TASK_READY_TEXT \
+		MAESTRO_LINK_PREVIEW_DOCUMENT_LINK \
+		MAESTRO_LINK_PREVIEW_DOCUMENT_TITLE; do \
+			grep -q "^$$var=" $(MAESTRO_ENV) || missing_vars="$$missing_vars $$var"; \
+	done; \
+	if [ -n "$$missing_vars" ]; then \
+		echo "✗ Missing link-preview Maestro vars in $(MAESTRO_ENV):$$missing_vars"; \
+		exit 1; \
+	fi
+	@echo "✓ link preview Maestro vars loaded"
+
 .PHONY: check-store-manifest
 ## Verify the mobile permission manifest is honest and complete (Feature 036).
 ## Both stores treat a declared-but-unused permission, or a permission string that
@@ -265,8 +293,11 @@ test-mobile-one: check-backend check-maestro check-maestro-env
 	@if [ "$(F)" = "canonical-resource-links" ]; then \
 		$(MAKE) check-maestro-canonical-env; \
 	fi
+	@if [ "$(F)" = "chat-link-previews" ]; then \
+		$(MAKE) check-maestro-link-preview-env; \
+	fi
 	@echo "\n=== Running Maestro flow: $(F).yaml ==="
-	$(MAESTRO_BIN) test $(MAESTRO_ENV_FLAGS) $(MAESTRO_DIR)/$(F).yaml
+	$(MAESTRO_BIN) $(MAESTRO_DEVICE_FLAG) test $(MAESTRO_ENV_FLAGS) $(MAESTRO_DIR)/$(F).yaml
 
 # ---------------------------------------------------------------------------
 # Infrastructure helpers

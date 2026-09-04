@@ -1,19 +1,18 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useMemo } from "react";
 import { Linking, Pressable, Text, View, type StyleProp, type TextStyle } from "react-native";
 import { usePathname, useRouter } from "expo-router";
 import RenderHtml from "react-native-render-html";
 
 import {
-  extractFirstCanonicalResourceLink,
-  getCanonicalLinkPreviewDisplay,
   removeCanonicalResourceLinksFromContent,
+  selectCanonicalPreviewCards,
   splitTextByCanonicalResourceLinks,
   type CanonicalLinkPreview,
 } from "@tech-office/links";
 
-import { SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE } from "apis";
+import { SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE, type MessageTaskLink } from "apis";
 
-import { fetchCanonicalPreview, getCanonicalInAppRoute } from "@/lib/canonical-links";
+import { getCanonicalInAppRoute } from "@/lib/canonical-links";
 import {
   getTabLabel,
   getTabRootHref,
@@ -46,6 +45,14 @@ interface ChatMessageBodyProps {
   messageTimestamp?: Date | null;
   contentWidth: number;
   textStyle?: StyleProp<TextStyle>;
+  /**
+   * Previews for the whole rendered page, keyed by canonical URL. Supplied by the screen:
+   * a message never looks one up itself, so a slow lookup for one link cannot hold up
+   * another message (FR-020, FR-022).
+   */
+  linkPreviews?: Map<string, CanonicalLinkPreview>;
+  /** Tasks this message already shows as chips; a card for one of them is suppressed. */
+  taskLinks?: MessageTaskLink[];
 }
 
 interface VoiceTimelineMetadata {
@@ -99,50 +106,29 @@ export function ChatMessageBody({
   messageTimestamp,
   contentWidth,
   textStyle,
+  linkPreviews,
+  taskLinks,
 }: ChatMessageBodyProps) {
   const router = useRouter();
   const pathname = usePathname();
   const hasHtml = /<[a-z][\s\S]*>/i.test(messageText);
-  const canonicalLink = useMemo(() => extractFirstCanonicalResourceLink(messageText), [messageText]);
-  const [preview, setPreview] = useState<CanonicalLinkPreview | null>(null);
-  const [previewLoaded, setPreviewLoaded] = useState(false);
-  const previewDisplay = useMemo(
-    () => getCanonicalLinkPreviewDisplay(preview, previewLoaded ? canonicalLink : null),
-    [canonicalLink, preview, previewLoaded],
+  const previewCards = useMemo(
+    () =>
+      selectCanonicalPreviewCards(messageText, linkPreviews, {
+        suppressedTaskIds: (taskLinks ?? []).map((link) => link.taskId),
+      }),
+    [linkPreviews, messageText, taskLinks],
   );
+  const cardedUrls = useMemo(() => previewCards.map((card) => card.url), [previewCards]);
   const displayMessageText = useMemo(
-    () => previewDisplay ? removeCanonicalResourceLinksFromContent(messageText) : messageText,
-    [messageText, previewDisplay],
+    () => removeCanonicalResourceLinksFromContent(messageText, cardedUrls),
+    [cardedUrls, messageText],
   );
   const timelineMetadata = useMemo(() => parseTimelineMetadata(metadataJson), [metadataJson]);
   const textSegments = useMemo(() => splitTextByCanonicalResourceLinks(displayMessageText), [displayMessageText]);
   const hasDisplayMessageText = displayMessageText.trim().length > 0;
   const voiceCallEvent = voiceCallEventFromText(displayMessageText);
   const isVoiceMessage = (messageKind === "voice" || displayMessageText.trim() === "Voice message") && fileIds.length > 0;
-
-  useEffect(() => {
-    if (!canonicalLink) {
-      setPreview(null);
-      setPreviewLoaded(false);
-      return;
-    }
-    let cancelled = false;
-    const previewURL = canonicalLink;
-    setPreviewLoaded(false);
-
-    async function loadPreview() {
-      const payload = await fetchCanonicalPreview(previewURL);
-      if (!cancelled) {
-        setPreview(payload?.preview ?? null);
-        setPreviewLoaded(true);
-      }
-    }
-
-    void loadPreview();
-    return () => {
-      cancelled = true;
-    };
-  }, [canonicalLink]);
 
   async function openCanonicalLink(rawUrl: string) {
     const route = await getCanonicalInAppRoute(rawUrl, { preferRecoverableFallback: true });
@@ -160,16 +146,17 @@ export function ChatMessageBody({
     await Linking.openURL(rawUrl);
   }
 
-  function renderPreviewCard() {
-    if (!previewDisplay) {
+  function renderPreviewCards() {
+    if (previewCards.length === 0) {
       return null;
     }
-    return (
+    return previewCards.map((card, index) => (
       <Pressable
-        testID="canonical-link-preview-card"
-        onPress={() => void openCanonicalLink(previewDisplay.href)}
+        key={card.url}
+        testID={`canonical-link-preview-card-${index}`}
+        onPress={() => void openCanonicalLink(card.display.href)}
         style={({ pressed }) => ({
-          marginTop: hasDisplayMessageText ? 10 : 0,
+          marginTop: index > 0 || hasDisplayMessageText ? 10 : 0,
           paddingHorizontal: 14,
           paddingVertical: 12,
           borderRadius: 14,
@@ -179,18 +166,20 @@ export function ChatMessageBody({
         })}
       >
         <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: "#1d4ed8" }}>
-          {previewDisplay.badge}
+          {card.display.badge}
         </Text>
-        <Text style={{ marginTop: 4, fontSize: 15, fontWeight: "700", color: "#0f172a" }}>
-          {previewDisplay.title}
+        {/* Resource-supplied text, rendered as text. numberOfLines keeps a long title
+            from pushing the card wide at 360 dp. */}
+        <Text numberOfLines={2} style={{ marginTop: 4, fontSize: 15, fontWeight: "700", color: "#0f172a" }}>
+          {card.display.title}
         </Text>
-        {previewDisplay.subtitle ? (
-          <Text style={{ marginTop: 2, fontSize: 13, color: "#475569" }}>
-            {previewDisplay.subtitle}
+        {card.display.lines.map((line, lineIndex) => (
+          <Text key={lineIndex} numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: "#475569" }}>
+            {line}
           </Text>
-        ) : null}
+        ))}
       </Pressable>
-    );
+    ));
   }
 
   // Feature 038: a conversion's announcement names the task it created rather than
@@ -267,7 +256,7 @@ export function ChatMessageBody({
             defaultTextProps={{ selectable: true }}
           />
         ) : null}
-        {renderPreviewCard()}
+        {renderPreviewCards()}
       </View>
     );
   }
@@ -291,7 +280,7 @@ export function ChatMessageBody({
           )}
         </Text>
       ) : null}
-      {renderPreviewCard()}
+      {renderPreviewCards()}
     </View>
   );
 }

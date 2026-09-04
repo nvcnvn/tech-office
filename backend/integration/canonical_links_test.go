@@ -33,18 +33,6 @@ type canonicalResolveResponse struct {
 	FallbackURL      string                      `json:"fallbackUrl"`
 }
 
-type canonicalPreviewResponse struct {
-	Preview struct {
-		Title        string               `json:"title"`
-		Subtitle     string               `json:"subtitle"`
-		ResourceType linking.ResourceType `json:"resourceType"`
-		Href         string               `json:"href"`
-	} `json:"preview"`
-	NormalizedTarget linking.CanonicalLinkTarget `json:"normalizedTarget"`
-	Status           linking.ResolutionStatus    `json:"status"`
-	FallbackURL      string                      `json:"fallbackUrl"`
-}
-
 func postCanonicalGenerate(t *testing.T, target linking.CanonicalLinkTarget) canonicalGenerateResponse {
 	t.Helper()
 	body, err := json.Marshal(map[string]any{"target": target})
@@ -89,25 +77,6 @@ func postCanonicalResolveWithToken(t *testing.T, rawURL string, platform linking
 	var payload canonicalResolveResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
 	return payload
-}
-
-func getCanonicalPreview(t *testing.T, rawURL string, bearerToken string) (int, canonicalPreviewResponse) {
-	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, serverBaseURL+"/api/linking/preview?url="+url.QueryEscape(rawURL), nil)
-	require.NoError(t, err)
-	if bearerToken != "" {
-		req.Header.Set("Authorization", "Bearer "+bearerToken)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	var payload canonicalPreviewResponse
-	if resp.StatusCode == http.StatusOK {
-		require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
-	}
-	return resp.StatusCode, payload
 }
 
 func containsString(items []string, expected string) bool {
@@ -203,7 +172,7 @@ func TestCanonicalLinks(t *testing.T) {
 			require.Equal(t, linking.ResolutionStatusOK, resolved.Status)
 			require.Equal(t, task.Id, resolved.NormalizedTarget.ResourceID)
 			require.Equal(t, "/workspace/projects/"+project.ID+"/tasks/"+task.Id+"?focusIntent=review_pending&requirementId="+requirementID, resolved.WebRoute)
-			require.Equal(t, "/(app)/(tasks)/"+project.ID+"/"+task.Id+"?focusIntent=review_pending&requirementId="+requirementID, resolved.MobileRoute)
+			require.Equal(t, "/(app)/(tasks)/"+project.ID+"/task/"+task.Id+"?focusIntent=review_pending&requirementId="+requirementID, resolved.MobileRoute)
 		})
 		t.Run("it returns the supported context as applied when the client can honor it", func(t *testing.T) {
 			resolved := postCanonicalResolve(t, generated.CanonicalURL, linking.PlatformMobile, true)
@@ -297,13 +266,15 @@ func TestCanonicalLinks(t *testing.T) {
 				ResourceID:   task.Id,
 			})
 
-			statusCode, preview := getCanonicalPreview(t, generated.CanonicalURL, owner.Token)
-			require.Equal(t, http.StatusOK, statusCode)
-			require.Equal(t, linking.ResolutionStatusOK, preview.Status)
-			require.Equal(t, generated.CanonicalURL, preview.Preview.Href)
-			require.Equal(t, linking.ResourceTypeTaskInstance, preview.Preview.ResourceType)
-			require.Contains(t, preview.Preview.Title, task.Id)
-			require.Equal(t, task.Id, preview.NormalizedTarget.ResourceID)
+			item := previewOne(t, owner.Token, generated.CanonicalURL)
+			card := requireOK(t, item)
+			require.Equal(t, generated.CanonicalURL, card.Href)
+			require.Equal(t, linking.ResourceTypeTaskInstance, card.ResourceType)
+			// The card names the task. It used to repeat the task's uuid, because the
+			// preview was composed from the URL rather than from the task (feature 046).
+			require.Equal(t, "Canonical Task", card.Title)
+			require.NotContains(t, card.Title, task.Id)
+			require.Equal(t, task.Identifier, card.Identifier)
 		})
 		t.Run("it allows raw-link rendering when metadata lookup fails", func(t *testing.T) {
 			deletedTask := w.createTask(owner, project.ID, "Deleted Preview Task", project.Levels[0].Id)
@@ -314,8 +285,9 @@ func TestCanonicalLinks(t *testing.T) {
 			})
 			deleteTask(t, w, owner, deletedTask.Id)
 
-			statusCode, _ := getCanonicalPreview(t, generated.CanonicalURL, owner.Token)
-			require.Equal(t, http.StatusNotFound, statusCode)
+			// A lookup that cannot produce a card is a successful response carrying
+			// "unavailable", not an error status: one dead link must not fail a page.
+			requireUnavailable(t, previewOne(t, owner.Token, generated.CanonicalURL))
 		})
 	})
 }

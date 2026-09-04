@@ -540,3 +540,51 @@ SELECT
 FROM docs.comment c
 WHERE c.organization_id = $1
   AND c.id = $2;
+
+-- name: ListDocumentPreviews :many
+-- Document cards (feature 046, FR-002): the document's own title, plus the parent it
+-- lives under as the supporting line.
+--
+-- The access predicate is copied verbatim from SearchDocuments INCLUDING ITS PRECEDENCE,
+-- which is the part that is easy to get wrong: an explicit employee grant of 'none' is a
+-- deny that stops the chain, so it must be a COALESCE over scalar sub-selects and not an
+-- OR-chain. It is evaluated on the linked document only; the parent contributes a name,
+-- never access.
+SELECT
+    d.id,
+    d.title,
+    d.parent_document_id,
+    parent.title AS parent_title
+FROM docs.document d
+LEFT JOIN docs.document parent
+    ON (parent.organization_id, parent.id) = (d.organization_id, d.parent_document_id)
+   AND parent.is_deleted = FALSE
+WHERE d.organization_id = @organization_id
+  AND d.id = ANY(@document_ids::uuid[])
+  AND d.is_deleted = FALSE
+  AND (
+    d.owner_employee_id = @employee_id
+    OR COALESCE(
+         (SELECT a.access_level
+            FROM docs.document_access a
+           WHERE a.organization_id = d.organization_id
+             AND a.document_id     = d.id
+             AND a.grantee_type    = 'employee'
+             AND a.grantee_id      = @employee_id),
+         (SELECT a.access_level
+            FROM docs.document_access a
+            JOIN organization.department_member dm
+              ON (dm.organization_id, dm.department_id) = (a.organization_id, a.grantee_id)
+           WHERE a.organization_id = d.organization_id
+             AND a.document_id     = d.id
+             AND a.grantee_type    = 'department'
+             AND dm.employee_id    = @employee_id
+           ORDER BY CASE a.access_level
+                      WHEN 'write_update' THEN 2
+                      WHEN 'read_comment' THEN 1
+                      ELSE 0
+                    END DESC
+           LIMIT 1),
+         CASE WHEN d.visibility = 'public' THEN 'write_update' ELSE 'none' END
+       ) <> 'none'
+  );

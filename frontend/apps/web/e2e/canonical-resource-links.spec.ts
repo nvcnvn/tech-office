@@ -181,9 +181,12 @@ test.describe('Canonical Resource Links', () => {
 			await loginAs(page, owner);
 			await page.goto(`/workspace/chat?channel=${previewChannelId}`);
 
-			const previewCard = page.getByTestId('canonical-link-preview-card').first();
+			// The card names the task. It used to repeat the task's uuid, because the
+			// preview was composed from the URL rather than from the task (feature 046).
+			const previewCard = page.getByTestId('canonical-link-preview-card-0').first();
 			await expect(previewCard).toBeVisible({ timeout: 10_000 });
-			await expect(previewCard).toContainText(taskId);
+			await expect(previewCard).toContainText(taskTitle);
+			await expect(previewCard).not.toContainText(taskId);
 			await stepScreenshot(page, testInfo, 'canonical-chat-preview-card');
 		});
 		test('the raw link remains clickable when metadata lookup fails', async ({ page }, testInfo) => {
@@ -191,7 +194,7 @@ test.describe('Canonical Resource Links', () => {
 			await page.goto(`/workspace/chat?channel=${previewChannelId}`);
 
 			await expect(page.locator(`a[href="${deletedPreviewCanonicalTaskUrl}"]`).first()).toBeVisible({ timeout: 10_000 });
-			await expect(page.getByTestId('canonical-link-preview-card')).toHaveCount(1);
+			await expect(page.getByTestId(/^canonical-link-preview-card-/)).toHaveCount(1);
 			await stepScreenshot(page, testInfo, 'canonical-chat-raw-link-fallback');
 		});
 	});

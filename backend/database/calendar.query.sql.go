@@ -1055,6 +1055,72 @@ func (q *Queries) ListDelegationsByDelegate(ctx context.Context, db DBTX, arg *L
 	return items, nil
 }
 
+const listEventPreviews = `-- name: ListEventPreviews :many
+SELECT
+    e.id,
+    e.title,
+    e.start_time,
+    e.all_day
+FROM calendar.event e
+WHERE e.organization_id = $1
+  AND e.id = ANY($2::uuid[])
+  AND e.cancelled_at IS NULL
+  AND (
+    e.organizer_id = $3
+    OR EXISTS (
+      SELECT 1 FROM calendar.attendee a
+       WHERE a.organization_id = e.organization_id
+         AND a.event_id        = e.id
+         AND a.employee_id     = $3
+    )
+    OR e.visibility IN ('team', 'org_wide')
+  )
+`
+
+type ListEventPreviewsParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	EventIds       []dbuuid.UUID `json:"event_ids"`
+	EmployeeID     dbuuid.UUID   `json:"employee_id"`
+}
+
+type ListEventPreviewsRow struct {
+	ID        dbuuid.UUID        `json:"id"`
+	Title     string             `json:"title"`
+	StartTime pgtype.Timestamptz `json:"start_time"`
+	AllDay    bool               `json:"all_day"`
+}
+
+// Event cards (feature 046, FR-003). start_time goes to the client as an instant and is
+// formatted in the reader's own zone there; the server never renders a wall clock.
+//
+// The visibility predicate is the one SearchEvents uses: organiser, attendee, or a
+// team/org_wide event. 'personal_shared' is deliberately outside the third arm — it means
+// organiser-and-attendees-only. A cancelled event has nothing to preview.
+func (q *Queries) ListEventPreviews(ctx context.Context, db DBTX, arg *ListEventPreviewsParams) ([]*ListEventPreviewsRow, error) {
+	rows, err := db.Query(ctx, listEventPreviews, arg.OrganizationID, arg.EventIds, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListEventPreviewsRow
+	for rows.Next() {
+		var i ListEventPreviewsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Title,
+			&i.StartTime,
+			&i.AllDay,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEventsForEmployee = `-- name: ListEventsForEmployee :many
 SELECT e.id, e.organization_id, e.title, e.description, e.event_type, e.visibility, e.start_time, e.end_time, e.all_day, e.location_text, e.virtual_link, e.organizer_id, e.recurrence_rule, e.recurrence_end, e.series_id, e.is_exception_instance, e.original_start_time, e.description_document_id, e.discussion_channel_id, e.requires_check_in, e.requires_evidence, e.cancelled_at, e.cancelled_by_id, e.updated_at FROM calendar.event e
 LEFT JOIN calendar.attendee a

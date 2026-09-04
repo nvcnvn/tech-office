@@ -76,6 +76,8 @@ import { ReportSheet } from "@/components/compliance/report-sheet";
 import { CreateTaskSheet } from "@/components/chat/create-task-sheet";
 import { MessageTaskChips } from "@/components/chat/message-task-chips";
 import { generateCanonicalUrl } from "@/lib/canonical-links";
+import { useCanonicalLinkPreviews } from "@/lib/canonical-link-previews";
+import type { CanonicalLinkPreview } from "@tech-office/links";
 import { API_BASE_URL } from "@/lib/constants";
 import { isSameDay } from "date-fns";
 import { ChatMessageBody } from "@/components/chat/chat-message-body";
@@ -536,6 +538,7 @@ function MessageBubble({
   channelId,
   contentWidth,
   taskLinksByMessage,
+  linkPreviews,
   onTaskPress,
   onPress,
   onLongPress,
@@ -549,6 +552,8 @@ function MessageBubble({
   contentWidth: number;
   /** Tasks each message has produced, resolved once for the whole page (Feature 038). */
   taskLinksByMessage?: Map<string, MessageTaskLink[]>;
+  /** Link previews for the whole page, resolved once (Feature 046). */
+  linkPreviews?: Map<string, CanonicalLinkPreview>;
   onTaskPress: (link: MessageTaskLink) => void;
   onPress: (id: string) => void;
   onLongPress: (id: string) => void;
@@ -639,6 +644,8 @@ function MessageBubble({
                   messageTimestamp={msgDate}
                   contentWidth={contentWidth}
                   textStyle={styles.messageText}
+                  linkPreviews={linkPreviews}
+                  taskLinks={taskLinksByMessage?.get(item.id) ?? []}
                 />
 
                 <MessageTaskChips
@@ -1374,6 +1381,10 @@ export default function ChannelScreen() {
     };
   }, [taskLinkMessageKey, taskLinkReloadToken]);
 
+  // Feature 046: one preview lookup for the whole loaded page, for the same reason.
+  const messageTexts = React.useMemo(() => messages.map((message) => message.messageText), [messages]);
+  const linkPreviews = useCanonicalLinkPreviews(messageTexts);
+
   listItemCountRef.current = listItems.length;
 
   useEffect(() => {
@@ -2038,6 +2049,7 @@ export default function ChannelScreen() {
                     channelId={channelId}
                     contentWidth={htmlContentWidth}
                     taskLinksByMessage={taskLinksByMessage}
+                    linkPreviews={linkPreviews}
                     onTaskPress={(link) =>
                       router.push(
                         withNavigationContext(

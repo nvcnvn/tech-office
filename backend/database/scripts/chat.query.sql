@@ -1212,3 +1212,55 @@ WHERE
   AND employee_id = sqlc.arg('employee_id');
 
 -- End of chat.query.sql
+
+-- name: ListChannelPreviews :many
+-- Channel cards (feature 046, FR-005). The permission predicate is the one SearchChannels
+-- uses: a public channel, or one the reader is a member of. It covers direct messages
+-- without a special case — a DM is private and its members are its membership rows.
+SELECT
+    c.id,
+    c.display_name,
+    c.title_slug,
+    c.channel_type
+FROM chat.channel c
+WHERE c.organization_id = @organization_id
+  AND c.id = ANY(@channel_ids::uuid[])
+  AND c.is_archived = FALSE
+  AND (
+    c.is_private = FALSE
+    OR EXISTS (
+      SELECT 1 FROM chat.channel_membership cm
+       WHERE cm.organization_id = c.organization_id
+         AND cm.channel_id      = c.id
+         AND cm.employee_id     = @employee_id
+    )
+  );
+
+-- name: ListThreadPreviews :many
+-- Thread cards (feature 046, FR-005). A thread's canonical resource id is its root
+-- message id — the same id MessageItem's copy-link puts in the URL — so the lookup starts
+-- at the message and names the channel it lives in.
+--
+-- Only the channel's name is read. Nothing from the message body is returned, so
+-- previewing a thread cannot render the conversation it points at.
+SELECT
+    m.id AS root_message_id,
+    c.id AS channel_id,
+    c.display_name,
+    c.title_slug
+FROM chat.message m
+JOIN chat.channel c
+    ON (c.organization_id, c.id) = (m.organization_id, m.channel_id)
+WHERE m.organization_id = @organization_id
+  AND m.id = ANY(@root_message_ids::uuid[])
+  AND m.is_deleted = FALSE
+  AND c.is_archived = FALSE
+  AND (
+    c.is_private = FALSE
+    OR EXISTS (
+      SELECT 1 FROM chat.channel_membership cm
+       WHERE cm.organization_id = c.organization_id
+         AND cm.channel_id      = c.id
+         AND cm.employee_id     = @employee_id
+    )
+  );

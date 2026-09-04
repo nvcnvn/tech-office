@@ -16,11 +16,14 @@ type ResolveRequest struct {
 	IsAuthenticated bool     `json:"isAuthenticated"`
 }
 
-type PreviewResponse struct {
-	Preview          *LinkPreviewMetadata `json:"preview,omitempty"`
-	NormalizedTarget CanonicalLinkTarget  `json:"normalizedTarget"`
-	Status           ResolutionStatus     `json:"status"`
-	FallbackURL      string               `json:"fallbackUrl,omitempty"`
+// PreviewsRequest is the batch preview request body. The bound is enforced rather than
+// truncated: the clients hold the same constant, so exceeding it is a client bug.
+type PreviewsRequest struct {
+	URLs []string `json:"urls"`
+}
+
+type PreviewsResponse struct {
+	Items []PreviewItem `json:"items"`
 }
 
 type GenerateRequest struct {
@@ -39,7 +42,7 @@ func NewConnectHandler(service *Service, auth *interceptor.AuthInterceptor) *Con
 func (h *ConnectHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/linking/generate", h.handleGenerate)
 	mux.HandleFunc("/api/linking/resolve", h.handleResolve)
-	mux.HandleFunc("/api/linking/preview", h.handlePreview)
+	mux.HandleFunc("/api/linking/previews", h.handlePreviews)
 }
 
 func (h *ConnectHandler) handleGenerate(w http.ResponseWriter, r *http.Request) {
@@ -93,34 +96,60 @@ func (h *ConnectHandler) handleResolve(w http.ResponseWriter, r *http.Request) {
 	h.writeJSON(w, result)
 }
 
-func (h *ConnectHandler) handlePreview(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+// handlePreviews answers a page of canonical links in one request. It is always a 200
+// unless the request itself is malformed: a link the reader may not see, one that does not
+// exist and one that was never previewable are the same "unavailable" answer, which is
+// what stops the endpoint being a disclosure oracle (FR-010).
+func (h *ConnectHandler) handlePreviews(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
-	ctx := h.authenticateContext(r)
-	result, err := h.service.Resolve(ctx, r.URL.Query().Get("url"), PlatformWeb, false)
-	if err != nil {
+
+	// 1. Decode and bound.
+	var req PreviewsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		h.writeError(w, http.StatusBadRequest, err)
 		return
 	}
-	switch result.ResolutionStatus {
-	case ResolutionStatusOK:
-		h.writeJSON(w, PreviewResponse{
-			Preview:          result.Preview,
-			NormalizedTarget: result.NormalizedTarget,
-			Status:           result.ResolutionStatus,
-			FallbackURL:      result.FallbackURL,
-		})
-	case ResolutionStatusAuthRequired:
-		h.writeError(w, http.StatusUnauthorized, errors.New("authentication required for preview"))
-	case ResolutionStatusAccessDenied:
-		h.writeError(w, http.StatusForbidden, errors.New("access denied"))
-	case ResolutionStatusNotFound:
-		h.writeError(w, http.StatusNotFound, errors.New("resource not found"))
-	default:
-		h.writeError(w, http.StatusBadGateway, errors.New("preview unavailable"))
+	if len(req.URLs) == 0 {
+		h.writeError(w, http.StatusBadRequest, errors.New("urls is required"))
+		return
 	}
+	if len(req.URLs) > MaxPreviewURLsPerRequest {
+		h.writeError(w, http.StatusBadRequest, errors.New("too many urls"))
+		return
+	}
+
+	// 2. Authenticate, from the Authorization header only. Unlike resolve, a preview is
+	// never the landing of a navigation, so there is no EventSource-style ?token= fallback
+	// to support. Without a principal every item is unavailable and no row is read — a
+	// signed-out reader must not be able to tell "you are signed out" from "you may not
+	// see this", and must not cost the database anything either.
+	ctx := r.Context()
+	if r.Header.Get("Authorization") != "" {
+		ctx = h.authenticateContext(r)
+	}
+	actor, ok := principalFromContext(ctx)
+	if !ok {
+		h.writeJSON(w, PreviewsResponse{Items: unavailableItems(req.URLs)})
+		return
+	}
+
+	// 3-7. Normalise, tenant-scope and resolve, in request order.
+	items := h.service.PreviewBatch(ctx, PreviewReader{
+		EmployeeID:     actor.EmployeeID,
+		OrganizationID: actor.OrganizationID,
+	}, req.URLs)
+	h.writeJSON(w, PreviewsResponse{Items: items})
+}
+
+func unavailableItems(urls []string) []PreviewItem {
+	items := make([]PreviewItem, len(urls))
+	for i, raw := range urls {
+		items[i] = PreviewItem{URL: raw, Status: PreviewStatusUnavailable}
+	}
+	return items
 }
 
 func (h *ConnectHandler) authenticateContext(r *http.Request) context.Context {

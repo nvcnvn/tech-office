@@ -4,7 +4,7 @@ Tenant creation, the employee roster, and the department hierarchy. Owned by
 `internal/organization` (`OrganizationService`) and `internal/department`
 (`DepartmentService`).
 
-**Status date: 2026-09-04.** Supersedes specs 001, 003, 004, 005, 006, 025, 035.
+**Status date: 2026-09-04.** Supersedes specs 001, 003, 004, 005, 006, 025, 035, 046.
 
 ## Organization
 
@@ -129,6 +129,17 @@ Two-phase, on `IAMService`, gated by `iam.importEmployees` (which neither `opera
 
 Web UI: `/workspace/organization/import-employees` and
 `components/EmployeeImportDialog.tsx`. Client: `packages/apis/src/iam-employee-import.ts`.
+
+### Names for other domains
+
+`OrganizationLogic.ListEmployeeNames(ctx, tx, orgID, ids)` returns one display name per
+employee id that exists in the organization, over the same `GetEmployeeCardsByIDs` query
+the employee cards use. An id with no row is absent from the map rather than an error.
+
+It exists so a caller outside this domain can name a person without joining
+`organization.employee` from its own schema — `internal/collaboration` uses it for the
+assignee line on a task link preview card, behind an interface it declares itself to avoid
+an import cycle.
 
 ## Departments
 

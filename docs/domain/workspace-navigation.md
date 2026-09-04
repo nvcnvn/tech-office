@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-04.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045.
+**Status date: 2026-09-04.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046.
 
 ## Canonical resource links
 
@@ -42,7 +42,7 @@ keys are the same either way.
 |---|---|
 | `POST /api/linking/generate` | build a canonical URL from a typed target |
 | `POST /api/linking/resolve` | normalise + authorise + return per-platform routes |
-| `POST /api/linking/preview` | metadata for an unfurl card |
+| `POST /api/linking/previews` | per-reader card content for a **list** of canonical URLs |
 
 ### Resolution
 
@@ -51,7 +51,14 @@ keys are the same either way.
 1. **Normalise** — parse the canonical path, or recognise a legacy route and rewrite it
    (`LegacyNormalized` flags this).
 2. **Resolve tenant** from `tenantKey`; unknown tenant → `not_found`.
-3. Build the canonical URL, the **web route** and the **mobile route**, and the preview.
+3. Build the canonical URL, the **web route** and the **mobile route**. `Resolve` carries
+   no preview: card content is its own endpoint, because it is per reader and per page.
+   The mobile route must be a route the app actually has: a task resolves to
+   `/(app)/(tasks)/{projectId}/task/{taskId}` — with the static `task` segment the
+   route-ambiguity invariant below requires — and a document to
+   `/(app)/(more)/docs/{documentId}`, which the viewer accepts alongside a slug. A route
+   Expo Router cannot match does not fail visibly; it drops the reader at the app root,
+   which renders as the sign-in screen.
 4. **Authenticate** — no principal → `auth_required`, with the routes already computed so
    the client can bounce through sign-in and land correctly.
 5. **Authorise** — the actor's org must match the link's tenant, then a per-resource check
@@ -63,8 +70,66 @@ Statuses: `ok`, `auth_required`, `access_denied`, `not_found`, `fallback`. Notab
 unauthenticated resolve still returns the routes — resolution and authorisation are
 separate answers, which is what makes deep-link-through-login work.
 
-Preview providers are registered per resource type in `cmd/server.go`: task, document,
-project, chat channel, chat thread, calendar event, booking.
+### Previews
+
+`POST /api/linking/previews` takes `{"urls": [...]}` — at most `20`
+(`linking.MaxPreviewURLsPerRequest`, mirrored as `MAX_PREVIEW_URLS_PER_REQUEST` in
+`packages/apis`) — and answers with one item per requested URL, **in request order**,
+echoing the URL as sent:
+
+```json
+{ "items": [ { "url": "...", "status": "ok", "preview": { ... } },
+             { "url": "...", "status": "unavailable" } ] }
+```
+
+`status` is `ok` or `unavailable`, and nothing else. Access denied, not found, deleted,
+cancelled, archived, another tenant's link, unauthenticated, a malformed URL and an
+unsupported resource type are **all** `unavailable` with no `preview` body, byte for byte,
+so the endpoint cannot be used to probe what exists. An unauthenticated request is not an
+error: it is a `200` whose every item is `unavailable`, and it reads no database row. The
+only error responses are `400` (malformed body, empty `urls`, or more than the bound —
+rejected, never truncated) and `405`.
+
+The handler runs in a fixed order: decode and bound; authenticate from the `Authorization`
+header only (no `?token=` fallback — a preview is never the landing of a navigation);
+normalise each URL; resolve each distinct tenant key on `AdminPool`; drop every target
+outside the reader's organization; run each provider once on **`TenantPool`**; assemble in
+request order.
+
+A preview is composed from the linked resource's own rows and never from the URL. There is
+no default branch: a target no provider resolves is `unavailable`, not a card titled
+`task 0199c4f2-…`. The title falls back resource title → resource identifier → type name.
+
+**Provider ownership** — each provider lives in the domain whose rows it reads
+(Constitution IV); `internal/linking` owns no preview SQL. Wired in `cmd/server.go`:
+
+| Provider | Package | Types | Query |
+|---|---|---|---|
+| `NewTaskPreviewProvider(queries, employeeNames)` | `internal/collaboration` | `task` | `ListTaskPreviews` |
+| `NewProjectPreviewProvider(queries)` | `internal/collaboration` | `project` | `ListProjectPreviews` |
+| `NewDocumentPreviewProvider(queries)` | `internal/docs` | `document` | `ListDocumentPreviews` |
+| `NewEventPreviewProvider(queries)` | `internal/calendar` | `calendar` | `ListEventPreviews` |
+| `NewChatPreviewProvider(queries)` | `internal/chat` | `chat`, `thread` | `ListChannelPreviews`, `ListThreadPreviews` |
+| `NewBookingPreviewProvider()` | `internal/linking` | `booking` | none — generic card |
+
+`message` and `workspace` describe no resource of their own and are not previewable.
+
+Every provider is **batched**: `PreviewAggregator` groups a request's targets by the first
+provider that `Handles` their type and calls each provider exactly once, so a request costs
+one query per resource *type* present rather than one per link. A provider that errors
+contributes nothing and is logged at `slog.WarnContext`; the other providers' results still
+render. One `slog.InfoContext` per request records the reader, the URL count, the distinct
+target count, the provider-call count and the duration.
+
+Each provider's access predicate is **copied from the query that already owns that rule**
+(`SearchTasks`/`ListTasksBySourceMessages`, `resolveProjectStatus`, `SearchDocuments`,
+`SearchEvents`, `SearchChannels`), so a row the reader may not see is never loaded and
+"which X may this reader see" keeps one definition per domain.
+
+There is **no server-side cache**: a cache keyed by reader entitlement would have to be
+invalidated whenever a project goes private, and getting that wrong is a disclosure rather
+than a stale card. The only cache is per client session, in
+`packages/apis/src/linking.ts`, cleared by `clearAuthToken()`.
 
 ### Client handling
 
@@ -74,9 +139,18 @@ project, chat channel, chat thread, calendar event, booking.
   `app/link-handoff.tsx`, `app/link-status.tsx`, `app/canonical-signin.tsx`, and the
   `app/(shared)/resource/…` route group that renders a resource reached from outside the
   tab hierarchy.
-- Shared: `packages/links/`, `apps/mobile/src/lib/canonical-links.ts` and `lib/linking.ts`.
+- Shared: `packages/links/` (parsing, routing, `buildCanonicalLinkPreviewDisplay`,
+  `MAX_PREVIEW_CARDS`), `packages/apis/src/linking.ts` (`fetchCanonicalPreviews` and the
+  session cache — both apps go through it; neither hand-rolls a preview `fetch`),
+  `apps/mobile/src/lib/canonical-links.ts` and `lib/linking.ts`.
+- Previews are fetched at the **list**, not at the message: `useCanonicalLinkPreviews` in
+  web's `VirtualizedMessageList` and in `apps/mobile/src/lib/canonical-link-previews.ts`
+  collects the distinct canonical URLs of the rendered page (cap `MAX_PREVIEW_LOOKUP`,
+  20), issues one request, and passes a `Map<url, preview>` down. Message components take
+  the map as a prop and fetch nothing, so message text never waits on a card.
 
-`make check-maestro-canonical-env` gates the mobile deep-link E2E flows.
+`make check-maestro-canonical-env` gates the mobile deep-link E2E flows;
+`make check-maestro-link-preview-env` gates `chat-link-previews.yaml`.
 
 ## Federated search
 

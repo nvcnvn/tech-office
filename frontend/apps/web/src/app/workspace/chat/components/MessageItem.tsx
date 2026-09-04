@@ -26,19 +26,17 @@ import MentionPreview from './MentionPreview';
 import FileAttachment from './FileAttachment';
 import VoiceMessagePlayer from './voice/VoiceMessagePlayer';
 import { VoiceCallRecord, voiceCallOutcomeHintFromText } from './voice/VoiceCallRecord';
-import { getAuthToken, getFileMetadataBatch } from 'apis';
+import { getFileMetadataBatch } from 'apis';
 import { SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE } from 'apis';
 import type { FileMetadata, MessageTaskLink, StateCategory } from 'apis';
 import NextLink from 'next/link';
 import { useAuthState } from '@/lib/auth/hooks';
 import {
-	extractFirstCanonicalResourceLink,
-	getCanonicalLinkPreviewDisplay,
 	removeCanonicalResourceLinksFromContent,
+	selectCanonicalPreviewCards,
 	splitTextByCanonicalResourceLinks,
 	type CanonicalLinkPreviewDisplay,
 	type CanonicalLinkPreview,
-	type CanonicalPreviewResponse,
 } from '@tech-office/links';
 
 /**
@@ -164,10 +162,10 @@ function metadataWaveformPeaks(metadata: VoiceTimelineMetadata | null): number[]
 	return peaks.filter((peak) => Number.isFinite(peak));
 }
 
-function CanonicalPreviewCard({ display }: { display: CanonicalLinkPreviewDisplay }) {
+function CanonicalPreviewCard({ display, index }: { display: CanonicalLinkPreviewDisplay; index: number }) {
 	return (
 		<Box
-			data-testid="canonical-link-preview-card"
+			data-testid={`canonical-link-preview-card-${index}`}
 			component="a"
 			href={display.href}
 			sx={(theme) => ({
@@ -190,14 +188,15 @@ function CanonicalPreviewCard({ display }: { display: CanonicalLinkPreviewDispla
 			<Typography variant="caption" sx={{ display: 'block', textTransform: 'uppercase', letterSpacing: '0.08em', color: 'primary.main', fontWeight: 700 }}>
 				{display.badge}
 			</Typography>
+			{/* Every string below is resource-supplied and rendered as text, never as markup. */}
 			<Typography variant="subtitle2" sx={{ mt: 0.5, fontWeight: 700, color: 'text.primary' }}>
 				{display.title}
 			</Typography>
-			{display.subtitle ? (
-				<Typography variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
-					{display.subtitle}
+			{display.lines.map((line, lineIndex) => (
+				<Typography key={lineIndex} variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
+					{line}
 				</Typography>
-			) : null}
+			))}
 		</Box>
 	);
 }
@@ -247,6 +246,11 @@ interface MessageItemProps {
 	 * that was never converted — which is the point.
 	 */
 	taskLinks?: MessageTaskLink[];
+	/**
+	 * Previews for the whole rendered page, keyed by canonical URL. Supplied by the list:
+	 * a message never looks one up itself (FR-020).
+	 */
+	linkPreviews?: Map<string, CanonicalLinkPreview>;
 	/** Called after a conversion, so the page can refresh its chips. */
 	onTaskCreated?: () => void;
 }
@@ -300,6 +304,7 @@ export default function MessageItem({
 	mentionedEmployeeIds = [],
 	isChannelArchived = false,
 	taskLinks = [],
+	linkPreviews,
 	onTaskCreated,
 }: MessageItemProps) {
 	const { user } = useAuthState();
@@ -324,24 +329,22 @@ export default function MessageItem({
 
 	const theme = useTheme();
 	const mentionId = mentionData?.id;
-	const canonicalLink = useMemo(() => extractFirstCanonicalResourceLink(messageText), [messageText]);
 	const currentMembership = useMemo(
 		() => user?.organizations.find((organization) => organization.organizationId === user.organizationId) ?? user?.organizations[0],
 		[user]
 	);
-	const [canonicalPreview, setCanonicalPreview] = useState<CanonicalLinkPreview | null>(null);
-	const [canonicalPreviewLoaded, setCanonicalPreviewLoaded] = useState(false);
-	// Only show a preview card when the backend actually resolved metadata (FR-018).
-	// When the lookup fails the raw link must stay in the message text (FR-017), so we
-	// deliberately do not synthesise a card from the URL here.
-	const canonicalPreviewDisplay = useMemo(
-		() => (canonicalPreviewLoaded ? getCanonicalLinkPreviewDisplay(canonicalPreview) : null),
-		[canonicalPreview, canonicalPreviewLoaded]
+	// The list owns the preview lookup for the whole rendered page; this component fetches
+	// nothing, so a slow or failed lookup for one link cannot hold up another message
+	// (FR-022, FR-023).
+	const canonicalPreviewCards = useMemo(
+		() => selectCanonicalPreviewCards(messageText, linkPreviews, { suppressedTaskIds: taskLinks.map((link) => link.taskId) }),
+		[linkPreviews, messageText, taskLinks]
 	);
+	const cardedUrls = useMemo(() => canonicalPreviewCards.map((card) => card.url), [canonicalPreviewCards]);
 	const isHtmlMessage = useMemo(() => /<[a-z][\s\S]*>/i.test(messageText), [messageText]);
 	const displayMessageText = useMemo(
-		() => canonicalPreviewDisplay ? removeCanonicalResourceLinksFromContent(messageText) : messageText,
-		[canonicalPreviewDisplay, messageText]
+		() => removeCanonicalResourceLinksFromContent(messageText, cardedUrls),
+		[cardedUrls, messageText]
 	);
 	const timelineMetadata = useMemo(() => parseTimelineMetadata(metadataJson), [metadataJson]);
 	const plainTextSegments = useMemo(() => splitTextByCanonicalResourceLinks(displayMessageText), [displayMessageText]);
@@ -502,52 +505,6 @@ export default function MessageItem({
 			return ia - ib;
 		});
 	}, [localReactions]);
-
-	useEffect(() => {
-		if (!canonicalLink) {
-			setCanonicalPreview(null);
-			setCanonicalPreviewLoaded(false);
-			return;
-		}
-		let cancelled = false;
-		const previewUrl = canonicalLink;
-		setCanonicalPreviewLoaded(false);
-
-		async function loadPreview() {
-			try {
-				const token = await getAuthToken();
-				const response = await fetch(
-					`${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:18080'}/api/linking/preview?url=${encodeURIComponent(previewUrl)}`,
-					{
-						headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-						cache: 'no-store',
-					}
-				);
-				if (!response.ok) {
-					if (!cancelled) {
-						setCanonicalPreview(null);
-						setCanonicalPreviewLoaded(true);
-					}
-					return;
-				}
-				const payload = (await response.json()) as CanonicalPreviewResponse;
-				if (!cancelled) {
-					setCanonicalPreview(payload.preview ?? null);
-					setCanonicalPreviewLoaded(true);
-				}
-			} catch {
-				if (!cancelled) {
-					setCanonicalPreview(null);
-					setCanonicalPreviewLoaded(true);
-				}
-			}
-		}
-
-		void loadPreview();
-		return () => {
-			cancelled = true;
-		};
-	}, [canonicalLink]);
 
 	// Copy message link to clipboard
 	const handleCopyLink = async () => {
@@ -915,7 +872,9 @@ export default function MessageItem({
 							)}
 						</Typography>
 					) : null}
-					{canonicalPreviewDisplay ? <CanonicalPreviewCard display={canonicalPreviewDisplay} /> : null}
+					{canonicalPreviewCards.map((card, index) => (
+						<CanonicalPreviewCard key={card.url} display={card.display} index={index} />
+					))}
 
 					{/*
 					  * The conversion's own announcement. It renders as a link to the task

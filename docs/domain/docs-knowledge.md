@@ -4,7 +4,7 @@ A Notion/Confluence-style document system: nested pages, full version history, t
 comments, cross-document section embeds, and live collaborative editing presence. Owned by
 `internal/docs`; contract in `rpc/v1/document.proto`, split across **eight** services.
 
-**Status date: 2026-09-04.** Supersedes specs 016, 045.
+**Status date: 2026-09-05.** Supersedes specs 016, 045, 046.
 
 ## Services
 
@@ -62,6 +62,20 @@ Two layers, and they answer different questions:
 
 `CheckAccess` exposes the second layer to clients so the UI can hide controls it knows will
 fail.
+
+**Link previews are access-scoped by the same rule.** `ListDocumentPreviews` — the query
+behind a document card in chat, see
+[workspace-navigation.md](workspace-navigation.md#previews) — carries the `COALESCE`
+precedence chain copied verbatim from `SearchDocuments`, deny grant included: owner, then
+an explicit employee grant (an explicit `none` stops the chain), then the highest inherited
+department grant, then `visibility = 'public'`. A document the reader may not read is never
+loaded, so pasting its link into a channel tells a reader without access nothing at all.
+This replaces an earlier existence-only check on the preview path, which would have
+disclosed the title of any document whose id somebody happened to hold.
+
+The linked document's **parent** contributes a name to the card, never access: a visible
+child inside a parent the reader cannot open still says which space it is in, and a root
+document names the workspace.
 
 ### Implicit reads through a ritual procedure
 
@@ -172,7 +186,16 @@ followers.
 - Web: `/workspace/docs`, `/workspace/docs/[slug]`. There is also a **separate static docs
   site** under `apps/web/src/app/docs/` — product guides, feature pages, and owner/employee
   guides — which is marketing/help content, not the document system.
-- Mobile: `app/(app)/(more)/docs/index.tsx`, `docs/[slug].tsx` — read-oriented. The list
+- Mobile: `app/(app)/(more)/docs/index.tsx`, `docs/[slug].tsx` — read-oriented. The route
+  segment is named `[slug]` but carries a slug only when the reader came from the docs list
+  or search; a canonical link or a notification deep link supplies a document **id**.
+  `GetDocument` takes either, so the screen picks the request field from the shape of the
+  segment rather than making every caller resolve an id to a slug first. The viewer renders
+  its body from the document's `contentJson` — the only content field
+  `protoDocumentToNative` populates — and runs one preview lookup over that same text, so a
+  canonical link inside a document body becomes a card there under exactly the rules it
+  follows in chat. The screen holds no `any`-typed view of the document, which is what keeps
+  a reference to a field the API does not return from compiling. The list
   screen serves two differently-shaped sources: `ListDocuments` returns `DocumentSummary`,
   `SearchDocuments` returns `SearchResult`, which wraps a `DocumentSummary` alongside a
   `snippet`. Both are normalised to one row shape in `apps/mobile/src/lib/doc-rows.ts`,

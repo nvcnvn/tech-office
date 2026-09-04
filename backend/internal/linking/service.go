@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/nvcnvn/tech-office/backend/database"
@@ -18,13 +20,19 @@ type Service struct {
 	generator *Generator
 	preview   *PreviewAggregator
 	queries   *database.Queries
+	// adminPool answers the pre-auth question "which organization owns this tenant key?"
+	// against the global public.organization table, and nothing else.
 	adminPool database.AdminDatabaseConnector
+	// tenantPool carries every preview row read. Previews are strictly authenticated, so
+	// a user-facing read belongs on the tenant pool (research D11, Principle I).
+	tenantPool database.TenantDatabaseConnector
 }
 
 func NewService(
 	webappURL string,
 	queries *database.Queries,
 	adminPool database.AdminDatabaseConnector,
+	tenantPool database.TenantDatabaseConnector,
 	previewProviders ...PreviewProvider,
 ) (*Service, error) {
 	generator, err := NewGenerator(webappURL)
@@ -32,11 +40,95 @@ func NewService(
 		return nil, err
 	}
 	return &Service{
-		generator: generator,
-		preview:   NewPreviewAggregator(previewProviders...),
-		queries:   queries,
-		adminPool: adminPool,
+		generator:  generator,
+		preview:    NewPreviewAggregator(previewProviders...),
+		queries:    queries,
+		adminPool:  adminPool,
+		tenantPool: tenantPool,
 	}, nil
+}
+
+// PreviewBatch answers one preview request: normalise every URL, resolve its tenant, drop
+// anything outside the reader's organization, then run each provider once.
+//
+// It returns exactly one item per input URL, in input order, echoing the URL as sent. A
+// duplicate URL yields a duplicate item but is looked up once, because targets are keyed
+// by resource rather than by string (FR-014).
+//
+// Steps 3 to 7 of the handler order in contracts/link-preview-api.md live here; the
+// connect layer owns decoding, the request bound and authentication.
+func (s *Service) PreviewBatch(ctx context.Context, reader PreviewReader, urls []string) []PreviewItem {
+	started := time.Now()
+	items := make([]PreviewItem, len(urls))
+	// keys[i] is the preview key for urls[i], or "" when the URL never became a target.
+	keys := make([]string, len(urls))
+	for i, raw := range urls {
+		items[i] = PreviewItem{URL: raw, Status: PreviewStatusUnavailable}
+	}
+
+	// 3. Normalise, and 4/5. keep only targets whose tenant is the reader's organization.
+	tenants := map[string]dbuuid.UUID{}
+	byKey := map[string]PreviewTarget{}
+	for i, raw := range urls {
+		normalized, err := Normalize(raw)
+		if err != nil {
+			continue
+		}
+		tenantKey := normalized.Target.TenantKey
+		organizationID, seen := tenants[tenantKey]
+		if !seen {
+			organizationID, err = s.resolveTenantID(ctx, tenantKey)
+			if err != nil {
+				organizationID = dbuuid.UUID{}
+			}
+			tenants[tenantKey] = organizationID
+		}
+		if organizationID != reader.OrganizationID {
+			continue
+		}
+		_, canonicalURL, err := s.generator.Generate(normalized.Target)
+		if err != nil {
+			continue
+		}
+		key := PreviewKey(normalized.Target.ResourceType, normalized.Target.ResourceID)
+		keys[i] = key
+		if _, exists := byKey[key]; !exists {
+			byKey[key] = PreviewTarget{Key: key, Target: normalized.Target, CanonicalURL: canonicalURL}
+		}
+	}
+
+	targets := make([]PreviewTarget, 0, len(byKey))
+	for _, target := range byKey {
+		targets = append(targets, target)
+	}
+
+	// 6. One call per provider, on the tenant pool.
+	previews, providerCalls := s.preview.Preview(ctx, s.tenantPool, reader, targets)
+
+	// 7. Assemble in request order.
+	resolved := 0
+	for i, key := range keys {
+		if key == "" {
+			continue
+		}
+		preview, ok := previews[key]
+		if !ok {
+			continue
+		}
+		items[i] = PreviewItem{URL: urls[i], Status: PreviewStatusOK, Preview: preview}
+		resolved++
+	}
+
+	slog.InfoContext(ctx, "link previews resolved",
+		"employeeID", reader.EmployeeID,
+		"organizationID", reader.OrganizationID,
+		"urls", len(urls),
+		"distinctTargets", len(targets),
+		"providerCalls", providerCalls,
+		"resolved", resolved,
+		"durationMs", time.Since(started).Milliseconds(),
+	)
+	return items
 }
 
 func (s *Service) Generate(target CanonicalLinkTarget) (CanonicalLink, string, error) {
@@ -67,7 +159,6 @@ func (s *Service) Resolve(ctx context.Context, rawURL string, platform Platform,
 		IgnoredContext:   normalized.IgnoredQueryKeys,
 		FallbackURL:      canonicalURL,
 		LegacyNormalized: normalized.LegacyNormalized,
-		Preview:          s.preview.Preview(normalized.Target, canonicalURL),
 	}
 	result.WebRoute = s.buildWebRoute(ctx, organizationID, normalized.Target)
 	result.MobileRoute = s.buildMobileRoute(ctx, organizationID, normalized.Target)
@@ -350,7 +441,10 @@ func (s *Service) buildMobileRoute(ctx context.Context, organizationID dbuuid.UU
 		if !ok {
 			return withCanonicalContext("/(app)/(tasks)", target)
 		}
-		return withCanonicalContext(path.Join("/(app)/(tasks)", projectID, target.ResourceID), target)
+		// The mobile route for a task is /(app)/(tasks)/[projectId]/task/[taskId]; without
+		// the "task" segment Expo Router matches nothing and drops the reader at the app
+		// root, which reads as a sign-out.
+		return withCanonicalContext(path.Join("/(app)/(tasks)", projectID, "task", target.ResourceID), target)
 	case ResourceTypeProjectDestination:
 		return path.Join("/(app)/(tasks)", target.ResourceID)
 	case ResourceTypeDocumentPage:

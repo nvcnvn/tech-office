@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044, 045 (034 and
+**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044, 045, 046 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 
@@ -203,6 +203,27 @@ confirmation rather than a project hunt.
   XIII this administrative surface is **web-only**: mobile reads the destination and can
   override it for a single conversion, but does not configure it.
 - Every channel remembers independently, direct messages included.
+
+### Link preview cards
+
+A pasted canonical task or project link is answered from this domain rather than from
+`internal/linking`, because the rows are here.
+
+- `ListTaskPreviews` returns title, `identifier`, the `project_state` name and category,
+  the earliest `role = 'assignee'` and how many assignees there are. `is_deleted` rows are
+  excluded, and the access predicate is the public-project-or-membership one
+  `ListTasksBySourceMessages` and `SearchTasks` already share — so a task in a project the
+  reader is not in is simply absent, indistinguishable from one that never existed.
+- `ListProjectPreviews` returns name and key, visible to anyone for a non-private project
+  and to the owner and members otherwise. An archived project still previews: it exists and
+  the reader may open it.
+- The assignee's display name crosses the boundary to `organization` through the
+  `EmployeeNameLookup` interface declared in `internal/collaboration`, resolved once per
+  request for the whole page. It is never a join.
+
+The card's text is composed on the client; see
+[workspace-navigation.md](workspace-navigation.md#previews) for the wire shape and the
+per-page request budget.
 
 ### Custom fields, workflow rules, saved views
 

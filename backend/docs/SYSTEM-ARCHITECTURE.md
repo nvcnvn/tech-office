@@ -568,6 +568,54 @@ Three properties keep the edge cheap:
   treat an error: the ritual's pool slot is left awaiting shift resolution and nothing is
   guessed. There is deliberately no fallback to another assignment strategy.
 
+#### The collaboration → organization name lookup (feature 046)
+
+A task link preview card names the task's assignee. The name lives in
+`organization.employee`, and joining it from `collaboration`'s own query would be the
+cross-schema join Constitution IV forbids. The direction is downward (T3 → T1), so the tier
+rule is not the obstacle — the obstacle is that `organization` already imports
+`collaboration` for default project creation, so a direct import would be a cycle.
+
+Same shape as every other cycle here: the consumer declares the interface.
+
+```go
+// Declared in internal/collaboration/preview_logic.go
+type EmployeeNameLookup interface {
+    ListEmployeeNames(ctx context.Context, tx database.DBTX,
+        orgID dbuuid.UUID, ids []dbuuid.UUID) (map[dbuuid.UUID]string, error)
+}
+
+// Satisfied by organization.OrganizationLogic, wired in cmd/server.go
+collaboration.NewTaskPreviewProvider(queries, orgLogic)
+```
+
+It is one batched call per request, never one per card, and a lookup that fails costs the
+assignee line rather than the page.
+
+#### Preview providers: the domain owns the read (feature 046)
+
+`internal/linking` answers `POST /api/linking/previews` but owns no preview SQL. It defines
+`PreviewProvider` and each domain implements it over its own rows:
+
+```go
+type PreviewProvider interface {
+    Handles(resourceType ResourceType) bool
+    Preview(ctx context.Context, tx database.DBTX,
+        reader PreviewReader, targets []PreviewTarget) (map[string]*LinkPreviewMetadata, error)
+}
+```
+
+`collaboration` (task, project), `docs` (document), `calendar` (calendar) and `chat` (chat,
+thread) each register one in `cmd/server.go`; `linking` keeps only `booking`, which reads no
+row. `PreviewAggregator` groups a request's targets by provider and calls each exactly once,
+so a page of links costs one query per resource *type*, not one per link.
+
+Each provider's access predicate is copied from the query that already owns that rule
+(`SearchTasks`, `SearchDocuments`, `SearchEvents`, `SearchChannels`), so a row the reader
+may not see is never loaded and no Go branch can leak it. Provider reads run on
+`TenantPool`; `AdminPool` is kept for the pre-auth tenant-key lookup on the global
+`public.organization` table only.
+
 ### Pattern 3: Event-Driven Decoupling (Notification Hub)
 
 Rather than domains calling each other for side effects, they publish notifications through the hub:

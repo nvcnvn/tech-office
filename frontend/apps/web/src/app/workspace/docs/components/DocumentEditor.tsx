@@ -37,14 +37,14 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import { useTheme } from '@mui/material/styles';
-import { updateDocument, type Document, createEmbed, getDocument, getAuthToken, type CreateEmbedParams, type SectionEmbed } from 'apis';
+import { updateDocument, type Document, createEmbed, getDocument, fetchCanonicalPreviews, type CreateEmbedParams, type SectionEmbed } from 'apis';
 import { useThemeColors } from '@/theme/useThemeColors';
 import {
 	extractCanonicalResourceLinks,
-	getCanonicalLinkPreviewDisplay,
+	buildCanonicalLinkPreviewDisplay,
 	isCanonicalResourceLink,
 	type CanonicalLinkPreviewDisplay,
-	type CanonicalPreviewResponse,
+	type CanonicalLinkPreview,
 } from '@tech-office/links';
 import { EmbedNode } from './EmbedNode';
 import LineNumberSidebar, { type CitedLineRange } from './LineNumberSidebar';
@@ -95,34 +95,19 @@ function CanonicalLinkPreviewList({ urls }: { urls: string[] }) {
 		}
 		let cancelled = false;
 
-		async function loadPreviews() {
-			const token = await getAuthToken().catch(() => null);
-			const nextItems = await Promise.all(
-				urls.map(async (url) => {
-					try {
-						const response = await fetch(
-							`${process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:18080'}/api/linking/preview?url=${encodeURIComponent(url)}`,
-							{
-								headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-								cache: 'no-store',
-							}
-						);
-						if (!response.ok) {
-							return getCanonicalLinkPreviewDisplay(null, url);
-						}
-						const payload = (await response.json()) as CanonicalPreviewResponse;
-						return getCanonicalLinkPreviewDisplay(payload.preview ?? null, url);
-					} catch {
-						return getCanonicalLinkPreviewDisplay(null, url);
-					}
-				})
+		// One batched call for the whole document, not one per link. There is deliberately
+		// no fallback card built from the url: a link the reader may not open shows nothing
+		// rather than a card naming its uuid (FR-006, FR-015).
+		fetchCanonicalPreviews(urls).then((previews) => {
+			if (cancelled) return;
+			setItems(
+				urls
+					.map((url) => previews.get(url))
+					.filter((preview): preview is CanonicalLinkPreview => Boolean(preview))
+					.map(buildCanonicalLinkPreviewDisplay)
 			);
-			if (!cancelled) {
-				setItems(nextItems.filter((item): item is CanonicalLinkPreviewDisplay => Boolean(item)));
-			}
-		}
+		});
 
-		void loadPreviews();
 		return () => {
 			cancelled = true;
 		};
@@ -163,11 +148,11 @@ function CanonicalLinkPreviewList({ urls }: { urls: string[] }) {
 						<Typography variant="subtitle2" sx={{ mt: 0.5, color: 'text.primary', fontWeight: 700 }}>
 							{item.title}
 						</Typography>
-						{item.subtitle ? (
-							<Typography variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
-								{item.subtitle}
+						{item.lines.map((line, lineIndex) => (
+							<Typography key={lineIndex} variant="body2" sx={{ mt: 0.25, color: 'text.secondary' }}>
+								{line}
 							</Typography>
-						) : null}
+						))}
 					</Box>
 				))}
 			</Box>

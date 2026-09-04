@@ -1,0 +1,228 @@
+appId: com.devguards.TechOffice
+name: "Chat link previews — a pasted resource link names what it points at"
+# Feature 046, US1 and US2. FR-001, FR-013, FR-017.
+#
+# Happy path only, per Constitution principle XIII. The properties Maestro cannot assert —
+# layout at 360 dp, the absence of a card for a resource the reader may not see — are
+# covered by the web E2E suite and by the backend contract suite, and by the by-eye pass
+# the quickstart describes.
+#
+# The flow posts its own message rather than depending on a seeded one, so it does not
+# care which channel sorts first or what an earlier run left behind. The two links come
+# from .env because they must point at resources this workspace actually has.
+tags:
+  - links
+  - previews
+  - chat
+env:
+    LINK_PREVIEW_TASK_LINK: ${MAESTRO_CANONICAL_TASK_LINK}
+    LINK_PREVIEW_TASK_TITLE: ${MAESTRO_CANONICAL_TASK_TITLE}
+    LINK_PREVIEW_TASK_IDENTIFIER: ${MAESTRO_CANONICAL_TASK_IDENTIFIER}
+    LINK_PREVIEW_DOCUMENT_LINK: ${MAESTRO_LINK_PREVIEW_DOCUMENT_LINK}
+    LINK_PREVIEW_DOCUMENT_TITLE: ${MAESTRO_LINK_PREVIEW_DOCUMENT_TITLE}
+    LINK_PREVIEW_TASK_READY_TEXT: ${MAESTRO_CANONICAL_TASK_READY_TEXT}
+---
+- runFlow: "auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-chat"
+- extendedWaitUntil:
+    visible:
+      id: "channel-row-.*"
+    timeout: 10000
+- tapOn:
+    id: "channel-row-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "message-input"
+    timeout: 10000
+
+# One message, two supported links. Before this feature only the first would have
+# previewed, and it would have previewed as "Task <uuid>".
+- tapOn:
+    id: "message-input"
+- inputText: "Maestro preview probe ${MAESTRO_RUN_ID} ${LINK_PREVIEW_TASK_LINK} ${LINK_PREVIEW_DOCUMENT_LINK}"
+- tapOn:
+    id: "send-button"
+
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      # The two cards, then each card opening its own resource. Every selector is scoped to
+      # this run's own message: the card testID carries the card's index *within its message*,
+      # so a channel holding messages from earlier runs has several
+      # `canonical-link-preview-card-0` elements and an unscoped selector matches the topmost,
+      # which is the oldest. The anchor differs by platform because the accessibility trees do:
+      # Android exposes the message text as a node of its own above the cards, so the cards sit
+      # `below` it, while iOS exposes that text only as the bubble's label and the bubble's
+      # bounds contain the cards, so there they are `childOf` it.
+      - hideKeyboard
+      - extendedWaitUntil:
+          visible:
+            id: "canonical-link-preview-card-0"
+            below:
+              text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+          timeout: 15000
+      # Each card resolves from the same batch response but mounts on its own render, so the
+      # second is waited for rather than asserted the instant the first appears.
+      - extendedWaitUntil:
+          visible:
+            id: "canonical-link-preview-card-1"
+            below:
+              text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+          timeout: 15000
+      - takeScreenshot: "tmp/maestro-screenshots/link-previews-01-two-cards"
+
+      # The task card names the task and its identifier, not its uuid (FR-001, FR-006). Both are
+      # anchored rather than exact: a card collapses to one accessibility label, so the title
+      # shares it with the badge and the identifier shares it with the state.
+      - assertVisible:
+          id: "canonical-link-preview-card-0"
+          text: ".*${LINK_PREVIEW_TASK_TITLE}.*"
+          below:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+      - assertVisible:
+          id: "canonical-link-preview-card-0"
+          text: ".*${LINK_PREVIEW_TASK_IDENTIFIER}.*"
+          below:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+
+      # The task card opens the task in the app (FR-017). The wait is on a control only the task
+      # screen has: the card back in the channel carries the task title too, so waiting on the
+      # title alone would pass without the tap having navigated anywhere.
+      - tapOn:
+          id: "canonical-link-preview-card-0"
+          below:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+      - extendedWaitUntil:
+          visible:
+            id: "task-copy-canonical-link"
+          timeout: 15000
+      - assertVisible: ".*${LINK_PREVIEW_TASK_READY_TEXT}.*"
+      - takeScreenshot: "tmp/maestro-screenshots/link-previews-02-task-open"
+
+      # Back to the message.
+      - back
+      # And the document card opens the document. Its route segment is named [slug] while a
+      # canonical link supplies an id, so this is the check that the viewer accepts both.
+      # doc-share-button renders only once the document loaded; the error state returns first.
+      - extendedWaitUntil:
+          visible:
+            id: "canonical-link-preview-card-1"
+            below:
+              text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+          timeout: 15000
+      - tapOn:
+          id: "canonical-link-preview-card-1"
+          below:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+      - extendedWaitUntil:
+          visible:
+            id: "doc-share-button"
+          timeout: 15000
+      - assertVisible: ".*${LINK_PREVIEW_DOCUMENT_TITLE}.*"
+      - takeScreenshot: "tmp/maestro-screenshots/link-previews-03-document-open"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      # The two cards, then each card opening its own resource. Every selector is scoped to
+      # this run's own message: the card testID carries the card's index *within its message*,
+      # so a channel holding messages from earlier runs has several
+      # `canonical-link-preview-card-0` elements and an unscoped selector matches the topmost,
+      # which is the oldest. The anchor differs by platform because the accessibility trees do:
+      # Android exposes the message text as a node of its own above the cards, so the cards sit
+      # `below` it, while iOS exposes that text only as the bubble's label and the bubble's
+      # bounds contain the cards, so there they are `childOf` it.
+      - swipe:
+          start: "50%, 25%"
+          end: "50%, 45%"
+      - extendedWaitUntil:
+          visible:
+            id: "canonical-link-preview-card-0"
+            childOf:
+              text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+          timeout: 15000
+      # Each card resolves from the same batch response but mounts on its own render, so the
+      # second is waited for rather than asserted the instant the first appears.
+      - extendedWaitUntil:
+          visible:
+            id: "canonical-link-preview-card-1"
+            childOf:
+              text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+          timeout: 15000
+      - takeScreenshot: "tmp/maestro-screenshots/link-previews-01-two-cards"
+
+      # The task card names the task and its identifier, not its uuid (FR-001, FR-006). Both are
+      # anchored rather than exact: a card collapses to one accessibility label, so the title
+      # shares it with the badge and the identifier shares it with the state.
+      - assertVisible:
+          id: "canonical-link-preview-card-0"
+          text: ".*${LINK_PREVIEW_TASK_TITLE}.*"
+          childOf:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+      - assertVisible:
+          id: "canonical-link-preview-card-0"
+          text: ".*${LINK_PREVIEW_TASK_IDENTIFIER}.*"
+          childOf:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+
+      # The task card opens the task in the app (FR-017). The wait is on a control only the task
+      # screen has: the card back in the channel carries the task title too, so waiting on the
+      # title alone would pass without the tap having navigated anywhere.
+      - tapOn:
+          id: "canonical-link-preview-card-0"
+          childOf:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+      - extendedWaitUntil:
+          visible:
+            id: "task-copy-canonical-link"
+          timeout: 15000
+      - assertVisible: ".*${LINK_PREVIEW_TASK_READY_TEXT}.*"
+      - takeScreenshot: "tmp/maestro-screenshots/link-previews-02-task-open"
+
+      # Back to the message. Not `back`: the task opens inside the My Work tab, which on
+      # iOS leaves no back affordance — but the chat tab still holds the channel, and
+      # re-entering it brings the keyboard back, so it is dismissed again.
+      - tapOn:
+          id: "tab-chat"
+      # Leaving and re-entering the channel rather than just returning to it: coming back
+      # refocuses the composer, and on this screen the keyboard covers the second card
+      # with no way left to dismiss it. A fresh entry has no keyboard at all. The channel
+      # still sorts first because this run's message is the newest in the workspace.
+      - tapOn:
+          id: "channel-back-button"
+      - extendedWaitUntil:
+          visible:
+            id: "channel-row-.*"
+          timeout: 10000
+      - tapOn:
+          id: "channel-row-.*"
+          index: 0
+      # And the document card opens the document. Its route segment is named [slug] while a
+      # canonical link supplies an id, so this is the check that the viewer accepts both.
+      # doc-share-button renders only once the document loaded; the error state returns first.
+      - extendedWaitUntil:
+          visible:
+            id: "canonical-link-preview-card-1"
+            childOf:
+              text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+          timeout: 15000
+      - tapOn:
+          id: "canonical-link-preview-card-1"
+          childOf:
+            text: ".*Maestro preview probe ${MAESTRO_RUN_ID}.*"
+      - extendedWaitUntil:
+          visible:
+            id: "doc-share-button"
+          timeout: 15000
+      - assertVisible: ".*${LINK_PREVIEW_DOCUMENT_TITLE}.*"
+      - takeScreenshot: "tmp/maestro-screenshots/link-previews-03-document-open"

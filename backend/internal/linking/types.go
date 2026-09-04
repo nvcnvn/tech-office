@@ -78,26 +78,60 @@ type CanonicalLink struct {
 	Target CanonicalLinkTarget `json:"target"`
 }
 
+// LinkPreviewMetadata is one card's worth of resource data, composed per reader and never
+// from the URL. The client formats the supporting line from these fields — the reader's
+// time zone is only known there, so StartTime crosses the wire as an instant (research D7).
 type LinkPreviewMetadata struct {
 	Title        string       `json:"title"`
 	Subtitle     string       `json:"subtitle,omitempty"`
 	ResourceType ResourceType `json:"resourceType"`
 	Badge        string       `json:"badge,omitempty"`
 	Href         string       `json:"href"`
-	Thumbnail    string       `json:"thumbnail,omitempty"`
+
+	// Identifier is the human-readable id: a task's `OPS-142`, a project's key.
+	Identifier string `json:"identifier,omitempty"`
+	// StateName and StateCategory describe a task's current workflow state.
+	StateName     string `json:"stateName,omitempty"`
+	StateCategory string `json:"stateCategory,omitempty"`
+	// AssigneeName is the earliest `role = 'assignee'`; the client appends "+N" for the
+	// rest (research D6).
+	AssigneeName string `json:"assigneeName,omitempty"`
+	// AssigneeCount is how many assignees the task has, so the client can render "+N".
+	AssigneeCount int `json:"assigneeCount,omitempty"`
+	// StartTime is an RFC3339 instant for a calendar event; AllDay suppresses the time.
+	StartTime string `json:"startTime,omitempty"`
+	AllDay    bool   `json:"allDay,omitempty"`
+}
+
+// PreviewStatus is the only outcome vocabulary a preview item has. Access denied, not
+// found, deleted, cancelled, archived, another tenant's link, unauthenticated, a malformed
+// URL and an unsupported resource type are all "unavailable" with no preview body, so a
+// client cannot use the response as a disclosure oracle (FR-010).
+type PreviewStatus string
+
+const (
+	PreviewStatusOK          PreviewStatus = "ok"
+	PreviewStatusUnavailable PreviewStatus = "unavailable"
+)
+
+// PreviewItem is one requested URL's answer. URL echoes the string as sent, so a client
+// can match items to its own list without re-normalising.
+type PreviewItem struct {
+	URL     string               `json:"url"`
+	Status  PreviewStatus        `json:"status"`
+	Preview *LinkPreviewMetadata `json:"preview,omitempty"`
 }
 
 type LinkResolutionResult struct {
-	NormalizedTarget       CanonicalLinkTarget  `json:"normalizedTarget"`
-	ResolutionStatus       ResolutionStatus     `json:"status"`
-	WebRoute               string               `json:"webRoute,omitempty"`
-	MobileRoute            string               `json:"mobileRoute,omitempty"`
-	RequiresAuthentication bool                 `json:"requiresAuthentication,omitempty"`
-	Preview                *LinkPreviewMetadata `json:"preview,omitempty"`
-	AppliedContext         []string             `json:"appliedContext,omitempty"`
-	IgnoredContext         []string             `json:"ignoredContext,omitempty"`
-	FallbackURL            string               `json:"fallbackUrl,omitempty"`
-	LegacyNormalized       bool                 `json:"legacyNormalized,omitempty"`
+	NormalizedTarget       CanonicalLinkTarget `json:"normalizedTarget"`
+	ResolutionStatus       ResolutionStatus    `json:"status"`
+	WebRoute               string              `json:"webRoute,omitempty"`
+	MobileRoute            string              `json:"mobileRoute,omitempty"`
+	RequiresAuthentication bool                `json:"requiresAuthentication,omitempty"`
+	AppliedContext         []string            `json:"appliedContext,omitempty"`
+	IgnoredContext         []string            `json:"ignoredContext,omitempty"`
+	FallbackURL            string              `json:"fallbackUrl,omitempty"`
+	LegacyNormalized       bool                `json:"legacyNormalized,omitempty"`
 }
 
 type ClientRouteTranslation struct {

@@ -78,10 +78,10 @@ env:
     id: "channel-row-${CANONICAL_PREVIEW_CHANNEL_ID}"
 - extendedWaitUntil:
     visible:
-      id: "canonical-link-preview-card"
+      id: "canonical-link-preview-card-0"
     timeout: 10000
 - tapOn:
-    id: "canonical-link-preview-card"
+    id: "canonical-link-preview-card-0"
 - extendedWaitUntil:
     visible: ${CANONICAL_TASK_READY_TEXT}
     timeout: 10000

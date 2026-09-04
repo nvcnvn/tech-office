@@ -4,7 +4,6 @@ import {
 	isCanonicalResourceLink,
 	parseCanonicalResourceLink,
 	type CanonicalLinkResolution,
-	type CanonicalPreviewResponse,
 } from '@tech-office/links';
 import { getAuthToken } from 'apis';
 
@@ -105,21 +104,6 @@ export async function resolveCanonicalMobileRoute(raw: string, authToken?: strin
 			return null;
 		}
 		return (await response.json()) as CanonicalLinkResolution;
-	} catch {
-		return null;
-	}
-}
-
-export async function fetchCanonicalPreview(raw: string): Promise<CanonicalPreviewResponse | null> {
-	try {
-		const token = await getAuthToken();
-		const response = await fetch(`${API_BASE_URL}/api/linking/preview?url=${encodeURIComponent(raw)}`, {
-			headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-		});
-		if (!response.ok) {
-			return null;
-		}
-		return (await response.json()) as CanonicalPreviewResponse;
 	} catch {
 		return null;
 	}

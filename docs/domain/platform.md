@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-09-04.**
+**Status date: 2026-09-05.**
 
 ## Shape
 
@@ -30,12 +30,19 @@ The two-layer split (Connect layer / Logic layer) is Constitution principle III.
 constructors never take a pool; they take `database.DBTX` per call so the Connect layer
 decides transaction scope.
 
-`SearchService` is the one place a Connect layer hands the logic layer the **tenant pool**
-rather than a transaction. Its fan-out runs eight sources concurrently, and a `pgx.Tx` is
-not safe for concurrent use — eight goroutines sharing one would interleave protocol frames
-on a single connection. `*pgxpool.Pool` satisfies `database.DBTX` and gives each source its
-own connection. Search is a pure read with no cross-source consistency requirement, so the
-transaction bought nothing it was giving up latency for. The shape holds everywhere else.
+Two surfaces hand the logic layer the **tenant pool** rather than a transaction, and both
+are pure fan-out reads where a transaction bought nothing:
+
+- `SearchService`. Its fan-out runs eight sources concurrently, and a `pgx.Tx` is not safe
+  for concurrent use — eight goroutines sharing one would interleave protocol frames on a
+  single connection. `*pgxpool.Pool` satisfies `database.DBTX` and gives each source its
+  own connection.
+- `linking.Service.PreviewBatch`. It calls one preview provider per resource type present
+  in the request and there is no cross-provider consistency requirement; a failing provider
+  is meant to cost only its own cards. It keeps `AdminPool` for exactly one thing — the
+  pre-auth `tenantKey` → organization lookup on the global `public.organization` table.
+
+The shape holds everywhere else.
 
 ## Multi-tenancy
 
@@ -317,7 +324,9 @@ Schemas reserved but unused so far: `timekeeping`, `learning`, `compliance`, `pa
 |---|---|
 | `make test-backend` | Go integration tests in `backend/integration` (89 files) against a live Postgres |
 | `make test-frontend` | Playwright E2E against web |
+| `make test-frontend-one F=<spec>` | one Playwright spec |
 | `make test-mobile` | Maestro flows against the Expo app |
+| `make test-mobile-one F=<flow> [MAESTRO_DEVICE=<udid>]` | one Maestro flow; `MAESTRO_DEVICE` names the simulator or emulator, and with it the same command covers both platforms |
 | `make test` | all three |
 | `make test-db-purge` | drops test organizations left behind |
 

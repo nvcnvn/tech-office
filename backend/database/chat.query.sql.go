@@ -1735,6 +1735,70 @@ func (q *Queries) ListChannelMessagesUpToAnchor(ctx context.Context, db DBTX, ar
 	return items, nil
 }
 
+const listChannelPreviews = `-- name: ListChannelPreviews :many
+
+SELECT
+    c.id,
+    c.display_name,
+    c.title_slug,
+    c.channel_type
+FROM chat.channel c
+WHERE c.organization_id = $1
+  AND c.id = ANY($2::uuid[])
+  AND c.is_archived = FALSE
+  AND (
+    c.is_private = FALSE
+    OR EXISTS (
+      SELECT 1 FROM chat.channel_membership cm
+       WHERE cm.organization_id = c.organization_id
+         AND cm.channel_id      = c.id
+         AND cm.employee_id     = $3
+    )
+  )
+`
+
+type ListChannelPreviewsParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	ChannelIds     []dbuuid.UUID `json:"channel_ids"`
+	EmployeeID     dbuuid.UUID   `json:"employee_id"`
+}
+
+type ListChannelPreviewsRow struct {
+	ID          dbuuid.UUID `json:"id"`
+	DisplayName string      `json:"display_name"`
+	TitleSlug   string      `json:"title_slug"`
+	ChannelType string      `json:"channel_type"`
+}
+
+// End of chat.query.sql
+// Channel cards (feature 046, FR-005). The permission predicate is the one SearchChannels
+// uses: a public channel, or one the reader is a member of. It covers direct messages
+// without a special case — a DM is private and its members are its membership rows.
+func (q *Queries) ListChannelPreviews(ctx context.Context, db DBTX, arg *ListChannelPreviewsParams) ([]*ListChannelPreviewsRow, error) {
+	rows, err := db.Query(ctx, listChannelPreviews, arg.OrganizationID, arg.ChannelIds, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListChannelPreviewsRow
+	for rows.Next() {
+		var i ListChannelPreviewsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DisplayName,
+			&i.TitleSlug,
+			&i.ChannelType,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChannelsForUser = `-- name: ListChannelsForUser :many
 SELECT
   c.id,
@@ -1986,6 +2050,74 @@ func (q *Queries) ListMessageReplies(ctx context.Context, db DBTX, arg *ListMess
 			&i.AuthorName,
 			&i.AuthorEmail,
 			&i.ReactionsJson,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listThreadPreviews = `-- name: ListThreadPreviews :many
+SELECT
+    m.id AS root_message_id,
+    c.id AS channel_id,
+    c.display_name,
+    c.title_slug
+FROM chat.message m
+JOIN chat.channel c
+    ON (c.organization_id, c.id) = (m.organization_id, m.channel_id)
+WHERE m.organization_id = $1
+  AND m.id = ANY($2::uuid[])
+  AND m.is_deleted = FALSE
+  AND c.is_archived = FALSE
+  AND (
+    c.is_private = FALSE
+    OR EXISTS (
+      SELECT 1 FROM chat.channel_membership cm
+       WHERE cm.organization_id = c.organization_id
+         AND cm.channel_id      = c.id
+         AND cm.employee_id     = $3
+    )
+  )
+`
+
+type ListThreadPreviewsParams struct {
+	OrganizationID dbuuid.UUID   `json:"organization_id"`
+	RootMessageIds []dbuuid.UUID `json:"root_message_ids"`
+	EmployeeID     dbuuid.UUID   `json:"employee_id"`
+}
+
+type ListThreadPreviewsRow struct {
+	RootMessageID dbuuid.UUID `json:"root_message_id"`
+	ChannelID     dbuuid.UUID `json:"channel_id"`
+	DisplayName   string      `json:"display_name"`
+	TitleSlug     string      `json:"title_slug"`
+}
+
+// Thread cards (feature 046, FR-005). A thread's canonical resource id is its root
+// message id — the same id MessageItem's copy-link puts in the URL — so the lookup starts
+// at the message and names the channel it lives in.
+//
+// Only the channel's name is read. Nothing from the message body is returned, so
+// previewing a thread cannot render the conversation it points at.
+func (q *Queries) ListThreadPreviews(ctx context.Context, db DBTX, arg *ListThreadPreviewsParams) ([]*ListThreadPreviewsRow, error) {
+	rows, err := db.Query(ctx, listThreadPreviews, arg.OrganizationID, arg.RootMessageIds, arg.EmployeeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListThreadPreviewsRow
+	for rows.Next() {
+		var i ListThreadPreviewsRow
+		if err := rows.Scan(
+			&i.RootMessageID,
+			&i.ChannelID,
+			&i.DisplayName,
+			&i.TitleSlug,
 		); err != nil {
 			return nil, err
 		}

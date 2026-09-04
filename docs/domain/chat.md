@@ -4,7 +4,7 @@ Channels, messages, threads, reactions, presence-aware typing, and the per-user 
 Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RPCs) and
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
-**Status date: 2026-09-02.** Supersedes specs 009, 010, 027.
+**Status date: 2026-09-04.** Supersedes specs 009, 010, 027, 046.
 
 ## Channels
 
@@ -56,6 +56,37 @@ its first 48 bits, so `ORDER BY id DESC` is chronological and the index
 `(organization_id, channel_id, id DESC)` serves it directly. `ListMessages` takes a
 `ListMessagesDirection` so a client can page in either direction from an anchor —
 which is what deep-linking to a specific message needs.
+
+### What a message renders for a canonical link
+
+A message body may contain canonical resource links (see
+[workspace-navigation.md](workspace-navigation.md#previews)). What the reader sees is
+decided per link, not per message:
+
+- Up to **three** cards (`MAX_PREVIEW_CARDS` in `packages/links`), in the order the links
+  appear in the text. The fourth and beyond stay raw clickable text.
+- A card renders only for a link the backend resolved **for this reader**. A link to a task
+  in a project they are not in, to a document they are denied, to a private channel or to a
+  cancelled event produces no card at all — and the raw link stays clickable, so they still
+  have something to follow and can ask whoever posted it.
+- The same resource linked twice in one message produces one card.
+- Only the URLs that produced a card are stripped from the body. A link with no card keeps
+  its text, so a reader is never left with neither.
+- A card is **suppressed** for any task the same message already shows as a
+  chat-to-task conversion chip — the chip is the authoritative representation of that
+  relationship, and a card beside it would say the same thing twice.
+
+Card text is composed once, in `buildCanonicalLinkPreviewDisplay`, so web and mobile agree:
+a task card reads `<title>` over `OPS-142 · In progress · Mai Anh Nguyen` (`+N` when the
+task has more assignees), a document card names its parent, an event card formats its start
+in the **reader's own** time zone. Nothing on the card is derived from the URL, and nothing
+is stored on the message row: a message posted before this existed previews normally, and a
+card always reflects the resource's current state.
+
+Previews are fetched once per rendered page by the list, never per message
+(`VirtualizedMessageList` on web, `[channelId].tsx` and `thread/[messageId].tsx` on
+mobile), so opening a busy channel costs one request and message text never waits on a
+card.
 
 ## Direct conversations and the block guard
 
@@ -202,7 +233,8 @@ is nothing for that component to measure against (`src/hooks/use-keyboard-height
 
 `integration/chat_messaging_test.go`, `chat_stream_test.go`,
 `workflow_chat_files_test.go`, `notification_chat_acknowledgement_test.go`,
-`context_rail_test.go`.
+`context_rail_test.go`, `chat_link_previews_test.go`. Web:
+`e2e/chat-link-previews.spec.ts`. Mobile: `.maestro/chat-link-previews.yaml`.
 
 ## Known drift
 

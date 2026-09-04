@@ -1648,3 +1648,83 @@ WHERE t.organization_id = @organization_id
   AND (sqlc.narg('cursor')::uuid IS NULL OR t.id < sqlc.narg('cursor'))
 ORDER BY relevance_score DESC, t.updated_at DESC, t.id DESC
 LIMIT @search_limit;
+
+-- name: ListTaskPreviews :many
+-- Task cards for a page of chat link previews (feature 046, FR-001).
+--
+-- The access predicate is the one ListTasksBySourceMessages and SearchTasks already
+-- share, so "which tasks may this reader see" keeps a single definition. A task the
+-- reader cannot see is absent from the result rather than flagged — that absence is what
+-- makes access_denied and not_found indistinguishable to the caller (FR-010).
+--
+-- The earliest assignee comes from a LATERAL taking one row, and the count from a
+-- correlated sub-select, rather than from a join on task_assignee: a task with three
+-- assignees must still produce exactly one row.
+--
+-- The assignee id is COALESCEd to the nil uuid because sqlc infers a LEFT JOIN'd NOT NULL
+-- column as non-nullable, and scanning a real NULL into dbuuid.UUID fails the whole batch.
+-- The nil uuid is not a valid employee id; the Go side reads assignee_count, not the id,
+-- to decide whether there is an assignee at all.
+SELECT
+    t.id,
+    t.identifier,
+    t.title,
+    t.project_id,
+    ps.name     AS state_name,
+    ps.category AS state_category,
+    COALESCE(primary_assignee.employee_id, '00000000-0000-0000-0000-000000000000'::uuid) AS primary_assignee_id,
+    (SELECT count(*)
+       FROM collaboration.task_assignee ta
+      WHERE ta.organization_id = t.organization_id
+        AND ta.task_id         = t.id
+        AND ta.role            = 'assignee') AS assignee_count
+FROM collaboration.task t
+JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+LEFT JOIN LATERAL (
+    SELECT ta.employee_id
+      FROM collaboration.task_assignee ta
+     WHERE ta.organization_id = t.organization_id
+       AND ta.task_id         = t.id
+       AND ta.role            = 'assignee'
+     ORDER BY ta.assigned_at, ta.id
+     LIMIT 1
+) primary_assignee ON TRUE
+WHERE t.organization_id = @organization_id
+  AND t.id = ANY(@task_ids::uuid[])
+  AND t.is_deleted = FALSE
+  -- Project access — same predicate as ListTasksBySourceMessages.
+  AND (
+      p.visibility = 'public'
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+           WHERE pm.organization_id = t.organization_id
+             AND pm.project_id      = t.project_id
+             AND pm.employee_id     = @employee_id
+      )
+  );
+
+-- name: ListProjectPreviews :many
+-- Project cards (feature 046, FR-004). The predicate mirrors
+-- Service.resolveProjectStatus: a private project is visible to its owner and its members.
+-- An archived project still previews — it exists and the reader may open it.
+SELECT
+    p.id,
+    p.name,
+    p.key,
+    p.is_archived
+FROM collaboration.project p
+WHERE p.organization_id = @organization_id
+  AND p.id = ANY(@project_ids::uuid[])
+  AND (
+      p.visibility <> 'private'
+      OR p.owner_employee_id = @employee_id
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+           WHERE pm.organization_id = p.organization_id
+             AND pm.project_id      = p.id
+             AND pm.employee_id     = @employee_id
+      )
+  );

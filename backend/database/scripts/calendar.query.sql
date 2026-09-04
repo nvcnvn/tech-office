@@ -458,3 +458,30 @@ SELECT series_id, original_start_time, exception_type, new_event_id
 FROM calendar.recurrence_exception
 WHERE organization_id = @organization_id
   AND series_id = ANY(@series_ids::uuid[]);
+
+-- name: ListEventPreviews :many
+-- Event cards (feature 046, FR-003). start_time goes to the client as an instant and is
+-- formatted in the reader's own zone there; the server never renders a wall clock.
+--
+-- The visibility predicate is the one SearchEvents uses: organiser, attendee, or a
+-- team/org_wide event. 'personal_shared' is deliberately outside the third arm — it means
+-- organiser-and-attendees-only. A cancelled event has nothing to preview.
+SELECT
+    e.id,
+    e.title,
+    e.start_time,
+    e.all_day
+FROM calendar.event e
+WHERE e.organization_id = @organization_id
+  AND e.id = ANY(@event_ids::uuid[])
+  AND e.cancelled_at IS NULL
+  AND (
+    e.organizer_id = @employee_id
+    OR EXISTS (
+      SELECT 1 FROM calendar.attendee a
+       WHERE a.organization_id = e.organization_id
+         AND a.event_id        = e.id
+         AND a.employee_id     = @employee_id
+    )
+    OR e.visibility IN ('team', 'org_wide')
+  );

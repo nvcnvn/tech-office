@@ -15,29 +15,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nvcnvn/tech-office/backend/database"
 	"github.com/nvcnvn/tech-office/backend/database/dbuuid"
-	"github.com/nvcnvn/tech-office/backend/internal/linking"
 	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-type documentPreviewProvider struct{}
-
-func NewPreviewProvider() linking.PreviewProvider {
-	return documentPreviewProvider{}
-}
-
-func (documentPreviewProvider) Preview(target linking.CanonicalLinkTarget, canonicalURL string) (*linking.LinkPreviewMetadata, bool) {
-	if target.ResourceType != linking.ResourceTypeDocumentPage {
-		return nil, false
-	}
-	return &linking.LinkPreviewMetadata{
-		Title:        fmt.Sprintf("Document %s", target.ResourceID),
-		Subtitle:     "Document",
-		ResourceType: target.ResourceType,
-		Href:         canonicalURL,
-	}, true
-}
 
 // Common errors for document operations
 var (
