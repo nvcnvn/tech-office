@@ -440,9 +440,13 @@ Expo Router in `apps/mobile/src/app`, five route groups:
   registered with `href: null` so deep links, push taps and canonical links resolve — but
   they own no tab slot: Schedule opens from the Today header, Alerts from the bell in the
   Chat header, which carries the `GetUnreadCount` badge.
-  - `(today)` is the single day view: overdue assigned work, today's events, then work due
-    today. It reads `CollaborationService.GetAssignedWorkSummary` (overdue + due-today
-    across every project, no client fan-out) and `CalendarService.ListEvents` over today.
+  - `(today)` is the single day view: overdue assigned work, the **Team block**, today's
+    events, then work due today. It reads `CollaborationService.GetAssignedWorkSummary`
+    (overdue + due-today across every project, no client fan-out),
+    `CalendarService.ListEvents` over today, and
+    `CollaborationService.GetTeamAttentionSummary`. All three queries are declared in the
+    same render, so the round trips are concurrent rather than chained. See
+    [the Team block](#the-team-block-on-mobile-today) below.
   - `(tasks)` opens in Focus mode; the project-first drilldown is behind the
     `task-mode-toggle` header action rather than a body segmented control. Two modal
     screens hang off it: `create-project` and `[projectId]/create-ritual`. Each is offered
@@ -519,6 +523,44 @@ differently on each platform: Android puts the greeting behind a Continue button
 the close control only with a content description, iOS shows the greeting inside the menu
 and exposes the SF Symbol as an identifier.
 Design guidance lives in the `building-native-ui` skill and `specs/mobile-ui-design.md`.
+
+### The Team block on mobile Today
+
+Between "Running late" and "Today's schedule", Today shows a **Team** section to callers who
+both hold `collab.reviewEvidence` and are `owner` or `admin` on at least one project. It
+lists the ritual instances those projects are late on, and the ones scheduled for the
+device's local date with nobody holding them, so a shift supervisor can answer "is the store
+OK" without opening a project. The backing RPC and its predicates are described in
+[rituals-tasks.md](rituals-tasks.md#team-attention-summary).
+
+**Who sees it.** Nobody else. When `can_supervise` is false the block renders *nothing* — no
+heading, no card, no skeleton, no placeholder — so a worker's Today is byte-for-byte what it
+was. `can_supervise` is a distinct response field rather than an inference from a zero count,
+because "you supervise nothing" and "your team is fine" must not look the same on screen. A
+supervisor with nothing wrong sees an explicit all-clear naming how many projects it covered,
+rather than the block vanishing: a block that disappears on a quiet morning is
+indistinguishable from one that never applied.
+
+**What it does not do.** No assignment, no reassignment, no bulk action, no configuration.
+Tapping a row routes to the existing ritual instance screen, which already carries whatever
+controls the caller is entitled to. This is why the block does not need Principle XIII's
+administrative carve-out: checking whether this morning's opening ritual has anybody on it
+*is* a day-to-day task for whoever runs the shift.
+
+**It fails alone.** The Team query is deliberately absent from the screen's whole-screen
+loading and error conditions, which stay wired to the work and events queries only. A team
+feed that fails renders a retry (`today-team-retry`) confined to the block while the caller's
+own overdue work, events and due-today work stay fully rendered — a supervisory extra must
+never blank out the day a worker depends on. Once a response has reported
+`can_supervise = false`, later loading and error states render nothing at all rather than
+flashing a Team heading at a non-supervisor.
+
+The block shares Today's existing refresh paths (`useManualRefresh` and
+`useStreamRecoveryRefresh`) rather than owning a gesture or a poll timer. Counts beside the
+heading are the server's true totals, rendered "99+" when the server reports the count
+capped; "Show more" refetches with a larger limit rather than paging, to a ceiling of 20 rows
+per category. Interactive elements carry `today-section-team`, `today-team-row-<taskId>`,
+`today-team-expand` and `today-team-retry`.
 
 ## Shared frontend packages
 

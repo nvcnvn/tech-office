@@ -737,6 +737,68 @@ card on the tasks tab. See
   `missed` instance drops out of the summary with no query change, because the seeded
   `Missed` state is `is_closed = true` and both queries already filter `is_closed = FALSE`.
 
+### Team attention summary
+
+`GetTeamAttentionSummary` is the supervisory counterpart to `GetAssignedWorkSummary`: "is
+the store OK", answered in one request for one supervisor. It backs the Team block on the
+mobile Today tab (see
+[workspace-navigation.md](workspace-navigation.md#the-team-block-on-mobile-today)) and has
+no web surface.
+
+**Scope.** A caller's supervisory scope is every non-archived project where they hold an
+`owner` or `admin` `project_membership` row — one notch tighter than the review queue's
+`role <> 'viewer'`, because `member` would mean every employee sees the whole workspace's
+late work. `can_supervise` is true only when the caller *also* holds `collab.reviewEvidence`.
+Like the two evidence-review-queue RPCs, the proto declares `access_control = {}` and the
+handler turns a missing permission into an **empty summary, never `PERMISSION_DENIED`**:
+not being anyone's supervisor is the ordinary condition for most of the workforce.
+
+**Two categories, disjoint by construction.**
+
+| | Overdue (rank `0`) | Unassigned (rank `1`) |
+|---|---|---|
+| State | `ps.category = 'overdue'` | `ps.category <> 'overdue'` |
+| Date | unbounded | `t.scheduled_date = as_of_date` (equality, not `<=`) |
+| Assignment | any | no `task_assignee` row with `role = 'assignee'` |
+
+Because the two state predicates are complements, an instance that is both overdue and
+unassigned is listed once and counted once, under overdue, with no `DISTINCT` in either
+query. Lateness is read from the stored `project_state.category` and **never computed from
+`completion_deadline`** — the reconciliation sweep is the sole authority, and any date
+arithmetic here would disagree with the caller's own "Running late" section for up to five
+minutes at every deadline. Both queries also exclude closed states (`is_closed = FALSE`,
+so a future terminal state is excluded automatically), soft-deleted and detached instances,
+archived projects, and anything assigned to the caller themselves.
+
+**Bounds.** `CountTeamAttention` counts each category inside a `LIMIT 100` subquery, so a
+5 000-instance backlog costs the same to summarise as a healthy one;
+`overdue_count_capped` / `unassigned_count_capped` are `count >= 100`, derived per category
+so 100+ overdue cannot make an exact 3 unassigned read as capped. `ListTeamAttentionItems`
+returns at most `limit` rows per leg — 5 by default, clamped to 20 — as
+`(overdue LIMIT n) UNION ALL (unassigned LIMIT n)` ordered by
+`attention_rank, sort_date NULLS LAST, task_id`. There is no cursor: the ceiling is 20 rows
+per category and "show more" is a refetch with a larger limit. Both queries carry an
+identical base predicate, because a count the caller cannot substantiate by opening the
+rows is worse than no count.
+
+**Assignee names** come from one batched `EmployeeNameLookup.ListEmployeeNames` call per
+response, injected into the collaboration logic by `SetEmployeeNameLookup` — never a
+cross-schema join (Constitution IV). A name that fails to resolve leaves
+`assignee_display_name` absent and **keeps the row**: a departed assignee is exactly what
+the owner needs to see. `assignee_count` is what distinguishes "nobody is on this" from
+"somebody is and we could not name them".
+
+`as_of_date` is an explicit optional request field carrying the caller's local date, not a
+header and not the server's clock: for a supervisor at UTC+7 the two differ precisely during
+the early-morning hours when the block is most useful. Absent or empty means the server's
+current date; present but unparseable is `InvalidArgument` with a `google.rpc.BadRequest`
+field violation on `as_of_date`, never a silent fallback. It scopes the unassigned category
+only. `GetAssignedWorkSummary` still resolves its own `as_of` from `time.Now()` and is
+deliberately unchanged — ritual lateness in both surfaces comes from the stored state, so
+the two cannot disagree.
+
+Read-only: no assignment, no reassignment, no bulk action, no write path.
+
 ## Calendar overlay
 
 `GetTasksDueInRange` and `GetRitualInstancesInRange` are read-only providers the calendar
@@ -881,6 +943,12 @@ sends no `procedure_document_id`.
 origin columns are written; the two RPCs that read them back (`ListTasksBySourceMessages`,
 `GetTaskOrigin`) and the per-channel destination memory are declared in the proto and the
 schema with nothing behind them. See D31 and D32 in the drift register.
+
+**`ListEvidenceReviewQueue` joins `organization.employee` directly** to name the submitter,
+which Constitution IV forbids — the collaboration → organization edge belongs in an
+interface, not a SQL join. Pre-existing. Feature 047's team attention summary hit the same
+"one name per row, one lookup per page" problem and used the `EmployeeNameLookup` interface
+instead of copying the neighbouring join. See D58 in the drift register.
 
 **Spec reading order.** Rituals accumulated across five specs; if you must read them, the
 useful order is 022 (model) → 023 (lazy resources + schedule change) → 028 (submission

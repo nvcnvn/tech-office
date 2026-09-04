@@ -278,6 +278,9 @@ function TeamSection({
   // later failure or refetch must not suddenly show them a Team heading.
   if (summary?.canSupervise === false) return null;
 
+  // Stacked rather than joined onto one line: "99+ late · 99+ unassigned" beside the
+  // heading is wide enough to squeeze the title on a 360 dp Android device or an iPhone SE,
+  // and a truncated count is worse than no count.
   const totals = summary
     ? [
         summary.overdueCount > 0
@@ -286,10 +289,8 @@ function TeamSection({
         summary.unassignedCount > 0
           ? `${teamCount(summary.unassignedCount, summary.unassignedCountCapped)} unassigned`
           : null,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
+      ].filter((line): line is string => line !== null)
+    : [];
 
   const header = (
     <View style={styles.sectionHeader} testID="today-section-team">
@@ -297,10 +298,14 @@ function TeamSection({
         <Text style={styles.sectionTitle}>Team</Text>
         <Text style={styles.sectionSubtitle}>Across the projects you run</Text>
       </View>
-      {totals ? (
-        <Text numberOfLines={1} style={styles.teamCounts}>
-          {totals}
-        </Text>
+      {totals.length > 0 ? (
+        <View style={styles.teamCounts}>
+          {totals.map((line) => (
+            <Text key={line} numberOfLines={1} style={styles.teamCountLine}>
+              {line}
+            </Text>
+          ))}
+        </View>
       ) : null}
     </View>
   );
@@ -813,8 +818,12 @@ const styles = StyleSheet.create({
     paddingVertical: mobileLayout.itemGap,
   },
   teamCounts: {
-    ...mobileTypography.caption,
     flexShrink: 0,
+    alignItems: "flex-end",
+    paddingLeft: mobileLayout.itemGap,
+  },
+  teamCountLine: {
+    ...mobileTypography.caption,
     color: lightPalette.text.secondary,
   },
   teamExpand: {
