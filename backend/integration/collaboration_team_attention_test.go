@@ -401,8 +401,36 @@ func TestTeamAttentionSummary(t *testing.T) {
 	})
 
 	t.Run("when the caller supervises projects and nothing is overdue or unassigned", func(t *testing.T) {
-		t.Skip("pending: US3")
-		t.Run("it returns can_supervise true with a non-zero supervised project count", func(t *testing.T) {})
+		t.Parallel()
+		// US3-1, FR-016. A silent block read as good news is the defect this whole feature
+		// exists to fix, so a healthy team and no supervisory scope must be distinguishable
+		// on the wire: same zero counts, different can_supervise and project count.
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		worker := w.withEmployee()
+		proj := w.newTeamProject(owner, "All Clear", "AC")
+		w.addProjectMember(owner, proj.ID, worker.ID, rpcv1.ProjectMemberRole_PROJECT_MEMBER_ROLE_MEMBER)
+
+		// Current and held: scheduled today, somebody on it, not in the overdue state.
+		today := time.Now()
+		healthy := w.createRitualInstance(owner, proj.projectResult, "Opening checks", today, today)
+		w.assignTask(owner, healthy.Id, worker.ID, rpcv1.TaskAssigneeRole_TASK_ASSIGNEE_ROLE_ASSIGNEE)
+
+		t.Run("it returns can_supervise true with a non-zero supervised project count", func(t *testing.T) {
+			healthySupervisor := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), nil)
+			assert.True(t, healthySupervisor.CanSupervise)
+			assert.Greater(t, healthySupervisor.SupervisedProjectCount, int32(0),
+				"the all-clear names how many projects it covered")
+			assert.Equal(t, int32(0), healthySupervisor.OverdueCount)
+			assert.Equal(t, int32(0), healthySupervisor.UnassignedCount)
+			assert.Empty(t, healthySupervisor.Items)
+
+			nonSupervisor := w.getTeamAttentionSummary(worker, ptr(isoDate(today)), nil)
+			assert.False(t, nonSupervisor.CanSupervise)
+			assert.Equal(t, int32(0), nonSupervisor.SupervisedProjectCount)
+			assert.Equal(t, healthySupervisor.OverdueCount, nonSupervisor.OverdueCount,
+				"the counts alone cannot tell the two apart — which is why can_supervise exists")
+		})
 	})
 
 	t.Run("when the assignee's employee record is archived", func(t *testing.T) {

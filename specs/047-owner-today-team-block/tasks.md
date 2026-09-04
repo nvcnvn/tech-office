@@ -164,12 +164,12 @@ a non-supervisor still sees nothing at all.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T035 [US3] Implement the all-clear scenario in `backend/integration/collaboration_team_attention_test.go`: a caller who supervises projects with nothing overdue or unassigned gets `can_supervise = true`, `supervised_project_count > 0` and zero counts — distinguishable from the non-supervisor's `can_supervise = false, supervised_project_count = 0` (US3-1, FR-016).
+- [X] T035 [US3] Implement the all-clear scenario in `backend/integration/collaboration_team_attention_test.go`: a caller who supervises projects with nothing overdue or unassigned gets `can_supervise = true`, `supervised_project_count > 0` and zero counts — distinguishable from the non-supervisor's `can_supervise = false, supervised_project_count = 0` (US3-1, FR-016).
 
 ### Implementation for User Story 3
 
-- [ ] T036 [US3] Render the all-clear state in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx`: when `canSupervise` is true and both counts are zero, the block renders with its heading and an explicit message naming `supervisedProjectCount` (e.g. "All clear across 3 projects"), pluralised correctly, with an `accessibilityLabel` conveying the same. When `canSupervise` is false, still nothing renders (FR-016, US3-2).
-- [ ] T037 [US3] Verify in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx` that the existing `isEmpty` / "Nothing due today" `EmptyState` is still computed from the caller's own three feeds only, so it cannot be read as asserting the team is clear, and that it can coexist on screen with a Team block that is showing problems (FR-020, US3-3). No copy change to the existing empty state.
+- [X] T036 [US3] Render the all-clear state in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx`: when `canSupervise` is true and both counts are zero, the block renders with its heading and an explicit message naming `supervisedProjectCount` (e.g. "All clear across 3 projects"), pluralised correctly, with an `accessibilityLabel` conveying the same. When `canSupervise` is false, still nothing renders (FR-016, US3-2).
+- [X] T037 [US3] Verify in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx` that the existing `isEmpty` / "Nothing due today" `EmptyState` is still computed from the caller's own three feeds only, so it cannot be read as asserting the team is clear, and that it can coexist on screen with a Team block that is showing problems (FR-020, US3-3). No copy change to the existing empty state.
 
 **Checkpoint**: The block is honest on quiet mornings — a healthy team and no supervisory scope
 now look different.

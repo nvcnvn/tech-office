@@ -272,7 +272,7 @@ function TeamSection({
         {header}
         <View style={styles.sectionCard}>
           <View style={styles.teamStateRow}>
-            <Text selectable style={styles.rowMeta}>
+            <Text selectable style={styles.teamErrorText}>
               Couldn&apos;t load your team&apos;s work
             </Text>
             <Button
@@ -295,6 +295,31 @@ function TeamSection({
         {header}
         <View style={styles.sectionCard}>
           <SkeletonList count={3} />
+        </View>
+      </View>
+    );
+  }
+
+  // Nothing overdue and nothing unheld. The block says so explicitly and names how many
+  // projects it checked, rather than vanishing — a block that disappears on a quiet morning
+  // is indistinguishable from a block that never applied, and the supervisor reads silence
+  // as good news without ever being told it is.
+  if (summary.items.length === 0) {
+    const allClear = `All clear across ${summary.supervisedProjectCount} ${
+      summary.supervisedProjectCount === 1 ? "project" : "projects"
+    }`;
+    return (
+      <View style={styles.sectionBlock}>
+        {header}
+        <View style={styles.sectionCard}>
+          <View
+            style={styles.teamStateRow}
+            accessible
+            accessibilityLabel={`Team: ${allClear}. Nothing overdue and nothing unassigned.`}
+          >
+            <SFIcon name="checkmark.circle" size={18} color={lightPalette.success.main} />
+            <Text style={styles.teamAllClear}>{allClear}</Text>
+          </View>
         </View>
       </View>
     );
@@ -464,6 +489,11 @@ export default function TodayScreen() {
     );
   }
 
+  // The caller's OWN three feeds, deliberately not the team query. "Nothing due today" is a
+  // statement about this person's day; folding the team block in would let it be read as
+  // asserting the team is clear, which is a different claim and one the block makes
+  // explicitly for itself. The two coexist: a supervisor with nothing of their own and a
+  // team in trouble sees both.
   const isEmpty =
     overdueItems.length === 0 &&
     dueTodayItems.length === 0 &&
@@ -710,6 +740,16 @@ const styles = StyleSheet.create({
     minHeight: mobileLayout.listRowHeight,
     paddingHorizontal: mobileLayout.cardPadding,
     paddingVertical: mobileLayout.itemGap,
+  },
+  teamErrorText: {
+    ...mobileTypography.caption,
+    flexShrink: 1,
+    color: lightPalette.text.secondary,
+  },
+  teamAllClear: {
+    ...mobileTypography.listPrimary,
+    flex: 1,
+    color: lightPalette.text.secondary,
   },
   teamUnassigned: {
     color: lightPalette.warning.dark,
