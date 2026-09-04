@@ -1,0 +1,1 @@
+Link previews in chat. Render the existing canonical-link preview endpoint as a card when a message contains a task, document or event link. The endpoint exists and nothing renders it; a pasted task link is the most common way work crosses from chat to tasks and it is bare text.
