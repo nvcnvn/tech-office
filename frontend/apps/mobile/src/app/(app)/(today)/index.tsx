@@ -22,7 +22,7 @@
  * day a worker depends on.
  */
 
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -65,6 +65,11 @@ import {
 } from "@tech-office/theme-tokens";
 
 const TODAY_HREF = "/(app)/(today)";
+
+// Items per category. The server clamps to its own ceiling of 20, so these are the two
+// values the block asks for and not a contract the client is trusted to honour.
+const TEAM_COLLAPSED_LIMIT = 5;
+const TEAM_EXPANDED_LIMIT = 20;
 
 function todayNavigation(href: string): string {
   return withNavigationContext(href, {
@@ -240,16 +245,32 @@ function TeamRow({ item, onPress }: { item: TeamAttentionItem; onPress: () => vo
  * stays wired to the work and events queries only, so a supervisory extra can never blank
  * out the day a worker depends on.
  */
+/**
+ * The counts beside the heading are the TRUE totals, not the length of the list — a short
+ * list presented as the whole picture is how a supervisor comes to trust a block that is
+ * hiding half the backlog. When the server capped a count it says so, and the figure reads
+ * "99+" rather than an exact number the caller could disprove by expanding.
+ */
+function teamCount(count: number, capped: boolean): string {
+  return capped ? `${TEAM_COUNT_CAP_DISPLAY}+` : String(count);
+}
+
+const TEAM_COUNT_CAP_DISPLAY = 99;
+
 function TeamSection({
   summary,
   isLoading,
   error,
+  expanded,
+  onToggleExpanded,
   onRetry,
   onOpenItem,
 }: {
   summary: TeamAttentionSummary | undefined;
   isLoading: boolean;
   error: unknown;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onRetry: () => void;
   onOpenItem: (item: TeamAttentionItem) => void;
 }) {
@@ -257,12 +278,30 @@ function TeamSection({
   // later failure or refetch must not suddenly show them a Team heading.
   if (summary?.canSupervise === false) return null;
 
+  const totals = summary
+    ? [
+        summary.overdueCount > 0
+          ? `${teamCount(summary.overdueCount, summary.overdueCountCapped)} late`
+          : null,
+        summary.unassignedCount > 0
+          ? `${teamCount(summary.unassignedCount, summary.unassignedCountCapped)} unassigned`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
+
   const header = (
     <View style={styles.sectionHeader} testID="today-section-team">
       <View style={styles.sectionHeaderText}>
         <Text style={styles.sectionTitle}>Team</Text>
         <Text style={styles.sectionSubtitle}>Across the projects you run</Text>
       </View>
+      {totals ? (
+        <Text numberOfLines={1} style={styles.teamCounts}>
+          {totals}
+        </Text>
+      ) : null}
     </View>
   );
 
@@ -335,6 +374,27 @@ function TeamSection({
             <TeamRow item={item} onPress={() => onOpenItem(item)} />
           </React.Fragment>
         ))}
+        {/*
+          Expansion refetches the same query with a larger limit rather than paging: the
+          ceiling is 20 rows per category, and a cursor for a list that short would be
+          scaffolding for a "load more" this block deliberately does not have. The totals
+          above stay visible either way, so expanding never changes what the block claims
+          about size — only how much of it is on screen.
+        */}
+        {expanded || summary.overdueCount + summary.unassignedCount > summary.items.length ? (
+          <>
+            <View style={styles.cardSeparator} />
+            <Pressable
+              testID="today-team-expand"
+              onPress={onToggleExpanded}
+              accessibilityRole="button"
+              accessibilityLabel={expanded ? "Show fewer team items" : "Show more team items"}
+              style={({ pressed }) => [styles.teamExpand, pressed && styles.rowPressed]}
+            >
+              <Text style={styles.teamExpandText}>{expanded ? "Show less" : "Show more"}</Text>
+            </Pressable>
+          </>
+        ) : null}
       </View>
     </View>
   );
@@ -369,6 +429,13 @@ function Section({
 
 // ── Screen ──────────────────────────────────────────────────────────────────
 
+// FR-015 — the three feeds are concurrent, and nothing below may quietly serialise them.
+// All three useQuery calls are unconditional, carry no `enabled` gate, and sit above the
+// screen's first early return, so React Query issues them in the same render and the added
+// cost of the Team block is the difference between the slowest feed and the previous
+// slowest, not a third serial hop. Chaining the team query behind the work query — or
+// gating it on `work?.…` — would break this, and no test can catch it: it is a property of
+// the render path, checked by reading it.
 export default function TodayScreen() {
   const router = useRouter();
   const dayKey = format(new Date(), "yyyy-MM-dd");
@@ -402,14 +469,16 @@ export default function TodayScreen() {
   // slowest feed and the previous slowest, not a third serial hop. `dayKey` is the same
   // local date the other two key on, so the Team block and "Due today" can never disagree
   // about what today means.
+  const [teamExpanded, setTeamExpanded] = useState(false);
+  const teamLimit = teamExpanded ? TEAM_EXPANDED_LIMIT : TEAM_COLLAPSED_LIMIT;
   const {
     data: team,
     isLoading: isTeamLoading,
     error: teamError,
     refetch: refetchTeam,
   } = useQuery({
-    queryKey: ["today-team", dayKey],
-    queryFn: () => getTeamAttentionSummary({ asOfDate: dayKey, limit: 5 }),
+    queryKey: ["today-team", dayKey, teamLimit],
+    queryFn: () => getTeamAttentionSummary({ asOfDate: dayKey, limit: teamLimit }),
   });
 
   const refetchAll = useCallback(
@@ -554,6 +623,8 @@ export default function TodayScreen() {
           summary={team}
           isLoading={isTeamLoading}
           error={teamError}
+          expanded={teamExpanded}
+          onToggleExpanded={() => setTeamExpanded((current) => !current)}
           onRetry={() => void refetchTeam()}
           onOpenItem={(item) =>
             router.push(
@@ -740,6 +811,21 @@ const styles = StyleSheet.create({
     minHeight: mobileLayout.listRowHeight,
     paddingHorizontal: mobileLayout.cardPadding,
     paddingVertical: mobileLayout.itemGap,
+  },
+  teamCounts: {
+    ...mobileTypography.caption,
+    flexShrink: 0,
+    color: lightPalette.text.secondary,
+  },
+  teamExpand: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: mobileLayout.compactRowHeight,
+    paddingHorizontal: mobileLayout.cardPadding,
+  },
+  teamExpandText: {
+    ...mobileTypography.button,
+    color: lightPalette.primary.main,
   },
   teamErrorText: {
     ...mobileTypography.caption,

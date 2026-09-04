@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -79,6 +80,46 @@ func (w *testWorld) blankEmployeeName(employeeID dbuuid.UUID) {
 	_, err := globalDB.Exec(context.Background(),
 		`UPDATE organization.employee SET given_name = '', family_name = '' WHERE id = $1`,
 		employeeID)
+	require.NoError(w.t, err)
+}
+
+// seedOverdueInstances makes `count` overdue instances in one supervised project, all
+// assigned to `assignee`.
+//
+// Written as two bulk INSERT ... SELECTs off a single seed instance rather than as `count`
+// trips through CreateTask/AssignTask/MoveTask: the cap scenario needs more than a hundred
+// of them, and three hundred round trips would make the suite's slowest test about HTTP
+// rather than about the bound it is asserting.
+func (w *testWorld) seedOverdueInstances(owner testUser, proj teamProject, assignee testUser, count int) {
+	w.t.Helper()
+	seed := w.newOverdueInstance(owner, proj, "Seeded late", &assignee, time.Now().AddDate(0, 0, -1))
+
+	_, err := globalDB.Exec(context.Background(),
+		`INSERT INTO collaboration.task (
+		    id, organization_id, project_id, identifier, title, depth, path, level_id,
+		    state_id, reporter_employee_id, task_kind, scheduled_date, completion_deadline
+		 )
+		 SELECT uuidv7(), t.organization_id, t.project_id, t.identifier || '-' || n, t.title || ' ' || n,
+		        t.depth, t.path, t.level_id, t.state_id, t.reporter_employee_id, t.task_kind,
+		        t.scheduled_date, t.completion_deadline - (n || ' hours')::interval
+		   FROM collaboration.task t, generate_series(1, $2) AS n
+		  WHERE t.id = $1`,
+		dbuuid.MustParse(seed.Id), count-1)
+	require.NoError(w.t, err)
+
+	_, err = globalDB.Exec(context.Background(),
+		`INSERT INTO collaboration.task_assignee (
+		    id, organization_id, task_id, employee_id, role, assigned_by_employee_id
+		 )
+		 SELECT uuidv7(), t.organization_id, t.id, $2, 'assignee', $3
+		   FROM collaboration.task t
+		  WHERE t.organization_id = $4
+		    AND t.project_id = $1
+		    AND NOT EXISTS (
+		      SELECT 1 FROM collaboration.task_assignee ta
+		       WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+		    )`,
+		dbuuid.MustParse(proj.ID), assignee.ID, owner.ID, owner.OrgID)
 	require.NoError(w.t, err)
 }
 
@@ -486,17 +527,75 @@ func TestTeamAttentionSummary(t *testing.T) {
 	})
 
 	t.Run("when more instances match than the requested limit", func(t *testing.T) {
-		t.Skip("pending: US4")
+		t.Parallel()
+		// US4-1, US4-2, FR-013. The counts are the truth about size; the items are what
+		// fits on a phone. A supervisor must never be shown a short list presented as the
+		// whole picture.
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		worker := w.withEmployee()
+		proj := w.newTeamProject(owner, "Bad Week", "BW")
+		w.addProjectMember(owner, proj.ID, worker.ID, rpcv1.ProjectMemberRole_PROJECT_MEMBER_ROLE_MEMBER)
+		for i := range 8 {
+			w.newOverdueInstance(owner, proj, "Late "+strconv.Itoa(i), &worker,
+				time.Now().AddDate(0, 0, -(i + 1)))
+		}
 
-		t.Run("it returns the true count alongside the shortened list", func(t *testing.T) {})
-		t.Run("it clamps the requested limit to the ceiling", func(t *testing.T) {})
+		t.Run("it returns the true count alongside the shortened list", func(t *testing.T) {
+			resp := w.getTeamAttentionSummary(owner, nil, ptr(int32(5)))
+			assert.Len(t, resp.Items, 5, "the list is bounded")
+			assert.Equal(t, int32(8), resp.OverdueCount, "the count is not")
+			assert.False(t, resp.OverdueCountCapped, "eight is well under the cap")
+		})
+
+		t.Run("it clamps the requested limit to the ceiling", func(t *testing.T) {
+			// Asking for too much is not a client error a supervisor can act on, so it is
+			// clamped rather than rejected.
+			require.NoError(t, w.getTeamAttentionSummaryError(owner, nil, ptr(int32(500))))
+			resp := w.getTeamAttentionSummary(owner, nil, ptr(int32(500)))
+			assert.Len(t, resp.Items, 8, "every match fits under the ceiling of 20")
+			assert.LessOrEqual(t, len(resp.Items), 20)
+		})
 	})
 
 	t.Run("when more instances match than the count cap", func(t *testing.T) {
-		t.Skip("pending: US4")
+		t.Parallel()
+		// US4-3, FR-014, SC-005. Two flags, not one: a workspace can plausibly have 100+
+		// overdue and 3 unassigned, and reporting the exact 3 as "99+" would be a lie the
+		// supervisor can disprove by expanding.
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		worker := w.withEmployee()
+		proj := w.newTeamProject(owner, "Very Bad Week", "VBW")
+		w.addProjectMember(owner, proj.ID, worker.ID, rpcv1.ProjectMemberRole_PROJECT_MEMBER_ROLE_MEMBER)
 
-		t.Run("it reports the capped figure and sets the capped flag", func(t *testing.T) {})
-		t.Run("it costs the same as a small backlog", func(t *testing.T) {})
+		// Past the cap of 100 on one category, and well under it on the other.
+		const overCap = 105
+		w.seedOverdueInstances(owner, proj, worker, overCap)
+		today := time.Now()
+		for i := range 3 {
+			w.createRitualInstance(owner, proj.projectResult, "Unheld "+strconv.Itoa(i), today, today)
+		}
+
+		resp := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), ptr(int32(20)))
+
+		t.Run("it reports the capped figure and sets the capped flag", func(t *testing.T) {
+			assert.Equal(t, int32(100), resp.OverdueCount, "counted up to the cap, not past it")
+			assert.True(t, resp.OverdueCountCapped, "so the client renders 99+ rather than a false exact figure")
+
+			assert.Equal(t, int32(3), resp.UnassignedCount, "the other category is exact")
+			assert.False(t, resp.UnassignedCountCapped,
+				"the two flags are independent — 100+ overdue must not make 3 unassigned read as capped")
+		})
+
+		t.Run("it costs the same as a small backlog", func(t *testing.T) {
+			// The bound is server-side and inside SQL, so the response a huge backlog
+			// produces is the same size as a healthy one's: at most `limit` rows per
+			// category, never the backlog.
+			assert.LessOrEqual(t, len(resp.Items), 40, "at most 20 per category at the ceiling")
+			assert.LessOrEqual(t, resp.OverdueCount, int32(100))
+			assert.LessOrEqual(t, resp.UnassignedCount, int32(100))
+		})
 	})
 
 	t.Run("when as_of_date is supplied", func(t *testing.T) {

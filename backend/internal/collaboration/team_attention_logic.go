@@ -116,11 +116,16 @@ func (l *logicImpl) GetTeamAttentionSummary(
 		return nil, err
 	}
 
+	// Derived per category, independently. One shared flag would report an exact 3
+	// unassigned as "99+" whenever overdue happened to be over the cap — a lie the
+	// supervisor can disprove by expanding the block.
 	return &rpcv1.GetTeamAttentionSummaryResponse{
 		CanSupervise:           true,
 		SupervisedProjectCount: counts.SupervisedProjectCount,
 		OverdueCount:           counts.OverdueCount,
 		UnassignedCount:        counts.UnassignedCount,
+		OverdueCountCapped:     counts.OverdueCount >= teamAttentionCountCap,
+		UnassignedCountCapped:  counts.UnassignedCount >= teamAttentionCountCap,
 		Items:                  items,
 	}, nil
 }
