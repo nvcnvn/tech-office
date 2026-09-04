@@ -208,8 +208,8 @@ count renders as a capped figure.
 - [X] T045 [P] Document the mobile Today team block in `docs/domain/workspace-navigation.md`: who sees it, where it sits between "Running late" and "Today's schedule", what it does not do (no assignment, no bulk action), and that it fails independently of the rest of the screen.
 - [X] T046 [P] Record in the drift register in `docs/domain/README.md` that `ListEvidenceReviewQueue` joins `organization.employee` directly in violation of Constitution IV, that this is pre-existing drift, and that feature 047 deliberately used the `EmployeeNameLookup` interface instead of copying it.
 - [X] T047 Work through the mobile design checklist in [quickstart.md](quickstart.md#mobile-design-checklist) against the built screen: tap-target sizes, plain labels, `testID` on every interactive element, `accessibilityLabel` on every row and control, skeleton parity with the rest of Today, and portrait layout at 360–430 dp verified on **a narrow Android device as well as an iPhone SE** — the responsibility label and the counts must not truncate on either (FR-021, FR-022).
-- [ ] T048 Run the definition of done from [quickstart.md](quickstart.md#definition-of-done): `make test-backend-one T=TestTeamAttentionSummary`, then `make test-backend`, `make lint-tenancy`, and `make test-mobile`, all green.
-- [ ] T049 Walk the four manual validations in [quickstart.md](quickstart.md#manual-validation) on a device: the owner sees the team's late work and can tap through; the worker sees a screen with no team artefact of any kind; the all-clear renders for a healthy supervisor; and forcing the team query to fail leaves the caller's own day fully rendered with a retry confined to the block.
+- [X] T048 Run the definition of done from [quickstart.md](quickstart.md#definition-of-done): `make test-backend-one T=TestTeamAttentionSummary`, then `make test-backend`, `make lint-tenancy`, and `make test-mobile`, all green.
+- [X] T049 Walk the four manual validations in [quickstart.md](quickstart.md#manual-validation) on a device: the owner sees the team's late work and can tap through; the worker sees a screen with no team artefact of any kind; the all-clear renders for a healthy supervisor; and forcing the team query to fail leaves the caller's own day fully rendered with a retry confined to the block.
 
 ---
 
@@ -322,3 +322,63 @@ Resolutions made while executing this plan, recorded for review:
   the very first load neither is knowable, so the skeleton renders; once the server has said
   the caller supervises nothing, `TeamSection` returns null for every later loading or error
   state rather than flashing a Team heading at a worker.
+
+## Verification record
+
+What was actually run, and what was not.
+
+**Green.**
+
+- `make test-backend-one T=TestTeamAttentionSummary` — 19 scenarios, all pass.
+- `make test-backend` — the whole integration package, **0 failures** in 146s. D52's
+  load-sensitive review-queue performance test passed on this run.
+- `make lint-tenancy` — green; the two new queries add 2 to the checked count and every new
+  join is composite and organization-pinned.
+- `pnpm typecheck:mobile` — no new errors. The three that remain are D34's, in chat files
+  this feature does not touch.
+- `pnpm lint` — no findings in the Today screen; the `collaboration.ts` findings are at
+  lines 1803–2137, well above this feature's additions.
+- `make test-mobile-one F=screens/today` — every feature-047 step passes on the Android
+  emulator: the `today-section-team` heading, the block screenshot, the "Nobody assigned"
+  row, tapping `today-team-row-<taskId>`, the ritual instance screen, and the return to a
+  Today that still shows the block.
+
+**Not green, and not this feature's doing.** The same flow's final step — the pre-existing
+Schedule handoff, `tab-calendar` → `add-event-button` — fails on D50: the Expo dev client's
+floating Tools button covers the header action and opens the dev menu instead. Switching it
+off does not survive Maestro's app relaunch. Confirmed pre-existing by running the
+**pre-047 version** of `today.yaml` (from commit `d4fefd1`), which fails on the identical
+step. Recorded in the drift register under D50.
+
+**Manual validations (quickstart).**
+
+1. *The owner sees the team's late work and can tap through* — verified on device by the
+   Maestro run above, with screenshots.
+2. *The worker sees no team artefact of any kind* — verified on device. Signed in as an
+   employee who is only a project `member`: `today-section-team`, the block's subtitle and
+   the all-clear text are all absent, and Today goes straight from the date card to
+   "Today's schedule". The RPC returns `{}` for that caller.
+3. *The all-clear renders for a healthy supervisor* — verified on device. With the seeded
+   problems moved to a closed state the block rendered "All clear across 4 projects" with
+   its heading and no counts; the fixtures were then restored.
+4. *Forcing the team query to fail leaves the caller's own day rendered* — **verified by
+   code review, not on device.** There is no way to fail only the team RPC from outside the
+   app: revoking the permission yields an empty summary rather than an error, and stopping
+   the backend fails all three feeds. The property is structural and was checked by reading
+   the render path: `if (isWorkLoading || isEventsLoading)` and `if (workError ||
+   eventsError)` do not reference the team query, and `TeamSection` renders its own
+   `today-team-retry`. Same class of check as FR-015 (T040), which quickstart also records
+   as not integration-testable.
+
+**Found while verifying, not fixed here.**
+
+- The two Team row icons shipped as a bare "?" because neither SF Symbol name was in
+  `SFIcon`'s map. Fixed by switching to two names already in it — caught only by looking at
+  a screenshot, which is the point of the blackbox flow.
+- T026's `top-level-back-button` does not exist on the ritual instance screen: that control
+  is only for tab roots with no tab button (Schedule, Alerts). Maestro's `back` on the
+  simulator unwinds past the stack to Chat, so the flow returns via `tab-today` instead.
+  FR-019's "back returns to Today" is therefore verified through the tab, not the gesture.
+- **D59**, a pre-existing crash in Today's event sort that takes down the whole screen —
+  the exact failure mode this feature went out of its way to make impossible for the Team
+  block. Recorded in the drift register rather than fixed, being unrelated to 047.

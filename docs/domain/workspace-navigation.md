@@ -598,6 +598,12 @@ migration would flip the tour audience or hide a stop silently.
 
 ## Known drift
 
+**Today's event sort can crash the whole screen.** `sortedEvents` compares
+`left.startTime?.getTime()`, which guards `null` but not a wrong type, so a `startTime` that
+arrives as a string throws and takes down all of Today — including the personal sections a
+worker depends on. Seen once on the Android emulator; see D59 in the drift register.
+
+
 **D46 — the Expo dev client's Tools button swallows header taps on Android.** The floating
 overlay is on by default in a freshly installed debug build and sits over the top-right of
 every screen, so a tap aimed at a header action — `task-mode-toggle` most often — opens the

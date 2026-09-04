@@ -36,16 +36,26 @@ name: "Screen — Today"
 # The unassigned half of the block. The label is the plain sentence a supervisor
 # would say, never a blank name and never an id fragment: the seeded workspace
 # needs one ritual instance scheduled for today with nobody holding it.
-- assertVisible: "Nobody assigned"
+# A regex, not the bare string: the label is a nested <Text> inside the row's meta line,
+# and React Native flattens nested Text into the parent's accessibility node, so the
+# hierarchy carries "Store Floor · Nobody assigned" rather than the child on its own.
+- assertVisible: ".*Nobody assigned.*"
 - tapOn:
     id: "today-team-row-${MAESTRO_TEAM_TASK_ID}"
+# The instance's own screen, asserted on the ritual card rather than on a header
+# control: this is a pushed stack screen inside the tasks tab, so it returns via
+# the platform back gesture. `top-level-back-button` exists only on tab roots that
+# have no tab button of their own (Schedule and Alerts) and is absent here.
 - extendedWaitUntil:
-    visible:
-      id: "top-level-back-button"
+    visible: "Proof checklist"
     timeout: 8000
 - takeScreenshot: "tmp/maestro-screenshots/05-today-team-instance"
+# Return via the tab rather than Maestro's `back`, which on the iOS simulator
+# unwinds past this stack entirely and lands on Chat. What matters here is that
+# the block survives the round trip, and the tab exercises that identically on
+# both platforms.
 - tapOn:
-    id: "top-level-back-button"
+    id: "tab-today"
 - extendedWaitUntil:
     visible:
       id: "today-section-team"

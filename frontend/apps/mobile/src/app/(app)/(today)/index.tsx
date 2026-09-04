@@ -213,8 +213,13 @@ function TeamRow({ item, onPress }: { item: TeamAttentionItem; onPress: () => vo
           },
         ]}
       >
+        {/*
+          Both names are already in SFIcon's map. An unmapped SF Symbol falls through to
+          "help-outline", which renders as a bare "?" — the two icons here shipped that way
+          until a Maestro screenshot showed it.
+        */}
         <SFIcon
-          name={unassigned ? "person.crop.circle.badge.questionmark" : "clock.badge.exclamationmark"}
+          name={unassigned ? "person.crop.circle.badge.minus" : "clock.badge.exclamationmark.fill"}
           size={18}
           color={unassigned ? lightPalette.warning.main : lightPalette.error.main}
         />
