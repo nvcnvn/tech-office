@@ -546,6 +546,13 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	collaborationLogic.SetShiftCoverageReader(calendarLogic)
 	slog.InfoContext(ctx, "calendar shift coverage injected into collaboration logic for on-shift ritual assignment")
 
+	// Feature 047: the team attention summary names each row's assignee. The
+	// collaboration -> organization edge crosses a schema boundary, so it goes through the
+	// EmployeeNameLookup interface rather than a SQL join (Constitution IV) — the same
+	// orgLogic already handed to NewTaskPreviewProvider above.
+	collaborationLogic.SetEmployeeNameLookup(orgLogic)
+	slog.InfoContext(ctx, "employee name lookup injected into collaboration logic for team attention summary")
+
 	// Feature 042: the third platform-wide collaboration job. Registered here rather than
 	// beside the other two sweeps because it must not be schedulable before
 	// SetShiftCoverageReader above — a first pass against a nil reader would leave every

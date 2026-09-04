@@ -2326,3 +2326,95 @@ export async function confirmTaskFileUpload(params: {
 		};
 	});
 }
+
+// =============================================================================
+// Team Attention Summary (Feature 047: owner Today team block)
+// =============================================================================
+
+/**
+ * Which failure a Team block row represents. Derived from the proto enum, so the label
+ * ("Unassigned") is a client-side lookup and there is no cross-stack literal to keep in
+ * sync.
+ */
+export type TeamAttentionCategory = 'overdue' | 'unassigned';
+
+/** One ritual instance needing a supervisor's attention. A projection, not a stored row. */
+export interface TeamAttentionItem {
+	taskId: string;
+	projectId: string;
+	/** The project's name, not its key — the row has width for the label said out loud. */
+	projectName: string;
+	title: string;
+	category: TeamAttentionCategory;
+	/** ISO `YYYY-MM-DD`. Absent when the source column is null. */
+	dueDate?: string;
+	/**
+	 * The earliest assignee's name. Absent for an unassigned row — render the literal
+	 * "Unassigned" from `category`, never an empty name. Absent *with* a non-zero
+	 * `additionalAssigneeCount` means a departed or archived assignee: somebody is on it
+	 * and we could not name them, which is the opposite fact and must not read as
+	 * Unassigned.
+	 */
+	assigneeDisplayName?: string;
+	/** Assignees beyond the one named, so the row can say "Ana Rivas +2". */
+	additionalAssigneeCount: number;
+}
+
+export interface TeamAttentionSummary {
+	/**
+	 * Whether the caller holds `collab.reviewEvidence` AND supervises at least one
+	 * project. False renders nothing at all — no heading, no card, no placeholder.
+	 */
+	canSupervise: boolean;
+	/** How many non-archived projects the summary covered; named in the all-clear. */
+	supervisedProjectCount: number;
+	overdueCount: number;
+	unassignedCount: number;
+	/** The count reached the server-side cap; render "99+" rather than an exact figure. */
+	overdueCountCapped: boolean;
+	unassignedCountCapped: boolean;
+	items: TeamAttentionItem[];
+}
+
+export interface GetTeamAttentionSummaryParams {
+	/** The device's local date, ISO `YYYY-MM-DD`. Scopes the unassigned category only. */
+	asOfDate?: string;
+	/** Items per category. Defaults to 5 server-side, clamped to 20. */
+	limit?: number;
+}
+
+function protoTeamAttentionCategory(
+	category: collaboration.TeamAttentionCategory,
+): TeamAttentionCategory {
+	return category === collaboration.TeamAttentionCategory.UNASSIGNED ? 'unassigned' : 'overdue';
+}
+
+export async function getTeamAttentionSummary(
+	params: GetTeamAttentionSummaryParams = {},
+): Promise<TeamAttentionSummary> {
+	return rpcCall(async () => {
+		const response = await collaborationClient.getTeamAttentionSummary({
+			asOfDate: params.asOfDate,
+			limit: params.limit,
+		});
+		const typed = response as collaboration.GetTeamAttentionSummaryResponse;
+		return {
+			canSupervise: typed.canSupervise,
+			supervisedProjectCount: typed.supervisedProjectCount,
+			overdueCount: typed.overdueCount,
+			unassignedCount: typed.unassignedCount,
+			overdueCountCapped: typed.overdueCountCapped,
+			unassignedCountCapped: typed.unassignedCountCapped,
+			items: typed.items.map((item) => ({
+				taskId: item.taskId,
+				projectId: item.projectId,
+				projectName: item.projectName,
+				title: item.title,
+				category: protoTeamAttentionCategory(item.category),
+				dueDate: item.dueDate || undefined,
+				assigneeDisplayName: item.assigneeDisplayName || undefined,
+				additionalAssigneeCount: item.additionalAssigneeCount,
+			})),
+		};
+	});
+}

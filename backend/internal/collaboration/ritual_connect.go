@@ -524,6 +524,48 @@ func (s *CollaborationServiceConnect) GetEvidenceReviewQueueCount(
 	}), nil
 }
 
+// ---------------------------------------------------------------------------
+// Team Attention Summary
+// ---------------------------------------------------------------------------
+
+func (s *CollaborationServiceConnect) GetTeamAttentionSummary(
+	ctx context.Context,
+	req *connect.Request[rpcv1.GetTeamAttentionSummaryRequest],
+) (*connect.Response[rpcv1.GetTeamAttentionSummaryResponse], error) {
+	slog.DebugContext(ctx, "GetTeamAttentionSummary RPC called")
+
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Not being anyone's supervisor is the ordinary condition for most of the workforce,
+	// so it is an empty summary rather than PERMISSION_DENIED — the same reasoning as the
+	// review queue above, and the reason the proto declares no required permission.
+	// `can_supervise: false` is what tells the client to render nothing at all.
+	if !callerCanReviewEvidence(ctx) {
+		return connect.NewResponse(&rpcv1.GetTeamAttentionSummaryResponse{}), nil
+	}
+
+	var summary *rpcv1.GetTeamAttentionSummaryResponse
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		summary, txErr = s.Logic.GetTeamAttentionSummary(ctx, tx, organizationID, employeeID, req.Msg)
+		return txErr
+	})
+	if err != nil {
+		// parseAsOfDate already returns a fully-formed connect error carrying the
+		// BadRequest field violation; passing it through handleError would flatten it.
+		var connectErr *connect.Error
+		if errors.As(err, &connectErr) {
+			return nil, connectErr
+		}
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(summary), nil
+}
+
 func (s *CollaborationServiceConnect) ListEvidenceSubmissions(
 	ctx context.Context,
 	req *connect.Request[rpcv1.ListEvidenceSubmissionsRequest],

@@ -237,6 +237,9 @@ const (
 	// CollaborationServiceGetEvidenceReviewQueueCountProcedure is the fully-qualified name of the
 	// CollaborationService's GetEvidenceReviewQueueCount RPC.
 	CollaborationServiceGetEvidenceReviewQueueCountProcedure = "/rpc.v1.CollaborationService/GetEvidenceReviewQueueCount"
+	// CollaborationServiceGetTeamAttentionSummaryProcedure is the fully-qualified name of the
+	// CollaborationService's GetTeamAttentionSummary RPC.
+	CollaborationServiceGetTeamAttentionSummaryProcedure = "/rpc.v1.CollaborationService/GetTeamAttentionSummary"
 	// CollaborationServiceRequestEvidenceFileUploadProcedure is the fully-qualified name of the
 	// CollaborationService's RequestEvidenceFileUpload RPC.
 	CollaborationServiceRequestEvidenceFileUploadProcedure = "/rpc.v1.CollaborationService/RequestEvidenceFileUpload"
@@ -380,6 +383,20 @@ type CollaborationServiceClient interface {
 	// Same deliberate absence of `required_permissions` as ListEvidenceReviewQueue: a caller
 	// without the permission gets zero, not an error.
 	GetEvidenceReviewQueueCount(context.Context, *connect.Request[v1.GetEvidenceReviewQueueCountRequest]) (*connect.Response[v1.GetEvidenceReviewQueueCountResponse], error)
+	// GetTeamAttentionSummary answers "is the store OK" for one supervisor, in one request:
+	// which ritual instances across every project they own or administer are overdue, and
+	// which are scheduled for today with nobody on them.
+	//
+	// Same deliberate absence of `required_permissions` as the two review-queue RPCs above: a
+	// caller who lacks `collab.reviewEvidence`, or who supervises no project, must receive an
+	// empty summary with `can_supervise = false`, not PERMISSION_DENIED. The interceptor
+	// rejects before the handler runs, so a declared permission would make that path
+	// unreachable, and a worker would be shown an authorization failure for the entirely
+	// ordinary condition of not being anyone's supervisor.
+	//
+	// Read-only. Nothing here assigns, reassigns or completes anything; the client routes to
+	// the existing ritual instance screen for that.
+	GetTeamAttentionSummary(context.Context, *connect.Request[v1.GetTeamAttentionSummaryRequest]) (*connect.Response[v1.GetTeamAttentionSummaryResponse], error)
 	RequestEvidenceFileUpload(context.Context, *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error)
 	ConfirmEvidenceFileUpload(context.Context, *connect.Request[v1.ConfirmEvidenceFileUploadRequest]) (*connect.Response[v1.ConfirmEvidenceFileUploadResponse], error)
 	SkipRitualInstance(context.Context, *connect.Request[v1.SkipRitualInstanceRequest]) (*connect.Response[v1.SkipRitualInstanceResponse], error)
@@ -809,6 +826,12 @@ func NewCollaborationServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(collaborationServiceMethods.ByName("GetEvidenceReviewQueueCount")),
 			connect.WithClientOptions(opts...),
 		),
+		getTeamAttentionSummary: connect.NewClient[v1.GetTeamAttentionSummaryRequest, v1.GetTeamAttentionSummaryResponse](
+			httpClient,
+			baseURL+CollaborationServiceGetTeamAttentionSummaryProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("GetTeamAttentionSummary")),
+			connect.WithClientOptions(opts...),
+		),
 		requestEvidenceFileUpload: connect.NewClient[v1.RequestEvidenceFileUploadRequest, v1.RequestEvidenceFileUploadResponse](
 			httpClient,
 			baseURL+CollaborationServiceRequestEvidenceFileUploadProcedure,
@@ -930,6 +953,7 @@ type collaborationServiceClient struct {
 	listEvidenceSubmissions        *connect.Client[v1.ListEvidenceSubmissionsRequest, v1.ListEvidenceSubmissionsResponse]
 	listEvidenceReviewQueue        *connect.Client[v1.ListEvidenceReviewQueueRequest, v1.ListEvidenceReviewQueueResponse]
 	getEvidenceReviewQueueCount    *connect.Client[v1.GetEvidenceReviewQueueCountRequest, v1.GetEvidenceReviewQueueCountResponse]
+	getTeamAttentionSummary        *connect.Client[v1.GetTeamAttentionSummaryRequest, v1.GetTeamAttentionSummaryResponse]
 	requestEvidenceFileUpload      *connect.Client[v1.RequestEvidenceFileUploadRequest, v1.RequestEvidenceFileUploadResponse]
 	confirmEvidenceFileUpload      *connect.Client[v1.ConfirmEvidenceFileUploadRequest, v1.ConfirmEvidenceFileUploadResponse]
 	skipRitualInstance             *connect.Client[v1.SkipRitualInstanceRequest, v1.SkipRitualInstanceResponse]
@@ -1280,6 +1304,11 @@ func (c *collaborationServiceClient) GetEvidenceReviewQueueCount(ctx context.Con
 	return c.getEvidenceReviewQueueCount.CallUnary(ctx, req)
 }
 
+// GetTeamAttentionSummary calls rpc.v1.CollaborationService.GetTeamAttentionSummary.
+func (c *collaborationServiceClient) GetTeamAttentionSummary(ctx context.Context, req *connect.Request[v1.GetTeamAttentionSummaryRequest]) (*connect.Response[v1.GetTeamAttentionSummaryResponse], error) {
+	return c.getTeamAttentionSummary.CallUnary(ctx, req)
+}
+
 // RequestEvidenceFileUpload calls rpc.v1.CollaborationService.RequestEvidenceFileUpload.
 func (c *collaborationServiceClient) RequestEvidenceFileUpload(ctx context.Context, req *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error) {
 	return c.requestEvidenceFileUpload.CallUnary(ctx, req)
@@ -1437,6 +1466,20 @@ type CollaborationServiceHandler interface {
 	// Same deliberate absence of `required_permissions` as ListEvidenceReviewQueue: a caller
 	// without the permission gets zero, not an error.
 	GetEvidenceReviewQueueCount(context.Context, *connect.Request[v1.GetEvidenceReviewQueueCountRequest]) (*connect.Response[v1.GetEvidenceReviewQueueCountResponse], error)
+	// GetTeamAttentionSummary answers "is the store OK" for one supervisor, in one request:
+	// which ritual instances across every project they own or administer are overdue, and
+	// which are scheduled for today with nobody on them.
+	//
+	// Same deliberate absence of `required_permissions` as the two review-queue RPCs above: a
+	// caller who lacks `collab.reviewEvidence`, or who supervises no project, must receive an
+	// empty summary with `can_supervise = false`, not PERMISSION_DENIED. The interceptor
+	// rejects before the handler runs, so a declared permission would make that path
+	// unreachable, and a worker would be shown an authorization failure for the entirely
+	// ordinary condition of not being anyone's supervisor.
+	//
+	// Read-only. Nothing here assigns, reassigns or completes anything; the client routes to
+	// the existing ritual instance screen for that.
+	GetTeamAttentionSummary(context.Context, *connect.Request[v1.GetTeamAttentionSummaryRequest]) (*connect.Response[v1.GetTeamAttentionSummaryResponse], error)
 	RequestEvidenceFileUpload(context.Context, *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error)
 	ConfirmEvidenceFileUpload(context.Context, *connect.Request[v1.ConfirmEvidenceFileUploadRequest]) (*connect.Response[v1.ConfirmEvidenceFileUploadResponse], error)
 	SkipRitualInstance(context.Context, *connect.Request[v1.SkipRitualInstanceRequest]) (*connect.Response[v1.SkipRitualInstanceResponse], error)
@@ -1862,6 +1905,12 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 		connect.WithSchema(collaborationServiceMethods.ByName("GetEvidenceReviewQueueCount")),
 		connect.WithHandlerOptions(opts...),
 	)
+	collaborationServiceGetTeamAttentionSummaryHandler := connect.NewUnaryHandler(
+		CollaborationServiceGetTeamAttentionSummaryProcedure,
+		svc.GetTeamAttentionSummary,
+		connect.WithSchema(collaborationServiceMethods.ByName("GetTeamAttentionSummary")),
+		connect.WithHandlerOptions(opts...),
+	)
 	collaborationServiceRequestEvidenceFileUploadHandler := connect.NewUnaryHandler(
 		CollaborationServiceRequestEvidenceFileUploadProcedure,
 		svc.RequestEvidenceFileUpload,
@@ -2048,6 +2097,8 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 			collaborationServiceListEvidenceReviewQueueHandler.ServeHTTP(w, r)
 		case CollaborationServiceGetEvidenceReviewQueueCountProcedure:
 			collaborationServiceGetEvidenceReviewQueueCountHandler.ServeHTTP(w, r)
+		case CollaborationServiceGetTeamAttentionSummaryProcedure:
+			collaborationServiceGetTeamAttentionSummaryHandler.ServeHTTP(w, r)
 		case CollaborationServiceRequestEvidenceFileUploadProcedure:
 			collaborationServiceRequestEvidenceFileUploadHandler.ServeHTTP(w, r)
 		case CollaborationServiceConfirmEvidenceFileUploadProcedure:
@@ -2343,6 +2394,10 @@ func (UnimplementedCollaborationServiceHandler) ListEvidenceReviewQueue(context.
 
 func (UnimplementedCollaborationServiceHandler) GetEvidenceReviewQueueCount(context.Context, *connect.Request[v1.GetEvidenceReviewQueueCountRequest]) (*connect.Response[v1.GetEvidenceReviewQueueCountResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.GetEvidenceReviewQueueCount is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) GetTeamAttentionSummary(context.Context, *connect.Request[v1.GetTeamAttentionSummaryRequest]) (*connect.Response[v1.GetTeamAttentionSummaryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.GetTeamAttentionSummary is not implemented"))
 }
 
 func (UnimplementedCollaborationServiceHandler) RequestEvidenceFileUpload(context.Context, *connect.Request[v1.RequestEvidenceFileUploadRequest]) (*connect.Response[v1.RequestEvidenceFileUploadResponse], error) {

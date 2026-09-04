@@ -266,12 +266,28 @@ type Logic interface {
 	ListEvidenceReviewQueue(ctx context.Context, tx database.DBTX, orgID, reviewerID dbuuid.UUID, req *rpcv1.ListEvidenceReviewQueueRequest) ([]*rpcv1.ReviewQueueEntry, string, error)
 	GetEvidenceReviewQueueCount(ctx context.Context, tx database.DBTX, orgID, reviewerID dbuuid.UUID, req *rpcv1.GetEvidenceReviewQueueCountRequest) (int32, bool, error)
 
+	// Team Attention Summary
+	//
+	// Takes the caller's employee id because supervisory scope — `owner`/`admin`
+	// membership on the instance's project — is evaluated inside the query, exactly as the
+	// review queue evaluates reviewer scope. Like the queue, it does not check
+	// `collab.reviewEvidence`: the Connect layer does, and returns an empty summary rather
+	// than an error when it is absent.
+	GetTeamAttentionSummary(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.GetTeamAttentionSummaryRequest) (*rpcv1.GetTeamAttentionSummaryResponse, error)
+
 	// SetShiftCoverageReader injects the calendar's shift coverage read. It is a setter
 	// rather than a NewLogic parameter because cmd/server.go constructs collaboration
 	// before calendar — calendar.NewLogic takes collaborationLogic — so a constructor
 	// argument would be a cycle. A nil reader is supported and means on-shift pools
 	// resolve to awaiting_shift and nothing is guessed.
 	SetShiftCoverageReader(reader ShiftCoverageReader)
+
+	// SetEmployeeNameLookup injects the organization's batched display-name read. A
+	// setter for the same reason as SetShiftCoverageReader — organization already imports
+	// collaboration for default project creation, so a constructor argument would be a
+	// cycle. A nil lookup is supported and means rows carry no assignee display name; a
+	// row is never dropped for want of a resolvable name.
+	SetEmployeeNameLookup(lookup EmployeeNameLookup)
 
 	// Ritual Scheduler
 	GenerateRitualInstances(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, now time.Time) (int, error)
@@ -321,11 +337,20 @@ type logicImpl struct {
 	// until wired, and legitimately nil in the seeder and in tests that never touch an
 	// on-shift pool.
 	shiftCoverage ShiftCoverageReader
+
+	// employeeNames is injected after construction; see SetEmployeeNameLookup. Nil until
+	// wired, and legitimately nil in the seeder and in tests that never read a name.
+	employeeNames EmployeeNameLookup
 }
 
 // SetShiftCoverageReader implements Logic.
 func (l *logicImpl) SetShiftCoverageReader(reader ShiftCoverageReader) {
 	l.shiftCoverage = reader
+}
+
+// SetEmployeeNameLookup implements Logic.
+func (l *logicImpl) SetEmployeeNameLookup(lookup EmployeeNameLookup) {
+	l.employeeNames = lookup
 }
 
 // NewLogic creates a new collaboration logic layer implementation

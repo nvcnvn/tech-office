@@ -3539,6 +3539,85 @@ func (w *testWorld) getEvidenceReviewQueueCount(actor testUser, projectID *strin
 	return resp.Msg
 }
 
+// ---------------------------------------------------------------------------
+// Act: Collaboration — Team Attention Summary
+// ---------------------------------------------------------------------------
+
+// createRitualInstance makes one ritual instance the test fully controls: a task of
+// task_kind 'ritual_instance' with a scheduled_date and a completion_deadline of the
+// test's choosing.
+//
+// Built by creating an ordinary task and then rewriting the three columns no RPC exposes,
+// for the same reason setRitualDeadline does: generating through the scheduler puts the
+// dates a few hours from now, which is not something a test can assert against without
+// sleeping, and a daily rule produces a window's worth of instances when the test wants
+// exactly one.
+func (w *testWorld) createRitualInstance(
+	actor testUser,
+	proj projectResult,
+	title string,
+	scheduledDate time.Time,
+	completionDeadline time.Time,
+) *rpcv1.Task {
+	w.t.Helper()
+	level0 := levelByDepth(proj.Levels, 0)
+	require.NotNil(w.t, level0, "fixture precondition: the project has a depth-0 task level")
+
+	task := w.createTask(actor, proj.ID, title, level0.Id)
+	_, err := globalDB.Exec(context.Background(),
+		`UPDATE collaboration.task
+		    SET task_kind = 'ritual_instance',
+		        scheduled_date = $2::date,
+		        completion_deadline = $3::timestamptz
+		  WHERE id = $1`,
+		dbuuid.MustParse(task.Id), scheduledDate, completionDeadline)
+	require.NoError(w.t, err)
+	return task
+}
+
+// getTeamAttentionSummary calls the supervisor's Team block RPC. Both arguments are
+// optional on the wire; nil means "let the server decide", which is exactly what the
+// absent-as_of_date and default-limit scenarios need to exercise.
+func (w *testWorld) getTeamAttentionSummary(actor testUser, asOfDate *string, limit *int32) *rpcv1.GetTeamAttentionSummaryResponse {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.GetTeamAttentionSummaryRequest{AsOfDate: asOfDate, Limit: limit})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.collab.GetTeamAttentionSummary(context.Background(), req)
+	require.NoError(w.t, err)
+	return resp.Msg
+}
+
+// getTeamAttentionSummaryError returns whatever the server answered, so a refusal can be
+// asserted on rather than aborting the test.
+func (w *testWorld) getTeamAttentionSummaryError(actor testUser, asOfDate *string, limit *int32) error {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.GetTeamAttentionSummaryRequest{AsOfDate: asOfDate, Limit: limit})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.collab.GetTeamAttentionSummary(context.Background(), req)
+	return err
+}
+
+// teamAttentionItem finds one item by task id, or nil when the summary omitted it.
+func teamAttentionItem(resp *rpcv1.GetTeamAttentionSummaryResponse, taskID string) *rpcv1.TeamAttentionItem {
+	for _, item := range resp.Items {
+		if item.TaskId == taskID {
+			return item
+		}
+	}
+	return nil
+}
+
+// teamAttentionTaskIDs is what the ordering assertions are about: which instances came
+// back, in what order. Comparing id slices prints the two orders on failure rather than
+// "expected true, got false".
+func teamAttentionTaskIDs(resp *rpcv1.GetTeamAttentionSummaryResponse) []string {
+	ids := make([]string, 0, len(resp.Items))
+	for _, item := range resp.Items {
+		ids = append(ids, item.TaskId)
+	}
+	return ids
+}
+
 // reviewQueueSubmissionIDs is what nearly every queue assertion is actually about: which
 // submissions came back, in what order. Comparing id slices makes an ordering failure
 // print the two orders rather than "expected true, got false".
