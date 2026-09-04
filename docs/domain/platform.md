@@ -75,7 +75,7 @@ actually scopes the data. A query that forgets it is a tenant leak, and no datab
 backstop will catch it.
 
 **`make lint-tenancy` is that backstop.** `backend/tools/tenancylint` parses `schema.sql`
-and all 524 sqlc queries with the real PostgreSQL parser and fails the build unless every
+and all 554 sqlc queries with the real PostgreSQL parser and fails the build unless every
 tenant table in a statement is transitively connected, through `organization_id`
 equalities, to an `organization_id = <parameter>` predicate. That one rule catches both a
 missing filter and a join that forgot to carry `organization_id`. Tenant tables are

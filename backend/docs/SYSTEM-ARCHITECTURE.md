@@ -1,6 +1,6 @@
 # Tech Office — System Architecture & Domain Dependency Analysis
 
-**Version**: 1.3.0 | **Date**: 2026-09-04
+**Version**: 1.3.1 | **Date**: 2026-09-05
 
 This document describes the domain-driven design (DDD) architecture of the Tech Office multi-tenant SaaS platform, including dependency flow analysis across database schema references and Go code imports. The architecture enforces **inward-pointing, unidirectional dependencies** — no circular references exist between domains.
 
@@ -568,12 +568,13 @@ Three properties keep the edge cheap:
   treat an error: the ritual's pool slot is left awaiting shift resolution and nothing is
   guessed. There is deliberately no fallback to another assignment strategy.
 
-#### The collaboration → organization name lookup (feature 046)
+#### The collaboration → organization name lookup
 
-A task link preview card names the task's assignee. The name lives in
-`organization.employee`, and joining it from `collaboration`'s own query would be the
-cross-schema join Constitution IV forbids. The direction is downward (T3 → T1), so the tier
-rule is not the obstacle — the obstacle is that `organization` already imports
+Two collaboration surfaces name an employee: a task link preview card names the task's
+assignee, and the supervisor's team attention summary names each listed instance's. The name
+lives in `organization.employee`, and joining it from `collaboration`'s own query would be
+the cross-schema join Constitution IV forbids. The direction is downward (T3 → T1), so the
+tier rule is not the obstacle — the obstacle is that `organization` already imports
 `collaboration` for default project creation, so a direct import would be a cycle.
 
 Same shape as every other cycle here: the consumer declares the interface.
@@ -585,12 +586,22 @@ type EmployeeNameLookup interface {
         orgID dbuuid.UUID, ids []dbuuid.UUID) (map[dbuuid.UUID]string, error)
 }
 
-// Satisfied by organization.OrganizationLogic, wired in cmd/server.go
-collaboration.NewTaskPreviewProvider(queries, orgLogic)
+// Satisfied by organization.OrganizationLogic. Wired in cmd/server.go two ways, because the
+// two consumers are constructed differently:
+collaboration.NewTaskPreviewProvider(queries, orgLogic)   // a constructor argument
+collaborationLogic.SetEmployeeNameLookup(orgLogic)        // a setter on logicImpl
 ```
 
-It is one batched call per request, never one per card, and a lookup that fails costs the
-assignee line rather than the page.
+The setter exists for the same reason `SetShiftCoverageReader` above it does — widening
+`NewLogic`'s signature would touch every construction site for no behavioural gain — and, as
+there, **a nil lookup is a supported state**: the seeder and the test harnesses build
+collaboration with no organization logic. Nil costs the name, never the row.
+
+It is one batched call per request, never one per card or per row. A lookup that fails, or
+an id that does not resolve, costs the assignee line rather than the page: for the team
+summary that distinction is load-bearing, because a departed assignee is exactly what the
+supervisor needs to see, and `assignee_count` is what separates "nobody is on this" from
+"somebody is and we could not name them".
 
 #### Preview providers: the domain owns the read (feature 046)
 
@@ -668,7 +679,7 @@ graph TD
     end
 
     subgraph "Phase 6: Post-Init & Start"
-        INJECT["orgLogic.SetCollaborationLogic()"]
+        INJECT["orgLogic.SetCollaborationLogic()<br/>collaborationLogic.SetShiftCoverageReader()<br/>collaborationLogic.SetEmployeeNameLookup()"]
         START["NotificationService.Start()<br/>Flow Worker.Start()"]
     end
 

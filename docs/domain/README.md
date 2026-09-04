@@ -1,6 +1,6 @@
 # Domain Snapshots
 
-**Status date: 2026-09-05** · Branch at capture: `046-chat-link-previews`
+**Status date: 2026-09-05** · Branch at capture: `047-owner-today-team-block`
 
 These documents describe **what the system does today**, domain by domain, derived by
 reading the code, the proto contracts and `backend/database/scripts/schema.sql` — not by

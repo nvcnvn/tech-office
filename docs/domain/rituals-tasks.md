@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044, 045, 046 (034 and
+**Status date: 2026-09-05.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044, 045, 046, 047 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 

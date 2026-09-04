@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-04.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046.
+**Status date: 2026-09-05.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047.
 
 ## Canonical resource links
 
