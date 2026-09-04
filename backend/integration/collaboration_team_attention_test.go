@@ -304,25 +304,100 @@ func TestTeamAttentionSummary(t *testing.T) {
 	})
 
 	t.Run("when a ritual instance scheduled for as_of_date has no assignee", func(t *testing.T) {
-		t.Skip("pending: US2 query")
+		t.Parallel()
+		// US2-1, US2-2, FR-006, FR-011. The instance sits in a non-overdue state — it is
+		// not late, it simply has nobody on it, which is the other half of "is the store
+		// OK".
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		proj := w.newTeamProject(owner, "Nobody On It", "NOI")
+		today := time.Now()
+		task := w.createRitualInstance(owner, proj.projectResult, "Open the store", today, today)
 
-		t.Run("it is listed in the unassigned category", func(t *testing.T) {})
-		t.Run("it carries no assignee name, so the client can label it Unassigned", func(t *testing.T) {})
+		resp := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), nil)
+
+		t.Run("it is listed in the unassigned category", func(t *testing.T) {
+			item := teamAttentionItem(resp, task.Id)
+			require.NotNil(t, item, "an instance nobody is on is the supervisor's problem")
+			assert.Equal(t, rpcv1.TeamAttentionCategory_TEAM_ATTENTION_CATEGORY_UNASSIGNED, item.Category)
+			assert.Equal(t, int32(1), resp.UnassignedCount)
+			assert.Equal(t, int32(0), resp.OverdueCount, "it is not late, only unheld")
+		})
+
+		t.Run("it carries no assignee name, so the client can label it Unassigned", func(t *testing.T) {
+			item := teamAttentionItem(resp, task.Id)
+			require.NotNil(t, item)
+			assert.Nil(t, item.AssigneeDisplayName, "never an empty name and never an id fragment")
+			assert.Equal(t, int32(0), item.AdditionalAssigneeCount)
+		})
 	})
 
 	t.Run("when an unassigned instance is given an assignee", func(t *testing.T) {
-		t.Skip("pending: US2 query")
-		t.Run("it leaves the unassigned category on the next request", func(t *testing.T) {})
+		t.Parallel()
+		// US2-3: the block is a live answer, not a snapshot — giving the instance an owner
+		// is what removes it.
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		worker := w.withEmployee()
+		proj := w.newTeamProject(owner, "Now Held", "NH")
+		w.addProjectMember(owner, proj.ID, worker.ID, rpcv1.ProjectMemberRole_PROJECT_MEMBER_ROLE_MEMBER)
+		today := time.Now()
+		task := w.createRitualInstance(owner, proj.projectResult, "Cash up", today, today)
+
+		before := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), nil)
+		require.Contains(t, teamAttentionTaskIDs(before), task.Id, "fixture precondition")
+
+		w.assignTask(owner, task.Id, worker.ID, rpcv1.TaskAssigneeRole_TASK_ASSIGNEE_ROLE_ASSIGNEE)
+
+		t.Run("it leaves the unassigned category on the next request", func(t *testing.T) {
+			resp := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), nil)
+			assert.NotContains(t, teamAttentionTaskIDs(resp), task.Id)
+			assert.Equal(t, int32(0), resp.UnassignedCount)
+		})
 	})
 
 	t.Run("when an unassigned instance is scheduled for a future date", func(t *testing.T) {
-		t.Skip("pending: US2 query")
-		t.Run("it is not listed", func(t *testing.T) {})
+		t.Parallel()
+		// US2-4: equality on scheduled_date, not `<=`, is what keeps next Tuesday out of
+		// this morning's block.
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		proj := w.newTeamProject(owner, "Next Week", "NW")
+		today := time.Now()
+		nextWeek := today.AddDate(0, 0, 7)
+		future := w.createRitualInstance(owner, proj.projectResult, "Stocktake", nextWeek, nextWeek)
+
+		t.Run("it is not listed", func(t *testing.T) {
+			resp := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), nil)
+			assert.NotContains(t, teamAttentionTaskIDs(resp), future.Id)
+			assert.Equal(t, int32(0), resp.UnassignedCount)
+		})
 	})
 
 	t.Run("when an instance is both overdue and unassigned", func(t *testing.T) {
-		t.Skip("pending: US2 query")
-		t.Run("it appears once, under overdue, and is counted once", func(t *testing.T) {})
+		t.Parallel()
+		// FR-010. The two legs are mutually exclusive by construction, so the row appears
+		// once and is counted once without a DISTINCT in either query — and it appears
+		// under the more urgent of the two.
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		proj := w.newTeamProject(owner, "Both", "BTH")
+		today := time.Now()
+		task := w.createRitualInstance(owner, proj.projectResult, "Late and unheld", today, today)
+		w.moveTask(owner, task.Id, proj.overdueState)
+
+		t.Run("it appears once, under overdue, and is counted once", func(t *testing.T) {
+			resp := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), nil)
+			ids := teamAttentionTaskIDs(resp)
+			assert.Equal(t, []string{task.Id}, ids, "one row, not two")
+
+			item := teamAttentionItem(resp, task.Id)
+			require.NotNil(t, item)
+			assert.Equal(t, rpcv1.TeamAttentionCategory_TEAM_ATTENTION_CATEGORY_OVERDUE, item.Category,
+				"late is the more urgent fact")
+			assert.Equal(t, int32(1), resp.OverdueCount)
+			assert.Equal(t, int32(0), resp.UnassignedCount, "counted once, in one category")
+		})
 	})
 
 	t.Run("when the caller supervises projects and nothing is overdue or unassigned", func(t *testing.T) {
@@ -397,8 +472,39 @@ func TestTeamAttentionSummary(t *testing.T) {
 	})
 
 	t.Run("when as_of_date is supplied", func(t *testing.T) {
-		t.Skip("pending: US2 query")
-		t.Run("it scopes the unassigned category to that date and leaves overdue unbounded", func(t *testing.T) {})
+		t.Parallel()
+		// Edge case: the date governs the unassigned category only. An instance that went
+		// late three days ago is still the store's problem this morning, so overdue stays
+		// unbounded — which is also what makes the block usable for a supervisor at UTC+7
+		// whose local date differs from the server's.
+		w := newTestWorld(t)
+		owner := w.withOwner()
+		worker := w.withEmployee()
+		proj := w.newTeamProject(owner, "As Of", "AOF")
+		w.addProjectMember(owner, proj.ID, worker.ID, rpcv1.ProjectMemberRole_PROJECT_MEMBER_ROLE_MEMBER)
+
+		today := time.Now()
+		tomorrow := today.AddDate(0, 0, 1)
+		longAgo := today.AddDate(0, 0, -5)
+
+		unheldToday := w.createRitualInstance(owner, proj.projectResult, "Unheld today", today, today)
+		unheldTomorrow := w.createRitualInstance(owner, proj.projectResult, "Unheld tomorrow", tomorrow, tomorrow)
+		lateLongAgo := w.newOverdueInstance(owner, proj, "Late five days ago", &worker, longAgo)
+
+		t.Run("it scopes the unassigned category to that date and leaves overdue unbounded", func(t *testing.T) {
+			todayResp := w.getTeamAttentionSummary(owner, ptr(isoDate(today)), nil)
+			todayIDs := teamAttentionTaskIDs(todayResp)
+			assert.Contains(t, todayIDs, unheldToday.Id)
+			assert.NotContains(t, todayIDs, unheldTomorrow.Id)
+			assert.Contains(t, todayIDs, lateLongAgo.Id, "five days late is still this morning's problem")
+
+			tomorrowResp := w.getTeamAttentionSummary(owner, ptr(isoDate(tomorrow)), nil)
+			tomorrowIDs := teamAttentionTaskIDs(tomorrowResp)
+			assert.Contains(t, tomorrowIDs, unheldTomorrow.Id)
+			assert.NotContains(t, tomorrowIDs, unheldToday.Id)
+			assert.Contains(t, tomorrowIDs, lateLongAgo.Id,
+				"moving the date must not move the overdue category")
+		})
 	})
 
 	t.Run("when as_of_date is malformed", func(t *testing.T) {

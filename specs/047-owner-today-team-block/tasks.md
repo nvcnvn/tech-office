@@ -137,17 +137,17 @@ Unassigned. Give it an assignee, pull to refresh, confirm it leaves the block.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T027 [US2] Implement the unassigned scenarios in `backend/integration/collaboration_team_attention_test.go`: an instance scheduled for `as_of_date` with no assignee is listed in the unassigned category (US2-1, FR-006); it carries no assignee name so the client can label it Unassigned (US2-2, FR-011); it leaves the category once assigned (US2-3); an instance scheduled for a future date is not listed (US2-4).
-- [ ] T028 [P] [US2] Implement the disjointness and date scenarios in `backend/integration/collaboration_team_attention_test.go`: an instance that is both overdue and unassigned appears **once**, under overdue, and is counted once (FR-010); a supplied `as_of_date` scopes the unassigned category to that date and leaves overdue unbounded (edge case); a malformed `as_of_date` returns `InvalidArgument` with a field violation on `as_of_date` (Constitution X).
+- [X] T027 [US2] Implement the unassigned scenarios in `backend/integration/collaboration_team_attention_test.go`: an instance scheduled for `as_of_date` with no assignee is listed in the unassigned category (US2-1, FR-006); it carries no assignee name so the client can label it Unassigned (US2-2, FR-011); it leaves the category once assigned (US2-3); an instance scheduled for a future date is not listed (US2-4).
+- [X] T028 [P] [US2] Implement the disjointness and date scenarios in `backend/integration/collaboration_team_attention_test.go`: an instance that is both overdue and unassigned appears **once**, under overdue, and is counted once (FR-010); a supplied `as_of_date` scopes the unassigned category to that date and leaves overdue unbounded (edge case); a malformed `as_of_date` returns `InvalidArgument` with a field violation on `as_of_date` (Constitution X).
 
 ### Implementation for User Story 2
 
-- [ ] T029 [US2] Add the unassigned leg to `CountTeamAttention` in `backend/database/scripts/collaboration.query.sql`, replacing the US1 placeholder: `COUNT(*)` over a `LIMIT @count_cap` subquery with the base predicate plus `ps.category <> 'overdue'`, `t.scheduled_date = @as_of_date` (equality, not `<=`, so next Tuesday stays out), and `NOT EXISTS (task_assignee WHERE role = 'assignee')`. The two legs are mutually exclusive by construction, so neither query needs `DISTINCT` (research Decision 4).
-- [ ] T030 [US2] Turn `ListTeamAttentionItems` in `backend/database/scripts/collaboration.query.sql` into `(overdue leg LIMIT @item_limit) UNION ALL (unassigned leg LIMIT @item_limit)` with `attention_rank` literal `1` and `sort_date` from `t.scheduled_date` on the unassigned leg, then apply the shared `ORDER BY attention_rank, sort_date NULLS LAST, task_id` to the union. Both legs MUST carry identical base predicates to the count query — FR-004 depends on the two queries differing in nothing but projection and bound.
-- [ ] T031 [US2] Run `cd backend && sqlc generate`, commit the regenerated `backend/database/collaboration.query.sql.go`, and pass the parsed `as_of_date` and `teamAttentionCountCap` through both query calls in `backend/internal/collaboration/team_attention_logic.go`, mapping `attention_rank` 0 → `TEAM_ATTENTION_CATEGORY_OVERDUE` and 1 → `TEAM_ATTENTION_CATEGORY_UNASSIGNED`. Unassigned rows carry no assignee name and `additional_assignee_count = 0`.
-- [ ] T032 [US2] Render unassigned rows in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx`: the literal "Unassigned" derived from the row's category — never an empty name and never an id fragment (FR-011) — with a visually distinct meta treatment from a named assignee, and the same treatment in the row's `accessibilityLabel`. `assignee_display_name` absent *with* `additional_assignee_count > 0` is a departed assignee, not an unassigned row, and must not be labelled Unassigned.
-- [ ] T033 [US2] Confirm the device's local date already flows to the RPC in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx`: the `dayKey` the screen computes with `format(new Date(), "yyyy-MM-dd")` for its query keys is the same value sent as `asOfDate`, so the Team block and the caller's own "Due today" section can never disagree about what "today" means (spec day-boundary assumption).
-- [ ] T034 [US2] Extend `frontend/apps/mobile/.maestro/screens/today.yaml` to assert an "Unassigned" row is visible in the team block for the seeded supervisor account.
+- [X] T029 [US2] Add the unassigned leg to `CountTeamAttention` in `backend/database/scripts/collaboration.query.sql`, replacing the US1 placeholder: `COUNT(*)` over a `LIMIT @count_cap` subquery with the base predicate plus `ps.category <> 'overdue'`, `t.scheduled_date = @as_of_date` (equality, not `<=`, so next Tuesday stays out), and `NOT EXISTS (task_assignee WHERE role = 'assignee')`. The two legs are mutually exclusive by construction, so neither query needs `DISTINCT` (research Decision 4).
+- [X] T030 [US2] Turn `ListTeamAttentionItems` in `backend/database/scripts/collaboration.query.sql` into `(overdue leg LIMIT @item_limit) UNION ALL (unassigned leg LIMIT @item_limit)` with `attention_rank` literal `1` and `sort_date` from `t.scheduled_date` on the unassigned leg, then apply the shared `ORDER BY attention_rank, sort_date NULLS LAST, task_id` to the union. Both legs MUST carry identical base predicates to the count query — FR-004 depends on the two queries differing in nothing but projection and bound.
+- [X] T031 [US2] Run `cd backend && sqlc generate`, commit the regenerated `backend/database/collaboration.query.sql.go`, and pass the parsed `as_of_date` and `teamAttentionCountCap` through both query calls in `backend/internal/collaboration/team_attention_logic.go`, mapping `attention_rank` 0 → `TEAM_ATTENTION_CATEGORY_OVERDUE` and 1 → `TEAM_ATTENTION_CATEGORY_UNASSIGNED`. Unassigned rows carry no assignee name and `additional_assignee_count = 0`.
+- [X] T032 [US2] Render unassigned rows in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx`: the literal "Unassigned" derived from the row's category — never an empty name and never an id fragment (FR-011) — with a visually distinct meta treatment from a named assignee, and the same treatment in the row's `accessibilityLabel`. `assignee_display_name` absent *with* `additional_assignee_count > 0` is a departed assignee, not an unassigned row, and must not be labelled Unassigned.
+- [X] T033 [US2] Confirm the device's local date already flows to the RPC in `frontend/apps/mobile/src/app/(app)/(today)/index.tsx`: the `dayKey` the screen computes with `format(new Date(), "yyyy-MM-dd")` for its query keys is the same value sent as `asOfDate`, so the Team block and the caller's own "Due today" section can never disagree about what "today" means (spec day-boundary assumption).
+- [X] T034 [US2] Extend `frontend/apps/mobile/.maestro/screens/today.yaml` to assert an "Unassigned" row is visible in the team block for the seeded supervisor account.
 
 **Checkpoint**: Both P1 stories complete. The block answers both halves of "is the store OK".
 
@@ -295,3 +295,30 @@ can be taken in parallel, and the three Polish documentation tasks by a third.
   `frontend/packages/rpc/`) are committed but never hand-edited; regenerate instead.
 - Commit after each task or logical group; stop at any checkpoint to validate a story on its
   own.
+
+---
+
+## Implementation notes
+
+Resolutions made while executing this plan, recorded for review:
+
+- **[ASSUMPTION: the unassigned row's label is "Nobody assigned", not the literal
+  "Unassigned" T032 names.]** T032 and the proto comments say "Unassigned"; the mobile design
+  checklist in [quickstart.md](quickstart.md#mobile-design-checklist) lists the plain labels as
+  *"Team", "Running late in your projects", "Nobody assigned", "All clear"*. The two disagree,
+  and the checklist is the one that governs the rendered copy, so "Nobody assigned" wins. The
+  proto enum is still the source of the distinction — the label is a client-side lookup either
+  way (Constitution VIII), so no cross-stack literal moved. The Maestro assertion in
+  `.maestro/screens/today.yaml` asserts the same string.
+- **[ASSUMPTION: an unresolvable assignee renders "Assignee unavailable", a third label
+  distinct from both a name and "Nobody assigned".]** T032 requires that an absent name with
+  `additional_assignee_count > 0` not be labelled Unassigned, but a departed *sole* assignee
+  has `additional_assignee_count = 0` and an absent name, which is indistinguishable from an
+  unassigned row on those two fields alone. The row's `category` is what actually separates
+  them, so the client branches on category and never on the name's absence.
+- **[ASSUMPTION: the Team block hides itself during loading and error whenever a previous
+  successful response already reported `can_supervise = false`.]** T023 asks for a skeleton and
+  an inline retry, and FR-001/SC-008 require that a non-supervisor see no artefact at all. On
+  the very first load neither is knowable, so the skeleton renders; once the server has said
+  the caller supervises nothing, `TeamSection` returns null for every later loading or error
+  state rather than flashing a Team heading at a worker.

@@ -80,7 +80,8 @@ func (l *logicImpl) GetTeamAttentionSummary(
 	orgID, employeeID dbuuid.UUID,
 	req *rpcv1.GetTeamAttentionSummaryRequest,
 ) (*rpcv1.GetTeamAttentionSummaryResponse, error) {
-	if _, err := parseAsOfDate(req.GetAsOfDate(), time.Now()); err != nil {
+	asOfDate, err := parseAsOfDate(req.GetAsOfDate(), time.Now())
+	if err != nil {
 		return nil, err
 	}
 
@@ -88,6 +89,7 @@ func (l *logicImpl) GetTeamAttentionSummary(
 		OrganizationID:   orgID,
 		CallerEmployeeID: employeeID,
 		CountCap:         teamAttentionCountCap,
+		AsOfDate:         asOfDate,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to count team attention: %w", err)
@@ -103,6 +105,7 @@ func (l *logicImpl) GetTeamAttentionSummary(
 		OrganizationID:   orgID,
 		CallerEmployeeID: employeeID,
 		ItemLimit:        clampTeamAttentionLimit(req.GetLimit()),
+		AsOfDate:         asOfDate,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list team attention items: %w", err)

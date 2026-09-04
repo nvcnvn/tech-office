@@ -402,8 +402,44 @@ SELECT
     LIMIT $3
   ) capped_overdue)::int AS overdue_count,
 
-  -- Placeholder until the unassigned leg lands with User Story 2.
-  0::int AS unassigned_count,
+  (SELECT COUNT(*) FROM (
+    SELECT 1
+    FROM collaboration.task t
+    JOIN collaboration.project p
+      ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+    JOIN collaboration.project_state ps
+      ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+    WHERE t.organization_id = $1
+      AND t.task_kind = 'ritual_instance'
+      AND t.is_deleted = FALSE
+      AND t.detached_from_ritual = FALSE
+      AND ps.is_closed = FALSE
+      AND p.is_archived = FALSE
+      AND EXISTS (
+        SELECT 1 FROM collaboration.project_membership pm
+         WHERE (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+           AND pm.employee_id = $2
+           AND pm.role IN ('owner', 'admin')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM collaboration.task_assignee ta
+         WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+           AND ta.role = 'assignee'
+           AND ta.employee_id = $2
+      )
+      -- Disjoint from the overdue leg by construction, which is what makes an instance
+      -- that is both appear once and count once without a DISTINCT in either query.
+      AND ps.category <> 'overdue'
+      -- Equality, not ` + "`" + `<=` + "`" + `: next Tuesday's unassigned instance is not this morning's
+      -- problem.
+      AND t.scheduled_date = $4::date
+      AND NOT EXISTS (
+        SELECT 1 FROM collaboration.task_assignee ta
+         WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+           AND ta.role = 'assignee'
+      )
+    LIMIT $3
+  ) capped_unassigned)::int AS unassigned_count,
 
   -- The scope's own cardinality. The all-clear message names it (FR-016), and zero is what
   -- makes the whole block disappear (FR-001), so it cannot be inferred from a zero count.
@@ -421,6 +457,7 @@ type CountTeamAttentionParams struct {
 	OrganizationID   dbuuid.UUID `json:"organization_id"`
 	CallerEmployeeID dbuuid.UUID `json:"caller_employee_id"`
 	CountCap         int32       `json:"count_cap"`
+	AsOfDate         pgtype.Date `json:"as_of_date"`
 }
 
 type CountTeamAttentionRow struct {
@@ -450,7 +487,12 @@ type CountTeamAttentionRow struct {
 // derived in Go from `count >= cap`, exactly as GetEvidenceReviewQueueCount derives
 // is_capped.
 func (q *Queries) CountTeamAttention(ctx context.Context, db DBTX, arg *CountTeamAttentionParams) (*CountTeamAttentionRow, error) {
-	row := db.QueryRow(ctx, countTeamAttention, arg.OrganizationID, arg.CallerEmployeeID, arg.CountCap)
+	row := db.QueryRow(ctx, countTeamAttention,
+		arg.OrganizationID,
+		arg.CallerEmployeeID,
+		arg.CountCap,
+		arg.AsOfDate,
+	)
 	var i CountTeamAttentionRow
 	err := row.Scan(&i.OverdueCount, &i.UnassignedCount, &i.SupervisedProjectCount)
 	return &i, err
@@ -5009,58 +5051,106 @@ func (q *Queries) ListTasksBySourceMessages(ctx context.Context, db DBTX, arg *L
 }
 
 const listTeamAttentionItems = `-- name: ListTeamAttentionItems :many
-SELECT
-  t.id AS task_id,
-  t.project_id,
-  p.name AS project_name,
-  t.title,
-  0::int AS attention_rank,
-  t.completion_deadline::date AS sort_date,
-  COALESCE(primary_assignee.employee_id, '00000000-0000-0000-0000-000000000000'::uuid) AS primary_assignee_id,
-  (SELECT count(*)
-     FROM collaboration.task_assignee ta
-    WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
-      AND ta.role = 'assignee')::int AS assignee_count
-FROM collaboration.task t
-JOIN collaboration.project p
-  ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
-JOIN collaboration.project_state ps
-  ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
-LEFT JOIN LATERAL (
-  SELECT ta.employee_id
-    FROM collaboration.task_assignee ta
-   WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
-     AND ta.role = 'assignee'
-   ORDER BY ta.assigned_at, ta.id
-   LIMIT 1
-) primary_assignee ON TRUE
-WHERE t.organization_id = $1
-  AND t.task_kind = 'ritual_instance'
-  AND t.is_deleted = FALSE
-  AND t.detached_from_ritual = FALSE
-  AND ps.is_closed = FALSE
-  AND p.is_archived = FALSE
-  AND EXISTS (
-    SELECT 1 FROM collaboration.project_membership pm
-     WHERE (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
-       AND pm.employee_id = $2
-       AND pm.role IN ('owner', 'admin')
-  )
-  AND NOT EXISTS (
-    SELECT 1 FROM collaboration.task_assignee ta
+(
+  SELECT
+    t.id AS task_id,
+    t.project_id,
+    p.name AS project_name,
+    t.title,
+    0::int AS attention_rank,
+    t.completion_deadline::date AS sort_date,
+    COALESCE(primary_assignee.employee_id, '00000000-0000-0000-0000-000000000000'::uuid) AS primary_assignee_id,
+    (SELECT count(*)
+       FROM collaboration.task_assignee ta
+      WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+        AND ta.role = 'assignee')::int AS assignee_count
+  FROM collaboration.task t
+  JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+  JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+  LEFT JOIN LATERAL (
+    SELECT ta.employee_id
+      FROM collaboration.task_assignee ta
      WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
        AND ta.role = 'assignee'
-       AND ta.employee_id = $2
-  )
-  AND ps.category = 'overdue'
+     ORDER BY ta.assigned_at, ta.id
+     LIMIT 1
+  ) primary_assignee ON TRUE
+  WHERE t.organization_id = $1
+    AND t.task_kind = 'ritual_instance'
+    AND t.is_deleted = FALSE
+    AND t.detached_from_ritual = FALSE
+    AND ps.is_closed = FALSE
+    AND p.is_archived = FALSE
+    AND EXISTS (
+      SELECT 1 FROM collaboration.project_membership pm
+       WHERE (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+         AND pm.employee_id = $2
+         AND pm.role IN ('owner', 'admin')
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM collaboration.task_assignee ta
+       WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+         AND ta.role = 'assignee'
+         AND ta.employee_id = $2
+    )
+    AND ps.category = 'overdue'
+  LIMIT $3
+)
+UNION ALL
+(
+  SELECT
+    t.id AS task_id,
+    t.project_id,
+    p.name AS project_name,
+    t.title,
+    1::int AS attention_rank,
+    t.scheduled_date AS sort_date,
+    '00000000-0000-0000-0000-000000000000'::uuid AS primary_assignee_id,
+    0::int AS assignee_count
+  FROM collaboration.task t
+  JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+  JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+  WHERE t.organization_id = $1
+    AND t.task_kind = 'ritual_instance'
+    AND t.is_deleted = FALSE
+    AND t.detached_from_ritual = FALSE
+    AND ps.is_closed = FALSE
+    AND p.is_archived = FALSE
+    AND EXISTS (
+      SELECT 1 FROM collaboration.project_membership pm
+       WHERE (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+         AND pm.employee_id = $2
+         AND pm.role IN ('owner', 'admin')
+    )
+    AND NOT EXISTS (
+      SELECT 1 FROM collaboration.task_assignee ta
+       WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+         AND ta.role = 'assignee'
+         AND ta.employee_id = $2
+    )
+    AND ps.category <> 'overdue'
+    AND t.scheduled_date = $4::date
+    -- No assignee at all. The self-exclusion above is a different clause and a different
+    -- fact: this one is "nobody is on it", that one is "it is my own work".
+    AND NOT EXISTS (
+      SELECT 1 FROM collaboration.task_assignee ta
+       WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+         AND ta.role = 'assignee'
+    )
+  LIMIT $3
+)
 ORDER BY attention_rank ASC, sort_date ASC NULLS LAST, task_id ASC
-LIMIT $3
 `
 
 type ListTeamAttentionItemsParams struct {
 	OrganizationID   dbuuid.UUID `json:"organization_id"`
 	CallerEmployeeID dbuuid.UUID `json:"caller_employee_id"`
 	ItemLimit        int32       `json:"item_limit"`
+	AsOfDate         pgtype.Date `json:"as_of_date"`
 }
 
 type ListTeamAttentionItemsRow struct {
@@ -5083,11 +5173,19 @@ type ListTeamAttentionItemsRow struct {
 // still produce exactly one row. The id is COALESCEd to the nil uuid because sqlc infers a
 // LEFT JOIN'd NOT NULL column as non-nullable; the Go side reads assignee_count, not the
 // id, to decide whether anyone is on it.
+//
+// Both legs MUST carry the base predicate of CountTeamAttention verbatim. FR-004 depends on
+// the count query and this one differing in nothing but projection and bound.
 // completion_deadline ASC *is* "longest late first": the oldest deadline has been late the
 // longest. The task id is a UUID v7 primary key, so the tiebreak is total and the order is
 // deterministic across requests.
 func (q *Queries) ListTeamAttentionItems(ctx context.Context, db DBTX, arg *ListTeamAttentionItemsParams) ([]*ListTeamAttentionItemsRow, error) {
-	rows, err := db.Query(ctx, listTeamAttentionItems, arg.OrganizationID, arg.CallerEmployeeID, arg.ItemLimit)
+	rows, err := db.Query(ctx, listTeamAttentionItems,
+		arg.OrganizationID,
+		arg.CallerEmployeeID,
+		arg.ItemLimit,
+		arg.AsOfDate,
+	)
 	if err != nil {
 		return nil, err
 	}

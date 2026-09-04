@@ -33,6 +33,10 @@ name: "Screen — Today"
       id: "today-section-team"
     timeout: 8000
 - takeScreenshot: "tmp/maestro-screenshots/04-today-team-block"
+# The unassigned half of the block. The label is the plain sentence a supervisor
+# would say, never a blank name and never an id fragment: the seeded workspace
+# needs one ritual instance scheduled for today with nobody holding it.
+- assertVisible: "Nobody assigned"
 - tapOn:
     id: "today-team-row-${MAESTRO_TEAM_TASK_ID}"
 - extendedWaitUntil:
