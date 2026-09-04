@@ -127,7 +127,7 @@ require_env POSTGRES_PASSWORD BACKUP_S3_BUCKET BACKUP_S3_KEY BACKUP_S3_KEY_SECRE
 cat >"$DEPLOY_DIR/secrets/pgbackrest.conf" <<EOF
 [global]
 repo1-type=s3
-repo1-path=/techoffice
+repo1-path=${BACKUP_S3_PATH:-/techoffice}
 repo1-s3-bucket=${BACKUP_S3_BUCKET}
 repo1-s3-endpoint=$(echo "${BACKUP_S3_ENDPOINT}" | sed 's#^https\?://##')
 repo1-s3-region=${BACKUP_S3_REGION}

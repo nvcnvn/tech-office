@@ -45,10 +45,10 @@ Then:
    on the device with the account ID and PIN. Four cards, plainer language, no administrative
    stops.
 3. **Administrator tour on mobile.** Sign in as the owner on the device. The tour is offered,
-   and three stops — "Get your team in", "Make one project" and the ritual stop — say the
-   work is done on the web and show no action button. That is the FR-023 behaviour easiest
-   to get wrong, and the mobile app has no create surface for a project or a ritual, so an
-   action button on any of the three would open a list it cannot add to.
+   and one stop — "Get your team in" — says the work is done on the web and shows no action
+   button. That is the FR-023 behaviour easiest to get wrong. "Make one project" and the
+   ritual stop were in that list until feature 044 built both create screens on mobile; they
+   now carry their full body and an action that lands on one of them.
 4. **Cross-platform memory.** Complete the tour on web, then open the mobile app as the same
    person. It is not offered again.
 5. **Replay.** On web, User menu → Take the tour. On mobile, More → App → Take the tour.

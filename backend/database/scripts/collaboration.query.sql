@@ -777,8 +777,14 @@ WHERE organization_id = @organization_id AND id = @id
 RETURNING *;
 
 -- name: ArchiveRitualDefinition :one
+-- Unarchiving clears the generation waterline. Archiving soft-deletes every pending
+-- instance, so a restored definition whose last_generated_date still pointed at the end of
+-- the old window produced nothing until real time caught up — up to generation_window_days
+-- of a ritual that reads as active and generates no runs.
 UPDATE collaboration.ritual_definition
-SET is_archived = @is_archived, updated_at = @updated_at
+SET is_archived = @is_archived,
+    last_generated_date = CASE WHEN @is_archived THEN last_generated_date ELSE NULL END,
+    updated_at = @updated_at
 WHERE organization_id = @organization_id AND id = @id
 RETURNING *;
 

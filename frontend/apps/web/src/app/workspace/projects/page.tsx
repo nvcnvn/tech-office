@@ -42,6 +42,7 @@ import AssignmentIcon from '@mui/icons-material/Assignment';
 import { useRequireAuth } from '@/lib/auth/hooks';
 import { useThemeColors } from '@/theme/useThemeColors';
 import { listProjects, createProject, type Project, type ProjectVisibility, type CollaborationMode } from 'apis';
+import { deriveProjectKey, projectKeySchema, PROJECT_KEY_RULE_TEXT } from '@tech-office/validations';
 
 function ProjectCard({ project, onClick }: { project: Project; onClick: () => void }) {
 	const colors = useThemeColors();
@@ -143,14 +144,11 @@ function CreateProjectDialog({ open, onClose, onCreated }: CreateProjectDialogPr
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	// Auto-generate key from name
+	// Auto-generate key from name. The rule and the derivation both live in
+	// @tech-office/validations so web and mobile cannot disagree about what they submit.
 	useEffect(() => {
 		if (name && !key) {
-			const generatedKey = name
-				.toUpperCase()
-				.replace(/[^A-Z0-9]/g, '')
-				.substring(0, 10);
-			setKey(generatedKey);
+			setKey(deriveProjectKey(name));
 		}
 	}, [name, key]);
 
@@ -160,8 +158,8 @@ function CreateProjectDialog({ open, onClose, onCreated }: CreateProjectDialogPr
 			return;
 		}
 
-		if (!/^[A-Z][A-Z0-9_]{0,9}$/.test(key)) {
-			setError('Key must be 1-10 uppercase letters/numbers, starting with a letter');
+		if (!projectKeySchema.safeParse(key).success) {
+			setError(PROJECT_KEY_RULE_TEXT);
 			return;
 		}
 
@@ -227,7 +225,7 @@ function CreateProjectDialog({ open, onClose, onCreated }: CreateProjectDialogPr
 					onChange={(e) => setKey(e.target.value.toUpperCase())}
 					margin="normal"
 					placeholder="e.g., MARKETING"
-					helperText="1-10 uppercase letters/numbers. Used in task IDs (e.g., MARKETING-123)"
+					helperText={`${PROJECT_KEY_RULE_TEXT} Used in task IDs (e.g., MARKETING-123).`}
 					inputProps={{ 'data-testid': 'project-key-input' }}
 				/>
 				<TextField

@@ -1,0 +1,102 @@
+appId: com.devguards.TechOffice
+name: "Rituals — an owner defines tomorrow's checklist from the shop floor"
+tags:
+  - rituals
+  - happy-path
+# Feature 044, US1. The headline capability: an owner standing on the shop floor defines a
+# recurring checklist and its upcoming runs are there immediately, because
+# CreateRitualDefinition generates the first instances inside its own transaction (FR-014).
+#
+# Opens the project projects/create-project.yaml made in this run, so the two flows seed
+# each other and neither needs a fixture. Run that flow first, or with the same
+# MAESTRO_RUN_ID, when running this one on its own.
+#
+# Requires MAESTRO_TEST_EMAIL to hold collab.manageRitualDefinition. Both that and owner or
+# admin standing in the project have to pass for the affordance to render at all, so
+# tapping it is the permission assertion (FR-015).
+---
+- runFlow: "../auth/signin.yaml"
+
+- tapOn:
+    id: "tab-tasks"
+# The tab root is titled "My Work"; the mode toggle is the one control present in both
+# modes, so waiting on it is what says the tab has finished loading.
+- extendedWaitUntil:
+    visible:
+      id: "task-mode-toggle"
+    timeout: 10000
+
+- tapOn:
+    id: "task-mode-toggle"
+# The projects list fans out one task query per project before it renders, and the row sits
+# below the overview cards — partly off the bottom on a small phone — so this scrolls to it
+# rather than asserting in place.
+- scrollUntilVisible:
+    element:
+      text: "Shop Floor ${MAESTRO_RUN_ID}"
+    direction: DOWN
+    # The last row of a tab-root list sits partly under the tab bar, so a 100% visibility
+    # requirement never resolves for it.
+    visibilityPercentage: 40
+    centerElement: true
+- tapOn: "Shop Floor ${MAESTRO_RUN_ID}"
+
+- extendedWaitUntil:
+    visible:
+      id: "project-create-ritual-button"
+    timeout: 10000
+- tapOn:
+    id: "project-create-ritual-button"
+
+- extendedWaitUntil:
+    visible:
+      id: "create-ritual-screen"
+    timeout: 10000
+
+- tapOn:
+    id: "ritual-name-input"
+- inputText: "Opening checklist ${MAESTRO_RUN_ID}"
+- hideKeyboard
+
+- tapOn:
+    id: "ritual-recurrence-daily"
+
+# The zone the runs will fire in is stated before saving, so a wrong one is visible now
+# rather than after the first run fires at the wrong hour (FR-010).
+- assertVisible:
+    id: "ritual-timezone-line"
+
+- scrollUntilVisible:
+    element:
+      id: "ritual-requirement-name-0"
+    direction: DOWN
+- tapOn:
+    id: "ritual-requirement-name-0"
+- inputText: "Shutters up"
+# The keyboard covers the proof-type chips and the submit button on a small phone.
+- hideKeyboard
+- tapOn:
+    id: "ritual-requirement-type-0-photo"
+
+- scrollUntilVisible:
+    element:
+      id: "create-ritual-submit"
+    direction: DOWN
+- tapOn:
+    id: "create-ritual-submit"
+
+# The ritual template screen, carrying the proof step that was sent inline with it.
+- extendedWaitUntil:
+    visible: "Opening checklist ${MAESTRO_RUN_ID}"
+    timeout: 15000
+# The proof steps are further down the template, under "Proof on each run".
+- scrollUntilVisible:
+    element:
+      text: "Shutters up"
+    direction: DOWN
+
+# Back in the project, the run it generated is already listed — no wait, no manual refresh.
+- back
+- extendedWaitUntil:
+    visible: "Opening checklist ${MAESTRO_RUN_ID}"
+    timeout: 15000

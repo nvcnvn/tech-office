@@ -184,8 +184,19 @@ func (s *CollaborationServiceConnect) ArchiveRitualDefinition(
 			return txErr
 		}
 
-		// is_archived is the whole mechanism now: the sweep's discovery query selects
-		// unarchived definitions only, so there is no schedule to pause or resume (FR-010).
+		// is_archived is the whole mechanism for *pausing*: the sweep's discovery query
+		// selects unarchived definitions only, so there is no schedule to stop.
+		//
+		// Restoring is not symmetric, though. Archiving soft-deleted every pending
+		// instance, so a restored definition has none — and it only regains them once
+		// generation runs. Doing it here rather than waiting for the next sweep means a
+		// ritual restored from a phone has its runs back on the screen the person is
+		// already looking at, the same way creating one does.
+		if !req.Msg.GetArchive() {
+			if _, genErr := s.Logic.GenerateRitualInstances(ctx, tx, organizationID, time.Now()); genErr != nil {
+				return genErr
+			}
+		}
 		return nil
 	})
 	if err != nil {

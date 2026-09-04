@@ -19,7 +19,7 @@ import {
 } from "react-native";
 import { Stack, Link, useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
-import { listProjectStates, listRitualDefinitions, listTasks, getProfile } from "apis";
+import { getEmployeePermissions, getProject, listProjectStates, listRitualDefinitions, listTasks, getProfile } from "apis";
 import { useAuth } from "@/hooks/use-auth";
 import { useResolvedProjectId } from "@/hooks/use-resolved-project-id";
 import { generateCanonicalUrl } from "@/lib/canonical-links";
@@ -516,7 +516,9 @@ function RitualTaskRow({ item }: { item: RitualSummaryItem }) {
       })}
       asChild
     >
-      <Pressable testID={`project-ritual-row-${item.activeTask.id}`} onPressIn={triggerSelectionHaptic} style={({ pressed }) => [styles.taskRow, pressed && styles.taskRowPressed]}>
+      {/* The row is a Pressable with several Text children, so the ritual's name is not
+          reachable on its own — the label has to live here (Constitution XIII). */}
+      <Pressable testID={`project-ritual-row-${item.activeTask.id}`} accessibilityRole="button" accessibilityLabel={item.title} onPressIn={triggerSelectionHaptic} style={({ pressed }) => [styles.taskRow, pressed && styles.taskRowPressed]}>
         <View style={styles.taskContentWrap}>
           <View style={styles.taskHeaderRow}>
             <View style={styles.titleRow}>
@@ -589,6 +591,22 @@ export default function TaskListScreen() {
       const result = await listRitualDefinitions(resolvedProjectId!);
       return result ?? [];
     },
+    enabled: !!resolvedProjectId,
+  });
+
+  // Both gates the "add a ritual" affordance answers to. The permissions query shares its
+  // key with every other permission read on this platform, so the two call sites share one
+  // cache entry rather than each fetching their own.
+  const { data: permissionIds } = useQuery({
+    queryKey: ["employee-permissions", auth.employeeId],
+    queryFn: () => getEmployeePermissions(auth.employeeId!),
+    enabled: !!auth.employeeId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: projectData } = useQuery({
+    queryKey: ["project", resolvedProjectId],
+    queryFn: () => getProject(resolvedProjectId!),
     enabled: !!resolvedProjectId,
   });
 
@@ -721,6 +739,13 @@ export default function TaskListScreen() {
 
   const hasAnyTasks = (tasksData?.length ?? 0) > 0;
 
+  // Absent, never disabled (FR-015): a control nobody here can complete is not offered.
+  // Defining a ritual needs both the organisation permission and admin standing in this
+  // project, the same pair `ritual_logic.go` enforces.
+  const canCreateRitual =
+    (permissionIds ?? []).includes("collab.manageRitualDefinition") &&
+    (projectData?.currentUserRole === "owner" || projectData?.currentUserRole === "admin");
+
   return (
     <>
     <View style={styles.container}>
@@ -745,6 +770,19 @@ export default function TaskListScreen() {
           contentContainerStyle={styles.scrollContent}
           refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} />}
         >
+          {canCreateRitual && resolvedProjectId ? (
+            <Pressable
+              testID="project-create-ritual-button"
+              accessibilityRole="button"
+              accessibilityLabel="Add a ritual to this project"
+              onPress={() => router.push(`/(app)/(tasks)/${resolvedProjectId}/create-ritual`)}
+              style={styles.createRitualButton}
+            >
+              <SFIcon name="plus" size={18} color={lightPalette.primary.main} />
+              <Text style={styles.createRitualLabel}>Add a ritual</Text>
+            </Pressable>
+          ) : null}
+
           {sections.length === 0 ? (
             hasAnyTasks ? (
               <EmptyState
@@ -829,6 +867,24 @@ const styles = StyleSheet.create({
     minHeight: 44,
     justifyContent: "center",
     alignItems: "center",
+  },
+  createRitualButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: mobileLayout.itemGap,
+    marginTop: spacing[2],
+    marginHorizontal: mobileLayout.screenPadding,
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: lightPalette.divider,
+    backgroundColor: lightPalette.background.paper,
+  },
+  createRitualLabel: {
+    fontSize: mobileTypography.button.fontSize as number,
+    fontWeight: "600" as const,
+    color: lightPalette.primary.main,
   },
   sectionBlock: {
     paddingTop: spacing[2],

@@ -125,6 +125,27 @@ func TestProject(t *testing.T) {
 			assert.Equal(t, proj.Key, updated.Key)
 		})
 	})
+
+	// FR-016, US2 scenario 3: a taken key is the caller's problem to fix, and the answer has
+	// to name the field so a create form can mark the key input instead of showing a
+	// whole-request error the person has to guess the cause of.
+	t.Run("when a project key is already taken in this organization", func(t *testing.T) {
+		w.createProject(owner, "Store Ops", "STORE")
+
+		t.Run("a second project with the same key is refused, naming the key field", func(t *testing.T) {
+			err := w.createProjectError(owner, "Store Ops Again", "STORE")
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Contains(t, fieldViolations(t, err), "key")
+		})
+
+		t.Run("the same key still succeeds in a different organization", func(t *testing.T) {
+			other := newTestWorld(t)
+			otherOwner := other.withOwner()
+			proj := other.createProject(otherOwner, "Store Ops Elsewhere", "STORE")
+			assert.Equal(t, "STORE", proj.Key)
+		})
+	})
 }
 
 // TestProjectCollaborationMode covers project collaboration mode selection and its effect on state bootstrapping.

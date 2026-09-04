@@ -1,8 +1,8 @@
 import React from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
-import { getRitualDefinition, type RitualDefinition } from "apis";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { archiveRitualDefinition, getProject, getRitualDefinition, type RitualDefinition } from "apis";
 import {
   lightPalette,
   mobileLayout,
@@ -10,6 +10,7 @@ import {
   radius,
   shadows,
   spacing,
+  touch,
 } from "@tech-office/theme-tokens";
 
 function getEvidenceTypeLabel(type: RitualDefinition["evidenceRequirements"][number]["evidenceTypes"][number]): string {
@@ -33,11 +34,57 @@ export default function RitualTemplateScreen() {
     taskId?: string;
   }>();
 
+  const queryClient = useQueryClient();
+
   const definitionQuery = useQuery({
     queryKey: ["ritual-definition", definitionId],
     queryFn: () => getRitualDefinition(definitionId),
     enabled: !!definitionId,
   });
+
+  const projectId = definitionQuery.data?.projectId;
+
+  // The screen does not otherwise need the project, but archiving does: only an owner or
+  // admin of it may stop a ritual, which is the same rule ritual_logic.go enforces.
+  const { data: projectData } = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => getProject(projectId!),
+    enabled: !!projectId,
+  });
+
+  const archiveMutation = useMutation({
+    mutationFn: (archive: boolean) => archiveRitualDefinition(definitionId, archive),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ritual-definition", definitionId] }),
+        queryClient.invalidateQueries({ queryKey: ["ritualDefinitions", projectId] }),
+      ]);
+    },
+    onError: (error: Error) => {
+      Alert.alert("Could not change this ritual", error.message);
+    },
+  });
+
+  const canArchive =
+    projectData?.currentUserRole === "owner" || projectData?.currentUserRole === "admin";
+
+  const confirmArchive = () => {
+    Alert.alert(
+      "Archive this ritual?",
+      "No new runs will be created. Runs that already exist are left alone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          // "Archive it", not "Archive": the button behind this alert already says
+          // "Archive", and two identically labelled controls on one screen are ambiguous
+          // to a screen reader and to the blackbox suite alike.
+          text: "Archive it",
+          style: "destructive",
+          onPress: () => archiveMutation.mutate(true),
+        },
+      ],
+    );
+  };
 
   if (definitionQuery.isLoading) {
     return (
@@ -66,13 +113,49 @@ export default function RitualTemplateScreen() {
       <Stack.Screen options={{ title: definition.name || "Ritual Template" }} />
 
       <View style={styles.heroCard}>
-        <View style={styles.templateBadge}>
-          <Text style={styles.templateBadgeText}>Reference only</Text>
-        </View>
+        {definition.isArchived ? (
+          <View style={[styles.templateBadge, styles.archivedBadge]} testID="ritual-archived-badge">
+            <Text style={[styles.templateBadgeText, styles.archivedBadgeText]}>Archived</Text>
+          </View>
+        ) : (
+          <View style={styles.templateBadge}>
+            <Text style={styles.templateBadgeText}>Reference only</Text>
+          </View>
+        )}
         <Text style={styles.heroTitle}>{definition.name}</Text>
         <Text style={styles.heroText}>
-          This page shows the repeating setup. Use the live task when you need to do the work or send proof.
+          {definition.isArchived
+            ? "This ritual is archived. No new runs are being created; runs that already exist are unchanged."
+            : "This page shows the repeating setup. Use the live task when you need to do the work or send proof."}
         </Text>
+
+        {/* Archive and restore, and nothing else: no rename, no schedule change, no
+            requirement editing. Those stay on the web (FR-018). */}
+        {canArchive ? (
+          definition.isArchived ? (
+            <Pressable
+              testID="ritual-unarchive-button"
+              accessibilityRole="button"
+              disabled={archiveMutation.isPending}
+              onPress={() => archiveMutation.mutate(false)}
+              style={styles.archiveAction}
+            >
+              <Text style={styles.archiveActionLabel}>Restore</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              testID="ritual-archive-button"
+              accessibilityRole="button"
+              disabled={archiveMutation.isPending}
+              onPress={confirmArchive}
+              style={styles.archiveAction}
+            >
+              <Text style={[styles.archiveActionLabel, styles.archiveActionDestructive]}>
+                Archive
+              </Text>
+            </Pressable>
+          )
+        ) : null}
       </View>
 
       <View style={styles.noticeCard}>
@@ -175,6 +258,29 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[0.5],
     borderRadius: 999,
     backgroundColor: "#eef6ff",
+  },
+  archivedBadge: {
+    backgroundColor: "#f1f5f9",
+  },
+  archivedBadgeText: {
+    color: lightPalette.text.secondary,
+  },
+  archiveAction: {
+    alignSelf: "flex-start",
+    minHeight: touch.minTarget,
+    justifyContent: "center",
+    paddingHorizontal: spacing[2],
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: lightPalette.divider,
+  },
+  archiveActionLabel: {
+    fontSize: mobileTypography.button.fontSize as number,
+    fontWeight: "600" as const,
+    color: lightPalette.primary.main,
+  },
+  archiveActionDestructive: {
+    color: lightPalette.error.main,
   },
   templateBadgeText: {
     fontSize: mobileTypography.caption.fontSize as number,

@@ -183,8 +183,10 @@ func handleError(err error) error {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, ErrDuplicateMembership):
 		return connect.NewError(connect.CodeAlreadyExists, err)
-	case errors.Is(err, ErrProjectKeyExists):
-		return connect.NewError(connect.CodeAlreadyExists, err)
+	case errors.Is(err, ErrProjectKeyTaken), errors.Is(err, ErrProjectKeyInvalid):
+		// Named field, so both create forms can mark the key input rather than showing a
+		// whole-request error the person has to guess the cause of (Principle X).
+		return fieldViolation(connect.CodeInvalidArgument, err, "key", err.Error())
 	case errors.Is(err, ErrCannotDeleteWithTasks):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, ErrLastOwner):

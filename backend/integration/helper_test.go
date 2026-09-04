@@ -1540,6 +1540,20 @@ func (w *testWorld) createProjectWithVisibility(actor testUser, name, key string
 	}
 }
 
+// createProjectError attempts a create and returns whatever the server answered, so a
+// refusal can be asserted on rather than aborting the test the way createProject does.
+func (w *testWorld) createProjectError(actor testUser, name, key string) error {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.CreateProjectRequest{
+		Name:       name,
+		Key:        key,
+		Visibility: rpcv1.ProjectVisibility_PROJECT_VISIBILITY_PUBLIC,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.collab.CreateProject(context.Background(), req)
+	return err
+}
+
 func (w *testWorld) createProjectWithMode(actor testUser, name, key string, mode rpcv1.CollaborationMode) projectResult {
 	w.t.Helper()
 	req := connect.NewRequest(&rpcv1.CreateProjectRequest{
@@ -3171,6 +3185,30 @@ func (w *testWorld) createRitualDefinitionWithAssigneesRequirementsAndWindow(
 	return resp.Msg.RitualDefinition
 }
 
+// createRitualDefinitionWithRequirementsError attempts a create carrying inline evidence
+// requirements and returns whatever the server answered, so a refusal can be asserted on.
+func (w *testWorld) createRitualDefinitionWithRequirementsError(
+	actor testUser,
+	projectID, name string,
+	rule *rpcv1.RecurrenceRule,
+	requirements []*rpcv1.CreateEvidenceRequirementInput,
+	procedureDocumentID *string,
+) error {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.CreateRitualDefinitionRequest{
+		ProjectId:             projectID,
+		Name:                  name,
+		RecurrenceRule:        rule,
+		CompletionWindowHours: 8,
+		Timezone:              "UTC",
+		EvidenceRequirements:  requirements,
+		ProcedureDocumentId:   procedureDocumentID,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.collab.CreateRitualDefinition(context.Background(), req)
+	return err
+}
+
 func (w *testWorld) createRitualDefinitionWithPool(
 	actor testUser,
 	projectID, name string,
@@ -3627,6 +3665,44 @@ func findRitualDefinition(defs []*rpcv1.RitualDefinition, id string) *rpcv1.Ritu
 		}
 	}
 	return nil
+}
+
+// countRitualInstances counts the live instances of one definition among a project's tasks.
+func countRitualInstances(tasks []*rpcv1.Task, definitionID string) int {
+	n := 0
+	for _, task := range tasks {
+		if task.TaskKind == rpcv1.TaskKind_TASK_KIND_RITUAL_INSTANCE && task.GetRitualDefinitionId() == definitionID {
+			n++
+		}
+	}
+	return n
+}
+
+// findRitualDefinitionByName locates a definition by the name it was created with, for
+// asserting that a refused create left nothing behind.
+func findRitualDefinitionByName(defs []*rpcv1.RitualDefinition, name string) *rpcv1.RitualDefinition {
+	for _, d := range defs {
+		if d.Name == name {
+			return d
+		}
+	}
+	return nil
+}
+
+// countEvidenceRequirementsInProject counts requirement rows across every definition in a
+// project, so "nothing was created" can be asserted without a definition id to hang it on.
+func (w *testWorld) countEvidenceRequirementsInProject(projectID string) int {
+	w.t.Helper()
+	var n int
+	err := globalDB.QueryRow(context.Background(), `
+		SELECT COUNT(*)
+		FROM collaboration.evidence_requirement er
+		JOIN collaboration.ritual_definition rd ON rd.id = er.ritual_definition_id
+		WHERE rd.project_id = $1`,
+		dbuuid.MustParse(projectID),
+	).Scan(&n)
+	require.NoError(w.t, err)
+	return n
 }
 
 // dailyRecurrenceRule returns a simple daily recurrence rule for testing.

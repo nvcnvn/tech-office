@@ -32,6 +32,14 @@ export default function TasksLayout() {
         name="rituals/[definitionId]"
         options={{ title: "Ritual Template" }}
       />
+      <Stack.Screen
+        name="create-project"
+        options={{ title: "New Project", presentation: "modal" }}
+      />
+      <Stack.Screen
+        name="[projectId]/create-ritual"
+        options={{ title: "New Ritual", presentation: "modal" }}
+      />
     </Stack>
     </ErrorBoundary>
   );

@@ -319,6 +319,15 @@ with `t.Parallel()`; each test provisions its own organization so parallel runs 
 collide. The suite — not unit tests — is the primary correctness gate, per Constitution
 principle II.
 
+That parallelism has a cost the wall-clock assertions do not account for. A handful of tests
+assert a latency budget on a round trip rather than on the query, and they share one local
+Postgres with everything else running at the same time, so they measure the machine's load
+as much as the code — `TestEvidenceReviewQueuePerformance`'s 2 s first-page budget is the
+one that fails in practice, and it passes in isolation. `make test-backend` and
+`make test-frontend` are therefore both not reliably green on a clean tree; the open rows in
+the drift register say which failures are expected, and a failure outside that list is the
+one worth chasing.
+
 ## Known drift
 
 **schema.sql no longer leads the migrations.** `schema.sql` used to be hand-written

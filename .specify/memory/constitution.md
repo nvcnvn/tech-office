@@ -1,46 +1,46 @@
 <!--
-SYNC IMPACT REPORT - Constitution v5.17.0
-Generated: 2026-08-26
+SYNC IMPACT REPORT - Constitution v5.20.0
+Generated: 2026-09-04
 
-VERSION CHANGE: 5.16.0 → 5.17.0 (MINOR)
+VERSION CHANGE: 5.19.0 → 5.20.0 (MINOR)
 
 MODIFIED PRINCIPLES:
 - Principle XIII (Mobile Application Design & Testing): "Feature Scope
-  (NON-NEGOTIABLE)" gains a narrow, exhaustive first-run onboarding carve-out.
-  Mobile MAY now surface exactly two otherwise-administrative capabilities, and
-  only during first-run onboarding:
-    1. Creating an organization (SMB owner registering their own workspace)
-    2. Creating the first org-managed accounts (so a new workspace is not
-       stranded as a one-person workspace)
-  The carve-out is explicitly about *starting* a workspace, never *administering*
-  an existing one. Role and permission editing, department management, bulk
-  member import, account deactivation, credential reset for other members,
-  billing and plan management all remain web-only. Any mobile surface beyond the
-  two named capabilities requires a further amendment.
+  (NON-NEGOTIABLE)" widens its carve-out beyond first-run onboarding to admit two
+  workspace-shaping capabilities on an *existing* workspace:
+    1. Creating a project
+    2. Creating a ritual definition (and archiving/unarchiving one)
+  The carve-out remains narrow and exhaustive. Role and permission editing,
+  department management, bulk member import, account deactivation, credential
+  reset for other members, billing and quota management stay web-only, as do the
+  advanced ritual controls (department pools, procedure-document attachment,
+  auto-approval, completion/generation windows, custom intervals, nth-weekday
+  recurrence).
 
 RATIONALE:
-  The target user is a small-business owner who may not use a desktop computer
-  for work at all. Requiring a laptop to create the workspace defeats the
-  product's stated purpose, and a mid-flow handoff to a browser is the highest
-  drop-off point available. A workspace with no employees has no value, so the
-  first teammate must be creatable where the workspace was created.
+  An owner who runs the business from a phone is the target user, and the two
+  things that shape their week — starting a project and defining a recurring
+  checklist — were the only day-to-day acts still requiring a laptop. Treating
+  them as "administration" mistook *who* configures them for *how often* they are
+  needed: an owner defines tomorrow's opening checklist standing on the shop
+  floor, not at a desk.
 
 ADDED SECTIONS:
-- None (carve-out added inside an existing subsection)
+- None (carve-out widened inside an existing subsection)
 
 REMOVED SECTIONS:
 - None
 
 TEMPLATE UPDATE STATUS:
-✅ .specify/memory/constitution.md - MINOR version bump (5.16.0 → 5.17.0)
-✅ Version history updated with v5.18.0 entry
+✅ .specify/memory/constitution.md - MINOR version bump (5.19.0 → 5.20.0)
+✅ Version history updated with v5.20.0 entry
 ✅ .specify/templates/plan-template.md - No changes needed (references principles generically)
 ✅ .specify/templates/tasks-template.md - No changes needed
 ✅ .specify/templates/spec-template.md - No changes needed
 ✅ AGENTS.md - No changes needed (does not restate the XIII feature-scope list)
 
 UNBLOCKS:
-- specs/035-mobile-owner-onboarding (T000 governance gate)
+- specs/044-mobile-project-ritual-creation (T001 governance gate)
 
 PLACEHOLDERS: None
 
@@ -53,7 +53,7 @@ VALIDATION SUMMARY:
 
 # Tech Office Constitution
 
-**Version**: 5.19.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-09-02
+**Version**: 5.20.0 | **Ratified**: 2024-10-01 | **Last Amended**: 2026-09-04
 
 ## Purpose & Scope
 
@@ -1405,16 +1405,25 @@ feature works end-to-end on a real or simulated device.
   task checking, chat, notifications, calendar events, personal profile, global search.
 - Administrative / configuration features (department management, member import, IAM
   settings, billing, etc.) MUST remain web-only.
-- **First-run onboarding carve-out (narrow, exhaustive)**: mobile MAY surface exactly two
-  otherwise-administrative capabilities, and only as part of first-run onboarding:
+- **Workspace-shaping carve-out (narrow, exhaustive)**: mobile MAY surface exactly four
+  otherwise-administrative capabilities, and no others:
   1. **Creating an organization** — an SMB owner registering their own workspace from a
-     phone, before any account exists.
+     phone, before any account exists (first-run onboarding).
   2. **Creating the first org-managed accounts** — so a newly created workspace is not
-     stranded as a one-person workspace.
-  Everything else in IAM administration stays web-only: role and permission editing,
-  department management, bulk member import, account deactivation, credential reset for
-  other members, billing and plan management. The carve-out covers *starting* a workspace,
-  never *administering* an existing one. Any mobile surface beyond these two capabilities
+     stranded as a one-person workspace (first-run onboarding).
+  3. **Creating a project** — an owner starts a body of work where the work is, without
+     waiting to be at a desk.
+  4. **Creating a ritual definition, and archiving or unarchiving one** — an owner defines
+     a recurring checklist, and can undo one created by mistake. No other edit of an
+     existing definition is offered from mobile.
+  Capabilities 1 and 2 are about *starting* a workspace; 3 and 4 are the day-to-day acts of
+  shaping an existing one, admitted because an owner who runs the business from a phone
+  needs them weekly, not because they stopped being configuration. Everything else in IAM
+  administration stays web-only: role and permission editing, department management, bulk
+  member import, account deactivation, credential reset for other members, billing and plan
+  and quota management. The advanced ritual controls stay web-only too: department pools,
+  procedure-document attachment, auto-approval, completion and generation windows, custom
+  intervals and nth-weekday recurrences. Any mobile surface beyond these four capabilities
   requires a further amendment.
 - When implementing a new backend feature, mobile is NOT required to expose it unless it
   is clearly part of an employee's day-to-day workflow. Justify any mobile additions
@@ -1556,6 +1565,7 @@ exercised before release.
 - Plan template includes "Constitution Check" gate (`.specify/templates/plan-template.md`)
 
 ### Version History
+- v5.20.0 (2026-09-04): MINOR — Principle XIII Feature Scope widens its carve-out from first-run onboarding to workspace shaping: mobile MAY now also create a project and create, archive or unarchive a ritual definition. Rationale: the target user is an SMB owner who runs the business from a phone, and starting a project and defining tomorrow's opening checklist are weekly acts performed on the shop floor, not desk-bound administration; treating them as web-only mistook who configures them for how often they are needed. The carve-out stays exhaustive — IAM administration (roles, permissions, departments, bulk import, deactivation, credential reset for others, billing and quota) and the advanced ritual controls (department pools, procedure-document attachment, auto-approval, completion and generation windows, custom intervals, nth-weekday recurrences) remain web-only. Unblocks feature 044 (create projects and rituals on mobile)
 - v5.17.0 (2026-08-26): MINOR — Principle XIII Feature Scope gains a narrow, exhaustive first-run onboarding carve-out permitting exactly two otherwise-administrative capabilities on mobile: creating an organization, and creating the first org-managed accounts. Rationale: the target user is a small-business owner who may not use a desktop computer for work at all, so requiring a laptop to create the workspace defeats the product's purpose, and a workspace with no employees has no value. Ongoing IAM administration — role and permission editing, department management, bulk import, deactivation, credential reset for others, billing — remains web-only. Unblocks feature 035 (mobile SMB owner onboarding & PIN-first login)
 - v5.16.0 (2026-08-22): MINOR — Principle XII renamed to "Living Documentation & Architecture Documentation Maintenance" and extended to cover `docs/domain/`: per-domain living snapshots are declared the source of truth for current system behaviour, `specs/NNN-*` is demoted to historical intent, agents MUST read the snapshot rather than replaying spec history, superseded behaviour MUST be deleted rather than annotated, and the drift register in `docs/domain/README.md` MUST be reconciled; Definition of Done extended with snapshot and drift-register items; Reference Documents section updated
 - v5.15.0 (2026-04-02): MINOR — Replaced golang-migrate workflow with a forward-only `psql` migration runner in `backend/scripts/migrate.sh`; updated migration policy to use timestamped `.up.sql` files, `public.schema_migrations` bookkeeping, status checks via `./scripts/migrate.sh status`, and compensating forward migrations instead of automated down execution

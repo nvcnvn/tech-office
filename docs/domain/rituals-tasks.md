@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042 (034 and
+**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 
@@ -25,6 +25,20 @@ enforcement — it tells the client whether to lead with the board or with today
 
 Every new organization gets a default project created inside the registration transaction
 (see [organization-people.md](organization-people.md#registration)).
+
+Projects are created from **both** clients (feature 044): the web dialog on
+`/workspace/projects` and the mobile modal `app/(app)/(tasks)/create-project`. Both collect
+name, key, description, visibility and collaboration mode, omit `default_states` so the
+server applies the set the mode implies, and validate the key against
+`@tech-office/validations`'s `projectKeySchema` before sending — one copy of the rule for
+both clients, mirroring the `valid_project_key` CHECK, which stays the authority. Both also
+suggest a key from the name with `deriveProjectKey`, which strips underscores the rule
+permits, so `STORE_OPS` is valid by hand but never suggested.
+
+A key already taken in the organization comes back as `InvalidArgument` with a
+`BadRequest.FieldViolation` on field `key`, so each form marks its key input rather than
+showing a whole-request error. The key is permanent — no update path exists — so this is a
+refusal to resolve before saving, not something either client auto-corrects.
 
 `collaboration.project_membership` roles: `owner | admin | member | viewer`. Ritual
 definition management requires `admin` or `owner` on the project — that is a *resource*
@@ -209,6 +223,36 @@ safety inspection, a closing procedure.
 | `is_archived` | archived definitions stop generating |
 | `procedure_document_id` | nullable FK to a workspace document — the ritual's written procedure (feature 043) |
 
+**Creating a definition from mobile** (feature 044). `app/(app)/(tasks)/[projectId]/create-ritual`
+collects a deliberate subset: name, plain-text description, a `daily` / `weekly` / `monthly`
+recurrence with `interval` always `1`, the device's IANA timezone shown read-only, one or
+more evidence requirements, and optional default assignees drawn from the project's members.
+It sends `completion_window_hours: 24`, empty `default_department_pools`, no
+`procedure_document_id`, `approval_mode: manual` and `deadline_offset_hours: 0` on every
+requirement. The requirements travel **inline on the create request**, never as a
+create-then-loop, so the definition and everything it has to prove commit in one
+transaction; `position` is assigned server-side from the array index.
+
+Everything the mobile form does not collect stays web-only: department pools, procedure
+attachment, auto-approval, the completion and generation windows, `custom_interval` and
+`nth_weekday` recurrences. A definition configured on the web keeps all of them when it is
+later viewed on a phone, because mobile never issues an **update** for a definition — only
+create, archive and unarchive — so there is no partial-update path that could null a field
+it does not collect.
+
+**Archiving from mobile.** `rituals/[definitionId]` offers archive and unarchive to a
+project `owner` or `admin`, and nothing else: no rename, no schedule change, no requirement
+editing. Archive is behind an `Alert.alert` confirmation stating that no new runs will be
+created; restore is not, because it is not the destructive direction.
+
+**Archive and restore are not symmetric.** Archiving flips `is_archived` — which is what
+the generation sweep's discovery query filters on — and soft-deletes every pending
+instance. Restoring therefore has nothing to restore, so it additionally clears
+`last_generated_date` and generates inside its own transaction, the same way
+`CreateRitualDefinition` does. Without both halves a restored definition read as active and
+produced no runs until real time caught up with the old waterline — up to
+`generation_window_days`. Historical instances are untouched by either direction.
+
 ### The procedure document (feature 043)
 
 A definition may point at **one** workspace document as its written procedure. The foreign
@@ -379,7 +423,8 @@ CRUD handlers in `ritual_connect.go` expecting to find scheduling there:
 |---|---|
 | Create | Calls `Logic.GenerateRitualInstances` **inside the creation transaction**, so the definition and its first window commit atomically and the instances exist on return. This replaces the old `flows.WithRunNow()` that rode along with the per-definition schedule. |
 | Update recurrence | Writes the new rule and stops. The next sweep (≤1 min) reads it. |
-| Archive / unarchive | Flips `is_archived` and stops. Nothing is paused or resumed — the discovery query simply stops or starts selecting the definition. |
+| Archive | Flips `is_archived` and soft-deletes the pending instances. Nothing is "paused" — the discovery query simply stops selecting the definition. |
+| Unarchive | Flips `is_archived` back, clears `last_generated_date` and calls `Logic.GenerateRitualInstances` in the same transaction. Archiving removed the pending instances, so restoring has to rebuild them; leaving the waterline where it was would have produced no runs until real time caught up with it. |
 | Change schedule | Regenerates in the logic layer as it always did. `instances_removed` / `instances_detached` / `instances_created` were never computed from a schedule, so they are unaffected. |
 
 The practical consequence for tests: calling a generation helper right after creating a
@@ -730,7 +775,11 @@ always-deliver priority reserved for mentions and incoming calls.
 - Mobile: `app/(app)/(tasks)/` — project list, `[projectId]/index`,
   `[projectId]/[taskId]`, `[projectId]/create`, `[projectId]/settings`,
   `rituals/[definitionId]`, `review/index` (the evidence review queue, reached from an
-  entry-point card on the tasks tab); plus `app/(shared)/resource/tasks/` for deep links.
+  entry-point card on the tasks tab), and the two create modals `create-project` and
+  `[projectId]/create-ritual` (feature 044); plus `app/(shared)/resource/tasks/` for deep
+  links. Both create affordances — `projects-create-button` on the projects list and
+  `project-create-ritual-button` on a project — are **absent**, not disabled, for anyone
+  who cannot complete them.
   Evidence
   capture uses `src/lib/evidence-media.ts`. Turning a message into a task is a
   purpose-built bottom sheet reached from the chat long-press action sheet —
@@ -744,7 +793,8 @@ The on-shift strategy is selectable **web-only**, in the ritual definition edito
 (`workspace/projects/[id]/rituals/[definitionId]/page.tsx`, re-exported at
 `workspace/tasks/[id]/rituals/[definitionId]/page.tsx`), alongside round-robin and
 least-assigned, with helper text stating that it depends on shift events published for that
-department. Mobile has no ritual pool configuration at all, so nothing was removed from it.
+department. Mobile has no ritual pool configuration at all, including on its create screen,
+so nothing was removed from it.
 
 The "waiting for the rota" explanation is read-only and appears on every surface that shows
 an instance, keyed on `Task.pool_assignment_state === 'awaiting_shift'`:
@@ -777,7 +827,8 @@ be able to read the chosen document. No acknowledgement of the warning is persis
 chooser is backed by `searchDocuments`, which is organization-scoped rather than
 access-scoped (drift D49), so it may offer a document the manager cannot open — the server
 refuses that attachment, which is where the rule is actually enforced. Mobile reads the
-procedure and never configures it.
+procedure and never configures it — its create screen does not offer attachment either, and
+sends no `procedure_document_id`.
 
 ## Tests
 

@@ -13,24 +13,32 @@ import (
 
 // Common errors for collaboration operations
 var (
-	ErrProjectNotFound          = errors.New("project not found")
-	ErrTaskNotFound             = errors.New("task not found")
-	ErrStateNotFound            = errors.New("project state not found")
-	ErrLevelNotFound            = errors.New("task level not found")
-	ErrCustomFieldNotFound      = errors.New("custom field not found")
-	ErrWorkflowRuleNotFound     = errors.New("workflow rule not found")
-	ErrSavedViewNotFound        = errors.New("saved view not found")
-	ErrInvalidViewType          = errors.New("invalid view type")
-	ErrInvalidTriggerType       = errors.New("invalid workflow trigger type")
-	ErrInvalidActionType        = errors.New("invalid workflow action type")
-	ErrAccessDenied             = errors.New("access denied")
-	ErrInvalidParent            = errors.New("invalid parent task")
-	ErrMaxDepthExceeded         = errors.New("maximum task depth exceeded")
-	ErrMembershipNotFound       = errors.New("project membership not found")
-	ErrDuplicateMembership      = errors.New("employee is already a project member")
-	ErrCannotDeleteWithTasks    = errors.New("cannot delete state/level with associated tasks")
-	ErrInvalidFieldValue        = errors.New("invalid custom field value")
-	ErrProjectKeyExists         = errors.New("project key already exists")
+	ErrProjectNotFound       = errors.New("project not found")
+	ErrTaskNotFound          = errors.New("task not found")
+	ErrStateNotFound         = errors.New("project state not found")
+	ErrLevelNotFound         = errors.New("task level not found")
+	ErrCustomFieldNotFound   = errors.New("custom field not found")
+	ErrWorkflowRuleNotFound  = errors.New("workflow rule not found")
+	ErrSavedViewNotFound     = errors.New("saved view not found")
+	ErrInvalidViewType       = errors.New("invalid view type")
+	ErrInvalidTriggerType    = errors.New("invalid workflow trigger type")
+	ErrInvalidActionType     = errors.New("invalid workflow action type")
+	ErrAccessDenied          = errors.New("access denied")
+	ErrInvalidParent         = errors.New("invalid parent task")
+	ErrMaxDepthExceeded      = errors.New("maximum task depth exceeded")
+	ErrMembershipNotFound    = errors.New("project membership not found")
+	ErrDuplicateMembership   = errors.New("employee is already a project member")
+	ErrCannotDeleteWithTasks = errors.New("cannot delete state/level with associated tasks")
+	ErrInvalidFieldValue     = errors.New("invalid custom field value")
+	// ErrProjectKeyTaken is a unique_project_key violation: another project in this
+	// organization already uses the key. The key is permanent, so this is a refusal the
+	// person has to resolve before saving, not something to auto-correct on their behalf.
+	ErrProjectKeyTaken = errors.New("a project with this key already exists")
+	// ErrProjectKeyInvalid is a valid_project_key CHECK violation. Both clients validate
+	// first, so reaching this means a caller bypassed them — it still gets a field-named
+	// answer rather than an Internal.
+	ErrProjectKeyInvalid = errors.New(
+		"project key must be 1-10 characters, starting with a letter, then letters, numbers or underscores")
 	ErrInvalidAssigneeRole      = errors.New("invalid assignee role")
 	ErrInvalidFieldType         = errors.New("invalid custom field type")
 	ErrCustomFieldValueNotFound = errors.New("custom field value not found")

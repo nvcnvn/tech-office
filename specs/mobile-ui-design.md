@@ -935,7 +935,14 @@ Every list screen must have a friendly empty state:
 
 ## 9. Screens NOT Built for Mobile (Web-Only)
 
-These explicitly remain web-only per Constitution Principle XIII:
+These explicitly remain web-only per Constitution Principle XIII, whose Feature Scope
+carve-out is exhaustive: mobile may create an organization, create the first org-managed
+accounts, create a project, and create, archive or unarchive a ritual definition. Nothing
+in the table below is one of those four, and none of them was ever a row here — the
+carve-out widened (v5.20.0, feature 044) without changing this list. The advanced ritual
+controls do belong on it in spirit: department pools, procedure attachment, auto-approval,
+completion and generation windows, custom intervals and nth-weekday recurrences are all
+configured on the web only, inside the ritual definition editor.
 
 | Feature | Why Web-Only |
 |---|---|

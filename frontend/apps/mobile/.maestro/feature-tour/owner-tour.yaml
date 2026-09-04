@@ -16,6 +16,9 @@ name: "Feature tour — administrator"
 # backend/integration/feature_tour_test.go and contracts/tour-content.md. This flow covers
 # what only a device can show: that the sheet appears, that it is operable and readable on
 # a small screen, and that finishing it stops the offer for good.
+# The project and ritual stops need the account's workspace to already have at least one
+# project, so the ritual action resolves to ritual creation rather than its no-project
+# fallback. Every registered workspace gets a default project, so this holds by default.
 tags:
   - tour
 ---
@@ -52,53 +55,81 @@ tags:
 - takeScreenshot: "tmp/maestro-screenshots/tour-01-stop-1"
 
 # ---------------------------------------------------------------------------
-# FR-023 — the web-only stops offer no action
+# FR-020 — the one remaining web-only stop offers no action
 # ---------------------------------------------------------------------------
-# people, project and ritual are the three stops whose work has no mobile surface. The
-# server strips their action label before the app ever sees them, so there is no button to
-# tap and nothing for this flow to guard against beyond its absence.
+# people is the only stop whose work has no mobile surface: adding staff, importing a team
+# and setting roles are administration proper. The server strips its action label before
+# the app ever sees it, so there is no button to tap.
 - assertNotVisible:
     id: "feature-tour-action"
 - assertVisible: ".*web app.*"
-
-- tapOn:
-    id: "feature-tour-next"
-- extendedWaitUntil:
-    visible: "Stop 2 of 6"
-    timeout: 5000
-- assertNotVisible:
-    id: "feature-tour-action"
-- takeScreenshot: "tmp/maestro-screenshots/tour-02-stop-2"
-
-- tapOn:
-    id: "feature-tour-next"
-- extendedWaitUntil:
-    visible: "Stop 3 of 6"
-    timeout: 5000
-- assertNotVisible:
-    id: "feature-tour-action"
-- takeScreenshot: "tmp/maestro-screenshots/tour-03-stop-3"
 
 # ---------------------------------------------------------------------------
 # Forward and back
 # ---------------------------------------------------------------------------
 - tapOn:
-    id: "feature-tour-previous"
+    id: "feature-tour-next"
 - extendedWaitUntil:
     visible: "Stop 2 of 6"
     timeout: 5000
 - tapOn:
-    id: "feature-tour-next"
+    id: "feature-tour-previous"
 - extendedWaitUntil:
-    visible: "Stop 3 of 6"
+    visible: "Stop 1 of 6"
     timeout: 5000
-
-# The remaining stops do have mobile surfaces, so their action button is present.
 - tapOn:
     id: "feature-tour-next"
 - extendedWaitUntil:
-    visible: "Stop 4 of 6"
+    visible: "Stop 2 of 6"
     timeout: 5000
+
+# ---------------------------------------------------------------------------
+# Feature 044 — the project and ritual stops now go somewhere
+# ---------------------------------------------------------------------------
+# Both used to arrive stripped, with a note saying the work was done on a computer. Each
+# now carries the same body a web administrator reads and an action that lands on a real
+# screen, and acting on one reopens the tour at the next stop when the person comes back
+# (FR-012, FR-022).
+- assertVisible:
+    id: "feature-tour-action"
+- takeScreenshot: "tmp/maestro-screenshots/tour-02-stop-2"
+- tapOn:
+    id: "feature-tour-action"
+- extendedWaitUntil:
+    visible:
+      id: "create-project-screen"
+    timeout: 12000
+- tapOn:
+    id: "create-project-cancel-button"
+
+# The tour belongs to the surface it was asked for from, and reopens when the person comes
+# back to it (FR-012). Leaving a create screen lands on the app root, not on that surface,
+# so getting back there is a tab tap.
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible: "Stop 3 of 6"
+    timeout: 10000
+- assertVisible:
+    id: "feature-tour-action"
+- takeScreenshot: "tmp/maestro-screenshots/tour-03-stop-3"
+- tapOn:
+    id: "feature-tour-action"
+# Rituals live inside a project, so this lands on ritual creation in the workspace's first
+# project. In a workspace with no project at all it falls back to project creation and the
+# card says so — see feature-tour-ritual-fallback-note.
+- extendedWaitUntil:
+    visible:
+      id: "create-ritual-screen"
+    timeout: 12000
+- tapOn:
+    id: "create-ritual-cancel-button"
+
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible: "Stop 4 of 6"
+    timeout: 10000
 - assertVisible:
     id: "feature-tour-action"
 - takeScreenshot: "tmp/maestro-screenshots/tour-04-stop-4"

@@ -19,7 +19,7 @@ NAME="techoffice-restore-drill-$$"
 cleanup() {
 	docker rm -f "$NAME" >/dev/null 2>&1 || true
 	docker volume rm "$VOL" >/dev/null 2>&1 || true
-	[ -n "${PGBR_CONF_DIR:-}" ] && rm -rf "$PGBR_CONF_DIR"
+	drop_pgbackrest_conf "${CONF_VOL:-}"
 }
 trap cleanup EXIT
 
@@ -31,10 +31,10 @@ docker run --rm -v "$VOL:/v" "$IMAGE" chown postgres:postgres /v >/dev/null
 # Deliberately no --spool-path here: pgBackRest carries it into the restore_command
 # it writes into postgresql.auto.conf, where archive-get rejects it as invalid without
 # archive-async — failing recovery after the restore itself has already succeeded.
-CONF="$(stage_pgbackrest_conf)"
+CONF_VOL="$(stage_pgbackrest_conf)"
 docker run --rm --user postgres \
 	-v "$VOL:/var/lib/postgresql/data" \
-	-v "$CONF:/etc/pgbackrest/pgbackrest.conf:ro" \
+	-v "$CONF_VOL:/etc/pgbackrest:ro" \
 	"$IMAGE" \
 	pgbackrest --stanza=techoffice --pg1-path=/var/lib/postgresql/data/pgdata \
 		--lock-path=/tmp \
@@ -50,7 +50,7 @@ info "starting the restored cluster"
 # restore succeeds and then the cluster fails to reach a consistent state.
 docker run -d --name "$NAME" \
 	-v "$VOL:/var/lib/postgresql/data" \
-	-v "$CONF:/etc/pgbackrest/pgbackrest.conf:ro" \
+	-v "$CONF_VOL:/etc/pgbackrest:ro" \
 	-e PGDATA=/var/lib/postgresql/data/pgdata \
 	"$IMAGE" \
 	postgres -c shared_preload_libraries=pg_textsearch,pg_stat_statements \

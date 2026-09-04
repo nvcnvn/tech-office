@@ -19,9 +19,10 @@
 
 import React from "react";
 import { useRouter, useSegments } from "expo-router";
-import { getTour, updateTourProgress, type FeatureTour } from "apis";
+import { useQuery } from "@tanstack/react-query";
+import { getTour, listProjects, updateTourProgress, type FeatureTour } from "apis";
 import { getOnboardingStep } from "@/lib/onboarding-progress";
-import { resolveTourRoute } from "@/lib/tour-routes";
+import { resolveTourRoute, ritualRouteFallsBackToProject } from "@/lib/tour-routes";
 
 /**
  * What the tour is currently doing.
@@ -46,6 +47,11 @@ export interface UseFeatureTourResult {
   act: () => void;
   /** The label for the current stop's action, or null when it carries none. */
   actionLabel: string | null;
+  /**
+   * True when the ritual stop's action goes to project creation instead, so the card can
+   * say why the button does not land where its label suggests (FR-021).
+   */
+  actionFallsBackToProjectCreation: boolean;
   /** Restart from the first stop, however the tour ended. Used by "Take the tour". */
   restart: () => void;
 }
@@ -127,6 +133,24 @@ export function useFeatureTour(): UseFeatureTourResult {
   const stops = tour?.stops ?? [];
   const currentStop = stops[stopIndex];
 
+  /*
+   * A ritual is defined inside a project, so the ritual stop needs to know whether this
+   * workspace has one. Shares `["projects"]` with the tasks tab, so this costs nothing
+   * beyond a cache read once that tab has been opened.
+   */
+  const { data: projects } = useQuery({
+    queryKey: ["projects"],
+    queryFn: async () => {
+      const result = await listProjects();
+      return result.projects ?? [];
+    },
+    enabled: !!tour,
+  });
+  const routeContext = React.useMemo(
+    () => ({ firstProjectId: projects?.[0]?.id }),
+    [projects],
+  );
+
   const writeProgress = React.useCallback(
     (status: "in_progress" | "completed" | "dismissed", index: number) => {
       // Fire and forget: the person is looking at the next card already, and a failed
@@ -169,7 +193,7 @@ export function useFeatureTour(): UseFeatureTourResult {
 
   const act = React.useCallback(() => {
     if (!currentStop) return;
-    const route = resolveTourRoute(currentStop.target);
+    const route = resolveTourRoute(currentStop.target, routeContext);
     if (!route) return;
     // The stop is finished once it has been acted on, so the person comes back to the
     // next one rather than the one they just did.
@@ -179,7 +203,7 @@ export function useFeatureTour(): UseFeatureTourResult {
     setPhase("hidden");
     setReturnRoute(routeKeyRef.current);
     router.push(route as never);
-  }, [currentStop, router, stopIndex, stops.length, writeProgress]);
+  }, [currentStop, routeContext, router, stopIndex, stops.length, writeProgress]);
 
   const restart = React.useCallback(() => {
     setStopIndex(0);
@@ -205,6 +229,9 @@ export function useFeatureTour(): UseFeatureTourResult {
     dismiss,
     act,
     actionLabel: currentStop?.actionLabel || null,
+    actionFallsBackToProjectCreation: currentStop
+      ? ritualRouteFallsBackToProject(currentStop.target, routeContext)
+      : false,
     restart,
   };
 }

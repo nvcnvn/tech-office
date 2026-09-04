@@ -37,7 +37,18 @@ export interface FeatureTourProps {
 export function FeatureTour({ controller }: FeatureTourProps) {
   const own = useFeatureTour();
   const insets = useSafeAreaInsets();
-  const { tour, phase, stopIndex, start, next, previous, dismiss, act, actionLabel } =
+  const {
+    tour,
+    phase,
+    stopIndex,
+    start,
+    next,
+    previous,
+    dismiss,
+    act,
+    actionLabel,
+    actionFallsBackToProjectCreation,
+  } =
     controller ?? own;
 
   if (phase === "hidden" || !tour || tour.stops.length === 0) {
@@ -134,6 +145,14 @@ export function FeatureTour({ controller }: FeatureTourProps) {
                 {stop.body}
               </Text>
             </ScrollView>
+            {/* Verbatim from the web card, so the two platforms explain the fallback the
+                same way (FR-021). */}
+            {actionFallsBackToProjectCreation ? (
+              <Text style={styles.fallbackNote} testID="feature-tour-ritual-fallback-note">
+                Rituals live inside a project, and this workspace does not have one yet — so
+                this takes you to project creation first.
+              </Text>
+            ) : null}
           </View>
 
           {actionLabel ? (
@@ -223,6 +242,11 @@ const styles = StyleSheet.create({
   body: {
     ...mobileTypography.listSecondary,
     color: lightPalette.text.secondary,
+  },
+  fallbackNote: {
+    ...mobileTypography.caption,
+    color: lightPalette.text.secondary,
+    marginTop: spacing[1.5],
   },
   primaryButton: {
     minHeight: touch.large,

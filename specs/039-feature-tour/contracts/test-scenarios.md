@@ -36,8 +36,9 @@ func TestFeatureTour(t *testing.T) {
         t.Run("the remaining stops are renumbered from zero with no gap")        // FR-006, FR-011
     })
 
-    // FR-023 — platform adaptation. The web-only stops are people, project and ritual:
-    // mobile can list projects and rituals but has no create surface for either.
+    // FR-023 — platform adaptation. The only web-only stop is people: adding staff,
+    // importing a team and setting roles have no mobile surface. project and ritual were
+    // web-only until feature 044 built both create screens on the phone.
     t.Run("when an owner asks for the tour from mobile", func(t *testing.T) {
         t.Run("each web-only stop says the work is done on the web")             // FR-023
         t.Run("each web-only stop carries no target and no action label")        // FR-023

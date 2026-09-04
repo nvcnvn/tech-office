@@ -15,10 +15,11 @@ import {
   RefreshControl,
   StyleSheet,
 } from "react-native";
-import { Link, Stack, useFocusEffect } from "expo-router";
+import { Link, Stack, useFocusEffect, useRouter } from "expo-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Project, ProjectState, RitualDefinition, Task, TaskAssignee } from "apis";
 import {
+  getEmployeePermissions,
   getEvidenceReviewQueueCount,
   listProjects,
   listProjectStates,
@@ -802,6 +803,11 @@ function ProjectRow({ item }: { item: ProjectOverviewItem }) {
       asChild
     >
       <Pressable
+        // The row is a Pressable with several Text children, so none of them is reachable
+        // on its own — the id and the label have to live here (Constitution XIII).
+        testID={`project-row-${item.project.key}`}
+        accessibilityRole="button"
+        accessibilityLabel={item.project.name}
         onPressIn={triggerSelectionHaptic}
         style={({ pressed }) => [styles.projectRow, pressed && styles.projectRowPressed]}
       >
@@ -960,6 +966,19 @@ export default function TasksScreen() {
   const [mode, setMode] = useState<TaskMode>("focus");
   const [focusFilter, setFocusFilter] = useState<FocusFilter>("all");
   const employeeId = auth?.employeeId ?? undefined;
+  const router = useRouter();
+
+  // Shares its key with every other permission read on this platform, so the two create
+  // affordances in this feature share one cache entry.
+  const { data: permissionIds } = useQuery({
+    queryKey: ["employee-permissions", employeeId],
+    queryFn: () => getEmployeePermissions(employeeId!),
+    enabled: !!employeeId,
+    staleTime: 5 * 60 * 1000,
+  });
+  // Absent, never disabled (FR-004, SC-005): a plain member is not offered a control they
+  // cannot complete.
+  const canCreateProject = (permissionIds ?? []).includes("collab.createProject");
 
   const {
     data: projects,
@@ -1375,6 +1394,19 @@ export default function TasksScreen() {
           />
           <ReviewQueueEntryCard />
 
+          {canCreateProject ? (
+            <Pressable
+              testID="projects-create-button"
+              accessibilityRole="button"
+              accessibilityLabel="Create a project"
+              onPress={() => router.push("/(app)/(tasks)/create-project")}
+              style={styles.createProjectButton}
+            >
+              <SFIcon name="plus" size={18} color={lightPalette.primary.main} />
+              <Text style={styles.createProjectLabel}>New project</Text>
+            </Pressable>
+          ) : null}
+
           {(projectOverviewItems?.length ?? 0) === 0 ? (
             <EmptyState
               sfSymbol="square.stack.3d.up"
@@ -1470,6 +1502,25 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
+  createProjectButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: mobileLayout.itemGap,
+    marginHorizontal: mobileLayout.screenPadding,
+    marginBottom: mobileLayout.cardGap,
+    minHeight: 48,
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    borderWidth: border.thin,
+    borderColor: lightPalette.divider,
+    backgroundColor: lightPalette.background.paper,
+  },
+  createProjectLabel: {
+    fontSize: mobileTypography.button.fontSize as number,
+    fontWeight: "600" as const,
+    color: lightPalette.primary.main,
+  },
   reviewEntryCard: {
     flexDirection: "row",
     alignItems: "center",

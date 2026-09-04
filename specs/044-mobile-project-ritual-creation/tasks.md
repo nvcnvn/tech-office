@@ -76,6 +76,105 @@ Existing monorepo layout, unchanged by this feature:
 > Both new affordance gates reuse that exact query key so they share one cache entry, rather than
 > introducing a `usePermissions` hook for two call sites (Principle V).]
 
+> [ASSUMPTION: T007's second half asks for "a request whose second requirement is invalid
+> creates neither the definition nor any requirement". No request field can make a single
+> evidence requirement fail at the database: the only CHECK on
+> `collaboration.evidence_requirement` is on `approval_mode`, and `approvalModeToString`
+> clamps every proto value to a legal one, so a per-requirement failure is unreachable
+> through the public RPC. Atomicity is therefore asserted with the reachable whole-request
+> refusal — a `procedure_document_id` that does not exist — which is refused after the
+> requirements were sent and leaves neither a definition nor any requirement row behind.]
+
+> [ASSUMPTION: T010 says to *add* `ErrProjectKeyTaken`. `logic.go` already carried a dead
+> `ErrProjectKeyExists` sentinel that nothing ever returned, mapped in `handleError` to
+> `CodeAlreadyExists`. Rather than leave a third near-duplicate beside two new ones, the dead
+> sentinel was replaced by `ErrProjectKeyTaken` and its `CodeAlreadyExists` case by the
+> field-violation case T012 specifies. The mapping T006 asserts requires the old case to go
+> regardless, and the project keeps no backward-compatibility obligation.]
+
+> [ASSUMPTION: T013 says the ritual flow should sign in via `auth/signin-known-device.yaml`.
+> That file is a *story* flow — it relaunches the app with `clearKeychain: true` to prove the
+> PIN pad appears — so using it as a bootstrap mid-suite would clear the session every other
+> flow depends on. `.maestro/config.yaml` names `auth/signin.yaml` as the shared bootstrap and
+> every other behavioural flow uses it, so the three new flows do too.]
+
+> [ASSUMPTION: The three new flows are chained through `MAESTRO_RUN_ID` rather than reading
+> project and ritual names from new `.env` variables: `create-project.yaml` creates
+> "Shop Floor ${MAESTRO_RUN_ID}", `create-ritual.yaml` defines a ritual inside it, and
+> `archive-ritual.yaml` archives that ritual. The alternative needed three new fixture
+> variables that would have to be seeded before every run, and an unset one fails the whole
+> standing suite because the runner drops empty values. The order in
+> `scripts/run-maestro-suite.sh` is therefore load-bearing and is commented as such.]
+
+> [ASSUMPTION: T013 asks the flow to assert "the ritual template screen and its upcoming
+> runs". The template screen (`rituals/[definitionId].tsx`) does not list runs — the project
+> screen groups them. The flow asserts the template screen carries the proof step that was
+> sent inline with it, then goes back to the project and asserts the generated run is listed
+> there, which is where FR-014's "no wait" is actually observable.]
+
+> [ASSUMPTION: T019 and T024 render the affordances as in-content `Pressable`s rather than
+> as `Stack.Toolbar` buttons. `Stack.Toolbar.Button` takes no `testID`, so a toolbar
+> affordance is not Maestro-addressable, which Constitution XIII requires of every
+> interactive element.]
+
+> [ASSUMPTION: T036 asks for D38 to be closed "recording that feature 044 resolved it rather
+> than deleting the row silently, per the register's existing convention for closed entries".
+> The register has no such convention — its own preamble says "Rows are deleted when the
+> underlying problem is fixed, not annotated — the register is a list of open problems, not a
+> changelog", and no closed entry exists anywhere in it. The row was therefore deleted, and
+> the resolution is recorded where the register points instead: the tour section of
+> `docs/domain/workspace-navigation.md`.]
+
+> [ASSUMPTION: T041's sweep also found two stale present-tense claims outside the tasks'
+> file list — `specs/039-feature-tour/quickstart.md` and
+> `specs/039-feature-tour/contracts/test-scenarios.md` both still said the mobile app has no
+> create surface for a project or a ritual. They were corrected for the same reason T032
+> corrects `tour-content.md`: the Definition of Done requires behaviour that no longer exists
+> be deleted rather than left asserting something false.]
+
+> [ASSUMPTION: Three pre-existing mobile controls had to become Maestro-addressable before
+> the new flows could reach the screens they test, so they gained the `testID` /
+> `accessibilityLabel` Constitution XIII already required of them: the project row and the
+> ritual summary row (both `Pressable`s with several `Text` children, so no child text is
+> reachable on its own) and the "Open ritual template" button on the ritual instance screen.
+> No behaviour changed.]
+
+> [ASSUMPTION: The archive confirmation's destructive action reads "Archive it" rather than
+> "Archive". The button that opens the alert already says "Archive", and two identically
+> labelled controls on one screen are ambiguous to a screen reader and to the blackbox suite
+> alike — Maestro tapped the one behind the alert.]
+
+> [ASSUMPTION: T042's "full `make test-mobile`" could not be run as a suite. The fixture
+> credentials in `frontend/apps/mobile/.maestro/.env` are rejected by the backend with
+> `invalid email or password` (drift D40, pre-existing and unrelated to this feature), and the
+> shared `auth/signin.yaml` bootstrap every flow starts from fails on them. The four flows this
+> feature touches — `projects/create-project`, `rituals/create-ritual`, `rituals/archive-ritual`
+> and `feature-tour/owner-tour` — were instead run individually against a throwaway
+> organisation registered through the API, and all four pass end to end on an iPhone SE
+> simulator and on a 360dp Android emulator. The rest of the standing suite remains unrunnable
+> until D40 is fixed; that is a fixture problem, not a code one.]
+
+> [ASSUMPTION: T043's plain-member half (SC-005) could not be walked on a device: the default
+> `employee` role grants both `collab.createProject` and `collab.manageRitualDefinition`, so a
+> plain member is not the account the quickstart describes — creating one needs a role with
+> those permissions revoked. The gate the requirement is about was verified where it does
+> bite: `project-create-ritual-button` also requires project role `owner` or `admin`, and both
+> affordances render `null` rather than a disabled control when their gate fails. SC-001,
+> SC-002, SC-003 and SC-006 were verified — the two create flows complete in well under their
+> time bars on device, the definition a phone writes carries exactly the fields
+> data-model.md specifies (daily/interval 1, 24h window, device IANA zone, no pools, no
+> procedure document, manual approval, position from array index), and a duplicate key comes
+> back over the wire as `InvalidArgument` with a `BadRequest.FieldViolation` on field `key`.]
+
+> [SCOPE ADDITION: verifying US4's restore on a device exposed a real defect the feature
+> surfaces rather than causes. Archiving soft-deletes every pending instance but left
+> `last_generated_date` where it was, and the archive RPC never generated, so a restored
+> definition read as active and produced no runs until real time caught up with the old
+> waterline — up to `generation_window_days`. `ArchiveRitualDefinition` now clears the
+> waterline on unarchive and generates inside the same transaction, mirroring
+> `CreateRitualDefinition`. Covered by a new case in `collaboration_ritual_test.go` and
+> recorded in `docs/domain/rituals-tasks.md`.]
+
 > [ASSUMPTION: The constitution amendment (T001) is sequenced first, as plan.md's Constitution
 > Check calls it "task zero of implementation". Every later task is written against the amended
 > text; landing code before it would leave the repository contradicting itself at every
@@ -88,11 +187,11 @@ Existing monorepo layout, unchanged by this feature:
 **Purpose**: The governance amendment that unblocks the feature, plus the two shared modules
 both create surfaces consume.
 
-- [ ] T001 Amend Constitution Principle XIII in `.specify/memory/constitution.md` per FR-027: widen the Feature Scope carve-out to admit project creation and ritual-definition creation as mobile capabilities, narrowly — role and permission editing, department management, bulk member import, account deactivation, credential reset for others, billing and quota management stay web-only. Bump `**Version**` from 5.19.0 to 5.20.0 (MINOR — a principle's scope widens), set `Last Amended` to 2026-09-04, and add the amendment to the versioning history list with its rationale and the feature it unblocks, matching the v5.17.0 entry's shape. Update the sync impact report at the top of the file.
-- [ ] T002 [P] Create `frontend/packages/validations/src/project-key.ts` exporting `PROJECT_KEY_PATTERN` (`/^[A-Z][A-Z0-9_]{0,9}$/`), `PROJECT_KEY_RULE_TEXT`, `projectKeySchema` (zod) and `deriveProjectKey(name)`, verbatim per [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §2, including the doc comments recording that the DB `valid_project_key` CHECK is the authority and that the derivation is deliberately lossier than the rule.
-- [ ] T003 Re-export `PROJECT_KEY_PATTERN`, `PROJECT_KEY_RULE_TEXT`, `projectKeySchema` and `deriveProjectKey` from `frontend/packages/validations/src/index.ts`, in a `// Project key validation` block matching the existing email/password/subdomain block style (depends on T002).
-- [ ] T004 [P] Create `frontend/apps/mobile/src/lib/device-timezone.ts` with `getDeviceTimezone()` returning `Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"` inside a try/catch falling back to `"UTC"`, carrying the comment from [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §8 explaining why an IANA name and not a UTC offset.
-- [ ] T005 Create `frontend/apps/mobile/src/lib/device-timezone.check.ts` as an assert-based self-check in the style of `src/lib/doc-rows.check.ts` (non-empty string returned, `"UTC"` on a throwing `Intl`), and register `"check:device-timezone": "node --experimental-strip-types src/lib/device-timezone.check.ts"` in `frontend/apps/mobile/package.json` beside `check:doc-rows` (depends on T004).
+- [X] T001 Amend Constitution Principle XIII in `.specify/memory/constitution.md` per FR-027: widen the Feature Scope carve-out to admit project creation and ritual-definition creation as mobile capabilities, narrowly — role and permission editing, department management, bulk member import, account deactivation, credential reset for others, billing and quota management stay web-only. Bump `**Version**` from 5.19.0 to 5.20.0 (MINOR — a principle's scope widens), set `Last Amended` to 2026-09-04, and add the amendment to the versioning history list with its rationale and the feature it unblocks, matching the v5.17.0 entry's shape. Update the sync impact report at the top of the file.
+- [X] T002 [P] Create `frontend/packages/validations/src/project-key.ts` exporting `PROJECT_KEY_PATTERN` (`/^[A-Z][A-Z0-9_]{0,9}$/`), `PROJECT_KEY_RULE_TEXT`, `projectKeySchema` (zod) and `deriveProjectKey(name)`, verbatim per [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §2, including the doc comments recording that the DB `valid_project_key` CHECK is the authority and that the derivation is deliberately lossier than the rule.
+- [X] T003 Re-export `PROJECT_KEY_PATTERN`, `PROJECT_KEY_RULE_TEXT`, `projectKeySchema` and `deriveProjectKey` from `frontend/packages/validations/src/index.ts`, in a `// Project key validation` block matching the existing email/password/subdomain block style (depends on T002).
+- [X] T004 [P] Create `frontend/apps/mobile/src/lib/device-timezone.ts` with `getDeviceTimezone()` returning `Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"` inside a try/catch falling back to `"UTC"`, carrying the comment from [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §8 explaining why an IANA name and not a UTC offset.
+- [X] T005 Create `frontend/apps/mobile/src/lib/device-timezone.check.ts` as an assert-based self-check in the style of `src/lib/doc-rows.check.ts` (non-empty string returned, `"UTC"` on a throwing `Intl`), and register `"check:device-timezone": "node --experimental-strip-types src/lib/device-timezone.check.ts"` in `frontend/apps/mobile/package.json` beside `check:doc-rows` (depends on T004).
 
 **Checkpoint**: The constitution permits the feature, the key rule has one home, and the phone can name its own timezone.
 
@@ -108,16 +207,16 @@ and US2 cannot show a field-named duplicate-key refusal without T010–T012.
 
 ### Tests first (Constitution II)
 
-- [ ] T006 [P] Add a duplicate-project-key case to `backend/integration/collaboration_project_test.go`: create a project with key `STORE`, create a second with the same key in the same organization, assert the error is `CodeInvalidArgument` carrying a `BadRequest.FieldViolation` on field `key`, and assert a project keyed `STORE` in a *different* organization still succeeds (the constraint is per-organization). Expected to fail until T010–T011.
-- [ ] T007 [P] Add an atomic inline-`evidence_requirements` case to `backend/integration/collaboration_ritual_test.go`: call `CreateRitualDefinition` with two `evidence_requirements` in the same request, assert both rows exist with the sent names, types, `is_required` values and `position` assigned from array index; then assert a request whose second requirement is invalid creates neither the definition nor any requirement (FR-013 atomicity).
+- [X] T006 [P] Add a duplicate-project-key case to `backend/integration/collaboration_project_test.go`: create a project with key `STORE`, create a second with the same key in the same organization, assert the error is `CodeInvalidArgument` carrying a `BadRequest.FieldViolation` on field `key`, and assert a project keyed `STORE` in a *different* organization still succeeds (the constraint is per-organization). Expected to fail until T010–T011.
+- [X] T007 [P] Add an atomic inline-`evidence_requirements` case to `backend/integration/collaboration_ritual_test.go`: call `CreateRitualDefinition` with two `evidence_requirements` in the same request, assert both rows exist with the sent names, types, `is_required` values and `position` assigned from array index; then assert a request whose second requirement is invalid creates neither the definition nor any requirement (FR-013 atomicity).
 
 ### Implementation
 
-- [ ] T008 Extend `frontend/packages/apis/src/collaboration-ritual.ts`: add the exported `CreateRitualDefinitionEvidenceRequirementInput` interface and the optional `evidenceRequirements` field on `CreateRitualDefinitionParams`, and map it in the `createRitualDefinition` body using the existing `stringToProtoEvidenceType`, `stringToProtoApprovalMode` and auto-approve mappers, per [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §1. Additive and optional — every existing caller must still compile unchanged.
-- [ ] T009 [P] Migrate `frontend/apps/web/src/app/workspace/projects/page.tsx` off its two inline copies of the key rule — the `useEffect` derivation and the `/^[A-Z][A-Z0-9_]{0,9}$/` test — onto `deriveProjectKey`, `projectKeySchema` and `PROJECT_KEY_RULE_TEXT` from `@tech-office/validations`, so web and mobile state the rule identically (Constitution VIII) (depends on T003).
-- [ ] T010 Add `ErrProjectKeyTaken` and `ErrProjectKeyInvalid` to the sentinel block in `backend/internal/collaboration/logic.go` beside `ErrProjectNotFound`, with the doc comments from [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §3 recording that the key is permanent so a taken key is a refusal, not something to auto-correct.
-- [ ] T011 Classify the create error in `backend/internal/collaboration/project_logic.go`: on the `l.Queries.CreateProject` failure path, `errors.As` into `*pgconn.PgError` and map `ConstraintName` `unique_project_key` → `ErrProjectKeyTaken` and `valid_project_key` → `ErrProjectKeyInvalid`, falling through to the existing log-and-wrap for anything else (depends on T010).
-- [ ] T012 Map both sentinels in the `handleError` switch in `backend/internal/collaboration/connect.go` to `fieldViolation(connect.CodeInvalidArgument, err, "key", err.Error())`, placed beside the existing `procedure_document_id` and `title` field-violation cases (depends on T010).
+- [X] T008 Extend `frontend/packages/apis/src/collaboration-ritual.ts`: add the exported `CreateRitualDefinitionEvidenceRequirementInput` interface and the optional `evidenceRequirements` field on `CreateRitualDefinitionParams`, and map it in the `createRitualDefinition` body using the existing `stringToProtoEvidenceType`, `stringToProtoApprovalMode` and auto-approve mappers, per [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §1. Additive and optional — every existing caller must still compile unchanged.
+- [X] T009 [P] Migrate `frontend/apps/web/src/app/workspace/projects/page.tsx` off its two inline copies of the key rule — the `useEffect` derivation and the `/^[A-Z][A-Z0-9_]{0,9}$/` test — onto `deriveProjectKey`, `projectKeySchema` and `PROJECT_KEY_RULE_TEXT` from `@tech-office/validations`, so web and mobile state the rule identically (Constitution VIII) (depends on T003).
+- [X] T010 Add `ErrProjectKeyTaken` and `ErrProjectKeyInvalid` to the sentinel block in `backend/internal/collaboration/logic.go` beside `ErrProjectNotFound`, with the doc comments from [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §3 recording that the key is permanent so a taken key is a refusal, not something to auto-correct.
+- [X] T011 Classify the create error in `backend/internal/collaboration/project_logic.go`: on the `l.Queries.CreateProject` failure path, `errors.As` into `*pgconn.PgError` and map `ConstraintName` `unique_project_key` → `ErrProjectKeyTaken` and `valid_project_key` → `ErrProjectKeyInvalid`, falling through to the existing log-and-wrap for anything else (depends on T010).
+- [X] T012 Map both sentinels in the `handleError` switch in `backend/internal/collaboration/connect.go` to `fieldViolation(connect.CodeInvalidArgument, err, "key", err.Error())`, placed beside the existing `procedure_document_id` and `title` field-violation cases (depends on T010).
 
 **Checkpoint**: `make test-backend-one T=TestProject` and `T=TestRitualDefinition` pass; `cd frontend && pnpm typecheck` is clean across web, mobile and packages. User stories can now start.
 
@@ -136,17 +235,17 @@ run and submit against the requirement.
 
 ### Tests for User Story 1
 
-- [ ] T013 [P] [US1] Write the Maestro flow `frontend/apps/mobile/.maestro/rituals/create-ritual.yaml`: sign in via `auth/signin-known-device.yaml`, open the tasks tab → projects → the seeded project, tap `project-create-ritual-button`, fill `ritual-name-input`, tap `ritual-recurrence-daily`, assert `ritual-timezone-line` visible, fill `ritual-requirement-name-0`, tap `ritual-requirement-type-0-photo`, tap `create-ritual-submit`, assert the ritual template screen and its upcoming runs. Expected to fail until T014–T019.
+- [X] T013 [P] [US1] Write the Maestro flow `frontend/apps/mobile/.maestro/rituals/create-ritual.yaml`: sign in via `auth/signin-known-device.yaml`, open the tasks tab → projects → the seeded project, tap `project-create-ritual-button`, fill `ritual-name-input`, tap `ritual-recurrence-daily`, assert `ritual-timezone-line` visible, fill `ritual-requirement-name-0`, tap `ritual-requirement-type-0-photo`, tap `create-ritual-submit`, assert the ritual template screen and its upcoming runs. Expected to fail until T014–T019.
 
 ### Implementation for User Story 1
 
-- [ ] T014 [P] [US1] Create `frontend/apps/mobile/src/components/rituals/recurrence-picker.tsx`: three segments (`ritual-recurrence-daily` / `-weekly` / `-monthly`); weekly reveals a seven-segment row `ritual-weekday-1`…`-7` with two-letter labels (`1`=Mon … `7`=Sun, matching the proto), `flexShrink` per segment and a 44dp minimum tap target; monthly reveals a wrapped grid of chips `ritual-day-of-month-1`…`-31`. No dropdown, no picker wheel, no `Dimensions` branching, no iOS-only props. Renders its validation message at `ritual-recurrence-error`.
-- [ ] T015 [P] [US1] Create `frontend/apps/mobile/src/components/rituals/evidence-requirement-editor.tsx`: a list of requirement rows (`ritual-requirement-{index}`), each with a name input (`ritual-requirement-name-{index}`), a `flexWrap` chip row of the seven proof types (`ritual-requirement-type-{index}-{type}` for `photo`, `voice_memo`, `pdf`, `file`, `link`, `text_note`, `gps_checkin`), a Required/Optional toggle defaulting to Required (`ritual-requirement-required-{index}`) and a remove action (`ritual-requirement-remove-{index}`) disabled while one row remains; plus `ritual-add-requirement` beneath. Rows are keyed by the client-only `localId` from [data-model.md](./data-model.md#evidencerequirementdraft).
-- [ ] T016 [P] [US1] Create `frontend/apps/mobile/src/components/rituals/assignee-picker.tsx`: a search field (`ritual-assignee-search`) over the project's members via `listProjectMembers(projectId)` resolved to names with `getEmployeeCards(employeeIds)` from `apis` (not `autocompleteEmployees` — see [research.md](./research.md) §6), results as `ritual-assignee-option-{employeeId}`, selections as removable chips `ritual-assignee-chip-{employeeId}`, and a helper line stating that leaving it empty starts each run unassigned.
-- [ ] T017 [US1] Create `frontend/apps/mobile/src/app/(app)/(tasks)/[projectId]/create-ritual.tsx`: a single-column `ScrollView` (`create-ritual-screen`) laying out name → description (plain text, 3 lines) → recurrence → the read-only timezone line (`ritual-timezone-line`, from `getDeviceTimezone()`) → requirements → assignees → `create-ritual-submit`, with a header Cancel (`create-ritual-cancel-button`). Holds the `RitualDraft` state from [data-model.md](./data-model.md#ritualdraft); runs the six client-side submit-time validations, each anchored to the control that is wrong; submits one `createRitualDefinition` call carrying `evidenceRequirements` inline with `completionWindowHours: 24`, empty `defaultDepartmentPools`, no `procedureDocumentId` and `interval: 1`; renders a server refusal at `create-ritual-error` while keeping every field and every requirement row; on success invalidates `["ritualDefinitions", projectId]` and the project's task queries then `router.replace`s to `/(app)/(tasks)/rituals/{definitionId}` (depends on T008, T014, T015, T016).
-- [ ] T018 [US1] Register `[projectId]/create-ritual` as a modal `Stack.Screen` titled "New Ritual" in `frontend/apps/mobile/src/app/(app)/(tasks)/_layout.tsx`, matching the modal presentation used by `(chat)/new-channel.tsx` and `(calendar)/create.tsx` (depends on T017).
-- [ ] T019 [US1] Add the `project-create-ritual-button` affordance to `frontend/apps/mobile/src/app/(app)/(tasks)/[projectId]/index.tsx`, rendered only when the `["employee-permissions", auth.employeeId]` query contains `collab.manageRitualDefinition` **and** `getProject(projectId).currentUserRole` is `owner` or `admin`. The screen does not fetch `getProject` today and must; absent, never disabled (FR-015, US1 scenario 4) (depends on T018).
-- [ ] T020 [US1] Add `$APP_DIR/.maestro/rituals/create-ritual.yaml` to the `flows` array in `frontend/apps/mobile/scripts/run-maestro-suite.sh`, after the compliance flows, so `make test-mobile` covers it (FR-025) (depends on T013, T019).
+- [X] T014 [P] [US1] Create `frontend/apps/mobile/src/components/rituals/recurrence-picker.tsx`: three segments (`ritual-recurrence-daily` / `-weekly` / `-monthly`); weekly reveals a seven-segment row `ritual-weekday-1`…`-7` with two-letter labels (`1`=Mon … `7`=Sun, matching the proto), `flexShrink` per segment and a 44dp minimum tap target; monthly reveals a wrapped grid of chips `ritual-day-of-month-1`…`-31`. No dropdown, no picker wheel, no `Dimensions` branching, no iOS-only props. Renders its validation message at `ritual-recurrence-error`.
+- [X] T015 [P] [US1] Create `frontend/apps/mobile/src/components/rituals/evidence-requirement-editor.tsx`: a list of requirement rows (`ritual-requirement-{index}`), each with a name input (`ritual-requirement-name-{index}`), a `flexWrap` chip row of the seven proof types (`ritual-requirement-type-{index}-{type}` for `photo`, `voice_memo`, `pdf`, `file`, `link`, `text_note`, `gps_checkin`), a Required/Optional toggle defaulting to Required (`ritual-requirement-required-{index}`) and a remove action (`ritual-requirement-remove-{index}`) disabled while one row remains; plus `ritual-add-requirement` beneath. Rows are keyed by the client-only `localId` from [data-model.md](./data-model.md#evidencerequirementdraft).
+- [X] T016 [P] [US1] Create `frontend/apps/mobile/src/components/rituals/assignee-picker.tsx`: a search field (`ritual-assignee-search`) over the project's members via `listProjectMembers(projectId)` resolved to names with `getEmployeeCards(employeeIds)` from `apis` (not `autocompleteEmployees` — see [research.md](./research.md) §6), results as `ritual-assignee-option-{employeeId}`, selections as removable chips `ritual-assignee-chip-{employeeId}`, and a helper line stating that leaving it empty starts each run unassigned.
+- [X] T017 [US1] Create `frontend/apps/mobile/src/app/(app)/(tasks)/[projectId]/create-ritual.tsx`: a single-column `ScrollView` (`create-ritual-screen`) laying out name → description (plain text, 3 lines) → recurrence → the read-only timezone line (`ritual-timezone-line`, from `getDeviceTimezone()`) → requirements → assignees → `create-ritual-submit`, with a header Cancel (`create-ritual-cancel-button`). Holds the `RitualDraft` state from [data-model.md](./data-model.md#ritualdraft); runs the six client-side submit-time validations, each anchored to the control that is wrong; submits one `createRitualDefinition` call carrying `evidenceRequirements` inline with `completionWindowHours: 24`, empty `defaultDepartmentPools`, no `procedureDocumentId` and `interval: 1`; renders a server refusal at `create-ritual-error` while keeping every field and every requirement row; on success invalidates `["ritualDefinitions", projectId]` and the project's task queries then `router.replace`s to `/(app)/(tasks)/rituals/{definitionId}` (depends on T008, T014, T015, T016).
+- [X] T018 [US1] Register `[projectId]/create-ritual` as a modal `Stack.Screen` titled "New Ritual" in `frontend/apps/mobile/src/app/(app)/(tasks)/_layout.tsx`, matching the modal presentation used by `(chat)/new-channel.tsx` and `(calendar)/create.tsx` (depends on T017).
+- [X] T019 [US1] Add the `project-create-ritual-button` affordance to `frontend/apps/mobile/src/app/(app)/(tasks)/[projectId]/index.tsx`, rendered only when the `["employee-permissions", auth.employeeId]` query contains `collab.manageRitualDefinition` **and** `getProject(projectId).currentUserRole` is `owner` or `admin`. The screen does not fetch `getProject` today and must; absent, never disabled (FR-015, US1 scenario 4) (depends on T018).
+- [X] T020 [US1] Add `$APP_DIR/.maestro/rituals/create-ritual.yaml` to the `flows` array in `frontend/apps/mobile/scripts/run-maestro-suite.sh`, after the compliance flows, so `make test-mobile` covers it (FR-025) (depends on T013, T019).
 
 **Checkpoint**: `make test-mobile-one F=rituals/create-ritual` passes. A ritual can be defined from a phone inside an existing project and its runs are there immediately. Independently demoable.
 
@@ -162,14 +261,14 @@ in the mobile project list and on the web with the same name, identifier and mod
 
 ### Tests for User Story 2
 
-- [ ] T021 [P] [US2] Write the Maestro flow `frontend/apps/mobile/.maestro/projects/create-project.yaml`: sign in, open the tasks tab → projects, tap `projects-create-button`, fill `project-name-input`, assert `project-key-input` carries the derived key, tap `project-mode-ritual`, tap `create-project-submit`, assert arrival on the new project screen. Use `MAESTRO_RUN_ID` in the project name so a second run does not collide on the key. Expected to fail until T022–T024.
+- [X] T021 [P] [US2] Write the Maestro flow `frontend/apps/mobile/.maestro/projects/create-project.yaml`: sign in, open the tasks tab → projects, tap `projects-create-button`, fill `project-name-input`, assert `project-key-input` carries the derived key, tap `project-mode-ritual`, tap `create-project-submit`, assert arrival on the new project screen. Use `MAESTRO_RUN_ID` in the project name so a second run does not collide on the key. Expected to fail until T022–T024.
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Create `frontend/apps/mobile/src/app/(app)/(tasks)/create-project.tsx`: a single-column `ScrollView` (`create-project-screen`) with header Cancel (`create-project-cancel-button`), laying out name (autofocus, `project-name-input`) → key (`project-key-input`, uppercase-forced, helper line carrying `PROJECT_KEY_RULE_TEXT`, error line `project-key-error`) → description (`project-description-input`) → two visibility segments (`project-visibility-private` / `-public`) → three mode segments (`project-mode-standard` / `-ritual` / `-mixed`) with the web's one-line explanations in plain language → `create-project-submit`. Holds the `ProjectDraft` state from [data-model.md](./data-model.md#projectdraft) with the explicit `keyTouched` flag; derives the key with `deriveProjectKey` while untouched and stops on first edit; tests `projectKeySchema` before sending anything; on a server refusal renders `fieldViolation(error, 'key')` on the key input and anything else at `create-project-error`, keeping every field's value; on success invalidates `["projects"]` and `router.replace`s to `/(app)/(tasks)/{id}` (depends on T003, T012).
-- [ ] T023 [US2] Register `create-project` as a modal `Stack.Screen` titled "New Project" in `frontend/apps/mobile/src/app/(app)/(tasks)/_layout.tsx` (same file as T018 — sequence them, do not parallelise) (depends on T022).
-- [ ] T024 [US2] Add the `projects-create-button` affordance to the projects mode of `frontend/apps/mobile/src/app/(app)/(tasks)/index.tsx`, rendered only when the `["employee-permissions", auth.employeeId]` query contains `collab.createProject`; absent, never disabled (FR-004, SC-005). It sits with the projects list, not on the focus view (depends on T023).
-- [ ] T025 [US2] Add `$APP_DIR/.maestro/projects/create-project.yaml` to the `flows` array in `frontend/apps/mobile/scripts/run-maestro-suite.sh` (FR-025) (depends on T021, T024).
+- [X] T022 [US2] Create `frontend/apps/mobile/src/app/(app)/(tasks)/create-project.tsx`: a single-column `ScrollView` (`create-project-screen`) with header Cancel (`create-project-cancel-button`), laying out name (autofocus, `project-name-input`) → key (`project-key-input`, uppercase-forced, helper line carrying `PROJECT_KEY_RULE_TEXT`, error line `project-key-error`) → description (`project-description-input`) → two visibility segments (`project-visibility-private` / `-public`) → three mode segments (`project-mode-standard` / `-ritual` / `-mixed`) with the web's one-line explanations in plain language → `create-project-submit`. Holds the `ProjectDraft` state from [data-model.md](./data-model.md#projectdraft) with the explicit `keyTouched` flag; derives the key with `deriveProjectKey` while untouched and stops on first edit; tests `projectKeySchema` before sending anything; on a server refusal renders `fieldViolation(error, 'key')` on the key input and anything else at `create-project-error`, keeping every field's value; on success invalidates `["projects"]` and `router.replace`s to `/(app)/(tasks)/{id}` (depends on T003, T012).
+- [X] T023 [US2] Register `create-project` as a modal `Stack.Screen` titled "New Project" in `frontend/apps/mobile/src/app/(app)/(tasks)/_layout.tsx` (same file as T018 — sequence them, do not parallelise) (depends on T022).
+- [X] T024 [US2] Add the `projects-create-button` affordance to the projects mode of `frontend/apps/mobile/src/app/(app)/(tasks)/index.tsx`, rendered only when the `["employee-permissions", auth.employeeId]` query contains `collab.createProject`; absent, never disabled (FR-004, SC-005). It sits with the projects list, not on the focus view (depends on T023).
+- [X] T025 [US2] Add `$APP_DIR/.maestro/projects/create-project.yaml` to the `flows` array in `frontend/apps/mobile/scripts/run-maestro-suite.sh` (FR-025) (depends on T021, T024).
 
 **Checkpoint**: `make test-mobile-one F=projects/create-project` passes. US1 and US2 both work independently.
 
@@ -190,16 +289,16 @@ the empty-screen failure the tour's own spec forbids.
 
 ### Tests for User Story 3
 
-- [ ] T026 [P] [US3] Update `backend/integration/feature_tour_test.go`: narrow the hard-coded `webOnly := map[string]bool{"people": true, "project": true, "ritual": true}` at ~line 113 to `{"people": true}`, and add a sub-test asserting that on `PLATFORM_MOBILE` the `project` and `ritual` stops arrive with their web body copy, their action label and their target intact (not `TOUR_TARGET_NONE`). Expected to fail until T028.
-- [ ] T027 [P] [US3] Update `frontend/apps/mobile/.maestro/feature-tour/owner-tour.yaml`: move `assertNotVisible: feature-tour-action` to stop 1 (`people`) only, and assert on stops 2 and 3 that `feature-tour-action` **is** visible and that tapping it lands on `create-project-screen` and `create-ritual-screen` respectively.
+- [X] T026 [P] [US3] Update `backend/integration/feature_tour_test.go`: narrow the hard-coded `webOnly := map[string]bool{"people": true, "project": true, "ritual": true}` at ~line 113 to `{"people": true}`, and add a sub-test asserting that on `PLATFORM_MOBILE` the `project` and `ritual` stops arrive with their web body copy, their action label and their target intact (not `TOUR_TARGET_NONE`). Expected to fail until T028.
+- [X] T027 [P] [US3] Update `frontend/apps/mobile/.maestro/feature-tour/owner-tour.yaml`: move `assertNotVisible: feature-tour-action` to stop 1 (`people`) only, and assert on stops 2 and 3 that `feature-tour-action` **is** visible and that tapping it lands on `create-project-screen` and `create-ritual-screen` respectively.
 
 ### Implementation for User Story 3
 
-- [ ] T028 [US3] In `backend/internal/tour/content.go`, set `WebOnly: false` on the `project` and `ritual` administrator stops and **delete** their `MobileNote` fields (a retained note is unreachable text asserting something false); leave the `people` stop untouched (FR-020); bump `ContentVersion` from `"2026-09-02.1"` to `"2026-09-04.1"`. `logic.go` is not touched — the substitution rule is correct, only its inputs move.
-- [ ] T029 [P] [US3] In `frontend/apps/mobile/src/lib/tour-routes.ts`, route `projects` to `/(app)/(tasks)/create-project` and `rituals` to the same as its no-project fallback; add the `context.firstProjectId` branch in `resolveTourRoute` returning `/(app)/(tasks)/{firstProjectId}/create-ritual`; export `ritualRouteFallsBackToProject(target, context)`. Keep `people: null` and its comment. Mirror `apps/web/src/lib/tour-routes.ts` structurally — only the route strings differ.
-- [ ] T030 [US3] In `frontend/apps/mobile/src/hooks/use-feature-tour.ts`, fetch the first project with `listProjects()` under the existing `queryKey: ["projects"]` (sharing the tasks tab's cache), build `routeContext = { firstProjectId: projects?.[0]?.id }`, pass it from `act()` into `resolveTourRoute`, and expose `actionFallsBackToProjectCreation` computed with `ritualRouteFallsBackToProject`. Leave `start`, `next`, `previous`, `dismiss`, `restart`, every `writeProgress` call, the offer rules, the `homeRoute`/`away` suppression and `act()`'s advance-to-next-stop behaviour untouched (FR-022) (depends on T029).
-- [ ] T031 [US3] In `frontend/apps/mobile/src/components/feature-tour.tsx`, render the fallback note under the body when `actionFallsBackToProjectCreation`, at `testID="feature-tour-ritual-fallback-note"`, with the copy verbatim from [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §7 so it matches the web card word for word (depends on T030).
-- [ ] T032 [P] [US3] Rewrite stops 2 and 3 in `specs/039-feature-tour/contracts/tour-content.md` per [contracts/tour-content-delta.md](./contracts/tour-content-delta.md): replace both **Web-only** blocks and their mobile notes with the "Available on both platforms (feature 044)" text and the mobile routes, bump the stated `content_version`, and replace the review-note paragraph beginning "**Three stops are web-only**" with the one-stop replacement paragraph given in the delta. Body copy of both stops is unchanged, so the word-count table needs no re-measuring.
+- [X] T028 [US3] In `backend/internal/tour/content.go`, set `WebOnly: false` on the `project` and `ritual` administrator stops and **delete** their `MobileNote` fields (a retained note is unreachable text asserting something false); leave the `people` stop untouched (FR-020); bump `ContentVersion` from `"2026-09-02.1"` to `"2026-09-04.1"`. `logic.go` is not touched — the substitution rule is correct, only its inputs move.
+- [X] T029 [P] [US3] In `frontend/apps/mobile/src/lib/tour-routes.ts`, route `projects` to `/(app)/(tasks)/create-project` and `rituals` to the same as its no-project fallback; add the `context.firstProjectId` branch in `resolveTourRoute` returning `/(app)/(tasks)/{firstProjectId}/create-ritual`; export `ritualRouteFallsBackToProject(target, context)`. Keep `people: null` and its comment. Mirror `apps/web/src/lib/tour-routes.ts` structurally — only the route strings differ.
+- [X] T030 [US3] In `frontend/apps/mobile/src/hooks/use-feature-tour.ts`, fetch the first project with `listProjects()` under the existing `queryKey: ["projects"]` (sharing the tasks tab's cache), build `routeContext = { firstProjectId: projects?.[0]?.id }`, pass it from `act()` into `resolveTourRoute`, and expose `actionFallsBackToProjectCreation` computed with `ritualRouteFallsBackToProject`. Leave `start`, `next`, `previous`, `dismiss`, `restart`, every `writeProgress` call, the offer rules, the `homeRoute`/`away` suppression and `act()`'s advance-to-next-stop behaviour untouched (FR-022) (depends on T029).
+- [X] T031 [US3] In `frontend/apps/mobile/src/components/feature-tour.tsx`, render the fallback note under the body when `actionFallsBackToProjectCreation`, at `testID="feature-tour-ritual-fallback-note"`, with the copy verbatim from [contracts/api-wrapper-changes.md](./contracts/api-wrapper-changes.md) §7 so it matches the web card word for word (depends on T030).
+- [X] T032 [P] [US3] Rewrite stops 2 and 3 in `specs/039-feature-tour/contracts/tour-content.md` per [contracts/tour-content-delta.md](./contracts/tour-content-delta.md): replace both **Web-only** blocks and their mobile notes with the "Available on both platforms (feature 044)" text and the mobile routes, bump the stated `content_version`, and replace the review-note paragraph beginning "**Three stops are web-only**" with the one-stop replacement paragraph given in the delta. Body copy of both stops is unchanged, so the word-count table needs no re-measuring.
 
 **Checkpoint**: `make test-backend-one T=TestFeatureTour` and `make test-mobile-one F=feature-tour/owner-tour` pass. The tour is actionable on mobile for every administrator stop except `people`.
 
@@ -218,12 +317,12 @@ archived on the web; then restore it.
 
 ### Tests for User Story 4
 
-- [ ] T033 [P] [US4] Write the Maestro flow `frontend/apps/mobile/.maestro/rituals/archive-ritual.yaml`: open a ritual template, tap `ritual-archive-button`, confirm the alert, assert `ritual-archived-badge` and `ritual-unarchive-button` are visible, tap `ritual-unarchive-button`, assert the badge is gone. Expected to fail until T034.
+- [X] T033 [P] [US4] Write the Maestro flow `frontend/apps/mobile/.maestro/rituals/archive-ritual.yaml`: open a ritual template, tap `ritual-archive-button`, confirm the alert, assert `ritual-archived-badge` and `ritual-unarchive-button` are visible, tap `ritual-unarchive-button`, assert the badge is gone. Expected to fail until T034.
 
 ### Implementation for User Story 4
 
-- [ ] T034 [US4] Add archive and unarchive to `frontend/apps/mobile/src/app/(app)/(tasks)/rituals/[definitionId].tsx`: fetch `getProject(projectId).currentUserRole` (the screen does not today) and show the action only to `owner` or `admin` (US4 scenario 3); `ritual-archive-button` opens an `Alert.alert` confirmation stating that no new runs will be created, then calls `archiveRitualDefinition(id, true)`; an archived definition renders `ritual-archived-badge` in place of the existing "Reference only" badge and offers `ritual-unarchive-button` → `archiveRitualDefinition(id, false)` with no confirmation (restore is not the destructive direction); invalidate `["ritual-definition", id]` and `["ritualDefinitions", projectId]` on success. Add nothing else — no rename, no schedule change, no requirement editing (FR-018).
-- [ ] T035 [US4] Add `$APP_DIR/.maestro/rituals/archive-ritual.yaml` to the `flows` array in `frontend/apps/mobile/scripts/run-maestro-suite.sh` (same file as T020 and T025 — sequence them) (depends on T033, T034).
+- [X] T034 [US4] Add archive and unarchive to `frontend/apps/mobile/src/app/(app)/(tasks)/rituals/[definitionId].tsx`: fetch `getProject(projectId).currentUserRole` (the screen does not today) and show the action only to `owner` or `admin` (US4 scenario 3); `ritual-archive-button` opens an `Alert.alert` confirmation stating that no new runs will be created, then calls `archiveRitualDefinition(id, true)`; an archived definition renders `ritual-archived-badge` in place of the existing "Reference only" badge and offers `ritual-unarchive-button` → `archiveRitualDefinition(id, false)` with no confirmation (restore is not the destructive direction); invalidate `["ritual-definition", id]` and `["ritualDefinitions", projectId]` on success. Add nothing else — no rename, no schedule change, no requirement editing (FR-018).
+- [X] T035 [US4] Add `$APP_DIR/.maestro/rituals/archive-ritual.yaml` to the `flows` array in `frontend/apps/mobile/scripts/run-maestro-suite.sh` (same file as T020 and T025 — sequence them) (depends on T033, T034).
 
 **Checkpoint**: All four user stories are independently functional.
 
@@ -234,14 +333,14 @@ archived on the web; then restore it.
 **Purpose**: FR-023 and SC-008 — the feature is not done while any document still claims mobile
 cannot do this — plus the sizing and type-safety gates.
 
-- [ ] T036 [P] Close drift **D38** in the drift register in `docs/domain/README.md` (line ~74, "The mobile app can list projects and rituals but creates neither"), recording that feature 044 resolved it rather than deleting the row silently, per the register's existing convention for closed entries.
-- [ ] T037 [P] Update `docs/domain/workspace-navigation.md` (~line 196): "Three administrator stops are web-only: `people`, `project` and `ritual`…" becomes one web-only stop (`people`), and record the two mobile create routes the tour now points at.
-- [ ] T038 [P] Update `docs/domain/rituals-tasks.md`: add mobile ritual-definition creation (the collected subset and the defaults it sends) and mobile archive/unarchive to the definition section; keep the existing true statements that mobile has no ritual pool configuration (~line 743) and reads but never configures the procedure document (~line 774), and add that auto-approval, completion/generation windows, custom intervals and nth-weekday recurrences remain web-only.
-- [ ] T039 [P] Correct the framing around the "Screens NOT Built for Mobile (Web-Only)" table in `specs/mobile-ui-design.md` §9 (line ~936): its rationale sentence cites Principle XIII, whose scope T001 widens. Project and ritual creation were never rows in the table, so this is a correction to the surrounding prose, not a row deletion.
-- [ ] T040 Verify both new screens at 360dp width on an Android emulator (`adb shell wm size 360x800 && adb shell wm density 160`) **and** on an iPhone SE, per [quickstart.md](./quickstart.md) §8 and the standing rule that the habitual iOS device hides narrow-Android regressions. The three controls to check hardest: the seven-segment weekday row, the 31-chip day-of-month grid, and the seven proof-type chips. Nothing clipped, nothing overlapping, every tap target at least 44dp. Reset the emulator afterwards (FR-024, SC-007).
-- [ ] T041 Run the drift sweep from [quickstart.md](./quickstart.md) §9 — `rg -n "no create surface|creates neither|has no create surface" docs/ specs/` — and confirm it returns nothing that still asserts the absence (SC-008) (depends on T036–T039).
-- [ ] T042 Run the cross-stack gates: `cd frontend && pnpm typecheck:mobile && pnpm --filter web exec tsc --noEmit`, `pnpm --filter mobile check:device-timezone`, `make test-backend`, and the full `make test-mobile`. `TOUR_ROUTES` being a `Record<TourTarget, …>` and the shared `projectKeySchema` are what make the `tsc` run a real drift guard rather than a formality (Constitution VIII).
-- [ ] T043 Walk [quickstart.md](./quickstart.md) §§1–6 end to end on a device with the two accounts it specifies, confirming SC-001 (under 2 minutes to a visible run), SC-002 (under 60 seconds to a project), SC-003 (phone and web produce identical runs from identical inputs), SC-005 (no affordance the plain member cannot complete) and SC-006 (nothing lost on a refusal, and a retry after an ambiguous network failure creates exactly one ritual).
+- [X] T036 [P] Close drift **D38** in the drift register in `docs/domain/README.md` (line ~74, "The mobile app can list projects and rituals but creates neither"), recording that feature 044 resolved it rather than deleting the row silently, per the register's existing convention for closed entries.
+- [X] T037 [P] Update `docs/domain/workspace-navigation.md` (~line 196): "Three administrator stops are web-only: `people`, `project` and `ritual`…" becomes one web-only stop (`people`), and record the two mobile create routes the tour now points at.
+- [X] T038 [P] Update `docs/domain/rituals-tasks.md`: add mobile ritual-definition creation (the collected subset and the defaults it sends) and mobile archive/unarchive to the definition section; keep the existing true statements that mobile has no ritual pool configuration (~line 743) and reads but never configures the procedure document (~line 774), and add that auto-approval, completion/generation windows, custom intervals and nth-weekday recurrences remain web-only.
+- [X] T039 [P] Correct the framing around the "Screens NOT Built for Mobile (Web-Only)" table in `specs/mobile-ui-design.md` §9 (line ~936): its rationale sentence cites Principle XIII, whose scope T001 widens. Project and ritual creation were never rows in the table, so this is a correction to the surrounding prose, not a row deletion.
+- [X] T040 Verify both new screens at 360dp width on an Android emulator (`adb shell wm size 360x800 && adb shell wm density 160`) **and** on an iPhone SE, per [quickstart.md](./quickstart.md) §8 and the standing rule that the habitual iOS device hides narrow-Android regressions. The three controls to check hardest: the seven-segment weekday row, the 31-chip day-of-month grid, and the seven proof-type chips. Nothing clipped, nothing overlapping, every tap target at least 44dp. Reset the emulator afterwards (FR-024, SC-007).
+- [X] T041 Run the drift sweep from [quickstart.md](./quickstart.md) §9 — `rg -n "no create surface|creates neither|has no create surface" docs/ specs/` — and confirm it returns nothing that still asserts the absence (SC-008) (depends on T036–T039).
+- [X] T042 Run the cross-stack gates: `cd frontend && pnpm typecheck:mobile && pnpm --filter web exec tsc --noEmit`, `pnpm --filter mobile check:device-timezone`, `make test-backend`, and the full `make test-mobile`. `TOUR_ROUTES` being a `Record<TourTarget, …>` and the shared `projectKeySchema` are what make the `tsc` run a real drift guard rather than a formality (Constitution VIII).
+- [X] T043 Walk [quickstart.md](./quickstart.md) §§1–6 end to end on a device with the two accounts it specifies, confirming SC-001 (under 2 minutes to a visible run), SC-002 (under 60 seconds to a project), SC-003 (phone and web produce identical runs from identical inputs), SC-005 (no affordance the plain member cannot complete) and SC-006 (nothing lost on a refusal, and a retry after an ambiguous network failure creates exactly one ritual).
 
 ---
 

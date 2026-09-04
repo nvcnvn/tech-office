@@ -151,7 +151,9 @@ func (q *Queries) ArchiveProject(ctx context.Context, db DBTX, arg *ArchiveProje
 
 const archiveRitualDefinition = `-- name: ArchiveRitualDefinition :one
 UPDATE collaboration.ritual_definition
-SET is_archived = $1, updated_at = $2
+SET is_archived = $1,
+    last_generated_date = CASE WHEN $1 THEN last_generated_date ELSE NULL END,
+    updated_at = $2
 WHERE organization_id = $3 AND id = $4
 RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id
 `
@@ -163,6 +165,10 @@ type ArchiveRitualDefinitionParams struct {
 	ID             dbuuid.UUID        `json:"id"`
 }
 
+// Unarchiving clears the generation waterline. Archiving soft-deletes every pending
+// instance, so a restored definition whose last_generated_date still pointed at the end of
+// the old window produced nothing until real time caught up — up to generation_window_days
+// of a ritual that reads as active and generates no runs.
 func (q *Queries) ArchiveRitualDefinition(ctx context.Context, db DBTX, arg *ArchiveRitualDefinitionParams) (*CollaborationRitualDefinition, error) {
 	row := db.QueryRow(ctx, archiveRitualDefinition,
 		arg.IsArchived,

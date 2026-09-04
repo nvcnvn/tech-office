@@ -536,6 +536,25 @@ function buildLatestSubmissionByRequirementId(
 // Ritual Definition API
 // =============================================================================
 
+/**
+ * One evidence requirement to create together with the definition.
+ *
+ * Sent inline rather than through `createEvidenceRequirement` afterwards, so the definition
+ * and its requirements commit in one transaction: a ritual with no evidence requirement is a
+ * task with a schedule, not a ritual, so a partial create is never an acceptable outcome.
+ */
+export interface CreateRitualDefinitionEvidenceRequirementInput {
+	name: string;
+	description?: string;
+	evidenceTypes: EvidenceType[];
+	isRequired: boolean;
+	/** Defaults to 'manual'. Auto-approval is configured on the web. */
+	approvalMode?: ApprovalMode;
+	autoApproveConfig?: AutoApproveConfig;
+	/** Defaults to 0. */
+	deadlineOffsetHours?: number;
+}
+
 export interface CreateRitualDefinitionParams {
 	projectId: string;
 	name: string;
@@ -544,6 +563,8 @@ export interface CreateRitualDefinitionParams {
 	completionWindowHours: number;
 	timezone: string;
 	defaultAssigneeIds?: string[];
+	/** Created atomically with the definition. Omit or pass [] to create none. */
+	evidenceRequirements?: CreateRitualDefinitionEvidenceRequirementInput[];
 	defaultDepartmentPools?: RitualDepartmentPoolInput[];
 	/** An existing workspace document to attach as the ritual's written procedure. */
 	procedureDocumentId?: string;
@@ -569,6 +590,15 @@ export async function createRitualDefinition(
 			completionWindowHours: params.completionWindowHours,
 			timezone: params.timezone,
 			defaultAssigneeIds: params.defaultAssigneeIds ?? [],
+			evidenceRequirements: (params.evidenceRequirements ?? []).map((r) => ({
+				name: r.name,
+				description: r.description ?? '',
+				evidenceTypes: r.evidenceTypes.map(stringToProtoEvidenceType),
+				isRequired: r.isRequired,
+				approvalMode: stringToProtoApprovalMode(r.approvalMode ?? 'manual'),
+				autoApproveConfig: r.autoApproveConfig,
+				deadlineOffsetHours: r.deadlineOffsetHours ?? 0,
+			})),
 			defaultDepartmentPools: (params.defaultDepartmentPools ?? []).map((p) => ({
 				departmentId: p.departmentId,
 				assignmentStrategy: p.assignmentStrategy,

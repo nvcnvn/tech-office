@@ -68,6 +68,13 @@ flows=(
   $APP_DIR/.maestro/compliance/block-person.yaml
   $APP_DIR/.maestro/compliance/delete-account.yaml
   $APP_DIR/.maestro/compliance/removal-request.yaml
+  # Feature 044, in order: the project flow creates the project the ritual flow defines a
+  # ritual inside, which is the ritual the archive flow then archives and restores. They
+  # seed each other through MAESTRO_RUN_ID rather than depending on a fixture, so the order
+  # here is load-bearing.
+  $APP_DIR/.maestro/projects/create-project.yaml
+  $APP_DIR/.maestro/rituals/create-ritual.yaml
+  $APP_DIR/.maestro/rituals/archive-ritual.yaml
 )
 failures=0
 

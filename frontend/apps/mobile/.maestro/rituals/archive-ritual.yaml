@@ -1,0 +1,87 @@
+appId: com.devguards.TechOffice
+name: "Rituals — undo one created by mistake"
+tags:
+  - rituals
+  - happy-path
+# Feature 044, US4. A ritual defined on the wrong day nags every morning until someone with
+# a laptop fixes it, so archiving is offered where the mistake was made. Archive is behind a
+# confirmation because it stops future runs; restore is not, because it is not the
+# destructive direction (FR-017).
+#
+# Archives the ritual rituals/create-ritual.yaml made in this run, so the flows seed each
+# other. Run that flow first, or with the same MAESTRO_RUN_ID, when running this one alone.
+---
+- runFlow: "../auth/signin.yaml"
+
+- tapOn:
+    id: "tab-tasks"
+# The tab root is titled "My Work"; the mode toggle is the one control present in both
+# modes, so waiting on it is what says the tab has finished loading.
+- extendedWaitUntil:
+    visible:
+      id: "task-mode-toggle"
+    timeout: 10000
+
+- tapOn:
+    id: "task-mode-toggle"
+# The projects list fans out one task query per project before it renders, and the row sits
+# below the overview cards — partly off the bottom on a small phone — so this scrolls to it
+# rather than asserting in place.
+- scrollUntilVisible:
+    element:
+      text: "Shop Floor ${MAESTRO_RUN_ID}"
+    direction: DOWN
+    # The last row of a tab-root list sits partly under the tab bar, so a 100% visibility
+    # requirement never resolves for it.
+    visibilityPercentage: 40
+    centerElement: true
+- tapOn: "Shop Floor ${MAESTRO_RUN_ID}"
+
+# The project screen lists the ritual's next run, not the definition; the template is
+# reached from the run, which is where a worker would be standing when they noticed.
+- extendedWaitUntil:
+    visible: "Opening checklist ${MAESTRO_RUN_ID}"
+    timeout: 20000
+- tapOn: "Opening checklist ${MAESTRO_RUN_ID}"
+
+- scrollUntilVisible:
+    element:
+      id: "open-ritual-template-button"
+    direction: DOWN
+    centerElement: true
+# A tap that lands while the scroll is still settling is swallowed, and the push never
+# happens.
+- waitForAnimationToEnd
+- tapOn:
+    id: "open-ritual-template-button"
+
+- extendedWaitUntil:
+    visible: "Reference only"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "ritual-archive-button"
+    timeout: 15000
+- tapOn:
+    id: "ritual-archive-button"
+
+# The confirmation says what stops, so nobody archives a ritual expecting it to pause.
+- extendedWaitUntil:
+    visible: "Archive this ritual\\?"
+    timeout: 8000
+- tapOn: "Archive it"
+
+- extendedWaitUntil:
+    visible:
+      id: "ritual-archived-badge"
+    timeout: 12000
+- assertVisible:
+    id: "ritual-unarchive-button"
+
+# Restore goes straight through — no confirmation, because nothing is lost by it.
+- tapOn:
+    id: "ritual-unarchive-button"
+- extendedWaitUntil:
+    notVisible:
+      id: "ritual-archived-badge"
+    timeout: 12000

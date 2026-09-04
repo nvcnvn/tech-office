@@ -2,11 +2,13 @@ package collaboration
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/nvcnvn/tech-office/backend/database"
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
@@ -41,6 +43,18 @@ func (l *logicImpl) CreateProject(
 		CollaborationMode: collaborationModeToString(req.CollaborationMode),
 	})
 	if err != nil {
+		// A key collision or a malformed key is the caller's answer to give, not an
+		// Internal: both create forms mark the key input from the field violation these
+		// sentinels carry.
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			switch pgErr.ConstraintName {
+			case "unique_project_key":
+				return nil, nil, nil, ErrProjectKeyTaken
+			case "valid_project_key":
+				return nil, nil, nil, ErrProjectKeyInvalid
+			}
+		}
 		slog.ErrorContext(ctx, "failed to create project",
 			"error", err,
 			"name", req.Name,

@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-03.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041.
+**Status date: 2026-09-04.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044.
 
 ## Canonical resource links
 
@@ -192,9 +192,11 @@ tour is six stops (people, project, ritual, chat, schedule, docs); the worker to
    no gap.
 2. For a mobile caller, a **web-only** stop has its body replaced by a "this is done on
    the web" note and its target forced to `TOUR_TARGET_NONE` with an empty action label,
-   so no client can render an action that cannot work. Three administrator stops are
-   web-only: `people`, `project` and `ritual` — the mobile app can list projects and
-   rituals but has no create surface for either.
+   so no client can render an action that cannot work. One administrator stop is web-only:
+   `people` — adding staff, importing a team and setting roles have no mobile surface. The
+   `project` and `ritual` stops arrive whole on a phone, with the same body a web
+   administrator reads and an action that lands on `/(app)/(tasks)/create-project` and
+   `/(app)/(tasks)/{firstProjectId}/create-ritual` respectively.
 3. `current_stop` is **clamped to the filtered list on read and not written back**. The
    stored index addresses a list whose length depends on permissions, so revoking one can
    leave it past the end; the clamp keeps `stops[current_stop]` renderable, and leaving
@@ -235,8 +237,10 @@ worker progress stays untouched.
   has a route: `packages/apis/src/tour.ts` converts the enum to a string union, and
   `apps/web/src/lib/tour-routes.ts` and `apps/mobile/src/lib/tour-routes.ts` map that union
   (Constitution VIII). The web project, ritual and docs routes land with the create action
-  open rather than on an empty list; the ritual route falls back to project creation when
-  the workspace has no project.
+  open rather than on an empty list; on both platforms the ritual route falls back to
+  project creation when the workspace has no project, and the card says why — the mobile
+  card renders that note at `testID="feature-tour-ritual-fallback-note"`, matching the web
+  `data-testid` of the same name.
 
 Presentation is purpose-built per platform and shares no code: a centred MUI dialog on web
 (`apps/web/src/components/tour/`), a bottom card sheet on mobile
@@ -309,7 +313,12 @@ Expo Router in `apps/mobile/src/app`, five route groups:
     today. It reads `CollaborationService.GetAssignedWorkSummary` (overdue + due-today
     across every project, no client fan-out) and `CalendarService.ListEvents` over today.
   - `(tasks)` opens in Focus mode; the project-first drilldown is behind the
-    `task-mode-toggle` header action rather than a body segmented control.
+    `task-mode-toggle` header action rather than a body segmented control. Two modal
+    screens hang off it: `create-project` and `[projectId]/create-ritual`. Each is offered
+    only to someone who can complete it — `collab.createProject` for the first,
+    `collab.manageRitualDefinition` plus project role `owner` or `admin` for the second —
+    and the affordance is **absent** rather than disabled otherwise. See
+    [rituals-tasks.md](rituals-tasks.md) for what each collects.
   - The layout is wrapped in `TermsGate`, which holds the app behind a read-and-accept
     screen while `GetTermsStatus` says this person has not accepted the version currently
     being served. It fails open on a network error, so a blip does not lock somebody out
@@ -408,6 +417,20 @@ Those ids are bare strings with no compile-time check, so without it a rename in
 migration would flip the tour audience or hide a stop silently.
 
 ## Known drift
+
+**D46 — the Expo dev client's Tools button swallows header taps on Android.** The floating
+overlay is on by default in a freshly installed debug build and sits over the top-right of
+every screen, so a tap aimed at a header action — `task-mode-toggle` most often — opens the
+dev menu instead. Maestro reports the tap as completed and then fails on the next assertion,
+which reads as a missing element. Switch it off in the dev menu (shake, or the ✕ overlay)
+before running flows against a new emulator. Not present in a release build.
+
+**D47 — three older mobile flows still wait on a screen title that no longer exists.**
+`ritual-submission-flow.yaml`, `ritual-procedure-doc.yaml` and
+`tasks/evidence-review-approve.yaml` each `assertVisible: "Focus"` after opening the tasks
+tab; the tab root is titled **My Work**. Feature 044's flows wait on the `task-mode-toggle`
+testID instead. The three were left alone rather than changing assertions in flows unrelated
+to that feature, and they cannot run at all while D40 stands.
 
 **D43 — `Link asChild` silently drops a function `style` on mobile.** Under expo-router 55,
 a `Pressable` nested in `<Link asChild>` with `style={({ pressed }) => [...]}` renders with

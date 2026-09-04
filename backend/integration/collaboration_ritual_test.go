@@ -116,6 +116,23 @@ func TestRitualDefinitionCRUD(t *testing.T) {
 			found := findRitualDefinition(defs, def.Id)
 			assert.Nil(t, found)
 		})
+
+		// Feature 044, US4 scenario 2. Archiving soft-deletes every pending instance but
+		// leaves the generation waterline where it was, so a restored definition used to
+		// read as active and produce nothing until real time caught up with the old
+		// window — up to generation_window_days of a ritual that looks alive and never
+		// runs. Unarchiving now clears the waterline.
+		t.Run("restoring it brings its runs back", func(t *testing.T) {
+			before := countRitualInstances(w.listTasks(owner, proj.ID), def.Id)
+			require.Zero(t, before, "archiving removes the pending runs")
+
+			restored, err := w.archiveRitualDefinition(owner, def.Id, false)
+			require.NoError(t, err)
+			assert.False(t, restored.IsArchived)
+
+			after := countRitualInstances(w.listTasks(owner, proj.ID), def.Id)
+			assert.NotZero(t, after, "a restored ritual generates runs again")
+		})
 	})
 
 	t.Run("when listing ritual definitions for a project", func(t *testing.T) {
@@ -135,6 +152,105 @@ func TestRitualDefinitionCRUD(t *testing.T) {
 			defs := w.listRitualDefinitions(owner, proj.ID, true)
 			assert.NotNil(t, findRitualDefinition(defs, active.Id))
 			assert.NotNil(t, findRitualDefinition(defs, toArchive.Id))
+		})
+	})
+
+	// FR-013: the mobile create form sends its evidence requirements inline rather than
+	// creating the definition and then looping. A ritual with no evidence requirement is a
+	// task with a schedule, so a half-created definition is never an acceptable outcome.
+	t.Run("when a definition is created with its evidence requirements inline", func(t *testing.T) {
+		proj := w.createProjectWithMode(owner, "Inline Reqs Project", uniqueProjectKey("INL"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
+
+		def := w.createRitualDefinitionWithAssigneesAndRequirements(
+			owner,
+			proj.ID,
+			"Opening Checklist",
+			dailyRecurrenceRule(),
+			nil,
+			[]*rpcv1.CreateEvidenceRequirementInput{
+				{
+					Name:          "Shutters up",
+					EvidenceTypes: []rpcv1.EvidenceType{rpcv1.EvidenceType_EVIDENCE_TYPE_PHOTO},
+					IsRequired:    true,
+					ApprovalMode:  rpcv1.ApprovalMode_APPROVAL_MODE_MANUAL,
+				},
+				{
+					Name: "Anything odd overnight",
+					EvidenceTypes: []rpcv1.EvidenceType{
+						rpcv1.EvidenceType_EVIDENCE_TYPE_TEXT_NOTE,
+						rpcv1.EvidenceType_EVIDENCE_TYPE_VOICE_MEMO,
+					},
+					IsRequired:   false,
+					ApprovalMode: rpcv1.ApprovalMode_APPROVAL_MODE_MANUAL,
+				},
+			},
+		)
+
+		t.Run("both requirements exist with the names, types and optionality that were sent", func(t *testing.T) {
+			reqs := w.listEvidenceRequirements(owner, def.Id)
+			require.Len(t, reqs, 2)
+
+			assert.Equal(t, "Shutters up", reqs[0].Name)
+			assert.Equal(t, []rpcv1.EvidenceType{rpcv1.EvidenceType_EVIDENCE_TYPE_PHOTO}, reqs[0].EvidenceTypes)
+			assert.True(t, reqs[0].IsRequired)
+
+			assert.Equal(t, "Anything odd overnight", reqs[1].Name)
+			assert.Equal(t, []rpcv1.EvidenceType{
+				rpcv1.EvidenceType_EVIDENCE_TYPE_TEXT_NOTE,
+				rpcv1.EvidenceType_EVIDENCE_TYPE_VOICE_MEMO,
+			}, reqs[1].EvidenceTypes)
+			assert.False(t, reqs[1].IsRequired)
+		})
+
+		t.Run("position follows the order they were sent in", func(t *testing.T) {
+			reqs := w.listEvidenceRequirements(owner, def.Id)
+			require.Len(t, reqs, 2)
+			assert.Equal(t, int32(0), reqs[0].Position)
+			assert.Equal(t, int32(1), reqs[1].Position)
+		})
+	})
+
+	// FR-013 atomicity: a refused request creates neither the definition nor any of the
+	// requirements it carried, so the phone can retry the same draft without producing a
+	// stripped ritual it would have to notice and clean up.
+	t.Run("when a create request carrying requirements is refused", func(t *testing.T) {
+		proj := w.createProjectWithMode(owner, "Atomic Reqs Project", uniqueProjectKey("ATM"), rpcv1.CollaborationMode_COLLABORATION_MODE_RITUAL)
+
+		err := w.createRitualDefinitionWithRequirementsError(
+			owner,
+			proj.ID,
+			"Never Lands",
+			dailyRecurrenceRule(),
+			[]*rpcv1.CreateEvidenceRequirementInput{
+				{
+					Name:          "Shutters up",
+					EvidenceTypes: []rpcv1.EvidenceType{rpcv1.EvidenceType_EVIDENCE_TYPE_PHOTO},
+					IsRequired:    true,
+					ApprovalMode:  rpcv1.ApprovalMode_APPROVAL_MODE_MANUAL,
+				},
+				{
+					// Points at a document that does not exist, so the whole request is
+					// refused after the first requirement would otherwise have been written.
+					Name:          "Signed off",
+					EvidenceTypes: []rpcv1.EvidenceType{rpcv1.EvidenceType_EVIDENCE_TYPE_PDF},
+					IsRequired:    true,
+					ApprovalMode:  rpcv1.ApprovalMode_APPROVAL_MODE_MANUAL,
+				},
+			},
+			ptr("00000000-0000-0000-0000-000000000000"),
+		)
+
+		t.Run("the request is refused", func(t *testing.T) {
+			require.Error(t, err)
+		})
+
+		t.Run("no definition was created", func(t *testing.T) {
+			defs := w.listRitualDefinitions(owner, proj.ID, true)
+			assert.Nil(t, findRitualDefinitionByName(defs, "Never Lands"))
+		})
+
+		t.Run("no evidence requirement rows were left behind in the project", func(t *testing.T) {
+			assert.Zero(t, w.countEvidenceRequirementsInProject(proj.ID))
 		})
 	})
 }

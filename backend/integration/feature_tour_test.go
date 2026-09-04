@@ -107,10 +107,10 @@ func TestFeatureTour(t *testing.T) {
 		owner := w.withOwner()
 		mobile := w.getTour(owner, rpcv1.TourPlatform_TOUR_PLATFORM_MOBILE)
 
-		// people, project and ritual are the web-only stops: the mobile app can list
-		// projects and rituals but has no create surface for either, and adding staff is
-		// administration proper.
-		webOnly := map[string]bool{"people": true, "project": true, "ritual": true}
+		// people is the only web-only stop left: since feature 044 the phone creates both
+		// projects and ritual definitions, while adding staff, importing a team and setting
+		// roles remain administration proper.
+		webOnly := map[string]bool{"people": true}
 
 		t.Run("each web-only stop says the work is done on the web", func(t *testing.T) { // FR-023
 			for key := range webOnly {
@@ -135,6 +135,30 @@ func TestFeatureTour(t *testing.T) {
 				}
 				assert.NotEqual(t, rpcv1.TourTarget_TOUR_TARGET_NONE, stop.Target, "stop %s", stop.Key)
 				assert.NotEmpty(t, stop.ActionLabel, "stop %s", stop.Key)
+			}
+		})
+
+		// Feature 044, FR-019/FR-021: the two stops that used to arrive stripped now carry
+		// the same body a web administrator reads, and an action that lands somewhere.
+		t.Run("the project and ritual stops arrive whole on a phone", func(t *testing.T) {
+			project := stopByKey(t, mobile, "project")
+			assert.Contains(t, project.Body, "Store Operations")
+			assert.NotContains(t, project.Body, "web app")
+			assert.Equal(t, rpcv1.TourTarget_TOUR_TARGET_PROJECTS, project.Target)
+			assert.NotEmpty(t, project.ActionLabel)
+
+			ritual := stopByKey(t, mobile, "ritual")
+			assert.Contains(t, ritual.Body, "opening checklist")
+			assert.NotContains(t, ritual.Body, "web app")
+			assert.Equal(t, rpcv1.TourTarget_TOUR_TARGET_RITUALS, ritual.Target)
+			assert.NotEmpty(t, ritual.ActionLabel)
+		})
+
+		t.Run("the project and ritual stops read identically on web and mobile", func(t *testing.T) {
+			web := w.getTour(owner, rpcv1.TourPlatform_TOUR_PLATFORM_WEB)
+			for _, key := range []string{"project", "ritual"} {
+				assert.Equal(t, stopByKey(t, web, key).Body, stopByKey(t, mobile, key).Body, "stop %s", key)
+				assert.Equal(t, stopByKey(t, web, key).ActionLabel, stopByKey(t, mobile, key).ActionLabel, "stop %s", key)
 			}
 		})
 	})

@@ -23,7 +23,7 @@ const (
 // ContentVersion is the version of the copy below. It travels in the response and is
 // stored on every progress write, so a person's row records which wording they saw.
 // Bump it whenever the copy changes.
-const ContentVersion = "2026-09-02.1"
+const ContentVersion = "2026-09-04.1"
 
 // PermissionInviteUser is the audience discriminator. Holding it means "can bring people
 // into the workspace", which is the premise of the administrator tour's first stop. It is
@@ -104,9 +104,6 @@ var administratorTour = Tour{
 			ActionLabel:        "Create a project",
 			Target:             rpcv1.TourTarget_TOUR_TARGET_PROJECTS,
 			RequiredPermission: "collab.createProject",
-			WebOnly:            true,
-			MobileNote: "Projects are set up on the web app — open TechOffice on a computer to " +
-				"create your first one. You will see the work here on your phone once it exists.",
 		},
 		{
 			Key:   "ritual",
@@ -118,9 +115,6 @@ var administratorTour = Tour{
 			ActionLabel:        "Define a ritual",
 			Target:             rpcv1.TourTarget_TOUR_TARGET_RITUALS,
 			RequiredPermission: "collab.manageRitualDefinition",
-			WebOnly:            true,
-			MobileNote: "Rituals are defined on the web app. Once one is set up, the runs land " +
-				"on your phone and you can approve the evidence from here.",
 		},
 		{
 			Key:   "chat",

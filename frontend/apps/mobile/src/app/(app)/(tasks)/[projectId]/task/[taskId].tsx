@@ -1675,6 +1675,8 @@ export default function TaskDetailScreen() {
           </View>
           {ritualDefinitionId ? (
             <Pressable
+              testID="open-ritual-template-button"
+              accessibilityRole="button"
               onPress={() => router.push(`/(app)/(tasks)/rituals/${ritualDefinitionId}`)}
               style={({ pressed }) => [styles.templateLinkButton, pressed && styles.templateLinkButtonPressed]}
             >

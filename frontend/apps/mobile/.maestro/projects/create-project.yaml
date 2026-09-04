@@ -1,0 +1,77 @@
+appId: com.devguards.TechOffice
+name: "Projects — an owner starts a project from the phone"
+tags:
+  - projects
+  - happy-path
+# Feature 044, US2. An owner who runs the business from a phone can start a body of work
+# where the work is, without waiting to be at a desk.
+#
+# Requires MAESTRO_TEST_EMAIL to hold collab.createProject. The create affordance is absent
+# rather than disabled for anyone who does not, so its presence is itself the permission
+# assertion (FR-004, SC-005).
+#
+# MAESTRO_RUN_ID is in the name so the derived key differs between runs: a project key is
+# permanent and unique per organisation, so a fixed name would collide on the second run.
+# The ritual flows in .maestro/rituals/ open this same project by that name, so the three
+# flows seed each other rather than depending on a fixture.
+---
+- runFlow: "../auth/signin.yaml"
+
+- tapOn:
+    id: "tab-tasks"
+# The tab root is titled "My Work"; the mode toggle is the one control present in both
+# modes, so waiting on it is what says the tab has finished loading.
+- extendedWaitUntil:
+    visible:
+      id: "task-mode-toggle"
+    timeout: 10000
+
+# The projects list is behind the header mode toggle; the create affordance sits with the
+# list rather than on the focus view, because that is the surface it adds to.
+- tapOn:
+    id: "task-mode-toggle"
+- extendedWaitUntil:
+    visible:
+      id: "projects-create-button"
+    timeout: 10000
+- tapOn:
+    id: "projects-create-button"
+
+- extendedWaitUntil:
+    visible:
+      id: "create-project-screen"
+    timeout: 10000
+
+- tapOn:
+    id: "project-name-input"
+- inputText: "Shop Floor ${MAESTRO_RUN_ID}"
+# The keyboard covers the lower half of the form on a small phone, and the mode segments
+# and the submit button both live down there.
+- hideKeyboard
+
+# The key is suggested from the name until the person edits it, so it is already filled in
+# and the form is submittable without typing it.
+- assertVisible:
+    id: "project-key-input"
+
+- scrollUntilVisible:
+    element:
+      id: "project-mode-ritual"
+    direction: DOWN
+- tapOn:
+    id: "project-mode-ritual"
+- scrollUntilVisible:
+    element:
+      id: "create-project-submit"
+    direction: DOWN
+- tapOn:
+    id: "create-project-submit"
+
+# Landing on the new project, not back on a form that has already been submitted. A brand
+# new project has no work in it yet, and the ritual affordance is there because the creator
+# is its owner.
+- extendedWaitUntil:
+    visible: "No tasks in this project"
+    timeout: 15000
+- assertVisible:
+    id: "project-create-ritual-button"

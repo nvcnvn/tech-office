@@ -24,5 +24,13 @@ export {
     generateSubdomainSuggestions,
 } from './subdomain';
 
+// Project key validation
+export {
+    PROJECT_KEY_PATTERN,
+    PROJECT_KEY_RULE_TEXT,
+    projectKeySchema,
+    deriveProjectKey,
+} from './project-key';
+
 // Signup form validation
 export { signupFormSchema, validateSignupForm, type SignupFormData } from './signup';
