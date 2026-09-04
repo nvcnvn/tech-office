@@ -2,6 +2,7 @@ package collaboration
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -82,5 +83,104 @@ func (l *logicImpl) GetTeamAttentionSummary(
 	if _, err := parseAsOfDate(req.GetAsOfDate(), time.Now()); err != nil {
 		return nil, err
 	}
-	return &rpcv1.GetTeamAttentionSummaryResponse{}, nil
+
+	counts, err := l.Queries.CountTeamAttention(ctx, tx, &database.CountTeamAttentionParams{
+		OrganizationID:   orgID,
+		CallerEmployeeID: employeeID,
+		CountCap:         teamAttentionCountCap,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to count team attention: %w", err)
+	}
+
+	// No supervisory scope means the block renders nothing at all, so there is nothing to
+	// list and no reason to pay for the item query.
+	if counts.SupervisedProjectCount == 0 {
+		return &rpcv1.GetTeamAttentionSummaryResponse{}, nil
+	}
+
+	rows, err := l.Queries.ListTeamAttentionItems(ctx, tx, &database.ListTeamAttentionItemsParams{
+		OrganizationID:   orgID,
+		CallerEmployeeID: employeeID,
+		ItemLimit:        clampTeamAttentionLimit(req.GetLimit()),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list team attention items: %w", err)
+	}
+
+	items, err := l.resolveTeamAttentionItems(ctx, tx, orgID, rows)
+	if err != nil {
+		return nil, err
+	}
+
+	return &rpcv1.GetTeamAttentionSummaryResponse{
+		CanSupervise:           true,
+		SupervisedProjectCount: counts.SupervisedProjectCount,
+		OverdueCount:           counts.OverdueCount,
+		UnassignedCount:        counts.UnassignedCount,
+		Items:                  items,
+	}, nil
+}
+
+// resolveTeamAttentionItems turns query rows into wire items, naming each row's assignee.
+//
+// Exactly one batched lookup for the whole response — never a per-row call and never a
+// cross-schema SQL join (Constitution IV). An id that does not resolve leaves the name
+// absent and KEEPS the row: a departed or archived assignee is precisely the situation the
+// supervisor needs to see, and `additional_assignee_count` alongside an absent name is what
+// tells the client "somebody is on it and we could not name them" rather than "nobody is".
+// A nil lookup — the seeder, and tests that wire no organization logic — behaves the same
+// way.
+func (l *logicImpl) resolveTeamAttentionItems(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	rows []*database.ListTeamAttentionItemsRow,
+) ([]*rpcv1.TeamAttentionItem, error) {
+	names := map[dbuuid.UUID]string{}
+	if l.employeeNames != nil {
+		ids := make([]dbuuid.UUID, 0, len(rows))
+		for _, row := range rows {
+			if row.AssigneeCount > 0 {
+				ids = append(ids, row.PrimaryAssigneeID)
+			}
+		}
+		resolved, err := l.employeeNames.ListEmployeeNames(ctx, tx, orgID, ids)
+		if err != nil {
+			return nil, fmt.Errorf("failed to resolve team attention assignee names: %w", err)
+		}
+		names = resolved
+	}
+
+	items := make([]*rpcv1.TeamAttentionItem, 0, len(rows))
+	for _, row := range rows {
+		item := &rpcv1.TeamAttentionItem{
+			TaskId:      row.TaskID.String(),
+			ProjectId:   row.ProjectID.String(),
+			ProjectName: row.ProjectName,
+			Title:       row.Title,
+			Category:    teamAttentionCategory(row.AttentionRank),
+		}
+		if row.SortDate.Valid {
+			due := row.SortDate.Time.Format(teamAttentionDateLayout)
+			item.DueDate = &due
+		}
+		if row.AssigneeCount > 0 {
+			if name, ok := names[row.PrimaryAssigneeID]; ok && name != "" {
+				item.AssigneeDisplayName = &name
+			}
+			item.AdditionalAssigneeCount = row.AssigneeCount - 1
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+// teamAttentionCategory derives the wire enum from the query's rank column. The rank is
+// the ordering authority; deriving the enum from it is what stops the two disagreeing.
+func teamAttentionCategory(rank int32) rpcv1.TeamAttentionCategory {
+	if rank == 0 {
+		return rpcv1.TeamAttentionCategory_TEAM_ATTENTION_CATEGORY_OVERDUE
+	}
+	return rpcv1.TeamAttentionCategory_TEAM_ATTENTION_CATEGORY_UNASSIGNED
 }

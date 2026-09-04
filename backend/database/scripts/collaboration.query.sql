@@ -1728,3 +1728,129 @@ WHERE p.organization_id = @organization_id
              AND pm.employee_id     = @employee_id
       )
   );
+
+-- ---------------------------------------------------------------------------
+-- Team Attention Summary (feature 047)
+--
+-- Two queries behind the supervisor's Team block on mobile Today. They share one base
+-- predicate verbatim, and differ only in projection and bound: FR-004 says a count the
+-- caller cannot substantiate by opening the rows is worse than no count, and the only way
+-- to keep that true is for the two to disagree about nothing else.
+--
+-- Lateness is `ps.category = 'overdue'` — the stored state the reconciliation sweep writes,
+-- never a comparison against completion_deadline. Computing it here would disagree with the
+-- caller's own "Running late" section for up to five minutes at every deadline.
+--
+-- Supervisory scope is `project_membership.role IN ('owner','admin')`: one notch tighter
+-- than the review queue's `role <> 'viewer'`, because `member` would mean every employee
+-- sees the whole workspace's late work.
+-- ---------------------------------------------------------------------------
+
+-- name: CountTeamAttention :one
+-- Each category count is COUNT(*) over a LIMIT @count_cap subquery, so a workspace with a
+-- 5 000-instance backlog costs the same to summarise as a healthy one. `*_count_capped` is
+-- derived in Go from `count >= cap`, exactly as GetEvidenceReviewQueueCount derives
+-- is_capped.
+SELECT
+  (SELECT COUNT(*) FROM (
+    SELECT 1
+    FROM collaboration.task t
+    JOIN collaboration.project p
+      ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+    JOIN collaboration.project_state ps
+      ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+    WHERE t.organization_id = @organization_id
+      AND t.task_kind = 'ritual_instance'
+      AND t.is_deleted = FALSE
+      AND t.detached_from_ritual = FALSE
+      AND ps.is_closed = FALSE
+      AND p.is_archived = FALSE
+      AND EXISTS (
+        SELECT 1 FROM collaboration.project_membership pm
+         WHERE (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+           AND pm.employee_id = @caller_employee_id
+           AND pm.role IN ('owner', 'admin')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM collaboration.task_assignee ta
+         WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+           AND ta.role = 'assignee'
+           AND ta.employee_id = @caller_employee_id
+      )
+      AND ps.category = 'overdue'
+    LIMIT @count_cap
+  ) capped_overdue)::int AS overdue_count,
+
+  -- Placeholder until the unassigned leg lands with User Story 2.
+  0::int AS unassigned_count,
+
+  -- The scope's own cardinality. The all-clear message names it (FR-016), and zero is what
+  -- makes the whole block disappear (FR-001), so it cannot be inferred from a zero count.
+  (SELECT COUNT(*)
+     FROM collaboration.project p
+     JOIN collaboration.project_membership pm
+       ON (pm.organization_id, pm.project_id) = (p.organization_id, p.id)
+    WHERE p.organization_id = @organization_id
+      AND p.is_archived = FALSE
+      AND pm.employee_id = @caller_employee_id
+      AND pm.role IN ('owner', 'admin'))::int AS supervised_project_count;
+
+-- name: ListTeamAttentionItems :many
+-- The rows behind the counts above. `attention_rank` is the ordering authority and the wire
+-- enum is derived from it in Go, so the two cannot disagree — the same discipline
+-- ListEvidenceReviewQueue applies to urgency_rank.
+--
+-- The earliest assignee comes from a LATERAL taking one row and the count from a correlated
+-- sub-select, both copied from ListTaskPreviews: an instance with three assignees must
+-- still produce exactly one row. The id is COALESCEd to the nil uuid because sqlc infers a
+-- LEFT JOIN'd NOT NULL column as non-nullable; the Go side reads assignee_count, not the
+-- id, to decide whether anyone is on it.
+SELECT
+  t.id AS task_id,
+  t.project_id,
+  p.name AS project_name,
+  t.title,
+  0::int AS attention_rank,
+  t.completion_deadline::date AS sort_date,
+  COALESCE(primary_assignee.employee_id, '00000000-0000-0000-0000-000000000000'::uuid) AS primary_assignee_id,
+  (SELECT count(*)
+     FROM collaboration.task_assignee ta
+    WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+      AND ta.role = 'assignee')::int AS assignee_count
+FROM collaboration.task t
+JOIN collaboration.project p
+  ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+JOIN collaboration.project_state ps
+  ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+LEFT JOIN LATERAL (
+  SELECT ta.employee_id
+    FROM collaboration.task_assignee ta
+   WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+     AND ta.role = 'assignee'
+   ORDER BY ta.assigned_at, ta.id
+   LIMIT 1
+) primary_assignee ON TRUE
+WHERE t.organization_id = @organization_id
+  AND t.task_kind = 'ritual_instance'
+  AND t.is_deleted = FALSE
+  AND t.detached_from_ritual = FALSE
+  AND ps.is_closed = FALSE
+  AND p.is_archived = FALSE
+  AND EXISTS (
+    SELECT 1 FROM collaboration.project_membership pm
+     WHERE (pm.organization_id, pm.project_id) = (t.organization_id, t.project_id)
+       AND pm.employee_id = @caller_employee_id
+       AND pm.role IN ('owner', 'admin')
+  )
+  AND NOT EXISTS (
+    SELECT 1 FROM collaboration.task_assignee ta
+     WHERE (ta.organization_id, ta.task_id) = (t.organization_id, t.id)
+       AND ta.role = 'assignee'
+       AND ta.employee_id = @caller_employee_id
+  )
+  AND ps.category = 'overdue'
+-- completion_deadline ASC *is* "longest late first": the oldest deadline has been late the
+-- longest. The task id is a UUID v7 primary key, so the tiebreak is total and the order is
+-- deterministic across requests.
+ORDER BY attention_rank ASC, sort_date ASC NULLS LAST, task_id ASC
+LIMIT @item_limit;

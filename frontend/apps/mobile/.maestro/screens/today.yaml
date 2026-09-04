@@ -23,6 +23,29 @@ name: "Screen — Today"
 - swipe:
     direction: DOWN
     duration: 700
+# Feature 047: the Team block. The signed-in account must own or administer at
+# least one project holding a seeded overdue ritual instance assigned to somebody
+# else — see MAESTRO_TEAM_* in .env.example. Tapping the first row must open that
+# instance, because a supervisor who cannot act on what the block shows them is
+# being told about a problem and handed no way to reach it.
+- extendedWaitUntil:
+    visible:
+      id: "today-section-team"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/04-today-team-block"
+- tapOn:
+    id: "today-team-row-${MAESTRO_TEAM_TASK_ID}"
+- extendedWaitUntil:
+    visible:
+      id: "top-level-back-button"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/05-today-team-instance"
+- tapOn:
+    id: "top-level-back-button"
+- extendedWaitUntil:
+    visible:
+      id: "today-section-team"
+    timeout: 8000
 # The Schedule header action is Today's only route to the calendar now that
 # Schedule has no tab of its own, so the sweep has to prove it still opens and
 # that the back control returns here.
