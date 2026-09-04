@@ -1,0 +1,141 @@
+// Contract delta for feature 047 — Team block on mobile Today.
+//
+// This file is NOT compiled. It is the exact, reviewable addition to
+// `backend/rpc/v1/collaboration.proto`; the implementation copies these declarations into
+// that file (RPC beside the evidence-review-queue RPCs, messages beside their siblings).
+//
+// Additive only. No existing field, message or RPC changes.
+
+syntax = "proto3";
+
+package rpc.v1;
+
+// ---------------------------------------------------------------------------
+// RPC — add to `service CollaborationService`, immediately after
+// GetEvidenceReviewQueueCount.
+// ---------------------------------------------------------------------------
+
+// GetTeamAttentionSummary answers "is the store OK" for one supervisor, in one request:
+// which ritual instances across every project they own or administer are overdue, and which
+// are scheduled for today with nobody on them.
+//
+// Same deliberate absence of `required_permissions` as the two review-queue RPCs above: a
+// caller who lacks `collab.reviewEvidence`, or who supervises no project, must receive an
+// empty summary with `can_supervise = false`, not PERMISSION_DENIED. The interceptor rejects
+// before the handler runs, so a declared permission would make that path unreachable, and a
+// worker would be shown an authorization failure for the entirely ordinary condition of not
+// being anyone's supervisor.
+//
+// Read-only. Nothing here assigns, reassigns or completes anything; the client routes to the
+// existing ritual instance screen for that.
+//
+//   rpc GetTeamAttentionSummary(GetTeamAttentionSummaryRequest)
+//       returns (GetTeamAttentionSummaryResponse) {
+//     option (rpc.v1.access_control) = {};
+//   }
+
+// ---------------------------------------------------------------------------
+// Messages
+// ---------------------------------------------------------------------------
+
+// Which failure a row represents. An enum rather than a string, so the mobile client and any
+// later web client cannot drift on the spelling, and so the "Unassigned" label is a
+// client-side lookup with no cross-stack literal to keep in sync.
+enum TeamAttentionCategory {
+  TEAM_ATTENTION_CATEGORY_UNSPECIFIED = 0;
+
+  // Still open and past its deadline, as recorded by the reconciliation sweep. Never
+  // computed from a date by this RPC — that is what stops this block disagreeing with the
+  // caller's own "Running late" section about which instances are late.
+  TEAM_ATTENTION_CATEGORY_OVERDUE = 1;
+
+  // Scheduled for `as_of_date` with nobody holding the assignee role — either a shift rota
+  // that has not resolved, or an instance created with no assignee. The two are the same
+  // problem from the supervisor's seat: nobody is on it.
+  TEAM_ATTENTION_CATEGORY_UNASSIGNED = 2;
+}
+
+message GetTeamAttentionSummaryRequest {
+  // The caller's local date, ISO `YYYY-MM-DD`. Scopes the unassigned category only; the
+  // overdue category is unbounded, because an instance that went late three days ago is
+  // still the store's problem this morning.
+  //
+  // An explicit field rather than an ambient header, and rather than the server's clock: for
+  // a supervisor at UTC+7 the local date and the server's UTC date differ exactly during the
+  // early-morning hours when this block is most useful.
+  //
+  // Absent or empty -> the server's current date. Present but unparseable -> InvalidArgument
+  // with a google.rpc.BadRequest field violation on `as_of_date`. Never a silent fallback: a
+  // caller who believes they asked about one day must not be answered about another.
+  optional string as_of_date = 1;
+
+  // Items returned per category. Defaults to 5, clamped to 20. The client sends 5 for the
+  // collapsed block and 20 when the supervisor expands it; there is no cursor, because the
+  // ceiling is 20 rows and paging past it is a feature this block deliberately does not have.
+  optional int32 limit = 2;
+}
+
+message TeamAttentionItem {
+  // Identity — enough to open the instance and to route back to Today afterwards.
+  string task_id = 1;
+  string project_id = 2;
+
+  // The project's name, not its key: the mobile row has the width for a name, and a
+  // supervisor reading a list of other people's work needs the label they would say out loud.
+  string project_name = 3;
+
+  string title = 4;
+
+  TeamAttentionCategory category = 5;
+
+  // ISO `YYYY-MM-DD`. The completion deadline's date for an overdue row, the scheduled date
+  // for an unassigned one. Absent when the source column is null.
+  optional string due_date = 6;
+
+  // The earliest assignee's human-readable name. Absent for an unassigned row — the client
+  // renders the literal "Unassigned" from `category`, never an empty name.
+  //
+  // Also absent, with `additional_assignee_count` implying somebody is on it, when the
+  // assignee's employee record could not be resolved — a departed or archived person. The row
+  // is still listed: a departed assignee is exactly the situation the owner needs to see, so
+  // it must not be dropped for want of a live employee record.
+  optional string assignee_display_name = 7;
+
+  // Assignees beyond the one named, so the client can render "Ana Rivas +2" rather than
+  // wrapping a list of names onto three lines. Zero for an unassigned row.
+  int32 additional_assignee_count = 8;
+}
+
+message GetTeamAttentionSummaryResponse {
+  // Whether the caller holds `collab.reviewEvidence` AND owns or administers at least one
+  // project. False renders nothing at all — no heading, no card, no placeholder.
+  //
+  // A distinct field rather than an inference from a zero count, for the same reason
+  // GetEvidenceReviewQueueCount carries `can_review`: zero alone cannot tell "you supervise
+  // nothing" from "you supervise three projects and they are all fine", and those two must
+  // look different on the screen. A silent block read as good news is the defect this whole
+  // feature exists to fix.
+  bool can_supervise = 1;
+
+  // How many non-archived projects the summary covered. Named in the all-clear message, so a
+  // supervisor can see the block checked something rather than merely finding nothing.
+  int32 supervised_project_count = 2;
+
+  // Counts across the whole supervisory scope, bounded server-side so a workspace with a
+  // 5 000-instance backlog costs the same to summarise as a healthy one.
+  int32 overdue_count = 3;
+  int32 unassigned_count = 4;
+
+  // True when the corresponding count reached the server-side cap and the real figure is at
+  // least that. Clients render "99+" rather than presenting a capped figure as exact.
+  //
+  // Two flags, not one: a workspace can plausibly have 100+ overdue and 3 unassigned, and
+  // reporting the exact 3 as "100+" would be a lie the supervisor can disprove by expanding.
+  bool overdue_count_capped = 5;
+  bool unassigned_count_capped = 6;
+
+  // Up to `limit` items per category, overdue first, then longest-late first within overdue.
+  // Always a subset of the counts above; the counts are the truth about size, the items are
+  // what fits on a phone.
+  repeated TeamAttentionItem items = 7;
+}
