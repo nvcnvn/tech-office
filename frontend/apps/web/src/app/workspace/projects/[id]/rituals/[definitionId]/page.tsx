@@ -40,6 +40,11 @@ import {
 	Breadcrumbs,
 	Link,
 	Autocomplete,
+	Dialog,
+	DialogActions,
+	DialogContent,
+	DialogContentText,
+	DialogTitle,
 	type TextFieldProps,
 } from '@mui/material';
 import GpsFixedIcon from '@mui/icons-material/GpsFixed';
@@ -85,6 +90,8 @@ import {
 	type AutoApproveConfig,
 	type ScheduleChangeImpact,
 	type AssignmentStrategy,
+	searchDocuments,
+	type SearchResult,
 } from 'apis';
 
 interface DeptPoolSlot {
@@ -897,6 +904,183 @@ function getEmployeeLabel(emp: EmployeeSuggestion): string {
 	return full || 'Unknown employee';
 }
 
+// =============================================================================
+// Procedure Document Picker (Feature 043)
+// =============================================================================
+
+/**
+ * The document currently chosen as the ritual's procedure, as this page tracks it.
+ *
+ * `null` means no procedure. The distinction between "the manager never touched this"
+ * and "the manager removed it" lives in `procedureDirty` on the page, not here: an
+ * untouched field must be omitted from the update so the server leaves the column alone,
+ * while a removal must send an empty string so the server detaches.
+ */
+interface ProcedureChoice {
+	documentId: string;
+	title: string;
+}
+
+interface ProcedureDocumentPickerProps {
+	value: ProcedureChoice | null;
+	onChange: (v: ProcedureChoice | null) => void;
+}
+
+/**
+ * Chooses one workspace document as the ritual's written procedure.
+ *
+ * Backed by `searchDocuments`, which searches only what THIS manager can already read.
+ * That is the access rule, not a convenience: a manager cannot attach — and so cannot
+ * grant every instance viewer sight of — a document they could not open themselves.
+ */
+function ProcedureDocumentPicker({ value, onChange }: ProcedureDocumentPickerProps) {
+	const colors = useThemeColors();
+	const [inputValue, setInputValue] = useState('');
+	const [options, setOptions] = useState<SearchResult[]>([]);
+	const [searching, setSearching] = useState(false);
+	// The chosen document, held until the manager confirms they understand what attaching
+	// it grants. Nothing is written to the form until they do.
+	const [pendingChoice, setPendingChoice] = useState<ProcedureChoice | null>(null);
+
+	useEffect(() => {
+		if (inputValue.trim().length < 2) {
+			setOptions([]);
+			return;
+		}
+		setSearching(true);
+		const timer = setTimeout(async () => {
+			try {
+				setOptions((await searchDocuments({ query: inputValue.trim(), limit: 10 })).results);
+			} catch {
+				setOptions([]);
+			} finally {
+				setSearching(false);
+			}
+		}, 250);
+		return () => clearTimeout(timer);
+	}, [inputValue]);
+
+	return (
+		<>
+			{value ? (
+				<Box
+					sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+					data-testid="ritual-procedure-current"
+				>
+					<Chip
+						label={value.title}
+						size="small"
+						sx={{ ...colors.text.primary.style }}
+						data-testid="ritual-procedure-current-title"
+					/>
+					<Button
+						size="small"
+						onClick={() => onChange(null)}
+						data-testid="ritual-procedure-remove"
+					>
+						Remove
+					</Button>
+				</Box>
+			) : null}
+
+			<Autocomplete
+				options={options}
+				value={null}
+				inputValue={inputValue}
+				onInputChange={(_e, v) => setInputValue(v)}
+				onChange={(_e, newValue) => {
+					const doc = (newValue as SearchResult | null)?.document;
+					if (!doc) return;
+					// Deliberately NOT onChange() — the warning comes first.
+					setPendingChoice({ documentId: doc.id, title: doc.title });
+					setInputValue('');
+				}}
+				getOptionLabel={(opt) => (opt as SearchResult).document.title}
+				isOptionEqualToValue={(opt, val) => opt.document.id === val.document.id}
+				filterOptions={(x) => x}
+				loading={searching}
+				noOptionsText={
+					inputValue.trim().length >= 2
+						? 'No documents found'
+						: 'Type at least two characters to search your documents'
+				}
+				renderInput={(params) => (
+					<TextField
+						{...(params as TextFieldProps)}
+						size="small"
+						placeholder={value ? 'Replace with another document…' : 'Search your documents…'}
+						InputProps={{
+							...params.InputProps,
+							endAdornment: (
+								<>
+									{searching && <CircularProgress size={14} />}
+									{params.InputProps.endAdornment}
+								</>
+							),
+						} as TextFieldProps['InputProps']}
+						inputProps={{
+							...params.inputProps,
+							'data-testid': 'ritual-procedure-input',
+						}}
+					/>
+				)}
+				renderOption={(props, option) => (
+					<Box component="li" {...props} key={option.document.id}>
+						<Typography variant="body2">{option.document.title}</Typography>
+					</Box>
+				)}
+			/>
+
+			{/*
+			  The access warning (FR-008). It is shown BEFORE the attachment is recorded,
+			  not after and not as a passive note beside the field: attaching grants every
+			  person who can see an instance of this ritual sight of this document, whether
+			  or not they could open it in the documents feature. That is a consequence a
+			  manager must be given the chance to decline.
+
+			  It is entirely client-side and nothing about the acknowledgement is stored.
+			  Recording it would create an audit trail nobody reads and a second source of
+			  truth about who agreed to what.
+			*/}
+			<Dialog
+				open={pendingChoice !== null}
+				onClose={() => setPendingChoice(null)}
+				fullWidth
+				maxWidth="sm"
+				data-testid="ritual-procedure-access-warning"
+			>
+				<DialogTitle>Everyone who can see this ritual will be able to read this document</DialogTitle>
+				<DialogContent>
+					<DialogContentText>
+						Attaching <strong>{pendingChoice?.title}</strong> lets everyone who can see an
+						instance of this ritual read it, even people you have not shared the document
+						with. They can only read it here — they cannot comment on it, edit it, or find
+						it in their documents.
+					</DialogContentText>
+				</DialogContent>
+				<DialogActions>
+					<Button
+						onClick={() => setPendingChoice(null)}
+						data-testid="ritual-procedure-access-warning-cancel"
+					>
+						Cancel
+					</Button>
+					<Button
+						variant="contained"
+						onClick={() => {
+							onChange(pendingChoice);
+							setPendingChoice(null);
+						}}
+						data-testid="ritual-procedure-access-warning-confirm"
+					>
+						Attach it
+					</Button>
+				</DialogActions>
+			</Dialog>
+		</>
+	);
+}
+
 function AssigneePicker({ value, onChange }: AssigneePickerProps) {
 	const colors = useThemeColors();
 	const [inputValue, setInputValue] = useState('');
@@ -1133,6 +1317,12 @@ export default function RitualDefinitionPage() {
 	const [daysOfWeek, setDaysOfWeek] = useState<number[]>([1, 2, 3, 4, 5]); // Mon-Fri default
 	const [dayOfMonth, setDayOfMonth] = useState(1);
 	const [completionWindowHours, setCompletionWindowHours] = useState(24);
+	// Feature 043. `procedure` is what the form shows; `procedureDirty` is whether the
+	// manager touched it at all. The update field is three-valued and only the server can
+	// tell the three apart, so an untouched field must be omitted (leave alone), a cleared
+	// one sent as '' (detach), and a chosen one sent as its id (attach or replace).
+	const [procedure, setProcedure] = useState<ProcedureChoice | null>(null);
+	const [procedureDirty, setProcedureDirty] = useState(false);
 	// Default timezone to user's local timezone, mapped to nearest UTC offset
 	const [timezone, setTimezone] = useState(() => {
 		try {
@@ -1202,6 +1392,20 @@ export default function RitualDefinitionPage() {
 					setDayOfMonth(defDayOfMonth);
 					setCompletionWindowHours(defResp.completionWindowHours);
 					setTimezone(defResp.timezone);
+					// An unresolvable procedure still shows the manager that something is
+					// attached — a blank field would read as "there is no procedure" and
+					// invite them to attach a second one over an existing attachment.
+					setProcedure(
+						defResp.procedure
+							? {
+									documentId: defResp.procedure.documentId,
+									title: defResp.procedure.isAvailable
+										? defResp.procedure.title
+										: 'Attached document is unavailable',
+							  }
+							: null
+					);
+					setProcedureDirty(false);
 					// Resolve the saved assignee IDs to people. Rendering the raw UUID while
 					// waiting for a re-search meant the chips showed a fragment of a UUID
 					// to whoever opened the ritual.
@@ -1316,6 +1520,7 @@ export default function RitualDefinitionPage() {
 						departmentId: s.dept.id,
 						assignmentStrategy: s.strategy,
 					})),
+					procedureDocumentId: procedure?.documentId,
 				});
 				// Save any draft evidence requirements
 				for (const draft of draftEvidence) {
@@ -1362,6 +1567,11 @@ export default function RitualDefinitionPage() {
 						departmentId: s.dept.id,
 						assignmentStrategy: s.strategy,
 					})),
+					// Untouched -> undefined, so the server leaves the column alone.
+					// Cleared -> '', which is the detach request. Chosen -> the id.
+					procedureDocumentId: procedureDirty
+						? (procedure?.documentId ?? '')
+						: undefined,
 				});
 				setShowScheduleConfirm(false);
 				// Navigate back to confirm save
@@ -1480,6 +1690,28 @@ export default function RitualDefinitionPage() {
 										Supports <strong>bold</strong>, <em>italic</em>, lists, and quotes.
 									</Typography>
 									<DescriptionEditor value={description} onChange={setDescription} />
+								</Box>
+								{/*
+								  Feature 043. The written procedure is a separate, longer document
+								  that lives in the workspace and is maintained there. It sits beside
+								  the free-text description rather than replacing it: the description
+								  is the short standing note, the procedure is the full document.
+								*/}
+								<Box>
+									<Typography variant="body2" sx={{ ...colors.text.primary.style, fontWeight: 500, mb: 0.5 }}>
+										Procedure document
+									</Typography>
+									<Typography variant="caption" sx={{ ...colors.text.secondary.style, mb: 1, display: 'block' }}>
+										Attach one workspace document as the written procedure. Workers can
+										read it from every instance of this ritual without leaving their work.
+									</Typography>
+									<ProcedureDocumentPicker
+										value={procedure}
+										onChange={(v) => {
+											setProcedure(v);
+											setProcedureDirty(true);
+										}}
+									/>
 								</Box>
 							</Box>
 						</Paper>

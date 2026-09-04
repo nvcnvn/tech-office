@@ -491,7 +491,7 @@ func (l *logicImpl) EnsureTaskResources(
 			Title:       fmt.Sprintf("Task: %s", task.Title),
 			ContentJson: "{}",
 			Visibility:  rpcv1.DocumentVisibility_DOCUMENT_VISIBILITY_PUBLIC,
-		})
+		}, DocumentTypeTaskDescription)
 		if docErr != nil {
 			slog.WarnContext(ctx, "EnsureTaskResources: failed to create document", "error", docErr, "taskID", taskID)
 		} else {

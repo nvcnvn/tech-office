@@ -38,6 +38,11 @@ func (l *logicImpl) CreateRitualDefinition(
 		return nil, ErrAccessDenied
 	}
 
+	procedureID, err := l.validateProcedureDocument(ctx, tx, orgID, employeeID, req.ProcedureDocumentId)
+	if err != nil {
+		return nil, err
+	}
+
 	recurrenceJSON, err := json.Marshal(recurrenceRuleToMap(req.RecurrenceRule))
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal recurrence rule: %w", err)
@@ -57,6 +62,7 @@ func (l *logicImpl) CreateRitualDefinition(
 		CreatedByEmployeeID:   employeeID,
 		GenerationWindowDays:  30,
 		UpdatedAt:             pgtype.Timestamptz{Time: now, Valid: true},
+		ProcedureDocumentID:   procedureID,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ritual definition: %w", err)
@@ -135,7 +141,9 @@ func (l *logicImpl) CreateRitualDefinition(
 		evidenceReqs = append(evidenceReqs, evidenceRequirementToProto(er))
 	}
 
-	return assembleRitualDefinition(def, req.DefaultAssigneeIds, evidenceReqs, poolProtos), nil
+	rd := assembleRitualDefinition(def, req.DefaultAssigneeIds, evidenceReqs, poolProtos)
+	rd.Procedure = l.resolveProcedure(ctx, tx, orgID, def.ProcedureDocumentID)
+	return rd, nil
 }
 
 // GetRitualDefinition retrieves a ritual definition with its assignees and evidence requirements.
@@ -184,7 +192,9 @@ func (l *logicImpl) GetRitualDefinition(
 
 	poolProtos := l.listDepartmentPoolsProto(ctx, tx, orgID, id)
 
-	return assembleRitualDefinition(def, assigneeIDs, evidenceReqs, poolProtos), nil
+	rd := assembleRitualDefinition(def, assigneeIDs, evidenceReqs, poolProtos)
+	rd.Procedure = l.resolveProcedure(ctx, tx, orgID, def.ProcedureDocumentID)
+	return rd, nil
 }
 
 // UpdateRitualDefinition performs a partial COALESCE update on a ritual definition.
@@ -195,6 +205,25 @@ func (l *logicImpl) UpdateRitualDefinition(
 	req *rpcv1.UpdateRitualDefinitionRequest,
 ) (*rpcv1.RitualDefinition, error) {
 	defID := dbuuid.MustParse(req.RitualDefinitionId)
+
+	// Only a project owner or admin may edit a definition — the same bar
+	// CreateRitualDefinition already enforces and the one the domain documentation
+	// already describes. Until feature 043 this check was missing entirely: the connect
+	// layer passed the definition id into the employee slot and the logic ignored it.
+	existing, err := l.Queries.GetRitualDefinition(ctx, tx, &database.GetRitualDefinitionParams{
+		OrganizationID: orgID,
+		ID:             defID,
+	})
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrRitualDefinitionNotFound
+		}
+		return nil, fmt.Errorf("failed to get ritual definition: %w", err)
+	}
+	role, err := l.GetProjectMemberRole(ctx, tx, orgID, dbuuid.UUID(existing.ProjectID), employeeID)
+	if err != nil || (role != ProjectMemberRoleAdmin && role != ProjectMemberRoleOwner) {
+		return nil, ErrAccessDenied
+	}
 
 	params := &database.UpdateRitualDefinitionParams{
 		OrganizationID: orgID,
@@ -222,7 +251,20 @@ func (l *logicImpl) UpdateRitualDefinition(
 		params.Timezone = pgtype.Text{String: *req.Timezone, Valid: true}
 	}
 
-	_, err := l.Queries.UpdateRitualDefinition(ctx, tx, params)
+	// Three-valued. Absent leaves the attachment exactly as it is; present-and-empty
+	// detaches without touching the document; present-and-non-empty attaches or replaces.
+	// Replacement is one write, not delete-then-add — "never two procedures" is a property
+	// of the column being singular, not of ordering.
+	if req.ProcedureDocumentId != nil {
+		procedureID, vErr := l.validateProcedureDocument(ctx, tx, orgID, employeeID, req.ProcedureDocumentId)
+		if vErr != nil {
+			return nil, vErr
+		}
+		params.UpdateProcedure = true
+		params.ProcedureDocumentID = procedureID
+	}
+
+	_, err = l.Queries.UpdateRitualDefinition(ctx, tx, params)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, ErrRitualDefinitionNotFound
@@ -353,6 +395,7 @@ func (l *logicImpl) ListRitualDefinitions(
 
 		poolProtos := l.listDepartmentPoolsProto(ctx, tx, orgID, defID)
 		results[i] = assembleRitualDefinition(def, assigneeIDs, evidenceReqs, poolProtos)
+		results[i].Procedure = l.resolveProcedure(ctx, tx, orgID, def.ProcedureDocumentID)
 	}
 
 	return results, nil
@@ -893,4 +936,161 @@ func stringToRecurrenceTypeProto(s string) rpcv1.RecurrenceType {
 	default:
 		return rpcv1.RecurrenceType_RECURRENCE_TYPE_UNSPECIFIED
 	}
+}
+
+// ============================================================================
+// Ritual Procedure — the workspace document attached to a definition
+// ============================================================================
+
+// resolveProcedure turns the nullable procedure_document_id column into the resolved
+// RitualProcedure clients read.
+//
+// It never returns an error. A docs failure degrades one entry point; it must not fail
+// GetRitualDefinition, because that would take the whole ritual instance screen down with
+// it. The three outcomes are deliberately distinct:
+//
+//	column NULL          -> nil. The definition has no procedure and clients render nothing.
+//	column set, resolved -> every field populated.
+//	column set, failed   -> {DocumentId, IsAvailable: false}, empty title, unspecified
+//	                        status. Clients render an explicit unavailable state.
+//
+// Collapsing the first and third would tell a worker there was never a procedure for a
+// ritual that has one, which is the confusion this feature is most insistent on avoiding.
+func (l *logicImpl) resolveProcedure(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID dbuuid.UUID,
+	documentID dbuuid.NullUUID,
+) *rpcv1.RitualProcedure {
+	if !documentID.Valid {
+		return nil
+	}
+
+	docID := dbuuid.UUID(documentID.UUID)
+	if l.DocsLogic == nil {
+		return &rpcv1.RitualProcedure{DocumentId: docID.String()}
+	}
+
+	doc, err := l.DocsLogic.GetDocument(ctx, tx, orgID, docID)
+	if err != nil || doc == nil {
+		slog.DebugContext(ctx, "ritual procedure document is unavailable",
+			"documentID", docID, "error", err,
+		)
+		return &rpcv1.RitualProcedure{DocumentId: docID.String()}
+	}
+
+	return &rpcv1.RitualProcedure{
+		DocumentId:  docID.String(),
+		Title:       doc.Title,
+		Slug:        doc.Slug,
+		Status:      doc.Status,
+		IsAvailable: true,
+	}
+}
+
+// validateProcedureDocument checks a candidate attachment and returns the value to write.
+//
+// A nil field means the caller did not mention the procedure at all; an empty string means
+// detach. Both produce a null column value and no error. Anything else must resolve, in the
+// caller's organization, to a workspace document.
+//
+// The candidate is resolved through DocsLogic, so a document in another organization is
+// indistinguishable from one that does not exist — both produce the same field violation,
+// by design. Any status is accepted, archived included: an archived procedure is usually one
+// somebody forgot to unarchive and is still better than none.
+func (l *logicImpl) validateProcedureDocument(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, employeeID dbuuid.UUID,
+	candidate *string,
+) (dbuuid.NullUUID, error) {
+	if candidate == nil || *candidate == "" {
+		return dbuuid.NullUUID{}, nil
+	}
+
+	docID, err := dbuuid.Parse(*candidate)
+	if err != nil {
+		return dbuuid.NullUUID{}, ErrProcedureDocumentInvalid
+	}
+
+	if l.DocsLogic == nil {
+		return dbuuid.NullUUID{}, ErrProcedureDocumentInvalid
+	}
+
+	doc, err := l.DocsLogic.GetDocument(ctx, tx, orgID, docID)
+	if err != nil || doc == nil {
+		return dbuuid.NullUUID{}, ErrProcedureDocumentInvalid
+	}
+	if doc.DocumentType != rpcv1.DocumentType_DOCUMENT_TYPE_WORKSPACE_DOC {
+		return dbuuid.NullUUID{}, ErrProcedureDocumentNotWorkspaceDoc
+	}
+
+	// FR-007. Attaching grants sight of this document to everyone who can see an instance
+	// of the ritual, so a manager may only attach what they could already open themselves.
+	// The read path deliberately skips this check; the write path must not, or a manager
+	// could hand out a document they were never allowed to read. A document the caller
+	// cannot read is refused exactly like one that does not exist, so the refusal does not
+	// disclose that it exists.
+	level, isOwner, err := l.DocsLogic.CheckAccess(ctx, tx, orgID, employeeID, docID)
+	if err != nil {
+		return dbuuid.NullUUID{}, ErrProcedureDocumentInvalid
+	}
+	if level == rpcv1.AccessLevel_ACCESS_LEVEL_NONE && !isOwner {
+		return dbuuid.NullUUID{}, ErrProcedureDocumentInvalid
+	}
+
+	return dbuuid.UUIDToNullUUID(docID), nil
+}
+
+// GetRitualProcedure resolves a definition's procedure and returns it with the document's
+// current content.
+//
+// The resource check is project access with NO required role: "can see an instance" is
+// exactly "can see the project", so a viewer and a reader of a public project both pass.
+// This is the only path by which the content is readable without the caller's own grant on
+// the document, and it deliberately grants nothing else — no comment, no reaction, no edit,
+// no version history, no reach into child pages.
+//
+// A caller outside the project gets a bare PermissionDenied with no detail: naming the
+// project or the ritual would disclose work they may not know exists.
+func (l *logicImpl) GetRitualProcedure(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, employeeID dbuuid.UUID,
+	defID dbuuid.UUID,
+) (*rpcv1.RitualProcedure, string, error) {
+	def, err := l.Queries.GetRitualDefinition(ctx, tx, &database.GetRitualDefinitionParams{
+		OrganizationID: orgID,
+		ID:             defID,
+	})
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, "", ErrRitualDefinitionNotFound
+		}
+		return nil, "", fmt.Errorf("failed to get ritual definition: %w", err)
+	}
+
+	hasAccess, err := l.CheckProjectAccess(ctx, tx, orgID, dbuuid.UUID(def.ProjectID), employeeID, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to check project access: %w", err)
+	}
+	if !hasAccess {
+		return nil, "", ErrAccessDenied
+	}
+
+	procedure := l.resolveProcedure(ctx, tx, orgID, def.ProcedureDocumentID)
+	if procedure == nil || !procedure.IsAvailable {
+		// Absent, or attached but unresolvable. Either way there is no content; the client
+		// tells the two apart with IsAvailable, never by testing the content for emptiness.
+		return procedure, "", nil
+	}
+
+	doc, err := l.DocsLogic.GetDocument(ctx, tx, orgID, dbuuid.UUID(def.ProcedureDocumentID.UUID))
+	if err != nil || doc == nil {
+		// Raced with a delete between the two reads. Report it the same way as any other
+		// unresolvable document rather than failing the call.
+		return &rpcv1.RitualProcedure{DocumentId: procedure.DocumentId}, "", nil
+	}
+
+	return procedure, doc.ContentJson, nil
 }

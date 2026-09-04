@@ -5,6 +5,7 @@ package rpc.v1;
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 import "rpc/v1/chat.proto";
+import "rpc/v1/document.proto";
 import "rpc/v1/files.proto";
 import "rpc/v1/rbac.proto";
 
@@ -418,6 +419,32 @@ service CollaborationService {
   rpc ListRitualDefinitions(ListRitualDefinitionsRequest) returns (ListRitualDefinitionsResponse) {
     option (rpc.v1.access_control) = {
       required_permissions: ["collab.viewRitualDefinition"]
+    };
+  }
+
+  // GetRitualProcedure returns the content of the workspace document attached to a ritual
+  // definition, for read-only rendering next to an instance.
+  //
+  // This is the ONLY way the content is reachable for a reader without their own grant on
+  // the document, and it is deliberately served here rather than by DocumentService:
+  // internal/docs must not learn what a ritual is, and the implicit read must not become a
+  // row in docs.document_access that would surface the document in the reader's tree,
+  // search results or followed-document list.
+  //
+  // Authorization is two-layer. The interceptor checks `collab.viewTask` — may this caller
+  // use the tasks feature at all. The logic layer then checks project access on the
+  // definition's project with no required role, because "can see an instance" is exactly
+  // "can see the project": a viewer and a reader of a public project both pass. A caller
+  // outside the project is refused with a bare PermissionDenied and no error detail, for
+  // the same reason the evidence decision path is: naming the project or the ritual would
+  // disclose work the caller may not know exists.
+  //
+  // It grants nothing else. Commenting, reacting, editing and version history stay on
+  // DocumentService, where the reader's own access decides. The grant does not extend to
+  // child pages or to documents this one links to.
+  rpc GetRitualProcedure(GetRitualProcedureRequest) returns (GetRitualProcedureResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["collab.viewTask"]
     };
   }
 
@@ -1739,6 +1766,44 @@ message RitualDefinition {
   google.protobuf.Timestamp updated_at = 12;
   int32 schedule_version = 13;
   repeated RitualDepartmentPool default_department_pools = 14;
+
+  // Absent when no procedure is attached. Distinct from present-with-is_available-false,
+  // which means one was attached and can no longer be resolved.
+  optional RitualProcedure procedure = 15;
+}
+
+// RitualProcedure is the resolved form of ritual_definition.procedure_document_id. It is
+// derived on every read and stored nowhere, so there is no snapshot that could go stale:
+// correcting the document corrects every open and future instance at once.
+//
+// Absent (not set) means the definition has no procedure. That is distinct from present
+// with is_available = false, which means a procedure was attached and can no longer be
+// resolved. Clients MUST render those two states differently — the first shows nothing at
+// all, the second an explicit unavailable state. Collapsing them would tell a worker there
+// was never a procedure for a ritual that has one.
+message RitualProcedure {
+  // Always set when the definition carries an attachment, including when the document can
+  // no longer be resolved. This is what lets a client tell "deleted" from "never attached".
+  string document_id = 1;
+
+  // The document's CURRENT title — renaming the document relabels every entry point with
+  // no further action. Empty when is_available is false.
+  string title = 2;
+
+  // The document's slug, for a manager on web who may open it in the documents feature
+  // with their own access. Readers relying on the implicit grant do not use it: their
+  // entry point opens the in-product overlay, not a docs route. Empty when unavailable.
+  string slug = 3;
+
+  // ACTIVE, OUTDATED or ARCHIVED. Shown to the reader, because an archived procedure is
+  // usually one somebody forgot to unarchive and is still better than none. UNSPECIFIED
+  // when unavailable.
+  DocumentStatus status = 4;
+
+  // False when the document has been deleted or cannot be resolved. An unavailable
+  // procedure never blocks evidence submission, evidence decisions, instance state
+  // transitions or instance completion.
+  bool is_available = 5;
 }
 
 message RitualDepartmentPool {
@@ -1881,6 +1946,15 @@ message CreateRitualDefinitionRequest {
   repeated string default_assignee_ids = 7;
   repeated CreateEvidenceRequirementInput evidence_requirements = 8;
   repeated RitualDepartmentPoolInput default_department_pools = 9;
+
+  // Optional. Must be an existing workspace_doc in the caller's organization; a
+  // task_description or project_brief document is refused, because those are owned by a
+  // task or a project and are reached through their owner.
+  //
+  // Rejection is InvalidArgument with a google.rpc.BadRequest field violation naming this
+  // field. A document in another organization is indistinguishable from one that does not
+  // exist, and produces the same violation.
+  optional string procedure_document_id = 10;
 }
 
 message CreateEvidenceRequirementInput {
@@ -1914,6 +1988,22 @@ message UpdateRitualDefinitionRequest {
   optional string timezone = 6;
   repeated string default_assignee_ids = 7;
   repeated RitualDepartmentPoolInput default_department_pools = 8;
+
+  // Three-valued, using proto3 field presence:
+  //
+  //   absent             -> the existing attachment is left exactly as it is
+  //   present, empty     -> detach. The document itself is NOT deleted, archived or
+  //                         otherwise modified and remains in the workspace; the ritual's
+  //                         instances stop showing a procedure and the implicit read it
+  //                         granted ends immediately
+  //   present, non-empty -> attach, or replace an existing attachment. A definition never
+  //                         carries two procedures — the field is singular, so a second
+  //                         one has nowhere to go
+  //
+  // Attaching, replacing or removing is NOT a schedule change: no instance is created,
+  // deleted, detached or reassigned, schedule_version is not bumped and no assignee is
+  // notified. Instance regeneration lives only in ChangeRitualDefinitionSchedule.
+  optional string procedure_document_id = 9;
 }
 
 message UpdateRitualDefinitionResponse {
@@ -1936,6 +2026,32 @@ message ListRitualDefinitionsRequest {
 
 message ListRitualDefinitionsResponse {
   repeated RitualDefinition ritual_definitions = 1;
+}
+
+message GetRitualProcedureRequest {
+  // The definition, not the instance. An instance resolves its procedure through its
+  // definition and holds no reference of its own, which is exactly why a corrected
+  // procedure reaches every open instance at once. A client holding only a task passes
+  // task.ritual_definition_id; a task with none (a standard task, or an instance detached
+  // from its ritual) has no procedure to ask for and does not call this.
+  string ritual_definition_id = 1;
+}
+
+message GetRitualProcedureResponse {
+  // Absent when the definition has no procedure attached. Present with
+  // is_available = false when one is attached but unresolvable.
+  optional RitualProcedure procedure = 1;
+
+  // TipTap/ProseMirror JSON, as docs.document.content_json holds it — the same shape
+  // DocumentService returns, so both clients render it with the renderer they already have.
+  // Always the document's current content: no instance-time or submission-time snapshot is
+  // kept anywhere.
+  //
+  // Empty when `procedure` is absent or unavailable. A client MUST distinguish empty
+  // content on an available document (a procedure somebody has not written yet) from an
+  // unavailable one (a procedure that was deleted) using is_available, never by testing
+  // this string.
+  string content_json = 2;
 }
 
 // =============================================================================
@@ -2101,6 +2217,16 @@ message ReviewQueueEntry {
   google.protobuf.Timestamp instance_completion_deadline = 24;
 
   ReviewUrgency urgency = 25;
+
+  // The procedure attached to this submission's ritual definition, or empty when there is
+  // none. The id only — deliberately not a resolved RitualProcedure: it comes from the
+  // ritual_definition join the queue projection already performs for ritual_name, so a
+  // page of entries costs zero additional queries. The reviewer's control is labelled
+  // "Procedure" and fetches title and content from GetRitualProcedure when it is opened.
+  //
+  // Empty for an entry whose definition could not be resolved. Such an entry stays listed
+  // and stays decidable, exactly as today.
+  string procedure_document_id = 26;
 }
 
 message ListEvidenceReviewQueueRequest {

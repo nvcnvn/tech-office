@@ -10,8 +10,10 @@ import {
 	TextField,
 	Typography,
 } from '@mui/material';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import type { ReviewQueueEntry } from 'apis';
 import { useThemeColors } from '@/theme/useThemeColors';
+import ProcedureDialog from '@/app/workspace/components/ProcedureDialog';
 
 export interface RejectReasonDialogProps {
 	entry?: ReviewQueueEntry;
@@ -33,6 +35,12 @@ export default function RejectReasonDialog({
 }: RejectReasonDialogProps) {
 	const colors = useThemeColors();
 	const [reason, setReason] = useState('');
+	// Feature 043. The Procedure control on the queue row sits *behind* this modal, so once
+	// the reviewer is writing a reason it is unreachable — which is exactly the moment they
+	// most need the written standard. The control is therefore repeated here and stacks a
+	// second dialog above this one. This dialog is never unmounted, so `reason` survives
+	// reading the procedure (FR-014).
+	const [procedureOpen, setProcedureOpen] = useState(false);
 
 	useEffect(() => {
 		if (entry) setReason('');
@@ -60,6 +68,16 @@ export default function RejectReasonDialog({
 				/>
 			</DialogContent>
 			<DialogActions>
+				{entry?.procedureDocumentId && (
+					<Button
+						startIcon={<MenuBookIcon fontSize="small" />}
+						onClick={() => setProcedureOpen(true)}
+						sx={{ mr: 'auto' }}
+						data-testid="review-queue-reject-procedure-btn"
+					>
+						Procedure
+					</Button>
+				)}
 				<Button onClick={onCancel} disabled={submitting}>
 					Cancel
 				</Button>
@@ -73,6 +91,14 @@ export default function RejectReasonDialog({
 					{submitting ? 'Rejecting…' : 'Reject'}
 				</Button>
 			</DialogActions>
+
+			{entry?.procedureDocumentId && (
+				<ProcedureDialog
+					open={procedureOpen}
+					onClose={() => setProcedureOpen(false)}
+					ritualDefinitionId={entry.ritualDefinitionId}
+				/>
+			)}
 		</Dialog>
 	);
 }

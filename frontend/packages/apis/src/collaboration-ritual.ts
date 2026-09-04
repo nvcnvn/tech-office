@@ -10,6 +10,8 @@ import { protoTimestampToDate, dateToProtoTimestamp } from './proto-utils';
 import { collaboration } from 'rpc';
 import type { CollaborationMode, ProjectState, RitualInstanceTask, Task } from './collaboration';
 import { getTask, isRitualInstanceTask, listTasks } from './collaboration';
+import { protoStatusToString } from './docs';
+import type { DocumentStatus } from './docs';
 
 // =============================================================================
 // Type Definitions — Enums
@@ -92,6 +94,44 @@ export interface RitualDefinition {
 	defaultDepartmentPools: RitualDepartmentPool[];
 	updatedAt?: Date;
 	scheduleVersion: number;
+	/**
+	 * The workspace document attached as this ritual's written procedure.
+	 *
+	 * `undefined` means no procedure was ever attached — render nothing at all: no empty
+	 * entry point, no placeholder, no layout shift. That is NOT the same state as a
+	 * present `procedure` with `isAvailable: false`, which means one is attached and can
+	 * no longer be resolved and must render an explicit unavailable state. Never tell the
+	 * two apart by testing the content for emptiness.
+	 */
+	procedure?: RitualProcedure;
+}
+
+/**
+ * The resolved form of a ritual definition's procedure attachment. Derived on every read
+ * and stored nowhere, so correcting the document corrects every open instance at once.
+ */
+export interface RitualProcedure {
+	/**
+	 * Always present when the definition carries an attachment, INCLUDING when the
+	 * document can no longer be resolved. This is what lets a client tell "deleted" from
+	 * "never attached".
+	 */
+	documentId: string;
+	/** The document's current title. Empty when `isAvailable` is false. */
+	title: string;
+	/**
+	 * For a manager who may open the document in the documents feature with their own
+	 * access. Readers relying on the ritual's implicit grant do not use it — their entry
+	 * point opens the in-product overlay, not a docs route.
+	 */
+	slug: string;
+	/** `undefined` when unavailable. */
+	status?: DocumentStatus;
+	/**
+	 * False when the document has been deleted or cannot be resolved. An unavailable
+	 * procedure never blocks evidence submission, decisions or instance completion.
+	 */
+	isAvailable: boolean;
 }
 
 export type AssignmentStrategy = 'round_robin' | 'least_assigned' | 'on_shift';
@@ -403,6 +443,21 @@ function protoToRitualDefinition(
 		})),
 		updatedAt: d.updatedAt ? protoTimestampToDate(d.updatedAt) : undefined,
 		scheduleVersion: d.scheduleVersion,
+		procedure: d.procedure ? protoToRitualProcedure(d.procedure) : undefined,
+	};
+}
+
+function protoToRitualProcedure(
+	p: collaboration.RitualProcedure
+): RitualProcedure {
+	return {
+		documentId: p.documentId,
+		title: p.title,
+		slug: p.slug,
+		// Unavailable procedures carry UNSPECIFIED; surfacing that as `active` would
+		// claim a status the server did not report.
+		status: p.isAvailable ? protoStatusToString(p.status) : undefined,
+		isAvailable: p.isAvailable,
 	};
 }
 
@@ -490,6 +545,8 @@ export interface CreateRitualDefinitionParams {
 	timezone: string;
 	defaultAssigneeIds?: string[];
 	defaultDepartmentPools?: RitualDepartmentPoolInput[];
+	/** An existing workspace document to attach as the ritual's written procedure. */
+	procedureDocumentId?: string;
 }
 
 export async function createRitualDefinition(
@@ -516,6 +573,7 @@ export async function createRitualDefinition(
 				departmentId: p.departmentId,
 				assignmentStrategy: p.assignmentStrategy,
 			})),
+			procedureDocumentId: params.procedureDocumentId,
 		});
 		if (!res.ritualDefinition) throw new Error('No ritual definition returned');
 		return protoToRitualDefinition(res.ritualDefinition);
@@ -682,6 +740,19 @@ export interface UpdateRitualDefinitionParams {
 	timezone?: string;
 	defaultAssigneeIds?: string[];
 	defaultDepartmentPools?: RitualDepartmentPoolInput[];
+	/**
+	 * Three-valued, and the three values mean three different things:
+	 *
+	 * - omitted (`undefined`) — leave the existing attachment exactly as it is
+	 * - `''` — detach. The document itself is not deleted, archived or otherwise
+	 *   modified and stays in the workspace; the ritual's instances stop showing a
+	 *   procedure and the implicit read it granted ends immediately
+	 * - a document id — attach, or replace an existing attachment. A definition never
+	 *   carries two procedures
+	 *
+	 * Passing `''` where you meant to omit the field silently detaches the procedure.
+	 */
+	procedureDocumentId?: string;
 }
 
 export async function updateRitualDefinition(
@@ -710,9 +781,53 @@ export async function updateRitualDefinition(
 				departmentId: p.departmentId,
 				assignmentStrategy: p.assignmentStrategy,
 			})),
+			procedureDocumentId: params.procedureDocumentId,
 		});
 		if (!res.ritualDefinition) throw new Error('No ritual definition returned');
 		return protoToRitualDefinition(res.ritualDefinition);
+	});
+}
+
+/** What {@link getRitualProcedure} returns: the resolved attachment plus its content. */
+export interface RitualProcedureContent {
+	/**
+	 * `undefined` when the definition has no procedure attached. Present with
+	 * `isAvailable: false` when one is attached but can no longer be resolved.
+	 */
+	procedure?: RitualProcedure;
+	/**
+	 * TipTap/ProseMirror JSON, the same shape the docs editor renders. Always the
+	 * document's current content — no snapshot of a procedure is kept anywhere.
+	 *
+	 * Empty when the procedure is absent OR unavailable. Distinguish an empty procedure
+	 * somebody has not written yet from a deleted one with `procedure.isAvailable`, never
+	 * by testing this string.
+	 */
+	contentJson: string;
+}
+
+/**
+ * Reads the workspace document attached to a ritual definition, for read-only rendering
+ * next to an instance.
+ *
+ * This is the only way the content is reachable for a reader with no grant of their own on
+ * the document, and it grants nothing else: commenting, reacting, editing and version
+ * history stay on the documents feature, where the reader's own access decides. Anyone who
+ * can see the definition's project can call it; anyone who cannot is refused outright.
+ */
+export async function getRitualProcedure(
+	ritualDefinitionId: string
+): Promise<RitualProcedureContent> {
+	return rpcCall(async () => {
+		const res = await collaborationClient.getRitualProcedure({
+			ritualDefinitionId,
+		});
+		return {
+			procedure: res.procedure
+				? protoToRitualProcedure(res.procedure)
+				: undefined,
+			contentJson: res.contentJson,
+		};
 	});
 }
 

@@ -439,6 +439,25 @@ var (
 	ErrNotRitualInstance           = errors.New("task is not a ritual instance")
 	ErrRitualDefinitionArchived    = errors.New("ritual definition is archived")
 
+	// ErrProcedureDocumentInvalid reports a procedure_document_id that does not resolve to
+	// a document in the caller's organization. A document in another organization is
+	// deliberately indistinguishable from one that does not exist, and a soft-deleted one
+	// from both: all three produce this single refusal, so the error cannot be used to
+	// probe for the existence of documents the caller may not see.
+	ErrProcedureDocumentInvalid = errors.New("procedure document not found")
+
+	// DocumentTypeTaskDescription is the docs document type collaboration provisions for a
+	// task's rich description. Duplicated from internal/docs rather than imported because
+	// the dependency runs collaboration -> docs through the DocsLogic interface only; the
+	// value is fixed by a database CHECK constraint on docs.document.document_type and is
+	// asserted equal in TestDocumentTypeConstantsMatch.
+	DocumentTypeTaskDescription = "task_description"
+
+	// ErrProcedureDocumentNotWorkspaceDoc reports an attempt to attach a task-description
+	// or project-brief document. Those are owned by a task or a project and are reached
+	// through their owner, so they are not free-standing procedures.
+	ErrProcedureDocumentNotWorkspaceDoc = errors.New("procedure document must be a workspace document")
+
 	// ErrEvidenceAlreadyDecided reports a submission whose approval_status is no longer
 	// `pending_review`. The refusal carries who decided it and when, so the losing client
 	// can say more than "that failed". Wrap it with evidenceAlreadyDecided to attach the

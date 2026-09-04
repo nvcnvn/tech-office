@@ -63,6 +63,45 @@ Two layers, and they answer different questions:
 `CheckAccess` exposes the second layer to clients so the UI can hide controls it knows will
 fail.
 
+### Implicit reads through a ritual procedure
+
+There is a third path into a document's content, and it touches neither layer above.
+
+A ritual definition may name one `workspace_doc` as its written procedure (feature 043, see
+[rituals-tasks.md](rituals-tasks.md#the-procedure-document-feature-043)). Anyone who can see
+the definition's project can then read that document's title, status and `content_json`
+through `CollaborationService.GetRitualProcedure`, with **no** `docs.document_access` row
+and without holding a docs permission — an assigned worker who has never been granted
+anything on a private document reads it while doing the ritual.
+
+The grant is deliberately narrow. It reaches the current title, status and content of that
+one document and **nothing else**:
+
+- it never puts the document in the reader's tree (`ListRootDocuments`,
+  `ListChildDocuments`) or in their search results (`SearchDocuments`);
+- it does not extend to the document's child pages;
+- it confers no comment, reaction, follow, version-history or update rights — every one of
+  those still goes through `docs.document_access`, where the reader's own access decides;
+- it ends immediately when the attachment is removed or the definition is deleted, because
+  nothing is copied and the grant is derived on every read.
+
+Two consequences worth knowing when changing this area. A manager can only attach a document
+they can already read: the attachment is validated with `CheckAccess` against the *manager's*
+own grants, so the implicit grant can never exceed what the granting manager could see. That
+check lives on the write path only — the read path skips it by design, which is the whole
+mechanism. And because nothing is snapshotted, editing the document changes what every open
+instance shows at once; there is no stored copy of a procedure anywhere.
+
+Related: `SearchDocuments` matches `title` as well as `content_text` (feature 043 made the
+procedure chooser title-driven; a document search that could not find a document by its own
+name was not a search). Both `SearchDocuments` and the tree listings remain **org-scoped
+rather than access-scoped** — they return every non-deleted document in the organization,
+gated only by the `docs.view` permission. Per-document access is enforced on `GetDocument`
+and everything downstream of it, so titles and snippets are visible more widely than content.
+That predates this feature; it is why the procedure chooser can offer a document the manager
+cannot open, and why the attachment is validated server-side rather than trusting the picker.
+See D49 in the drift register.
+
 ## Comments and reactions
 
 `docs.comment` with `docs.comment_reply` — one level of threading, resolvable.
@@ -134,7 +173,8 @@ followers.
 
 `integration/docs_crud_test.go`, `docs_version_test.go`, `docs_diff_test.go`,
 `workflow_document_collab_test.go`, `notification_docs_test.go`,
-`notification_document_coverage_test.go`, `notification_v2_document_subscription_test.go`.
+`notification_document_coverage_test.go`, `notification_v2_document_subscription_test.go`,
+`collaboration_ritual_procedure_test.go` (the implicit read path).
 
 ## Known drift
 

@@ -10,11 +10,13 @@
 -- name: CreateDocument :one
 INSERT INTO docs.document (
     id, organization_id, title, slug, parent_document_id, depth, 
-    content_json, content_text, status, visibility, owner_employee_id, path
+    content_json, content_text, status, visibility, owner_employee_id, path,
+    document_type
 )
 VALUES (
     @id, @organization_id, @title, @slug, sqlc.narg('parent_document_id'), 
-    @depth, @content_json, @content_text, @status, @visibility, @owner_employee_id, @path
+    @depth, @content_json, @content_text, @status, @visibility, @owner_employee_id, @path,
+    @document_type
 )
 RETURNING *;
 
@@ -421,7 +423,10 @@ FROM docs.document d
 WHERE d.organization_id = @organization_id
   AND d.is_deleted = FALSE
   AND (sqlc.narg('status')::text IS NULL OR d.status = sqlc.narg('status'))
-  AND d.content_text &@~ @query
+  -- Title as well as body. A document search that cannot find a document by its own
+  -- name is not a search; the ritual procedure picker (feature 043) is title-driven and
+  -- found nothing at all until this matched titles too.
+  AND (d.title &@~ @query OR d.content_text &@~ @query)
   AND (sqlc.narg('cursor')::uuid IS NULL OR d.id < sqlc.narg('cursor'))
 ORDER BY score DESC, d.id DESC
 LIMIT @search_limit;

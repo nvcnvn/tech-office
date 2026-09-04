@@ -128,11 +128,13 @@ const createDocument = `-- name: CreateDocument :one
 
 INSERT INTO docs.document (
     id, organization_id, title, slug, parent_document_id, depth, 
-    content_json, content_text, status, visibility, owner_employee_id, path
+    content_json, content_text, status, visibility, owner_employee_id, path,
+    document_type
 )
 VALUES (
     $1, $2, $3, $4, $5, 
-    $6, $7, $8, $9, $10, $11, $12
+    $6, $7, $8, $9, $10, $11, $12,
+    $13
 )
 RETURNING id, organization_id, title, slug, document_type, parent_document_id, depth, path, content_json, content_text, status, visibility, owner_employee_id, child_count, version_count, follower_count, is_deleted, updated_at
 `
@@ -150,6 +152,7 @@ type CreateDocumentParams struct {
 	Visibility       string          `json:"visibility"`
 	OwnerEmployeeID  dbuuid.UUID     `json:"owner_employee_id"`
 	Path             []dbuuid.UUID   `json:"path"`
+	DocumentType     string          `json:"document_type"`
 }
 
 // ============================================================================
@@ -173,6 +176,7 @@ func (q *Queries) CreateDocument(ctx context.Context, db DBTX, arg *CreateDocume
 		arg.Visibility,
 		arg.OwnerEmployeeID,
 		arg.Path,
+		arg.DocumentType,
 	)
 	var i DocsDocument
 	err := row.Scan(
@@ -1755,7 +1759,10 @@ FROM docs.document d
 WHERE d.organization_id = $2
   AND d.is_deleted = FALSE
   AND ($3::text IS NULL OR d.status = $3)
-  AND d.content_text &@~ $1
+  -- Title as well as body. A document search that cannot find a document by its own
+  -- name is not a search; the ritual procedure picker (feature 043) is title-driven and
+  -- found nothing at all until this matched titles too.
+  AND (d.title &@~ $1 OR d.content_text &@~ $1)
   AND ($4::uuid IS NULL OR d.id < $4)
 ORDER BY score DESC, d.id DESC
 LIMIT $5

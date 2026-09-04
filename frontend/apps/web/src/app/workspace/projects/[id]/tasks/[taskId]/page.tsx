@@ -62,6 +62,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import SubdirectoryArrowRightIcon from '@mui/icons-material/SubdirectoryArrowRight';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { useThemeColors } from '@/theme/useThemeColors';
 import { useRequireAuth } from '@/lib/auth/hooks';
 import {
@@ -107,6 +108,7 @@ import CustomFieldEditor from './components/CustomFieldEditor';
 import EvidenceChecklist from './components/EvidenceChecklist';
 import RitualDefinitionSection from './components/RitualDefinitionSection';
 import TaskOriginBlock from './components/TaskOriginBlock';
+import ProcedureDialog from '@/app/workspace/components/ProcedureDialog';
 
 const LINKING_API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:18080';
 
@@ -160,6 +162,9 @@ export default function TaskDetailPage() {
 	const [customFields, setCustomFields] = useState<CustomFieldDefinition[]>([]);
 	const [ritualDefinition, setRitualDefinition] = useState<RitualDefinition | null>(null);
 	const [currentUserRole, setCurrentUserRole] = useState<ProjectMemberRole>('viewer');
+	// Feature 043. Owned by the page, not by the evidence form, so the dialog portals over
+	// whichever surface opened it and that surface is never unmounted (D5, FR-013).
+	const [procedureOpen, setProcedureOpen] = useState(false);
 
 	// UI state
 	const [loading, setLoading] = useState(true);
@@ -1168,7 +1173,35 @@ export default function TaskDetailPage() {
 										{ritualDefinition.description}
 									</Typography>
 								)}
+								{/*
+								  Feature 043. Absent procedure renders nothing at all — no empty
+								  entry point, no placeholder, no layout shift (FR-017). An
+								  attached-but-unresolvable one still renders the entry point; the
+								  dialog is what explains it is unavailable.
+								*/}
+								{ritualDefinition.procedure && (
+									<Button
+										size="small"
+										startIcon={<MenuBookIcon fontSize="small" />}
+										onClick={() => setProcedureOpen(true)}
+										sx={{ mt: 1, textTransform: 'none' }}
+										data-testid="ritual-procedure-entry"
+									>
+										{ritualDefinition.procedure.isAvailable
+											? ritualDefinition.procedure.title
+											: 'Procedure unavailable'}
+									</Button>
+								)}
 							</Box>
+						)}
+
+						{ritualDefinition?.procedure && task.ritualDefinitionId && (
+							<ProcedureDialog
+								open={procedureOpen}
+								onClose={() => setProcedureOpen(false)}
+								ritualDefinitionId={task.ritualDefinitionId}
+								title={ritualDefinition.procedure.title}
+							/>
 						)}
 
 						{/* Why an on-shift instance has nobody on it. Shown only for a pool slot
@@ -1251,6 +1284,18 @@ export default function TaskDetailPage() {
 													autoOpenRequirementId={ritualRequirementId}
 													highlightedRequirementId={ritualRequirementId}
 													autoFocusFirstActionable={ritualFocusIntent === 'view_instance' || ritualFocusIntent === 'submit_requirement'}
+													procedureTitle={
+														ritualDefinition?.procedure?.isAvailable
+															? ritualDefinition.procedure.title
+															: ritualDefinition?.procedure
+																? 'Procedure unavailable'
+																: undefined
+													}
+													onOpenProcedure={
+														ritualDefinition?.procedure
+															? () => setProcedureOpen(true)
+															: undefined
+													}
 												/>
 											</Box>
 											<Divider sx={{ my: 3 }} />

@@ -78,6 +78,16 @@ export interface ReviewQueueEntry {
 	instanceStateCategory: string;
 	instanceCompletionDeadline?: Date;
 	urgency: ReviewUrgency;
+	/**
+	 * The document attached as this submission's ritual procedure, or `''` when there is
+	 * none. The id only — the title and content are fetched with `getRitualProcedure`
+	 * when the reviewer actually opens the procedure, so listing a page costs no extra
+	 * document reads.
+	 *
+	 * Empty for an entry whose definition could not be resolved. Such an entry stays
+	 * listed and stays decidable.
+	 */
+	procedureDocumentId: string;
 }
 
 export interface ReviewQueuePage {
@@ -172,6 +182,7 @@ function protoToReviewQueueEntry(e: collaboration.ReviewQueueEntry): ReviewQueue
 		instanceStateCategory: e.instanceStateCategory,
 		instanceCompletionDeadline: protoTimestampToDate(e.instanceCompletionDeadline),
 		urgency: protoUrgencyToString(e.urgency),
+		procedureDocumentId: e.procedureDocumentId,
 	};
 }
 

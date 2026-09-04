@@ -1046,8 +1046,16 @@ CREATE TABLE collaboration.ritual_definition (
     generation_window_days integer DEFAULT 30 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     schedule_version integer DEFAULT 1 NOT NULL,
+    procedure_document_id uuid,
     CONSTRAINT ritual_definition_completion_window_hours_check CHECK ((completion_window_hours > 0))
 );
+
+
+--
+-- Name: COLUMN ritual_definition.procedure_document_id; Type: COMMENT; Schema: collaboration; Owner: -
+--
+
+COMMENT ON COLUMN collaboration.ritual_definition.procedure_document_id IS 'The workspace document that is this ritual''s written procedure. NULL means no procedure. Readers of an instance may read this document without their own docs grant, through CollaborationService.GetRitualProcedure only.';
 
 
 --
@@ -5781,6 +5789,13 @@ CREATE INDEX idx_document_status ON docs.document USING btree (organization_id, 
 
 
 --
+-- Name: idx_document_title_pgroonga; Type: INDEX; Schema: docs; Owner: -
+--
+
+CREATE INDEX idx_document_title_pgroonga ON docs.document USING pgroonga (title);
+
+
+--
 -- Name: idx_document_title_trgm; Type: INDEX; Schema: docs; Owner: -
 --
 
@@ -7249,6 +7264,14 @@ ALTER TABLE ONLY collaboration.ritual_definition
 
 ALTER TABLE ONLY collaboration.ritual_definition
     ADD CONSTRAINT fk_ritual_def_project FOREIGN KEY (organization_id, project_id) REFERENCES collaboration.project(organization_id, id) ON DELETE CASCADE;
+
+
+--
+-- Name: ritual_definition fk_ritual_definition_procedure; Type: FK CONSTRAINT; Schema: collaboration; Owner: -
+--
+
+ALTER TABLE ONLY collaboration.ritual_definition
+    ADD CONSTRAINT fk_ritual_definition_procedure FOREIGN KEY (organization_id, procedure_document_id) REFERENCES docs.document(organization_id, id) ON DELETE RESTRICT;
 
 
 --

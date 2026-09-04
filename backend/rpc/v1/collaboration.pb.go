@@ -9557,8 +9557,11 @@ type RitualDefinition struct {
 	UpdatedAt              *timestamppb.Timestamp       `protobuf:"bytes,12,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	ScheduleVersion        int32                        `protobuf:"varint,13,opt,name=schedule_version,json=scheduleVersion,proto3" json:"schedule_version,omitempty"`
 	DefaultDepartmentPools []*RitualDepartmentPool      `protobuf:"bytes,14,rep,name=default_department_pools,json=defaultDepartmentPools,proto3" json:"default_department_pools,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Absent when no procedure is attached. Distinct from present-with-is_available-false,
+	// which means one was attached and can no longer be resolved.
+	Procedure     *RitualProcedure `protobuf:"bytes,15,opt,name=procedure,proto3,oneof" json:"procedure,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RitualDefinition) Reset() {
@@ -9689,6 +9692,111 @@ func (x *RitualDefinition) GetDefaultDepartmentPools() []*RitualDepartmentPool {
 	return nil
 }
 
+func (x *RitualDefinition) GetProcedure() *RitualProcedure {
+	if x != nil {
+		return x.Procedure
+	}
+	return nil
+}
+
+// RitualProcedure is the resolved form of ritual_definition.procedure_document_id. It is
+// derived on every read and stored nowhere, so there is no snapshot that could go stale:
+// correcting the document corrects every open and future instance at once.
+//
+// Absent (not set) means the definition has no procedure. That is distinct from present
+// with is_available = false, which means a procedure was attached and can no longer be
+// resolved. Clients MUST render those two states differently — the first shows nothing at
+// all, the second an explicit unavailable state. Collapsing them would tell a worker there
+// was never a procedure for a ritual that has one.
+type RitualProcedure struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Always set when the definition carries an attachment, including when the document can
+	// no longer be resolved. This is what lets a client tell "deleted" from "never attached".
+	DocumentId string `protobuf:"bytes,1,opt,name=document_id,json=documentId,proto3" json:"document_id,omitempty"`
+	// The document's CURRENT title — renaming the document relabels every entry point with
+	// no further action. Empty when is_available is false.
+	Title string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	// The document's slug, for a manager on web who may open it in the documents feature
+	// with their own access. Readers relying on the implicit grant do not use it: their
+	// entry point opens the in-product overlay, not a docs route. Empty when unavailable.
+	Slug string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
+	// ACTIVE, OUTDATED or ARCHIVED. Shown to the reader, because an archived procedure is
+	// usually one somebody forgot to unarchive and is still better than none. UNSPECIFIED
+	// when unavailable.
+	Status DocumentStatus `protobuf:"varint,4,opt,name=status,proto3,enum=rpc.v1.DocumentStatus" json:"status,omitempty"`
+	// False when the document has been deleted or cannot be resolved. An unavailable
+	// procedure never blocks evidence submission, evidence decisions, instance state
+	// transitions or instance completion.
+	IsAvailable   bool `protobuf:"varint,5,opt,name=is_available,json=isAvailable,proto3" json:"is_available,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RitualProcedure) Reset() {
+	*x = RitualProcedure{}
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[129]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RitualProcedure) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RitualProcedure) ProtoMessage() {}
+
+func (x *RitualProcedure) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[129]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RitualProcedure.ProtoReflect.Descriptor instead.
+func (*RitualProcedure) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{129}
+}
+
+func (x *RitualProcedure) GetDocumentId() string {
+	if x != nil {
+		return x.DocumentId
+	}
+	return ""
+}
+
+func (x *RitualProcedure) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *RitualProcedure) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
+func (x *RitualProcedure) GetStatus() DocumentStatus {
+	if x != nil {
+		return x.Status
+	}
+	return DocumentStatus_DOCUMENT_STATUS_UNSPECIFIED
+}
+
+func (x *RitualProcedure) GetIsAvailable() bool {
+	if x != nil {
+		return x.IsAvailable
+	}
+	return false
+}
+
 type RitualDepartmentPool struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	Id                     string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -9702,7 +9810,7 @@ type RitualDepartmentPool struct {
 
 func (x *RitualDepartmentPool) Reset() {
 	*x = RitualDepartmentPool{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[129]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9714,7 +9822,7 @@ func (x *RitualDepartmentPool) String() string {
 func (*RitualDepartmentPool) ProtoMessage() {}
 
 func (x *RitualDepartmentPool) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[129]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9727,7 +9835,7 @@ func (x *RitualDepartmentPool) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RitualDepartmentPool.ProtoReflect.Descriptor instead.
 func (*RitualDepartmentPool) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{129}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *RitualDepartmentPool) GetId() string {
@@ -9775,7 +9883,7 @@ type RitualDepartmentPoolInput struct {
 
 func (x *RitualDepartmentPoolInput) Reset() {
 	*x = RitualDepartmentPoolInput{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[130]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9787,7 +9895,7 @@ func (x *RitualDepartmentPoolInput) String() string {
 func (*RitualDepartmentPoolInput) ProtoMessage() {}
 
 func (x *RitualDepartmentPoolInput) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[130]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9800,7 +9908,7 @@ func (x *RitualDepartmentPoolInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RitualDepartmentPoolInput.ProtoReflect.Descriptor instead.
 func (*RitualDepartmentPoolInput) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{130}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *RitualDepartmentPoolInput) GetDepartmentId() string {
@@ -9835,7 +9943,7 @@ type EvidenceRequirementDetail struct {
 
 func (x *EvidenceRequirementDetail) Reset() {
 	*x = EvidenceRequirementDetail{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[131]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9847,7 +9955,7 @@ func (x *EvidenceRequirementDetail) String() string {
 func (*EvidenceRequirementDetail) ProtoMessage() {}
 
 func (x *EvidenceRequirementDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[131]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9860,7 +9968,7 @@ func (x *EvidenceRequirementDetail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvidenceRequirementDetail.ProtoReflect.Descriptor instead.
 func (*EvidenceRequirementDetail) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{131}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *EvidenceRequirementDetail) GetId() string {
@@ -9944,7 +10052,7 @@ type AutoApproveConfig struct {
 
 func (x *AutoApproveConfig) Reset() {
 	*x = AutoApproveConfig{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[132]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9956,7 +10064,7 @@ func (x *AutoApproveConfig) String() string {
 func (*AutoApproveConfig) ProtoMessage() {}
 
 func (x *AutoApproveConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[132]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9969,7 +10077,7 @@ func (x *AutoApproveConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AutoApproveConfig.ProtoReflect.Descriptor instead.
 func (*AutoApproveConfig) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{132}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *AutoApproveConfig) GetGpsTarget() *GpsTarget {
@@ -10003,7 +10111,7 @@ type GpsTarget struct {
 
 func (x *GpsTarget) Reset() {
 	*x = GpsTarget{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[133]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10015,7 +10123,7 @@ func (x *GpsTarget) String() string {
 func (*GpsTarget) ProtoMessage() {}
 
 func (x *GpsTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[133]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10028,7 +10136,7 @@ func (x *GpsTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GpsTarget.ProtoReflect.Descriptor instead.
 func (*GpsTarget) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{133}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *GpsTarget) GetLatitude() float64 {
@@ -10071,7 +10179,7 @@ type EvidenceSubmission struct {
 
 func (x *EvidenceSubmission) Reset() {
 	*x = EvidenceSubmission{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[134]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10083,7 +10191,7 @@ func (x *EvidenceSubmission) String() string {
 func (*EvidenceSubmission) ProtoMessage() {}
 
 func (x *EvidenceSubmission) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[134]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10096,7 +10204,7 @@ func (x *EvidenceSubmission) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvidenceSubmission.ProtoReflect.Descriptor instead.
 func (*EvidenceSubmission) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{134}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *EvidenceSubmission) GetId() string {
@@ -10215,7 +10323,7 @@ type GpsCoordinates struct {
 
 func (x *GpsCoordinates) Reset() {
 	*x = GpsCoordinates{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[135]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10227,7 +10335,7 @@ func (x *GpsCoordinates) String() string {
 func (*GpsCoordinates) ProtoMessage() {}
 
 func (x *GpsCoordinates) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[135]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10240,7 +10348,7 @@ func (x *GpsCoordinates) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GpsCoordinates.ProtoReflect.Descriptor instead.
 func (*GpsCoordinates) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{135}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *GpsCoordinates) GetLatitude() float64 {
@@ -10280,7 +10388,7 @@ type OperationalHealthSummary struct {
 
 func (x *OperationalHealthSummary) Reset() {
 	*x = OperationalHealthSummary{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[136]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10292,7 +10400,7 @@ func (x *OperationalHealthSummary) String() string {
 func (*OperationalHealthSummary) ProtoMessage() {}
 
 func (x *OperationalHealthSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[136]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10305,7 +10413,7 @@ func (x *OperationalHealthSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OperationalHealthSummary.ProtoReflect.Descriptor instead.
 func (*OperationalHealthSummary) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{136}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *OperationalHealthSummary) GetProjectId() string {
@@ -10379,7 +10487,7 @@ type RitualHealthDetail struct {
 
 func (x *RitualHealthDetail) Reset() {
 	*x = RitualHealthDetail{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[137]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10391,7 +10499,7 @@ func (x *RitualHealthDetail) String() string {
 func (*RitualHealthDetail) ProtoMessage() {}
 
 func (x *RitualHealthDetail) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[137]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10404,7 +10512,7 @@ func (x *RitualHealthDetail) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RitualHealthDetail.ProtoReflect.Descriptor instead.
 func (*RitualHealthDetail) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{137}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *RitualHealthDetail) GetRitualDefinitionId() string {
@@ -10471,7 +10579,7 @@ type EmployeeComplianceSummary struct {
 
 func (x *EmployeeComplianceSummary) Reset() {
 	*x = EmployeeComplianceSummary{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[138]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10483,7 +10591,7 @@ func (x *EmployeeComplianceSummary) String() string {
 func (*EmployeeComplianceSummary) ProtoMessage() {}
 
 func (x *EmployeeComplianceSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[138]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10496,7 +10604,7 @@ func (x *EmployeeComplianceSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EmployeeComplianceSummary.ProtoReflect.Descriptor instead.
 func (*EmployeeComplianceSummary) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{138}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *EmployeeComplianceSummary) GetEmployeeId() string {
@@ -10563,7 +10671,7 @@ type TaskEvidenceProgress struct {
 
 func (x *TaskEvidenceProgress) Reset() {
 	*x = TaskEvidenceProgress{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[139]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10575,7 +10683,7 @@ func (x *TaskEvidenceProgress) String() string {
 func (*TaskEvidenceProgress) ProtoMessage() {}
 
 func (x *TaskEvidenceProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[139]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10588,7 +10696,7 @@ func (x *TaskEvidenceProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskEvidenceProgress.ProtoReflect.Descriptor instead.
 func (*TaskEvidenceProgress) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{139}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *TaskEvidenceProgress) GetTotalRequirements() int32 {
@@ -10651,7 +10759,7 @@ type TaskEvidenceRequirementStatus struct {
 
 func (x *TaskEvidenceRequirementStatus) Reset() {
 	*x = TaskEvidenceRequirementStatus{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[140]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10663,7 +10771,7 @@ func (x *TaskEvidenceRequirementStatus) String() string {
 func (*TaskEvidenceRequirementStatus) ProtoMessage() {}
 
 func (x *TaskEvidenceRequirementStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[140]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10676,7 +10784,7 @@ func (x *TaskEvidenceRequirementStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskEvidenceRequirementStatus.ProtoReflect.Descriptor instead.
 func (*TaskEvidenceRequirementStatus) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{140}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *TaskEvidenceRequirementStatus) GetRequirement() *EvidenceRequirementDetail {
@@ -10711,13 +10819,21 @@ type CreateRitualDefinitionRequest struct {
 	DefaultAssigneeIds     []string                          `protobuf:"bytes,7,rep,name=default_assignee_ids,json=defaultAssigneeIds,proto3" json:"default_assignee_ids,omitempty"`
 	EvidenceRequirements   []*CreateEvidenceRequirementInput `protobuf:"bytes,8,rep,name=evidence_requirements,json=evidenceRequirements,proto3" json:"evidence_requirements,omitempty"`
 	DefaultDepartmentPools []*RitualDepartmentPoolInput      `protobuf:"bytes,9,rep,name=default_department_pools,json=defaultDepartmentPools,proto3" json:"default_department_pools,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Optional. Must be an existing workspace_doc in the caller's organization; a
+	// task_description or project_brief document is refused, because those are owned by a
+	// task or a project and are reached through their owner.
+	//
+	// Rejection is InvalidArgument with a google.rpc.BadRequest field violation naming this
+	// field. A document in another organization is indistinguishable from one that does not
+	// exist, and produces the same violation.
+	ProcedureDocumentId *string `protobuf:"bytes,10,opt,name=procedure_document_id,json=procedureDocumentId,proto3,oneof" json:"procedure_document_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *CreateRitualDefinitionRequest) Reset() {
 	*x = CreateRitualDefinitionRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[141]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10729,7 +10845,7 @@ func (x *CreateRitualDefinitionRequest) String() string {
 func (*CreateRitualDefinitionRequest) ProtoMessage() {}
 
 func (x *CreateRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[141]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10742,7 +10858,7 @@ func (x *CreateRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRitualDefinitionRequest.ProtoReflect.Descriptor instead.
 func (*CreateRitualDefinitionRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{141}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *CreateRitualDefinitionRequest) GetProjectId() string {
@@ -10808,6 +10924,13 @@ func (x *CreateRitualDefinitionRequest) GetDefaultDepartmentPools() []*RitualDep
 	return nil
 }
 
+func (x *CreateRitualDefinitionRequest) GetProcedureDocumentId() string {
+	if x != nil && x.ProcedureDocumentId != nil {
+		return *x.ProcedureDocumentId
+	}
+	return ""
+}
+
 type CreateEvidenceRequirementInput struct {
 	state               protoimpl.MessageState `protogen:"open.v1"`
 	Name                string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -10823,7 +10946,7 @@ type CreateEvidenceRequirementInput struct {
 
 func (x *CreateEvidenceRequirementInput) Reset() {
 	*x = CreateEvidenceRequirementInput{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[142]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10835,7 +10958,7 @@ func (x *CreateEvidenceRequirementInput) String() string {
 func (*CreateEvidenceRequirementInput) ProtoMessage() {}
 
 func (x *CreateEvidenceRequirementInput) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[142]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10848,7 +10971,7 @@ func (x *CreateEvidenceRequirementInput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEvidenceRequirementInput.ProtoReflect.Descriptor instead.
 func (*CreateEvidenceRequirementInput) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{142}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *CreateEvidenceRequirementInput) GetName() string {
@@ -10909,7 +11032,7 @@ type CreateRitualDefinitionResponse struct {
 
 func (x *CreateRitualDefinitionResponse) Reset() {
 	*x = CreateRitualDefinitionResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[143]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10921,7 +11044,7 @@ func (x *CreateRitualDefinitionResponse) String() string {
 func (*CreateRitualDefinitionResponse) ProtoMessage() {}
 
 func (x *CreateRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[143]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10934,7 +11057,7 @@ func (x *CreateRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateRitualDefinitionResponse.ProtoReflect.Descriptor instead.
 func (*CreateRitualDefinitionResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{143}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *CreateRitualDefinitionResponse) GetRitualDefinition() *RitualDefinition {
@@ -10953,7 +11076,7 @@ type GetRitualDefinitionRequest struct {
 
 func (x *GetRitualDefinitionRequest) Reset() {
 	*x = GetRitualDefinitionRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[144]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10965,7 +11088,7 @@ func (x *GetRitualDefinitionRequest) String() string {
 func (*GetRitualDefinitionRequest) ProtoMessage() {}
 
 func (x *GetRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[144]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10978,7 +11101,7 @@ func (x *GetRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRitualDefinitionRequest.ProtoReflect.Descriptor instead.
 func (*GetRitualDefinitionRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{144}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *GetRitualDefinitionRequest) GetRitualDefinitionId() string {
@@ -10997,7 +11120,7 @@ type GetRitualDefinitionResponse struct {
 
 func (x *GetRitualDefinitionResponse) Reset() {
 	*x = GetRitualDefinitionResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[145]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11009,7 +11132,7 @@ func (x *GetRitualDefinitionResponse) String() string {
 func (*GetRitualDefinitionResponse) ProtoMessage() {}
 
 func (x *GetRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[145]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11022,7 +11145,7 @@ func (x *GetRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRitualDefinitionResponse.ProtoReflect.Descriptor instead.
 func (*GetRitualDefinitionResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{145}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *GetRitualDefinitionResponse) GetRitualDefinition() *RitualDefinition {
@@ -11042,13 +11165,28 @@ type UpdateRitualDefinitionRequest struct {
 	Timezone               *string                      `protobuf:"bytes,6,opt,name=timezone,proto3,oneof" json:"timezone,omitempty"`
 	DefaultAssigneeIds     []string                     `protobuf:"bytes,7,rep,name=default_assignee_ids,json=defaultAssigneeIds,proto3" json:"default_assignee_ids,omitempty"`
 	DefaultDepartmentPools []*RitualDepartmentPoolInput `protobuf:"bytes,8,rep,name=default_department_pools,json=defaultDepartmentPools,proto3" json:"default_department_pools,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	// Three-valued, using proto3 field presence:
+	//
+	//	absent             -> the existing attachment is left exactly as it is
+	//	present, empty     -> detach. The document itself is NOT deleted, archived or
+	//	                      otherwise modified and remains in the workspace; the ritual's
+	//	                      instances stop showing a procedure and the implicit read it
+	//	                      granted ends immediately
+	//	present, non-empty -> attach, or replace an existing attachment. A definition never
+	//	                      carries two procedures — the field is singular, so a second
+	//	                      one has nowhere to go
+	//
+	// Attaching, replacing or removing is NOT a schedule change: no instance is created,
+	// deleted, detached or reassigned, schedule_version is not bumped and no assignee is
+	// notified. Instance regeneration lives only in ChangeRitualDefinitionSchedule.
+	ProcedureDocumentId *string `protobuf:"bytes,9,opt,name=procedure_document_id,json=procedureDocumentId,proto3,oneof" json:"procedure_document_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *UpdateRitualDefinitionRequest) Reset() {
 	*x = UpdateRitualDefinitionRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[146]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11060,7 +11198,7 @@ func (x *UpdateRitualDefinitionRequest) String() string {
 func (*UpdateRitualDefinitionRequest) ProtoMessage() {}
 
 func (x *UpdateRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[146]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11073,7 +11211,7 @@ func (x *UpdateRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRitualDefinitionRequest.ProtoReflect.Descriptor instead.
 func (*UpdateRitualDefinitionRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{146}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *UpdateRitualDefinitionRequest) GetRitualDefinitionId() string {
@@ -11132,6 +11270,13 @@ func (x *UpdateRitualDefinitionRequest) GetDefaultDepartmentPools() []*RitualDep
 	return nil
 }
 
+func (x *UpdateRitualDefinitionRequest) GetProcedureDocumentId() string {
+	if x != nil && x.ProcedureDocumentId != nil {
+		return *x.ProcedureDocumentId
+	}
+	return ""
+}
+
 type UpdateRitualDefinitionResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	RitualDefinition *RitualDefinition      `protobuf:"bytes,1,opt,name=ritual_definition,json=ritualDefinition,proto3" json:"ritual_definition,omitempty"`
@@ -11141,7 +11286,7 @@ type UpdateRitualDefinitionResponse struct {
 
 func (x *UpdateRitualDefinitionResponse) Reset() {
 	*x = UpdateRitualDefinitionResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[147]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11153,7 +11298,7 @@ func (x *UpdateRitualDefinitionResponse) String() string {
 func (*UpdateRitualDefinitionResponse) ProtoMessage() {}
 
 func (x *UpdateRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[147]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11166,7 +11311,7 @@ func (x *UpdateRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateRitualDefinitionResponse.ProtoReflect.Descriptor instead.
 func (*UpdateRitualDefinitionResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{147}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *UpdateRitualDefinitionResponse) GetRitualDefinition() *RitualDefinition {
@@ -11186,7 +11331,7 @@ type ArchiveRitualDefinitionRequest struct {
 
 func (x *ArchiveRitualDefinitionRequest) Reset() {
 	*x = ArchiveRitualDefinitionRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[148]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11198,7 +11343,7 @@ func (x *ArchiveRitualDefinitionRequest) String() string {
 func (*ArchiveRitualDefinitionRequest) ProtoMessage() {}
 
 func (x *ArchiveRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[148]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11211,7 +11356,7 @@ func (x *ArchiveRitualDefinitionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveRitualDefinitionRequest.ProtoReflect.Descriptor instead.
 func (*ArchiveRitualDefinitionRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{148}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *ArchiveRitualDefinitionRequest) GetRitualDefinitionId() string {
@@ -11237,7 +11382,7 @@ type ArchiveRitualDefinitionResponse struct {
 
 func (x *ArchiveRitualDefinitionResponse) Reset() {
 	*x = ArchiveRitualDefinitionResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[149]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11249,7 +11394,7 @@ func (x *ArchiveRitualDefinitionResponse) String() string {
 func (*ArchiveRitualDefinitionResponse) ProtoMessage() {}
 
 func (x *ArchiveRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[149]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11262,7 +11407,7 @@ func (x *ArchiveRitualDefinitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ArchiveRitualDefinitionResponse.ProtoReflect.Descriptor instead.
 func (*ArchiveRitualDefinitionResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{149}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *ArchiveRitualDefinitionResponse) GetRitualDefinition() *RitualDefinition {
@@ -11282,7 +11427,7 @@ type ListRitualDefinitionsRequest struct {
 
 func (x *ListRitualDefinitionsRequest) Reset() {
 	*x = ListRitualDefinitionsRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[150]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11294,7 +11439,7 @@ func (x *ListRitualDefinitionsRequest) String() string {
 func (*ListRitualDefinitionsRequest) ProtoMessage() {}
 
 func (x *ListRitualDefinitionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[150]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11307,7 +11452,7 @@ func (x *ListRitualDefinitionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRitualDefinitionsRequest.ProtoReflect.Descriptor instead.
 func (*ListRitualDefinitionsRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{150}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *ListRitualDefinitionsRequest) GetProjectId() string {
@@ -11333,7 +11478,7 @@ type ListRitualDefinitionsResponse struct {
 
 func (x *ListRitualDefinitionsResponse) Reset() {
 	*x = ListRitualDefinitionsResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[151]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11345,7 +11490,7 @@ func (x *ListRitualDefinitionsResponse) String() string {
 func (*ListRitualDefinitionsResponse) ProtoMessage() {}
 
 func (x *ListRitualDefinitionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[151]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11358,7 +11503,7 @@ func (x *ListRitualDefinitionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListRitualDefinitionsResponse.ProtoReflect.Descriptor instead.
 func (*ListRitualDefinitionsResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{151}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *ListRitualDefinitionsResponse) GetRitualDefinitions() []*RitualDefinition {
@@ -11366,6 +11511,118 @@ func (x *ListRitualDefinitionsResponse) GetRitualDefinitions() []*RitualDefiniti
 		return x.RitualDefinitions
 	}
 	return nil
+}
+
+type GetRitualProcedureRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The definition, not the instance. An instance resolves its procedure through its
+	// definition and holds no reference of its own, which is exactly why a corrected
+	// procedure reaches every open instance at once. A client holding only a task passes
+	// task.ritual_definition_id; a task with none (a standard task, or an instance detached
+	// from its ritual) has no procedure to ask for and does not call this.
+	RitualDefinitionId string `protobuf:"bytes,1,opt,name=ritual_definition_id,json=ritualDefinitionId,proto3" json:"ritual_definition_id,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *GetRitualProcedureRequest) Reset() {
+	*x = GetRitualProcedureRequest{}
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[153]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRitualProcedureRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRitualProcedureRequest) ProtoMessage() {}
+
+func (x *GetRitualProcedureRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[153]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRitualProcedureRequest.ProtoReflect.Descriptor instead.
+func (*GetRitualProcedureRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{153}
+}
+
+func (x *GetRitualProcedureRequest) GetRitualDefinitionId() string {
+	if x != nil {
+		return x.RitualDefinitionId
+	}
+	return ""
+}
+
+type GetRitualProcedureResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Absent when the definition has no procedure attached. Present with
+	// is_available = false when one is attached but unresolvable.
+	Procedure *RitualProcedure `protobuf:"bytes,1,opt,name=procedure,proto3,oneof" json:"procedure,omitempty"`
+	// TipTap/ProseMirror JSON, as docs.document.content_json holds it — the same shape
+	// DocumentService returns, so both clients render it with the renderer they already have.
+	// Always the document's current content: no instance-time or submission-time snapshot is
+	// kept anywhere.
+	//
+	// Empty when `procedure` is absent or unavailable. A client MUST distinguish empty
+	// content on an available document (a procedure somebody has not written yet) from an
+	// unavailable one (a procedure that was deleted) using is_available, never by testing
+	// this string.
+	ContentJson   string `protobuf:"bytes,2,opt,name=content_json,json=contentJson,proto3" json:"content_json,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetRitualProcedureResponse) Reset() {
+	*x = GetRitualProcedureResponse{}
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[154]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetRitualProcedureResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRitualProcedureResponse) ProtoMessage() {}
+
+func (x *GetRitualProcedureResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[154]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRitualProcedureResponse.ProtoReflect.Descriptor instead.
+func (*GetRitualProcedureResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{154}
+}
+
+func (x *GetRitualProcedureResponse) GetProcedure() *RitualProcedure {
+	if x != nil {
+		return x.Procedure
+	}
+	return nil
+}
+
+func (x *GetRitualProcedureResponse) GetContentJson() string {
+	if x != nil {
+		return x.ContentJson
+	}
+	return ""
 }
 
 type CreateEvidenceRequirementRequest struct {
@@ -11384,7 +11641,7 @@ type CreateEvidenceRequirementRequest struct {
 
 func (x *CreateEvidenceRequirementRequest) Reset() {
 	*x = CreateEvidenceRequirementRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[152]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11396,7 +11653,7 @@ func (x *CreateEvidenceRequirementRequest) String() string {
 func (*CreateEvidenceRequirementRequest) ProtoMessage() {}
 
 func (x *CreateEvidenceRequirementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[152]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11409,7 +11666,7 @@ func (x *CreateEvidenceRequirementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateEvidenceRequirementRequest.ProtoReflect.Descriptor instead.
 func (*CreateEvidenceRequirementRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{152}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *CreateEvidenceRequirementRequest) GetRitualDefinitionId() string {
@@ -11477,7 +11734,7 @@ type CreateEvidenceRequirementResponse struct {
 
 func (x *CreateEvidenceRequirementResponse) Reset() {
 	*x = CreateEvidenceRequirementResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[153]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11489,7 +11746,7 @@ func (x *CreateEvidenceRequirementResponse) String() string {
 func (*CreateEvidenceRequirementResponse) ProtoMessage() {}
 
 func (x *CreateEvidenceRequirementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[153]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11502,7 +11759,7 @@ func (x *CreateEvidenceRequirementResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use CreateEvidenceRequirementResponse.ProtoReflect.Descriptor instead.
 func (*CreateEvidenceRequirementResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{153}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *CreateEvidenceRequirementResponse) GetEvidenceRequirement() *EvidenceRequirementDetail {
@@ -11528,7 +11785,7 @@ type UpdateEvidenceRequirementRequest struct {
 
 func (x *UpdateEvidenceRequirementRequest) Reset() {
 	*x = UpdateEvidenceRequirementRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[154]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11540,7 +11797,7 @@ func (x *UpdateEvidenceRequirementRequest) String() string {
 func (*UpdateEvidenceRequirementRequest) ProtoMessage() {}
 
 func (x *UpdateEvidenceRequirementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[154]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11553,7 +11810,7 @@ func (x *UpdateEvidenceRequirementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEvidenceRequirementRequest.ProtoReflect.Descriptor instead.
 func (*UpdateEvidenceRequirementRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{154}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{157}
 }
 
 func (x *UpdateEvidenceRequirementRequest) GetEvidenceRequirementId() string {
@@ -11621,7 +11878,7 @@ type UpdateEvidenceRequirementResponse struct {
 
 func (x *UpdateEvidenceRequirementResponse) Reset() {
 	*x = UpdateEvidenceRequirementResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[155]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11633,7 +11890,7 @@ func (x *UpdateEvidenceRequirementResponse) String() string {
 func (*UpdateEvidenceRequirementResponse) ProtoMessage() {}
 
 func (x *UpdateEvidenceRequirementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[155]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11646,7 +11903,7 @@ func (x *UpdateEvidenceRequirementResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use UpdateEvidenceRequirementResponse.ProtoReflect.Descriptor instead.
 func (*UpdateEvidenceRequirementResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{155}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *UpdateEvidenceRequirementResponse) GetEvidenceRequirement() *EvidenceRequirementDetail {
@@ -11665,7 +11922,7 @@ type DeleteEvidenceRequirementRequest struct {
 
 func (x *DeleteEvidenceRequirementRequest) Reset() {
 	*x = DeleteEvidenceRequirementRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[156]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11677,7 +11934,7 @@ func (x *DeleteEvidenceRequirementRequest) String() string {
 func (*DeleteEvidenceRequirementRequest) ProtoMessage() {}
 
 func (x *DeleteEvidenceRequirementRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[156]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11690,7 +11947,7 @@ func (x *DeleteEvidenceRequirementRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteEvidenceRequirementRequest.ProtoReflect.Descriptor instead.
 func (*DeleteEvidenceRequirementRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{156}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *DeleteEvidenceRequirementRequest) GetEvidenceRequirementId() string {
@@ -11708,7 +11965,7 @@ type DeleteEvidenceRequirementResponse struct {
 
 func (x *DeleteEvidenceRequirementResponse) Reset() {
 	*x = DeleteEvidenceRequirementResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[157]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11720,7 +11977,7 @@ func (x *DeleteEvidenceRequirementResponse) String() string {
 func (*DeleteEvidenceRequirementResponse) ProtoMessage() {}
 
 func (x *DeleteEvidenceRequirementResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[157]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11733,7 +11990,7 @@ func (x *DeleteEvidenceRequirementResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use DeleteEvidenceRequirementResponse.ProtoReflect.Descriptor instead.
 func (*DeleteEvidenceRequirementResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{157}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{160}
 }
 
 type ListEvidenceRequirementsRequest struct {
@@ -11745,7 +12002,7 @@ type ListEvidenceRequirementsRequest struct {
 
 func (x *ListEvidenceRequirementsRequest) Reset() {
 	*x = ListEvidenceRequirementsRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[158]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11757,7 +12014,7 @@ func (x *ListEvidenceRequirementsRequest) String() string {
 func (*ListEvidenceRequirementsRequest) ProtoMessage() {}
 
 func (x *ListEvidenceRequirementsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[158]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11770,7 +12027,7 @@ func (x *ListEvidenceRequirementsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidenceRequirementsRequest.ProtoReflect.Descriptor instead.
 func (*ListEvidenceRequirementsRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{158}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *ListEvidenceRequirementsRequest) GetRitualDefinitionId() string {
@@ -11789,7 +12046,7 @@ type ListEvidenceRequirementsResponse struct {
 
 func (x *ListEvidenceRequirementsResponse) Reset() {
 	*x = ListEvidenceRequirementsResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[159]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11801,7 +12058,7 @@ func (x *ListEvidenceRequirementsResponse) String() string {
 func (*ListEvidenceRequirementsResponse) ProtoMessage() {}
 
 func (x *ListEvidenceRequirementsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[159]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11814,7 +12071,7 @@ func (x *ListEvidenceRequirementsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidenceRequirementsResponse.ProtoReflect.Descriptor instead.
 func (*ListEvidenceRequirementsResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{159}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{162}
 }
 
 func (x *ListEvidenceRequirementsResponse) GetEvidenceRequirements() []*EvidenceRequirementDetail {
@@ -11842,7 +12099,7 @@ type SubmitEvidenceRequest struct {
 
 func (x *SubmitEvidenceRequest) Reset() {
 	*x = SubmitEvidenceRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[160]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11854,7 +12111,7 @@ func (x *SubmitEvidenceRequest) String() string {
 func (*SubmitEvidenceRequest) ProtoMessage() {}
 
 func (x *SubmitEvidenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[160]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11867,7 +12124,7 @@ func (x *SubmitEvidenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitEvidenceRequest.ProtoReflect.Descriptor instead.
 func (*SubmitEvidenceRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{160}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{163}
 }
 
 func (x *SubmitEvidenceRequest) GetTaskId() string {
@@ -11935,7 +12192,7 @@ type SubmitEvidenceResponse struct {
 
 func (x *SubmitEvidenceResponse) Reset() {
 	*x = SubmitEvidenceResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[161]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11947,7 +12204,7 @@ func (x *SubmitEvidenceResponse) String() string {
 func (*SubmitEvidenceResponse) ProtoMessage() {}
 
 func (x *SubmitEvidenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[161]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11960,7 +12217,7 @@ func (x *SubmitEvidenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitEvidenceResponse.ProtoReflect.Descriptor instead.
 func (*SubmitEvidenceResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{161}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *SubmitEvidenceResponse) GetEvidenceSubmission() *EvidenceSubmission {
@@ -11980,7 +12237,7 @@ type ApproveEvidenceRequest struct {
 
 func (x *ApproveEvidenceRequest) Reset() {
 	*x = ApproveEvidenceRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[162]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11992,7 +12249,7 @@ func (x *ApproveEvidenceRequest) String() string {
 func (*ApproveEvidenceRequest) ProtoMessage() {}
 
 func (x *ApproveEvidenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[162]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12005,7 +12262,7 @@ func (x *ApproveEvidenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveEvidenceRequest.ProtoReflect.Descriptor instead.
 func (*ApproveEvidenceRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{162}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{165}
 }
 
 func (x *ApproveEvidenceRequest) GetEvidenceSubmissionId() string {
@@ -12031,7 +12288,7 @@ type ApproveEvidenceResponse struct {
 
 func (x *ApproveEvidenceResponse) Reset() {
 	*x = ApproveEvidenceResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[163]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12043,7 +12300,7 @@ func (x *ApproveEvidenceResponse) String() string {
 func (*ApproveEvidenceResponse) ProtoMessage() {}
 
 func (x *ApproveEvidenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[163]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12056,7 +12313,7 @@ func (x *ApproveEvidenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveEvidenceResponse.ProtoReflect.Descriptor instead.
 func (*ApproveEvidenceResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{163}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{166}
 }
 
 func (x *ApproveEvidenceResponse) GetEvidenceSubmission() *EvidenceSubmission {
@@ -12076,7 +12333,7 @@ type RejectEvidenceRequest struct {
 
 func (x *RejectEvidenceRequest) Reset() {
 	*x = RejectEvidenceRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[164]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12088,7 +12345,7 @@ func (x *RejectEvidenceRequest) String() string {
 func (*RejectEvidenceRequest) ProtoMessage() {}
 
 func (x *RejectEvidenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[164]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12101,7 +12358,7 @@ func (x *RejectEvidenceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectEvidenceRequest.ProtoReflect.Descriptor instead.
 func (*RejectEvidenceRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{164}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{167}
 }
 
 func (x *RejectEvidenceRequest) GetEvidenceSubmissionId() string {
@@ -12127,7 +12384,7 @@ type RejectEvidenceResponse struct {
 
 func (x *RejectEvidenceResponse) Reset() {
 	*x = RejectEvidenceResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[165]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12139,7 +12396,7 @@ func (x *RejectEvidenceResponse) String() string {
 func (*RejectEvidenceResponse) ProtoMessage() {}
 
 func (x *RejectEvidenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[165]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12152,7 +12409,7 @@ func (x *RejectEvidenceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectEvidenceResponse.ProtoReflect.Descriptor instead.
 func (*RejectEvidenceResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{165}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{168}
 }
 
 func (x *RejectEvidenceResponse) GetEvidenceSubmission() *EvidenceSubmission {
@@ -12171,7 +12428,7 @@ type ListEvidenceSubmissionsRequest struct {
 
 func (x *ListEvidenceSubmissionsRequest) Reset() {
 	*x = ListEvidenceSubmissionsRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[166]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[169]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12183,7 +12440,7 @@ func (x *ListEvidenceSubmissionsRequest) String() string {
 func (*ListEvidenceSubmissionsRequest) ProtoMessage() {}
 
 func (x *ListEvidenceSubmissionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[166]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[169]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12196,7 +12453,7 @@ func (x *ListEvidenceSubmissionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidenceSubmissionsRequest.ProtoReflect.Descriptor instead.
 func (*ListEvidenceSubmissionsRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{166}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{169}
 }
 
 func (x *ListEvidenceSubmissionsRequest) GetTaskId() string {
@@ -12215,7 +12472,7 @@ type ListEvidenceSubmissionsResponse struct {
 
 func (x *ListEvidenceSubmissionsResponse) Reset() {
 	*x = ListEvidenceSubmissionsResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[167]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[170]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12227,7 +12484,7 @@ func (x *ListEvidenceSubmissionsResponse) String() string {
 func (*ListEvidenceSubmissionsResponse) ProtoMessage() {}
 
 func (x *ListEvidenceSubmissionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[167]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[170]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12240,7 +12497,7 @@ func (x *ListEvidenceSubmissionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidenceSubmissionsResponse.ProtoReflect.Descriptor instead.
 func (*ListEvidenceSubmissionsResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{167}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{170}
 }
 
 func (x *ListEvidenceSubmissionsResponse) GetEvidenceSubmissions() []*EvidenceSubmission {
@@ -12300,13 +12557,22 @@ type ReviewQueueEntry struct {
 	// The instance's completion deadline, absent when the ritual defines none.
 	InstanceCompletionDeadline *timestamppb.Timestamp `protobuf:"bytes,24,opt,name=instance_completion_deadline,json=instanceCompletionDeadline,proto3" json:"instance_completion_deadline,omitempty"`
 	Urgency                    ReviewUrgency          `protobuf:"varint,25,opt,name=urgency,proto3,enum=rpc.v1.ReviewUrgency" json:"urgency,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// The procedure attached to this submission's ritual definition, or empty when there is
+	// none. The id only — deliberately not a resolved RitualProcedure: it comes from the
+	// ritual_definition join the queue projection already performs for ritual_name, so a
+	// page of entries costs zero additional queries. The reviewer's control is labelled
+	// "Procedure" and fetches title and content from GetRitualProcedure when it is opened.
+	//
+	// Empty for an entry whose definition could not be resolved. Such an entry stays listed
+	// and stays decidable, exactly as today.
+	ProcedureDocumentId string `protobuf:"bytes,26,opt,name=procedure_document_id,json=procedureDocumentId,proto3" json:"procedure_document_id,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *ReviewQueueEntry) Reset() {
 	*x = ReviewQueueEntry{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[168]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12318,7 +12584,7 @@ func (x *ReviewQueueEntry) String() string {
 func (*ReviewQueueEntry) ProtoMessage() {}
 
 func (x *ReviewQueueEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[168]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12331,7 +12597,7 @@ func (x *ReviewQueueEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewQueueEntry.ProtoReflect.Descriptor instead.
 func (*ReviewQueueEntry) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{168}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{171}
 }
 
 func (x *ReviewQueueEntry) GetEvidenceSubmissionId() string {
@@ -12509,6 +12775,13 @@ func (x *ReviewQueueEntry) GetUrgency() ReviewUrgency {
 	return ReviewUrgency_REVIEW_URGENCY_UNSPECIFIED
 }
 
+func (x *ReviewQueueEntry) GetProcedureDocumentId() string {
+	if x != nil {
+		return x.ProcedureDocumentId
+	}
+	return ""
+}
+
 type ListEvidenceReviewQueueRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Opaque keyset cursor from the previous page's `next_cursor`. Absent on the first page.
@@ -12526,7 +12799,7 @@ type ListEvidenceReviewQueueRequest struct {
 
 func (x *ListEvidenceReviewQueueRequest) Reset() {
 	*x = ListEvidenceReviewQueueRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[169]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12538,7 +12811,7 @@ func (x *ListEvidenceReviewQueueRequest) String() string {
 func (*ListEvidenceReviewQueueRequest) ProtoMessage() {}
 
 func (x *ListEvidenceReviewQueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[169]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12551,7 +12824,7 @@ func (x *ListEvidenceReviewQueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidenceReviewQueueRequest.ProtoReflect.Descriptor instead.
 func (*ListEvidenceReviewQueueRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{169}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{172}
 }
 
 func (x *ListEvidenceReviewQueueRequest) GetCursor() string {
@@ -12589,7 +12862,7 @@ type ListEvidenceReviewQueueResponse struct {
 
 func (x *ListEvidenceReviewQueueResponse) Reset() {
 	*x = ListEvidenceReviewQueueResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[170]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[173]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12601,7 +12874,7 @@ func (x *ListEvidenceReviewQueueResponse) String() string {
 func (*ListEvidenceReviewQueueResponse) ProtoMessage() {}
 
 func (x *ListEvidenceReviewQueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[170]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[173]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12614,7 +12887,7 @@ func (x *ListEvidenceReviewQueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEvidenceReviewQueueResponse.ProtoReflect.Descriptor instead.
 func (*ListEvidenceReviewQueueResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{170}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{173}
 }
 
 func (x *ListEvidenceReviewQueueResponse) GetEntries() []*ReviewQueueEntry {
@@ -12642,7 +12915,7 @@ type GetEvidenceReviewQueueCountRequest struct {
 
 func (x *GetEvidenceReviewQueueCountRequest) Reset() {
 	*x = GetEvidenceReviewQueueCountRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[171]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12654,7 +12927,7 @@ func (x *GetEvidenceReviewQueueCountRequest) String() string {
 func (*GetEvidenceReviewQueueCountRequest) ProtoMessage() {}
 
 func (x *GetEvidenceReviewQueueCountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[171]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12667,7 +12940,7 @@ func (x *GetEvidenceReviewQueueCountRequest) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetEvidenceReviewQueueCountRequest.ProtoReflect.Descriptor instead.
 func (*GetEvidenceReviewQueueCountRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{171}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{174}
 }
 
 func (x *GetEvidenceReviewQueueCountRequest) GetProjectId() string {
@@ -12698,7 +12971,7 @@ type GetEvidenceReviewQueueCountResponse struct {
 
 func (x *GetEvidenceReviewQueueCountResponse) Reset() {
 	*x = GetEvidenceReviewQueueCountResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[172]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12710,7 +12983,7 @@ func (x *GetEvidenceReviewQueueCountResponse) String() string {
 func (*GetEvidenceReviewQueueCountResponse) ProtoMessage() {}
 
 func (x *GetEvidenceReviewQueueCountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[172]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12723,7 +12996,7 @@ func (x *GetEvidenceReviewQueueCountResponse) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use GetEvidenceReviewQueueCountResponse.ProtoReflect.Descriptor instead.
 func (*GetEvidenceReviewQueueCountResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{172}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *GetEvidenceReviewQueueCountResponse) GetPendingCount() int32 {
@@ -12760,7 +13033,7 @@ type RequestEvidenceFileUploadRequest struct {
 
 func (x *RequestEvidenceFileUploadRequest) Reset() {
 	*x = RequestEvidenceFileUploadRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[173]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12772,7 +13045,7 @@ func (x *RequestEvidenceFileUploadRequest) String() string {
 func (*RequestEvidenceFileUploadRequest) ProtoMessage() {}
 
 func (x *RequestEvidenceFileUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[173]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12785,7 +13058,7 @@ func (x *RequestEvidenceFileUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RequestEvidenceFileUploadRequest.ProtoReflect.Descriptor instead.
 func (*RequestEvidenceFileUploadRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{173}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{176}
 }
 
 func (x *RequestEvidenceFileUploadRequest) GetTaskId() string {
@@ -12833,7 +13106,7 @@ type RequestEvidenceFileUploadResponse struct {
 
 func (x *RequestEvidenceFileUploadResponse) Reset() {
 	*x = RequestEvidenceFileUploadResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[174]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12845,7 +13118,7 @@ func (x *RequestEvidenceFileUploadResponse) String() string {
 func (*RequestEvidenceFileUploadResponse) ProtoMessage() {}
 
 func (x *RequestEvidenceFileUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[174]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12858,7 +13131,7 @@ func (x *RequestEvidenceFileUploadResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use RequestEvidenceFileUploadResponse.ProtoReflect.Descriptor instead.
 func (*RequestEvidenceFileUploadResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{174}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{177}
 }
 
 func (x *RequestEvidenceFileUploadResponse) GetFileId() string {
@@ -12885,7 +13158,7 @@ type ConfirmEvidenceFileUploadRequest struct {
 
 func (x *ConfirmEvidenceFileUploadRequest) Reset() {
 	*x = ConfirmEvidenceFileUploadRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[175]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[178]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12897,7 +13170,7 @@ func (x *ConfirmEvidenceFileUploadRequest) String() string {
 func (*ConfirmEvidenceFileUploadRequest) ProtoMessage() {}
 
 func (x *ConfirmEvidenceFileUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[175]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[178]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12910,7 +13183,7 @@ func (x *ConfirmEvidenceFileUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmEvidenceFileUploadRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmEvidenceFileUploadRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{175}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{178}
 }
 
 func (x *ConfirmEvidenceFileUploadRequest) GetFileId() string {
@@ -12936,7 +13209,7 @@ type ConfirmEvidenceFileUploadResponse struct {
 
 func (x *ConfirmEvidenceFileUploadResponse) Reset() {
 	*x = ConfirmEvidenceFileUploadResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[176]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[179]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12948,7 +13221,7 @@ func (x *ConfirmEvidenceFileUploadResponse) String() string {
 func (*ConfirmEvidenceFileUploadResponse) ProtoMessage() {}
 
 func (x *ConfirmEvidenceFileUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[176]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[179]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12961,7 +13234,7 @@ func (x *ConfirmEvidenceFileUploadResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ConfirmEvidenceFileUploadResponse.ProtoReflect.Descriptor instead.
 func (*ConfirmEvidenceFileUploadResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{176}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{179}
 }
 
 func (x *ConfirmEvidenceFileUploadResponse) GetFileId() string {
@@ -12981,7 +13254,7 @@ type SkipRitualInstanceRequest struct {
 
 func (x *SkipRitualInstanceRequest) Reset() {
 	*x = SkipRitualInstanceRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[177]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[180]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12993,7 +13266,7 @@ func (x *SkipRitualInstanceRequest) String() string {
 func (*SkipRitualInstanceRequest) ProtoMessage() {}
 
 func (x *SkipRitualInstanceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[177]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[180]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13006,7 +13279,7 @@ func (x *SkipRitualInstanceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkipRitualInstanceRequest.ProtoReflect.Descriptor instead.
 func (*SkipRitualInstanceRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{177}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{180}
 }
 
 func (x *SkipRitualInstanceRequest) GetTaskId() string {
@@ -13032,7 +13305,7 @@ type SkipRitualInstanceResponse struct {
 
 func (x *SkipRitualInstanceResponse) Reset() {
 	*x = SkipRitualInstanceResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[178]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[181]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13044,7 +13317,7 @@ func (x *SkipRitualInstanceResponse) String() string {
 func (*SkipRitualInstanceResponse) ProtoMessage() {}
 
 func (x *SkipRitualInstanceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[178]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[181]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13057,7 +13330,7 @@ func (x *SkipRitualInstanceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkipRitualInstanceResponse.ProtoReflect.Descriptor instead.
 func (*SkipRitualInstanceResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{178}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{181}
 }
 
 func (x *SkipRitualInstanceResponse) GetTask() *Task {
@@ -13077,7 +13350,7 @@ type GetScheduleChangeImpactRequest struct {
 
 func (x *GetScheduleChangeImpactRequest) Reset() {
 	*x = GetScheduleChangeImpactRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[179]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[182]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13089,7 +13362,7 @@ func (x *GetScheduleChangeImpactRequest) String() string {
 func (*GetScheduleChangeImpactRequest) ProtoMessage() {}
 
 func (x *GetScheduleChangeImpactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[179]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[182]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13102,7 +13375,7 @@ func (x *GetScheduleChangeImpactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleChangeImpactRequest.ProtoReflect.Descriptor instead.
 func (*GetScheduleChangeImpactRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{179}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{182}
 }
 
 func (x *GetScheduleChangeImpactRequest) GetRitualDefinitionId() string {
@@ -13130,7 +13403,7 @@ type GetScheduleChangeImpactResponse struct {
 
 func (x *GetScheduleChangeImpactResponse) Reset() {
 	*x = GetScheduleChangeImpactResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[180]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[183]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13142,7 +13415,7 @@ func (x *GetScheduleChangeImpactResponse) String() string {
 func (*GetScheduleChangeImpactResponse) ProtoMessage() {}
 
 func (x *GetScheduleChangeImpactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[180]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[183]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13155,7 +13428,7 @@ func (x *GetScheduleChangeImpactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetScheduleChangeImpactResponse.ProtoReflect.Descriptor instead.
 func (*GetScheduleChangeImpactResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{180}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{183}
 }
 
 func (x *GetScheduleChangeImpactResponse) GetInstancesToRemove() int32 {
@@ -13190,7 +13463,7 @@ type ChangeRitualDefinitionScheduleRequest struct {
 
 func (x *ChangeRitualDefinitionScheduleRequest) Reset() {
 	*x = ChangeRitualDefinitionScheduleRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[181]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[184]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13202,7 +13475,7 @@ func (x *ChangeRitualDefinitionScheduleRequest) String() string {
 func (*ChangeRitualDefinitionScheduleRequest) ProtoMessage() {}
 
 func (x *ChangeRitualDefinitionScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[181]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[184]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13215,7 +13488,7 @@ func (x *ChangeRitualDefinitionScheduleRequest) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use ChangeRitualDefinitionScheduleRequest.ProtoReflect.Descriptor instead.
 func (*ChangeRitualDefinitionScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{181}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{184}
 }
 
 func (x *ChangeRitualDefinitionScheduleRequest) GetRitualDefinitionId() string {
@@ -13251,7 +13524,7 @@ type ChangeRitualDefinitionScheduleResponse struct {
 
 func (x *ChangeRitualDefinitionScheduleResponse) Reset() {
 	*x = ChangeRitualDefinitionScheduleResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[182]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[185]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13263,7 +13536,7 @@ func (x *ChangeRitualDefinitionScheduleResponse) String() string {
 func (*ChangeRitualDefinitionScheduleResponse) ProtoMessage() {}
 
 func (x *ChangeRitualDefinitionScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[182]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[185]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13276,7 +13549,7 @@ func (x *ChangeRitualDefinitionScheduleResponse) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use ChangeRitualDefinitionScheduleResponse.ProtoReflect.Descriptor instead.
 func (*ChangeRitualDefinitionScheduleResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{182}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{185}
 }
 
 func (x *ChangeRitualDefinitionScheduleResponse) GetRitualDefinition() *RitualDefinition {
@@ -13318,7 +13591,7 @@ type GetOperationalHealthRequest struct {
 
 func (x *GetOperationalHealthRequest) Reset() {
 	*x = GetOperationalHealthRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[183]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[186]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13330,7 +13603,7 @@ func (x *GetOperationalHealthRequest) String() string {
 func (*GetOperationalHealthRequest) ProtoMessage() {}
 
 func (x *GetOperationalHealthRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[183]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[186]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13343,7 +13616,7 @@ func (x *GetOperationalHealthRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOperationalHealthRequest.ProtoReflect.Descriptor instead.
 func (*GetOperationalHealthRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{183}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{186}
 }
 
 func (x *GetOperationalHealthRequest) GetProjectId() string {
@@ -13377,7 +13650,7 @@ type GetOperationalHealthResponse struct {
 
 func (x *GetOperationalHealthResponse) Reset() {
 	*x = GetOperationalHealthResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[184]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[187]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13389,7 +13662,7 @@ func (x *GetOperationalHealthResponse) String() string {
 func (*GetOperationalHealthResponse) ProtoMessage() {}
 
 func (x *GetOperationalHealthResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[184]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[187]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13402,7 +13675,7 @@ func (x *GetOperationalHealthResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetOperationalHealthResponse.ProtoReflect.Descriptor instead.
 func (*GetOperationalHealthResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{184}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{187}
 }
 
 func (x *GetOperationalHealthResponse) GetSummary() *OperationalHealthSummary {
@@ -13431,7 +13704,7 @@ type GetRitualComplianceSummaryRequest struct {
 
 func (x *GetRitualComplianceSummaryRequest) Reset() {
 	*x = GetRitualComplianceSummaryRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[185]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[188]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13443,7 +13716,7 @@ func (x *GetRitualComplianceSummaryRequest) String() string {
 func (*GetRitualComplianceSummaryRequest) ProtoMessage() {}
 
 func (x *GetRitualComplianceSummaryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[185]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[188]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13456,7 +13729,7 @@ func (x *GetRitualComplianceSummaryRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use GetRitualComplianceSummaryRequest.ProtoReflect.Descriptor instead.
 func (*GetRitualComplianceSummaryRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{185}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{188}
 }
 
 func (x *GetRitualComplianceSummaryRequest) GetProjectId() string {
@@ -13496,7 +13769,7 @@ type GetRitualComplianceSummaryResponse struct {
 
 func (x *GetRitualComplianceSummaryResponse) Reset() {
 	*x = GetRitualComplianceSummaryResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[186]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[189]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13508,7 +13781,7 @@ func (x *GetRitualComplianceSummaryResponse) String() string {
 func (*GetRitualComplianceSummaryResponse) ProtoMessage() {}
 
 func (x *GetRitualComplianceSummaryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[186]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[189]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13521,7 +13794,7 @@ func (x *GetRitualComplianceSummaryResponse) ProtoReflect() protoreflect.Message
 
 // Deprecated: Use GetRitualComplianceSummaryResponse.ProtoReflect.Descriptor instead.
 func (*GetRitualComplianceSummaryResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{186}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{189}
 }
 
 func (x *GetRitualComplianceSummaryResponse) GetEmployeeSummaries() []*EmployeeComplianceSummary {
@@ -13542,7 +13815,7 @@ type ExportRitualComplianceCSVRequest struct {
 
 func (x *ExportRitualComplianceCSVRequest) Reset() {
 	*x = ExportRitualComplianceCSVRequest{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[187]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[190]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13554,7 +13827,7 @@ func (x *ExportRitualComplianceCSVRequest) String() string {
 func (*ExportRitualComplianceCSVRequest) ProtoMessage() {}
 
 func (x *ExportRitualComplianceCSVRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[187]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[190]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13567,7 +13840,7 @@ func (x *ExportRitualComplianceCSVRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportRitualComplianceCSVRequest.ProtoReflect.Descriptor instead.
 func (*ExportRitualComplianceCSVRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{187}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{190}
 }
 
 func (x *ExportRitualComplianceCSVRequest) GetProjectId() string {
@@ -13600,7 +13873,7 @@ type ExportRitualComplianceCSVResponse struct {
 
 func (x *ExportRitualComplianceCSVResponse) Reset() {
 	*x = ExportRitualComplianceCSVResponse{}
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[188]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[191]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13612,7 +13885,7 @@ func (x *ExportRitualComplianceCSVResponse) String() string {
 func (*ExportRitualComplianceCSVResponse) ProtoMessage() {}
 
 func (x *ExportRitualComplianceCSVResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_collaboration_proto_msgTypes[188]
+	mi := &file_rpc_v1_collaboration_proto_msgTypes[191]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13625,7 +13898,7 @@ func (x *ExportRitualComplianceCSVResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use ExportRitualComplianceCSVResponse.ProtoReflect.Descriptor instead.
 func (*ExportRitualComplianceCSVResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{188}
+	return file_rpc_v1_collaboration_proto_rawDescGZIP(), []int{191}
 }
 
 func (x *ExportRitualComplianceCSVResponse) GetCsvData() []byte {
@@ -13639,7 +13912,7 @@ var File_rpc_v1_collaboration_proto protoreflect.FileDescriptor
 
 const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\n" +
-	"\x1arpc/v1/collaboration.proto\x12\x06rpc.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11rpc/v1/chat.proto\x1a\x12rpc/v1/files.proto\x1a\x11rpc/v1/rbac.proto\"\xb0\x03\n" +
+	"\x1arpc/v1/collaboration.proto\x12\x06rpc.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11rpc/v1/chat.proto\x1a\x15rpc/v1/document.proto\x1a\x12rpc/v1/files.proto\x1a\x11rpc/v1/rbac.proto\"\xb0\x03\n" +
 	"\aProject\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
@@ -14475,7 +14748,7 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\n" +
 	"NthWeekday\x12\x12\n" +
 	"\x04week\x18\x01 \x01(\x05R\x04week\x12\x10\n" +
-	"\x03day\x18\x02 \x01(\x05R\x03day\"\xaa\x05\n" +
+	"\x03day\x18\x02 \x01(\x05R\x03day\"\xf4\x05\n" +
 	"\x10RitualDefinition\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -14494,7 +14767,17 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12)\n" +
 	"\x10schedule_version\x18\r \x01(\x05R\x0fscheduleVersion\x12V\n" +
-	"\x18default_department_pools\x18\x0e \x03(\v2\x1c.rpc.v1.RitualDepartmentPoolR\x16defaultDepartmentPools\"\xe0\x01\n" +
+	"\x18default_department_pools\x18\x0e \x03(\v2\x1c.rpc.v1.RitualDepartmentPoolR\x16defaultDepartmentPools\x12:\n" +
+	"\tprocedure\x18\x0f \x01(\v2\x17.rpc.v1.RitualProcedureH\x00R\tprocedure\x88\x01\x01B\f\n" +
+	"\n" +
+	"_procedure\"\xaf\x01\n" +
+	"\x0fRitualProcedure\x12\x1f\n" +
+	"\vdocument_id\x18\x01 \x01(\tR\n" +
+	"documentId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12.\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x16.rpc.v1.DocumentStatusR\x06status\x12!\n" +
+	"\fis_available\x18\x05 \x01(\bR\visAvailable\"\xe0\x01\n" +
 	"\x14RitualDepartmentPool\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rdepartment_id\x18\x02 \x01(\tR\fdepartmentId\x12'\n" +
@@ -14587,7 +14870,7 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\x1dTaskEvidenceRequirementStatus\x12C\n" +
 	"\vrequirement\x18\x01 \x01(\v2!.rpc.v1.EvidenceRequirementDetailR\vrequirement\x12.\n" +
 	"\x06status\x18\x02 \x01(\x0e2\x16.rpc.v1.ApprovalStatusR\x06status\x12G\n" +
-	"\x11latest_submission\x18\x03 \x01(\v2\x1a.rpc.v1.EvidenceSubmissionR\x10latestSubmission\"\xf5\x03\n" +
+	"\x11latest_submission\x18\x03 \x01(\v2\x1a.rpc.v1.EvidenceSubmissionR\x10latestSubmission\"\xc8\x04\n" +
 	"\x1dCreateRitualDefinitionRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -14598,7 +14881,10 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\btimezone\x18\x06 \x01(\tR\btimezone\x120\n" +
 	"\x14default_assignee_ids\x18\a \x03(\tR\x12defaultAssigneeIds\x12[\n" +
 	"\x15evidence_requirements\x18\b \x03(\v2&.rpc.v1.CreateEvidenceRequirementInputR\x14evidenceRequirements\x12[\n" +
-	"\x18default_department_pools\x18\t \x03(\v2!.rpc.v1.RitualDepartmentPoolInputR\x16defaultDepartmentPools\"\xee\x02\n" +
+	"\x18default_department_pools\x18\t \x03(\v2!.rpc.v1.RitualDepartmentPoolInputR\x16defaultDepartmentPools\x127\n" +
+	"\x15procedure_document_id\x18\n" +
+	" \x01(\tH\x00R\x13procedureDocumentId\x88\x01\x01B\x18\n" +
+	"\x16_procedure_document_id\"\xee\x02\n" +
 	"\x1eCreateEvidenceRequirementInput\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12;\n" +
@@ -14613,7 +14899,7 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\x1aGetRitualDefinitionRequest\x120\n" +
 	"\x14ritual_definition_id\x18\x01 \x01(\tR\x12ritualDefinitionId\"d\n" +
 	"\x1bGetRitualDefinitionResponse\x12E\n" +
-	"\x11ritual_definition\x18\x01 \x01(\v2\x18.rpc.v1.RitualDefinitionR\x10ritualDefinition\"\x9a\x04\n" +
+	"\x11ritual_definition\x18\x01 \x01(\v2\x18.rpc.v1.RitualDefinitionR\x10ritualDefinition\"\xed\x04\n" +
 	"\x1dUpdateRitualDefinitionRequest\x120\n" +
 	"\x14ritual_definition_id\x18\x01 \x01(\tR\x12ritualDefinitionId\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01\x12%\n" +
@@ -14622,12 +14908,14 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\x17completion_window_hours\x18\x05 \x01(\x05H\x03R\x15completionWindowHours\x88\x01\x01\x12\x1f\n" +
 	"\btimezone\x18\x06 \x01(\tH\x04R\btimezone\x88\x01\x01\x120\n" +
 	"\x14default_assignee_ids\x18\a \x03(\tR\x12defaultAssigneeIds\x12[\n" +
-	"\x18default_department_pools\x18\b \x03(\v2!.rpc.v1.RitualDepartmentPoolInputR\x16defaultDepartmentPoolsB\a\n" +
+	"\x18default_department_pools\x18\b \x03(\v2!.rpc.v1.RitualDepartmentPoolInputR\x16defaultDepartmentPools\x127\n" +
+	"\x15procedure_document_id\x18\t \x01(\tH\x05R\x13procedureDocumentId\x88\x01\x01B\a\n" +
 	"\x05_nameB\x0e\n" +
 	"\f_descriptionB\x12\n" +
 	"\x10_recurrence_ruleB\x1a\n" +
 	"\x18_completion_window_hoursB\v\n" +
-	"\t_timezone\"g\n" +
+	"\t_timezoneB\x18\n" +
+	"\x16_procedure_document_id\"g\n" +
 	"\x1eUpdateRitualDefinitionResponse\x12E\n" +
 	"\x11ritual_definition\x18\x01 \x01(\v2\x18.rpc.v1.RitualDefinitionR\x10ritualDefinition\"l\n" +
 	"\x1eArchiveRitualDefinitionRequest\x120\n" +
@@ -14640,7 +14928,14 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12)\n" +
 	"\x10include_archived\x18\x02 \x01(\bR\x0fincludeArchived\"h\n" +
 	"\x1dListRitualDefinitionsResponse\x12G\n" +
-	"\x12ritual_definitions\x18\x01 \x03(\v2\x18.rpc.v1.RitualDefinitionR\x11ritualDefinitions\"\xa2\x03\n" +
+	"\x12ritual_definitions\x18\x01 \x03(\v2\x18.rpc.v1.RitualDefinitionR\x11ritualDefinitions\"M\n" +
+	"\x19GetRitualProcedureRequest\x120\n" +
+	"\x14ritual_definition_id\x18\x01 \x01(\tR\x12ritualDefinitionId\"\x89\x01\n" +
+	"\x1aGetRitualProcedureResponse\x12:\n" +
+	"\tprocedure\x18\x01 \x01(\v2\x17.rpc.v1.RitualProcedureH\x00R\tprocedure\x88\x01\x01\x12!\n" +
+	"\fcontent_json\x18\x02 \x01(\tR\vcontentJsonB\f\n" +
+	"\n" +
+	"_procedure\"\xa2\x03\n" +
 	" CreateEvidenceRequirementRequest\x120\n" +
 	"\x14ritual_definition_id\x18\x01 \x01(\tR\x12ritualDefinitionId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -14702,7 +14997,7 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\x1eListEvidenceSubmissionsRequest\x12\x17\n" +
 	"\atask_id\x18\x01 \x01(\tR\x06taskId\"p\n" +
 	"\x1fListEvidenceSubmissionsResponse\x12M\n" +
-	"\x14evidence_submissions\x18\x01 \x03(\v2\x1a.rpc.v1.EvidenceSubmissionR\x13evidenceSubmissions\"\x92\n" +
+	"\x14evidence_submissions\x18\x01 \x03(\v2\x1a.rpc.v1.EvidenceSubmissionR\x13evidenceSubmissions\"\xc6\n" +
 	"\n" +
 	"\x10ReviewQueueEntry\x124\n" +
 	"\x16evidence_submission_id\x18\x01 \x01(\tR\x14evidenceSubmissionId\x12\x17\n" +
@@ -14733,7 +15028,8 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\x0fgps_coordinates\x18\x16 \x01(\v2\x16.rpc.v1.GpsCoordinatesR\x0egpsCoordinates\x126\n" +
 	"\x17instance_state_category\x18\x17 \x01(\tR\x15instanceStateCategory\x12\\\n" +
 	"\x1cinstance_completion_deadline\x18\x18 \x01(\v2\x1a.google.protobuf.TimestampR\x1ainstanceCompletionDeadline\x12/\n" +
-	"\aurgency\x18\x19 \x01(\x0e2\x15.rpc.v1.ReviewUrgencyR\aurgency\"\x98\x01\n" +
+	"\aurgency\x18\x19 \x01(\x0e2\x15.rpc.v1.ReviewUrgencyR\aurgency\x122\n" +
+	"\x15procedure_document_id\x18\x1a \x01(\tR\x13procedureDocumentId\"\x98\x01\n" +
 	"\x1eListEvidenceReviewQueueRequest\x12\x1b\n" +
 	"\x06cursor\x18\x01 \x01(\tH\x00R\x06cursor\x88\x01\x01\x12\x1b\n" +
 	"\tpage_size\x18\x02 \x01(\x05R\bpageSize\x12\"\n" +
@@ -14926,7 +15222,7 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\x15RECURRENCE_TYPE_DAILY\x10\x01\x12\x1a\n" +
 	"\x16RECURRENCE_TYPE_WEEKLY\x10\x02\x12\x1b\n" +
 	"\x17RECURRENCE_TYPE_MONTHLY\x10\x03\x12#\n" +
-	"\x1fRECURRENCE_TYPE_CUSTOM_INTERVAL\x10\x042\xbaG\n" +
+	"\x1fRECURRENCE_TYPE_CUSTOM_INTERVAL\x10\x042\xaeH\n" +
 	"\x14CollaborationService\x12h\n" +
 	"\rCreateProject\x12\x1c.rpc.v1.CreateProjectRequest\x1a\x1d.rpc.v1.CreateProjectResponse\"\x1a\x82\xf9+\x16\n" +
 	"\x14collab.createProject\x12]\n" +
@@ -15046,7 +15342,9 @@ const file_rpc_v1_collaboration_proto_rawDesc = "" +
 	"\x17ArchiveRitualDefinition\x12&.rpc.v1.ArchiveRitualDefinitionRequest\x1a'.rpc.v1.ArchiveRitualDefinitionResponse\"#\x82\xf9+\x1f\n" +
 	"\x1dcollab.manageRitualDefinition\x12\x87\x01\n" +
 	"\x15ListRitualDefinitions\x12$.rpc.v1.ListRitualDefinitionsRequest\x1a%.rpc.v1.ListRitualDefinitionsResponse\"!\x82\xf9+\x1d\n" +
-	"\x1bcollab.viewRitualDefinition\x12\x98\x01\n" +
+	"\x1bcollab.viewRitualDefinition\x12r\n" +
+	"\x12GetRitualProcedure\x12!.rpc.v1.GetRitualProcedureRequest\x1a\".rpc.v1.GetRitualProcedureResponse\"\x15\x82\xf9+\x11\n" +
+	"\x0fcollab.viewTask\x12\x98\x01\n" +
 	"\x19CreateEvidenceRequirement\x12(.rpc.v1.CreateEvidenceRequirementRequest\x1a).rpc.v1.CreateEvidenceRequirementResponse\"&\x82\xf9+\"\n" +
 	" collab.manageEvidenceRequirement\x12\x98\x01\n" +
 	"\x19UpdateEvidenceRequirement\x12(.rpc.v1.UpdateEvidenceRequirementRequest\x1a).rpc.v1.UpdateEvidenceRequirementResponse\"&\x82\xf9+\"\n" +
@@ -15097,7 +15395,7 @@ func file_rpc_v1_collaboration_proto_rawDescGZIP() []byte {
 }
 
 var file_rpc_v1_collaboration_proto_enumTypes = make([]protoimpl.EnumInfo, 18)
-var file_rpc_v1_collaboration_proto_msgTypes = make([]protoimpl.MessageInfo, 191)
+var file_rpc_v1_collaboration_proto_msgTypes = make([]protoimpl.MessageInfo, 194)
 var file_rpc_v1_collaboration_proto_goTypes = []any{
 	(ProjectVisibility)(0),                         // 0: rpc.v1.ProjectVisibility
 	(StateCategory)(0),                             // 1: rpc.v1.StateCategory
@@ -15246,77 +15544,81 @@ var file_rpc_v1_collaboration_proto_goTypes = []any{
 	(*RecurrenceRule)(nil),                         // 144: rpc.v1.RecurrenceRule
 	(*NthWeekday)(nil),                             // 145: rpc.v1.NthWeekday
 	(*RitualDefinition)(nil),                       // 146: rpc.v1.RitualDefinition
-	(*RitualDepartmentPool)(nil),                   // 147: rpc.v1.RitualDepartmentPool
-	(*RitualDepartmentPoolInput)(nil),              // 148: rpc.v1.RitualDepartmentPoolInput
-	(*EvidenceRequirementDetail)(nil),              // 149: rpc.v1.EvidenceRequirementDetail
-	(*AutoApproveConfig)(nil),                      // 150: rpc.v1.AutoApproveConfig
-	(*GpsTarget)(nil),                              // 151: rpc.v1.GpsTarget
-	(*EvidenceSubmission)(nil),                     // 152: rpc.v1.EvidenceSubmission
-	(*GpsCoordinates)(nil),                         // 153: rpc.v1.GpsCoordinates
-	(*OperationalHealthSummary)(nil),               // 154: rpc.v1.OperationalHealthSummary
-	(*RitualHealthDetail)(nil),                     // 155: rpc.v1.RitualHealthDetail
-	(*EmployeeComplianceSummary)(nil),              // 156: rpc.v1.EmployeeComplianceSummary
-	(*TaskEvidenceProgress)(nil),                   // 157: rpc.v1.TaskEvidenceProgress
-	(*TaskEvidenceRequirementStatus)(nil),          // 158: rpc.v1.TaskEvidenceRequirementStatus
-	(*CreateRitualDefinitionRequest)(nil),          // 159: rpc.v1.CreateRitualDefinitionRequest
-	(*CreateEvidenceRequirementInput)(nil),         // 160: rpc.v1.CreateEvidenceRequirementInput
-	(*CreateRitualDefinitionResponse)(nil),         // 161: rpc.v1.CreateRitualDefinitionResponse
-	(*GetRitualDefinitionRequest)(nil),             // 162: rpc.v1.GetRitualDefinitionRequest
-	(*GetRitualDefinitionResponse)(nil),            // 163: rpc.v1.GetRitualDefinitionResponse
-	(*UpdateRitualDefinitionRequest)(nil),          // 164: rpc.v1.UpdateRitualDefinitionRequest
-	(*UpdateRitualDefinitionResponse)(nil),         // 165: rpc.v1.UpdateRitualDefinitionResponse
-	(*ArchiveRitualDefinitionRequest)(nil),         // 166: rpc.v1.ArchiveRitualDefinitionRequest
-	(*ArchiveRitualDefinitionResponse)(nil),        // 167: rpc.v1.ArchiveRitualDefinitionResponse
-	(*ListRitualDefinitionsRequest)(nil),           // 168: rpc.v1.ListRitualDefinitionsRequest
-	(*ListRitualDefinitionsResponse)(nil),          // 169: rpc.v1.ListRitualDefinitionsResponse
-	(*CreateEvidenceRequirementRequest)(nil),       // 170: rpc.v1.CreateEvidenceRequirementRequest
-	(*CreateEvidenceRequirementResponse)(nil),      // 171: rpc.v1.CreateEvidenceRequirementResponse
-	(*UpdateEvidenceRequirementRequest)(nil),       // 172: rpc.v1.UpdateEvidenceRequirementRequest
-	(*UpdateEvidenceRequirementResponse)(nil),      // 173: rpc.v1.UpdateEvidenceRequirementResponse
-	(*DeleteEvidenceRequirementRequest)(nil),       // 174: rpc.v1.DeleteEvidenceRequirementRequest
-	(*DeleteEvidenceRequirementResponse)(nil),      // 175: rpc.v1.DeleteEvidenceRequirementResponse
-	(*ListEvidenceRequirementsRequest)(nil),        // 176: rpc.v1.ListEvidenceRequirementsRequest
-	(*ListEvidenceRequirementsResponse)(nil),       // 177: rpc.v1.ListEvidenceRequirementsResponse
-	(*SubmitEvidenceRequest)(nil),                  // 178: rpc.v1.SubmitEvidenceRequest
-	(*SubmitEvidenceResponse)(nil),                 // 179: rpc.v1.SubmitEvidenceResponse
-	(*ApproveEvidenceRequest)(nil),                 // 180: rpc.v1.ApproveEvidenceRequest
-	(*ApproveEvidenceResponse)(nil),                // 181: rpc.v1.ApproveEvidenceResponse
-	(*RejectEvidenceRequest)(nil),                  // 182: rpc.v1.RejectEvidenceRequest
-	(*RejectEvidenceResponse)(nil),                 // 183: rpc.v1.RejectEvidenceResponse
-	(*ListEvidenceSubmissionsRequest)(nil),         // 184: rpc.v1.ListEvidenceSubmissionsRequest
-	(*ListEvidenceSubmissionsResponse)(nil),        // 185: rpc.v1.ListEvidenceSubmissionsResponse
-	(*ReviewQueueEntry)(nil),                       // 186: rpc.v1.ReviewQueueEntry
-	(*ListEvidenceReviewQueueRequest)(nil),         // 187: rpc.v1.ListEvidenceReviewQueueRequest
-	(*ListEvidenceReviewQueueResponse)(nil),        // 188: rpc.v1.ListEvidenceReviewQueueResponse
-	(*GetEvidenceReviewQueueCountRequest)(nil),     // 189: rpc.v1.GetEvidenceReviewQueueCountRequest
-	(*GetEvidenceReviewQueueCountResponse)(nil),    // 190: rpc.v1.GetEvidenceReviewQueueCountResponse
-	(*RequestEvidenceFileUploadRequest)(nil),       // 191: rpc.v1.RequestEvidenceFileUploadRequest
-	(*RequestEvidenceFileUploadResponse)(nil),      // 192: rpc.v1.RequestEvidenceFileUploadResponse
-	(*ConfirmEvidenceFileUploadRequest)(nil),       // 193: rpc.v1.ConfirmEvidenceFileUploadRequest
-	(*ConfirmEvidenceFileUploadResponse)(nil),      // 194: rpc.v1.ConfirmEvidenceFileUploadResponse
-	(*SkipRitualInstanceRequest)(nil),              // 195: rpc.v1.SkipRitualInstanceRequest
-	(*SkipRitualInstanceResponse)(nil),             // 196: rpc.v1.SkipRitualInstanceResponse
-	(*GetScheduleChangeImpactRequest)(nil),         // 197: rpc.v1.GetScheduleChangeImpactRequest
-	(*GetScheduleChangeImpactResponse)(nil),        // 198: rpc.v1.GetScheduleChangeImpactResponse
-	(*ChangeRitualDefinitionScheduleRequest)(nil),  // 199: rpc.v1.ChangeRitualDefinitionScheduleRequest
-	(*ChangeRitualDefinitionScheduleResponse)(nil), // 200: rpc.v1.ChangeRitualDefinitionScheduleResponse
-	(*GetOperationalHealthRequest)(nil),            // 201: rpc.v1.GetOperationalHealthRequest
-	(*GetOperationalHealthResponse)(nil),           // 202: rpc.v1.GetOperationalHealthResponse
-	(*GetRitualComplianceSummaryRequest)(nil),      // 203: rpc.v1.GetRitualComplianceSummaryRequest
-	(*GetRitualComplianceSummaryResponse)(nil),     // 204: rpc.v1.GetRitualComplianceSummaryResponse
-	(*ExportRitualComplianceCSVRequest)(nil),       // 205: rpc.v1.ExportRitualComplianceCSVRequest
-	(*ExportRitualComplianceCSVResponse)(nil),      // 206: rpc.v1.ExportRitualComplianceCSVResponse
-	nil,                           // 207: rpc.v1.AnalyticsRow.DimensionsEntry
-	nil,                           // 208: rpc.v1.AnalyticsRow.MetricsEntry
-	(*timestamppb.Timestamp)(nil), // 209: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),       // 210: google.protobuf.Struct
-	(NotificationPreference)(0),   // 211: rpc.v1.NotificationPreference
-	(*FileMetadata)(nil),          // 212: rpc.v1.FileMetadata
-	(*structpb.Value)(nil),        // 213: google.protobuf.Value
+	(*RitualProcedure)(nil),                        // 147: rpc.v1.RitualProcedure
+	(*RitualDepartmentPool)(nil),                   // 148: rpc.v1.RitualDepartmentPool
+	(*RitualDepartmentPoolInput)(nil),              // 149: rpc.v1.RitualDepartmentPoolInput
+	(*EvidenceRequirementDetail)(nil),              // 150: rpc.v1.EvidenceRequirementDetail
+	(*AutoApproveConfig)(nil),                      // 151: rpc.v1.AutoApproveConfig
+	(*GpsTarget)(nil),                              // 152: rpc.v1.GpsTarget
+	(*EvidenceSubmission)(nil),                     // 153: rpc.v1.EvidenceSubmission
+	(*GpsCoordinates)(nil),                         // 154: rpc.v1.GpsCoordinates
+	(*OperationalHealthSummary)(nil),               // 155: rpc.v1.OperationalHealthSummary
+	(*RitualHealthDetail)(nil),                     // 156: rpc.v1.RitualHealthDetail
+	(*EmployeeComplianceSummary)(nil),              // 157: rpc.v1.EmployeeComplianceSummary
+	(*TaskEvidenceProgress)(nil),                   // 158: rpc.v1.TaskEvidenceProgress
+	(*TaskEvidenceRequirementStatus)(nil),          // 159: rpc.v1.TaskEvidenceRequirementStatus
+	(*CreateRitualDefinitionRequest)(nil),          // 160: rpc.v1.CreateRitualDefinitionRequest
+	(*CreateEvidenceRequirementInput)(nil),         // 161: rpc.v1.CreateEvidenceRequirementInput
+	(*CreateRitualDefinitionResponse)(nil),         // 162: rpc.v1.CreateRitualDefinitionResponse
+	(*GetRitualDefinitionRequest)(nil),             // 163: rpc.v1.GetRitualDefinitionRequest
+	(*GetRitualDefinitionResponse)(nil),            // 164: rpc.v1.GetRitualDefinitionResponse
+	(*UpdateRitualDefinitionRequest)(nil),          // 165: rpc.v1.UpdateRitualDefinitionRequest
+	(*UpdateRitualDefinitionResponse)(nil),         // 166: rpc.v1.UpdateRitualDefinitionResponse
+	(*ArchiveRitualDefinitionRequest)(nil),         // 167: rpc.v1.ArchiveRitualDefinitionRequest
+	(*ArchiveRitualDefinitionResponse)(nil),        // 168: rpc.v1.ArchiveRitualDefinitionResponse
+	(*ListRitualDefinitionsRequest)(nil),           // 169: rpc.v1.ListRitualDefinitionsRequest
+	(*ListRitualDefinitionsResponse)(nil),          // 170: rpc.v1.ListRitualDefinitionsResponse
+	(*GetRitualProcedureRequest)(nil),              // 171: rpc.v1.GetRitualProcedureRequest
+	(*GetRitualProcedureResponse)(nil),             // 172: rpc.v1.GetRitualProcedureResponse
+	(*CreateEvidenceRequirementRequest)(nil),       // 173: rpc.v1.CreateEvidenceRequirementRequest
+	(*CreateEvidenceRequirementResponse)(nil),      // 174: rpc.v1.CreateEvidenceRequirementResponse
+	(*UpdateEvidenceRequirementRequest)(nil),       // 175: rpc.v1.UpdateEvidenceRequirementRequest
+	(*UpdateEvidenceRequirementResponse)(nil),      // 176: rpc.v1.UpdateEvidenceRequirementResponse
+	(*DeleteEvidenceRequirementRequest)(nil),       // 177: rpc.v1.DeleteEvidenceRequirementRequest
+	(*DeleteEvidenceRequirementResponse)(nil),      // 178: rpc.v1.DeleteEvidenceRequirementResponse
+	(*ListEvidenceRequirementsRequest)(nil),        // 179: rpc.v1.ListEvidenceRequirementsRequest
+	(*ListEvidenceRequirementsResponse)(nil),       // 180: rpc.v1.ListEvidenceRequirementsResponse
+	(*SubmitEvidenceRequest)(nil),                  // 181: rpc.v1.SubmitEvidenceRequest
+	(*SubmitEvidenceResponse)(nil),                 // 182: rpc.v1.SubmitEvidenceResponse
+	(*ApproveEvidenceRequest)(nil),                 // 183: rpc.v1.ApproveEvidenceRequest
+	(*ApproveEvidenceResponse)(nil),                // 184: rpc.v1.ApproveEvidenceResponse
+	(*RejectEvidenceRequest)(nil),                  // 185: rpc.v1.RejectEvidenceRequest
+	(*RejectEvidenceResponse)(nil),                 // 186: rpc.v1.RejectEvidenceResponse
+	(*ListEvidenceSubmissionsRequest)(nil),         // 187: rpc.v1.ListEvidenceSubmissionsRequest
+	(*ListEvidenceSubmissionsResponse)(nil),        // 188: rpc.v1.ListEvidenceSubmissionsResponse
+	(*ReviewQueueEntry)(nil),                       // 189: rpc.v1.ReviewQueueEntry
+	(*ListEvidenceReviewQueueRequest)(nil),         // 190: rpc.v1.ListEvidenceReviewQueueRequest
+	(*ListEvidenceReviewQueueResponse)(nil),        // 191: rpc.v1.ListEvidenceReviewQueueResponse
+	(*GetEvidenceReviewQueueCountRequest)(nil),     // 192: rpc.v1.GetEvidenceReviewQueueCountRequest
+	(*GetEvidenceReviewQueueCountResponse)(nil),    // 193: rpc.v1.GetEvidenceReviewQueueCountResponse
+	(*RequestEvidenceFileUploadRequest)(nil),       // 194: rpc.v1.RequestEvidenceFileUploadRequest
+	(*RequestEvidenceFileUploadResponse)(nil),      // 195: rpc.v1.RequestEvidenceFileUploadResponse
+	(*ConfirmEvidenceFileUploadRequest)(nil),       // 196: rpc.v1.ConfirmEvidenceFileUploadRequest
+	(*ConfirmEvidenceFileUploadResponse)(nil),      // 197: rpc.v1.ConfirmEvidenceFileUploadResponse
+	(*SkipRitualInstanceRequest)(nil),              // 198: rpc.v1.SkipRitualInstanceRequest
+	(*SkipRitualInstanceResponse)(nil),             // 199: rpc.v1.SkipRitualInstanceResponse
+	(*GetScheduleChangeImpactRequest)(nil),         // 200: rpc.v1.GetScheduleChangeImpactRequest
+	(*GetScheduleChangeImpactResponse)(nil),        // 201: rpc.v1.GetScheduleChangeImpactResponse
+	(*ChangeRitualDefinitionScheduleRequest)(nil),  // 202: rpc.v1.ChangeRitualDefinitionScheduleRequest
+	(*ChangeRitualDefinitionScheduleResponse)(nil), // 203: rpc.v1.ChangeRitualDefinitionScheduleResponse
+	(*GetOperationalHealthRequest)(nil),            // 204: rpc.v1.GetOperationalHealthRequest
+	(*GetOperationalHealthResponse)(nil),           // 205: rpc.v1.GetOperationalHealthResponse
+	(*GetRitualComplianceSummaryRequest)(nil),      // 206: rpc.v1.GetRitualComplianceSummaryRequest
+	(*GetRitualComplianceSummaryResponse)(nil),     // 207: rpc.v1.GetRitualComplianceSummaryResponse
+	(*ExportRitualComplianceCSVRequest)(nil),       // 208: rpc.v1.ExportRitualComplianceCSVRequest
+	(*ExportRitualComplianceCSVResponse)(nil),      // 209: rpc.v1.ExportRitualComplianceCSVResponse
+	nil,                           // 210: rpc.v1.AnalyticsRow.DimensionsEntry
+	nil,                           // 211: rpc.v1.AnalyticsRow.MetricsEntry
+	(*timestamppb.Timestamp)(nil), // 212: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),       // 213: google.protobuf.Struct
+	(NotificationPreference)(0),   // 214: rpc.v1.NotificationPreference
+	(*FileMetadata)(nil),          // 215: rpc.v1.FileMetadata
+	(DocumentStatus)(0),           // 216: rpc.v1.DocumentStatus
+	(*structpb.Value)(nil),        // 217: google.protobuf.Value
 }
 var file_rpc_v1_collaboration_proto_depIdxs = []int32{
 	0,   // 0: rpc.v1.Project.visibility:type_name -> rpc.v1.ProjectVisibility
-	209, // 1: rpc.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
+	212, // 1: rpc.v1.Project.updated_at:type_name -> google.protobuf.Timestamp
 	12,  // 2: rpc.v1.Project.collaboration_mode:type_name -> rpc.v1.CollaborationMode
 	0,   // 3: rpc.v1.CreateProjectRequest.visibility:type_name -> rpc.v1.ProjectVisibility
 	20,  // 4: rpc.v1.CreateProjectRequest.default_states:type_name -> rpc.v1.DefaultState
@@ -15347,17 +15649,17 @@ var file_rpc_v1_collaboration_proto_depIdxs = []int32{
 	41,  // 29: rpc.v1.UpdateTaskLevelResponse.level:type_name -> rpc.v1.TaskLevel
 	41,  // 30: rpc.v1.ListTaskLevelsResponse.levels:type_name -> rpc.v1.TaskLevel
 	51,  // 31: rpc.v1.Task.assignees:type_name -> rpc.v1.TaskAssignee
-	209, // 32: rpc.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
+	212, // 32: rpc.v1.Task.updated_at:type_name -> google.protobuf.Timestamp
 	94,  // 33: rpc.v1.Task.custom_field_values:type_name -> rpc.v1.CustomFieldValue
 	10,  // 34: rpc.v1.Task.task_kind:type_name -> rpc.v1.TaskKind
-	209, // 35: rpc.v1.Task.completion_deadline:type_name -> google.protobuf.Timestamp
-	157, // 36: rpc.v1.Task.evidence_progress:type_name -> rpc.v1.TaskEvidenceProgress
+	212, // 35: rpc.v1.Task.completion_deadline:type_name -> google.protobuf.Timestamp
+	158, // 36: rpc.v1.Task.evidence_progress:type_name -> rpc.v1.TaskEvidenceProgress
 	11,  // 37: rpc.v1.Task.pool_assignment_state:type_name -> rpc.v1.RitualPoolAssignmentState
 	8,   // 38: rpc.v1.TaskAssignee.role:type_name -> rpc.v1.TaskAssigneeRole
-	209, // 39: rpc.v1.TaskAssignee.assigned_at:type_name -> google.protobuf.Timestamp
+	212, // 39: rpc.v1.TaskAssignee.assigned_at:type_name -> google.protobuf.Timestamp
 	53,  // 40: rpc.v1.CreateTaskRequest.custom_fields:type_name -> rpc.v1.CreateCustomFieldValueInput
 	10,  // 41: rpc.v1.CreateTaskRequest.task_kind:type_name -> rpc.v1.TaskKind
-	209, // 42: rpc.v1.CreateTaskRequest.completion_deadline:type_name -> google.protobuf.Timestamp
+	212, // 42: rpc.v1.CreateTaskRequest.completion_deadline:type_name -> google.protobuf.Timestamp
 	91,  // 43: rpc.v1.CreateCustomFieldValueInput.string_array_value:type_name -> rpc.v1.StringArray
 	50,  // 44: rpc.v1.CreateTaskResponse.task:type_name -> rpc.v1.Task
 	50,  // 45: rpc.v1.GetTaskResponse.task:type_name -> rpc.v1.Task
@@ -15394,34 +15696,34 @@ var file_rpc_v1_collaboration_proto_depIdxs = []int32{
 	91,  // 76: rpc.v1.SetCustomFieldValueRequest.string_array_value:type_name -> rpc.v1.StringArray
 	50,  // 77: rpc.v1.SetCustomFieldValueResponse.task:type_name -> rpc.v1.Task
 	5,   // 78: rpc.v1.WorkflowRule.trigger_type:type_name -> rpc.v1.WorkflowTriggerType
-	210, // 79: rpc.v1.WorkflowRule.trigger_condition:type_name -> google.protobuf.Struct
+	213, // 79: rpc.v1.WorkflowRule.trigger_condition:type_name -> google.protobuf.Struct
 	6,   // 80: rpc.v1.WorkflowRule.action_type:type_name -> rpc.v1.WorkflowActionType
-	210, // 81: rpc.v1.WorkflowRule.action_payload:type_name -> google.protobuf.Struct
+	213, // 81: rpc.v1.WorkflowRule.action_payload:type_name -> google.protobuf.Struct
 	5,   // 82: rpc.v1.CreateWorkflowRuleRequest.trigger_type:type_name -> rpc.v1.WorkflowTriggerType
-	210, // 83: rpc.v1.CreateWorkflowRuleRequest.trigger_condition:type_name -> google.protobuf.Struct
+	213, // 83: rpc.v1.CreateWorkflowRuleRequest.trigger_condition:type_name -> google.protobuf.Struct
 	6,   // 84: rpc.v1.CreateWorkflowRuleRequest.action_type:type_name -> rpc.v1.WorkflowActionType
-	210, // 85: rpc.v1.CreateWorkflowRuleRequest.action_payload:type_name -> google.protobuf.Struct
+	213, // 85: rpc.v1.CreateWorkflowRuleRequest.action_payload:type_name -> google.protobuf.Struct
 	105, // 86: rpc.v1.CreateWorkflowRuleResponse.rule:type_name -> rpc.v1.WorkflowRule
 	5,   // 87: rpc.v1.UpdateWorkflowRuleRequest.trigger_type:type_name -> rpc.v1.WorkflowTriggerType
-	210, // 88: rpc.v1.UpdateWorkflowRuleRequest.trigger_condition:type_name -> google.protobuf.Struct
+	213, // 88: rpc.v1.UpdateWorkflowRuleRequest.trigger_condition:type_name -> google.protobuf.Struct
 	6,   // 89: rpc.v1.UpdateWorkflowRuleRequest.action_type:type_name -> rpc.v1.WorkflowActionType
-	210, // 90: rpc.v1.UpdateWorkflowRuleRequest.action_payload:type_name -> google.protobuf.Struct
+	213, // 90: rpc.v1.UpdateWorkflowRuleRequest.action_payload:type_name -> google.protobuf.Struct
 	105, // 91: rpc.v1.UpdateWorkflowRuleResponse.rule:type_name -> rpc.v1.WorkflowRule
 	105, // 92: rpc.v1.ListWorkflowRulesResponse.rules:type_name -> rpc.v1.WorkflowRule
 	7,   // 93: rpc.v1.ProjectMember.role:type_name -> rpc.v1.ProjectMemberRole
-	211, // 94: rpc.v1.ProjectMember.notification_preference:type_name -> rpc.v1.NotificationPreference
-	209, // 95: rpc.v1.ProjectMember.joined_at:type_name -> google.protobuf.Timestamp
+	214, // 94: rpc.v1.ProjectMember.notification_preference:type_name -> rpc.v1.NotificationPreference
+	212, // 95: rpc.v1.ProjectMember.joined_at:type_name -> google.protobuf.Timestamp
 	7,   // 96: rpc.v1.AddProjectMemberRequest.role:type_name -> rpc.v1.ProjectMemberRole
 	114, // 97: rpc.v1.AddProjectMemberResponse.member:type_name -> rpc.v1.ProjectMember
 	7,   // 98: rpc.v1.UpdateProjectMemberRoleRequest.role:type_name -> rpc.v1.ProjectMemberRole
 	114, // 99: rpc.v1.UpdateProjectMemberRoleResponse.member:type_name -> rpc.v1.ProjectMember
 	114, // 100: rpc.v1.ListProjectMembersResponse.members:type_name -> rpc.v1.ProjectMember
 	9,   // 101: rpc.v1.SavedView.view_type:type_name -> rpc.v1.ViewType
-	210, // 102: rpc.v1.SavedView.config:type_name -> google.protobuf.Struct
+	213, // 102: rpc.v1.SavedView.config:type_name -> google.protobuf.Struct
 	9,   // 103: rpc.v1.CreateSavedViewRequest.view_type:type_name -> rpc.v1.ViewType
-	210, // 104: rpc.v1.CreateSavedViewRequest.config:type_name -> google.protobuf.Struct
+	213, // 104: rpc.v1.CreateSavedViewRequest.config:type_name -> google.protobuf.Struct
 	123, // 105: rpc.v1.CreateSavedViewResponse.view:type_name -> rpc.v1.SavedView
-	210, // 106: rpc.v1.UpdateSavedViewRequest.config:type_name -> google.protobuf.Struct
+	213, // 106: rpc.v1.UpdateSavedViewRequest.config:type_name -> google.protobuf.Struct
 	123, // 107: rpc.v1.UpdateSavedViewResponse.view:type_name -> rpc.v1.SavedView
 	123, // 108: rpc.v1.ListSavedViewsResponse.views:type_name -> rpc.v1.SavedView
 	133, // 109: rpc.v1.GetTaskAnalyticsRequest.aggregations:type_name -> rpc.v1.AnalyticsAggregation
@@ -15429,236 +15731,241 @@ var file_rpc_v1_collaboration_proto_depIdxs = []int32{
 	92,  // 111: rpc.v1.AnalyticsFilter.value:type_name -> rpc.v1.FieldValue
 	136, // 112: rpc.v1.GetTaskAnalyticsResponse.rows:type_name -> rpc.v1.AnalyticsRow
 	137, // 113: rpc.v1.GetTaskAnalyticsResponse.summary:type_name -> rpc.v1.AnalyticsSummary
-	207, // 114: rpc.v1.AnalyticsRow.dimensions:type_name -> rpc.v1.AnalyticsRow.DimensionsEntry
-	208, // 115: rpc.v1.AnalyticsRow.metrics:type_name -> rpc.v1.AnalyticsRow.MetricsEntry
+	210, // 114: rpc.v1.AnalyticsRow.dimensions:type_name -> rpc.v1.AnalyticsRow.DimensionsEntry
+	211, // 115: rpc.v1.AnalyticsRow.metrics:type_name -> rpc.v1.AnalyticsRow.MetricsEntry
 	134, // 116: rpc.v1.ExportTasksCSVRequest.filters:type_name -> rpc.v1.AnalyticsFilter
-	209, // 117: rpc.v1.RequestTaskFileUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
-	212, // 118: rpc.v1.ConfirmTaskFileUploadResponse.file:type_name -> rpc.v1.FileMetadata
+	212, // 117: rpc.v1.RequestTaskFileUploadResponse.expires_at:type_name -> google.protobuf.Timestamp
+	215, // 118: rpc.v1.ConfirmTaskFileUploadResponse.file:type_name -> rpc.v1.FileMetadata
 	50,  // 119: rpc.v1.ConfirmTaskFileUploadResponse.task:type_name -> rpc.v1.Task
 	17,  // 120: rpc.v1.RecurrenceRule.type:type_name -> rpc.v1.RecurrenceType
 	145, // 121: rpc.v1.RecurrenceRule.nth_weekday:type_name -> rpc.v1.NthWeekday
 	144, // 122: rpc.v1.RitualDefinition.recurrence_rule:type_name -> rpc.v1.RecurrenceRule
-	149, // 123: rpc.v1.RitualDefinition.evidence_requirements:type_name -> rpc.v1.EvidenceRequirementDetail
-	209, // 124: rpc.v1.RitualDefinition.updated_at:type_name -> google.protobuf.Timestamp
-	147, // 125: rpc.v1.RitualDefinition.default_department_pools:type_name -> rpc.v1.RitualDepartmentPool
-	13,  // 126: rpc.v1.EvidenceRequirementDetail.evidence_types:type_name -> rpc.v1.EvidenceType
-	14,  // 127: rpc.v1.EvidenceRequirementDetail.approval_mode:type_name -> rpc.v1.ApprovalMode
-	150, // 128: rpc.v1.EvidenceRequirementDetail.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
-	151, // 129: rpc.v1.AutoApproveConfig.gps_target:type_name -> rpc.v1.GpsTarget
-	13,  // 130: rpc.v1.EvidenceSubmission.evidence_type:type_name -> rpc.v1.EvidenceType
-	209, // 131: rpc.v1.EvidenceSubmission.device_timestamp:type_name -> google.protobuf.Timestamp
-	209, // 132: rpc.v1.EvidenceSubmission.server_timestamp:type_name -> google.protobuf.Timestamp
-	153, // 133: rpc.v1.EvidenceSubmission.gps_coordinates:type_name -> rpc.v1.GpsCoordinates
-	15,  // 134: rpc.v1.EvidenceSubmission.approval_status:type_name -> rpc.v1.ApprovalStatus
-	209, // 135: rpc.v1.EvidenceSubmission.reviewed_at:type_name -> google.protobuf.Timestamp
-	149, // 136: rpc.v1.TaskEvidenceRequirementStatus.requirement:type_name -> rpc.v1.EvidenceRequirementDetail
-	15,  // 137: rpc.v1.TaskEvidenceRequirementStatus.status:type_name -> rpc.v1.ApprovalStatus
-	152, // 138: rpc.v1.TaskEvidenceRequirementStatus.latest_submission:type_name -> rpc.v1.EvidenceSubmission
-	144, // 139: rpc.v1.CreateRitualDefinitionRequest.recurrence_rule:type_name -> rpc.v1.RecurrenceRule
-	160, // 140: rpc.v1.CreateRitualDefinitionRequest.evidence_requirements:type_name -> rpc.v1.CreateEvidenceRequirementInput
-	148, // 141: rpc.v1.CreateRitualDefinitionRequest.default_department_pools:type_name -> rpc.v1.RitualDepartmentPoolInput
-	13,  // 142: rpc.v1.CreateEvidenceRequirementInput.evidence_types:type_name -> rpc.v1.EvidenceType
-	14,  // 143: rpc.v1.CreateEvidenceRequirementInput.approval_mode:type_name -> rpc.v1.ApprovalMode
-	150, // 144: rpc.v1.CreateEvidenceRequirementInput.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
-	146, // 145: rpc.v1.CreateRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
-	146, // 146: rpc.v1.GetRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
-	144, // 147: rpc.v1.UpdateRitualDefinitionRequest.recurrence_rule:type_name -> rpc.v1.RecurrenceRule
-	148, // 148: rpc.v1.UpdateRitualDefinitionRequest.default_department_pools:type_name -> rpc.v1.RitualDepartmentPoolInput
-	146, // 149: rpc.v1.UpdateRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
-	146, // 150: rpc.v1.ArchiveRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
-	146, // 151: rpc.v1.ListRitualDefinitionsResponse.ritual_definitions:type_name -> rpc.v1.RitualDefinition
-	13,  // 152: rpc.v1.CreateEvidenceRequirementRequest.evidence_types:type_name -> rpc.v1.EvidenceType
-	14,  // 153: rpc.v1.CreateEvidenceRequirementRequest.approval_mode:type_name -> rpc.v1.ApprovalMode
-	150, // 154: rpc.v1.CreateEvidenceRequirementRequest.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
-	149, // 155: rpc.v1.CreateEvidenceRequirementResponse.evidence_requirement:type_name -> rpc.v1.EvidenceRequirementDetail
-	13,  // 156: rpc.v1.UpdateEvidenceRequirementRequest.evidence_types:type_name -> rpc.v1.EvidenceType
-	14,  // 157: rpc.v1.UpdateEvidenceRequirementRequest.approval_mode:type_name -> rpc.v1.ApprovalMode
-	150, // 158: rpc.v1.UpdateEvidenceRequirementRequest.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
-	149, // 159: rpc.v1.UpdateEvidenceRequirementResponse.evidence_requirement:type_name -> rpc.v1.EvidenceRequirementDetail
-	149, // 160: rpc.v1.ListEvidenceRequirementsResponse.evidence_requirements:type_name -> rpc.v1.EvidenceRequirementDetail
-	13,  // 161: rpc.v1.SubmitEvidenceRequest.evidence_type:type_name -> rpc.v1.EvidenceType
-	209, // 162: rpc.v1.SubmitEvidenceRequest.device_timestamp:type_name -> google.protobuf.Timestamp
-	153, // 163: rpc.v1.SubmitEvidenceRequest.gps_coordinates:type_name -> rpc.v1.GpsCoordinates
-	152, // 164: rpc.v1.SubmitEvidenceResponse.evidence_submission:type_name -> rpc.v1.EvidenceSubmission
-	152, // 165: rpc.v1.ApproveEvidenceResponse.evidence_submission:type_name -> rpc.v1.EvidenceSubmission
-	152, // 166: rpc.v1.RejectEvidenceResponse.evidence_submission:type_name -> rpc.v1.EvidenceSubmission
-	152, // 167: rpc.v1.ListEvidenceSubmissionsResponse.evidence_submissions:type_name -> rpc.v1.EvidenceSubmission
-	209, // 168: rpc.v1.ReviewQueueEntry.server_timestamp:type_name -> google.protobuf.Timestamp
-	209, // 169: rpc.v1.ReviewQueueEntry.device_timestamp:type_name -> google.protobuf.Timestamp
-	13,  // 170: rpc.v1.ReviewQueueEntry.evidence_type:type_name -> rpc.v1.EvidenceType
-	153, // 171: rpc.v1.ReviewQueueEntry.gps_coordinates:type_name -> rpc.v1.GpsCoordinates
-	209, // 172: rpc.v1.ReviewQueueEntry.instance_completion_deadline:type_name -> google.protobuf.Timestamp
-	16,  // 173: rpc.v1.ReviewQueueEntry.urgency:type_name -> rpc.v1.ReviewUrgency
-	186, // 174: rpc.v1.ListEvidenceReviewQueueResponse.entries:type_name -> rpc.v1.ReviewQueueEntry
-	50,  // 175: rpc.v1.SkipRitualInstanceResponse.task:type_name -> rpc.v1.Task
-	144, // 176: rpc.v1.GetScheduleChangeImpactRequest.new_recurrence_rule:type_name -> rpc.v1.RecurrenceRule
-	144, // 177: rpc.v1.ChangeRitualDefinitionScheduleRequest.new_recurrence_rule:type_name -> rpc.v1.RecurrenceRule
-	146, // 178: rpc.v1.ChangeRitualDefinitionScheduleResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
-	209, // 179: rpc.v1.GetOperationalHealthRequest.start_date:type_name -> google.protobuf.Timestamp
-	209, // 180: rpc.v1.GetOperationalHealthRequest.end_date:type_name -> google.protobuf.Timestamp
-	154, // 181: rpc.v1.GetOperationalHealthResponse.summary:type_name -> rpc.v1.OperationalHealthSummary
-	155, // 182: rpc.v1.GetOperationalHealthResponse.ritual_details:type_name -> rpc.v1.RitualHealthDetail
-	209, // 183: rpc.v1.GetRitualComplianceSummaryRequest.start_date:type_name -> google.protobuf.Timestamp
-	209, // 184: rpc.v1.GetRitualComplianceSummaryRequest.end_date:type_name -> google.protobuf.Timestamp
-	156, // 185: rpc.v1.GetRitualComplianceSummaryResponse.employee_summaries:type_name -> rpc.v1.EmployeeComplianceSummary
-	209, // 186: rpc.v1.ExportRitualComplianceCSVRequest.start_date:type_name -> google.protobuf.Timestamp
-	209, // 187: rpc.v1.ExportRitualComplianceCSVRequest.end_date:type_name -> google.protobuf.Timestamp
-	213, // 188: rpc.v1.AnalyticsRow.DimensionsEntry.value:type_name -> google.protobuf.Value
-	19,  // 189: rpc.v1.CollaborationService.CreateProject:input_type -> rpc.v1.CreateProjectRequest
-	22,  // 190: rpc.v1.CollaborationService.GetProject:input_type -> rpc.v1.GetProjectRequest
-	24,  // 191: rpc.v1.CollaborationService.UpdateProject:input_type -> rpc.v1.UpdateProjectRequest
-	26,  // 192: rpc.v1.CollaborationService.ListProjects:input_type -> rpc.v1.ListProjectsRequest
-	28,  // 193: rpc.v1.CollaborationService.ArchiveProject:input_type -> rpc.v1.ArchiveProjectRequest
-	31,  // 194: rpc.v1.CollaborationService.CreateProjectState:input_type -> rpc.v1.CreateProjectStateRequest
-	33,  // 195: rpc.v1.CollaborationService.UpdateProjectState:input_type -> rpc.v1.UpdateProjectStateRequest
-	35,  // 196: rpc.v1.CollaborationService.DeleteProjectState:input_type -> rpc.v1.DeleteProjectStateRequest
-	37,  // 197: rpc.v1.CollaborationService.ReorderProjectStates:input_type -> rpc.v1.ReorderProjectStatesRequest
-	39,  // 198: rpc.v1.CollaborationService.ListProjectStates:input_type -> rpc.v1.ListProjectStatesRequest
-	42,  // 199: rpc.v1.CollaborationService.CreateTaskLevel:input_type -> rpc.v1.CreateTaskLevelRequest
-	44,  // 200: rpc.v1.CollaborationService.UpdateTaskLevel:input_type -> rpc.v1.UpdateTaskLevelRequest
-	46,  // 201: rpc.v1.CollaborationService.DeleteTaskLevel:input_type -> rpc.v1.DeleteTaskLevelRequest
-	48,  // 202: rpc.v1.CollaborationService.ListTaskLevels:input_type -> rpc.v1.ListTaskLevelsRequest
-	52,  // 203: rpc.v1.CollaborationService.CreateTask:input_type -> rpc.v1.CreateTaskRequest
-	55,  // 204: rpc.v1.CollaborationService.GetTask:input_type -> rpc.v1.GetTaskRequest
-	58,  // 205: rpc.v1.CollaborationService.UpdateTask:input_type -> rpc.v1.UpdateTaskRequest
-	61,  // 206: rpc.v1.CollaborationService.DeleteTask:input_type -> rpc.v1.DeleteTaskRequest
-	63,  // 207: rpc.v1.CollaborationService.ListTasks:input_type -> rpc.v1.ListTasksRequest
-	65,  // 208: rpc.v1.CollaborationService.GetAssignedWorkSummary:input_type -> rpc.v1.GetAssignedWorkSummaryRequest
-	68,  // 209: rpc.v1.CollaborationService.MoveTask:input_type -> rpc.v1.MoveTaskRequest
-	70,  // 210: rpc.v1.CollaborationService.GetTaskByIdentifier:input_type -> rpc.v1.GetTaskByIdentifierRequest
-	72,  // 211: rpc.v1.CollaborationService.CreateTaskFromMessage:input_type -> rpc.v1.CreateTaskFromMessageRequest
-	74,  // 212: rpc.v1.CollaborationService.ListTasksBySourceMessages:input_type -> rpc.v1.ListTasksBySourceMessagesRequest
-	77,  // 213: rpc.v1.CollaborationService.GetTaskOrigin:input_type -> rpc.v1.GetTaskOriginRequest
-	79,  // 214: rpc.v1.CollaborationService.GetChannelTaskDestination:input_type -> rpc.v1.GetChannelTaskDestinationRequest
-	81,  // 215: rpc.v1.CollaborationService.SetChannelTaskDestination:input_type -> rpc.v1.SetChannelTaskDestinationRequest
-	83,  // 216: rpc.v1.CollaborationService.AssignTask:input_type -> rpc.v1.AssignTaskRequest
-	85,  // 217: rpc.v1.CollaborationService.UnassignTask:input_type -> rpc.v1.UnassignTaskRequest
-	87,  // 218: rpc.v1.CollaborationService.WatchTask:input_type -> rpc.v1.WatchTaskRequest
-	89,  // 219: rpc.v1.CollaborationService.UnwatchTask:input_type -> rpc.v1.UnwatchTaskRequest
-	95,  // 220: rpc.v1.CollaborationService.CreateCustomField:input_type -> rpc.v1.CreateCustomFieldRequest
-	97,  // 221: rpc.v1.CollaborationService.UpdateCustomField:input_type -> rpc.v1.UpdateCustomFieldRequest
-	99,  // 222: rpc.v1.CollaborationService.ArchiveCustomField:input_type -> rpc.v1.ArchiveCustomFieldRequest
-	101, // 223: rpc.v1.CollaborationService.ListCustomFields:input_type -> rpc.v1.ListCustomFieldsRequest
-	103, // 224: rpc.v1.CollaborationService.SetCustomFieldValue:input_type -> rpc.v1.SetCustomFieldValueRequest
-	106, // 225: rpc.v1.CollaborationService.CreateWorkflowRule:input_type -> rpc.v1.CreateWorkflowRuleRequest
-	108, // 226: rpc.v1.CollaborationService.UpdateWorkflowRule:input_type -> rpc.v1.UpdateWorkflowRuleRequest
-	110, // 227: rpc.v1.CollaborationService.DeleteWorkflowRule:input_type -> rpc.v1.DeleteWorkflowRuleRequest
-	112, // 228: rpc.v1.CollaborationService.ListWorkflowRules:input_type -> rpc.v1.ListWorkflowRulesRequest
-	115, // 229: rpc.v1.CollaborationService.AddProjectMember:input_type -> rpc.v1.AddProjectMemberRequest
-	117, // 230: rpc.v1.CollaborationService.RemoveProjectMember:input_type -> rpc.v1.RemoveProjectMemberRequest
-	119, // 231: rpc.v1.CollaborationService.UpdateProjectMemberRole:input_type -> rpc.v1.UpdateProjectMemberRoleRequest
-	121, // 232: rpc.v1.CollaborationService.ListProjectMembers:input_type -> rpc.v1.ListProjectMembersRequest
-	124, // 233: rpc.v1.CollaborationService.CreateSavedView:input_type -> rpc.v1.CreateSavedViewRequest
-	126, // 234: rpc.v1.CollaborationService.UpdateSavedView:input_type -> rpc.v1.UpdateSavedViewRequest
-	128, // 235: rpc.v1.CollaborationService.DeleteSavedView:input_type -> rpc.v1.DeleteSavedViewRequest
-	130, // 236: rpc.v1.CollaborationService.ListSavedViews:input_type -> rpc.v1.ListSavedViewsRequest
-	132, // 237: rpc.v1.CollaborationService.GetTaskAnalytics:input_type -> rpc.v1.GetTaskAnalyticsRequest
-	138, // 238: rpc.v1.CollaborationService.ExportTasksCSV:input_type -> rpc.v1.ExportTasksCSVRequest
-	140, // 239: rpc.v1.CollaborationService.RequestTaskFileUpload:input_type -> rpc.v1.RequestTaskFileUploadRequest
-	142, // 240: rpc.v1.CollaborationService.ConfirmTaskFileUpload:input_type -> rpc.v1.ConfirmTaskFileUploadRequest
-	159, // 241: rpc.v1.CollaborationService.CreateRitualDefinition:input_type -> rpc.v1.CreateRitualDefinitionRequest
-	162, // 242: rpc.v1.CollaborationService.GetRitualDefinition:input_type -> rpc.v1.GetRitualDefinitionRequest
-	164, // 243: rpc.v1.CollaborationService.UpdateRitualDefinition:input_type -> rpc.v1.UpdateRitualDefinitionRequest
-	166, // 244: rpc.v1.CollaborationService.ArchiveRitualDefinition:input_type -> rpc.v1.ArchiveRitualDefinitionRequest
-	168, // 245: rpc.v1.CollaborationService.ListRitualDefinitions:input_type -> rpc.v1.ListRitualDefinitionsRequest
-	170, // 246: rpc.v1.CollaborationService.CreateEvidenceRequirement:input_type -> rpc.v1.CreateEvidenceRequirementRequest
-	172, // 247: rpc.v1.CollaborationService.UpdateEvidenceRequirement:input_type -> rpc.v1.UpdateEvidenceRequirementRequest
-	174, // 248: rpc.v1.CollaborationService.DeleteEvidenceRequirement:input_type -> rpc.v1.DeleteEvidenceRequirementRequest
-	176, // 249: rpc.v1.CollaborationService.ListEvidenceRequirements:input_type -> rpc.v1.ListEvidenceRequirementsRequest
-	178, // 250: rpc.v1.CollaborationService.SubmitEvidence:input_type -> rpc.v1.SubmitEvidenceRequest
-	180, // 251: rpc.v1.CollaborationService.ApproveEvidence:input_type -> rpc.v1.ApproveEvidenceRequest
-	182, // 252: rpc.v1.CollaborationService.RejectEvidence:input_type -> rpc.v1.RejectEvidenceRequest
-	184, // 253: rpc.v1.CollaborationService.ListEvidenceSubmissions:input_type -> rpc.v1.ListEvidenceSubmissionsRequest
-	187, // 254: rpc.v1.CollaborationService.ListEvidenceReviewQueue:input_type -> rpc.v1.ListEvidenceReviewQueueRequest
-	189, // 255: rpc.v1.CollaborationService.GetEvidenceReviewQueueCount:input_type -> rpc.v1.GetEvidenceReviewQueueCountRequest
-	191, // 256: rpc.v1.CollaborationService.RequestEvidenceFileUpload:input_type -> rpc.v1.RequestEvidenceFileUploadRequest
-	193, // 257: rpc.v1.CollaborationService.ConfirmEvidenceFileUpload:input_type -> rpc.v1.ConfirmEvidenceFileUploadRequest
-	195, // 258: rpc.v1.CollaborationService.SkipRitualInstance:input_type -> rpc.v1.SkipRitualInstanceRequest
-	197, // 259: rpc.v1.CollaborationService.GetScheduleChangeImpact:input_type -> rpc.v1.GetScheduleChangeImpactRequest
-	199, // 260: rpc.v1.CollaborationService.ChangeRitualDefinitionSchedule:input_type -> rpc.v1.ChangeRitualDefinitionScheduleRequest
-	201, // 261: rpc.v1.CollaborationService.GetOperationalHealth:input_type -> rpc.v1.GetOperationalHealthRequest
-	203, // 262: rpc.v1.CollaborationService.GetRitualComplianceSummary:input_type -> rpc.v1.GetRitualComplianceSummaryRequest
-	205, // 263: rpc.v1.CollaborationService.ExportRitualComplianceCSV:input_type -> rpc.v1.ExportRitualComplianceCSVRequest
-	21,  // 264: rpc.v1.CollaborationService.CreateProject:output_type -> rpc.v1.CreateProjectResponse
-	23,  // 265: rpc.v1.CollaborationService.GetProject:output_type -> rpc.v1.GetProjectResponse
-	25,  // 266: rpc.v1.CollaborationService.UpdateProject:output_type -> rpc.v1.UpdateProjectResponse
-	27,  // 267: rpc.v1.CollaborationService.ListProjects:output_type -> rpc.v1.ListProjectsResponse
-	29,  // 268: rpc.v1.CollaborationService.ArchiveProject:output_type -> rpc.v1.ArchiveProjectResponse
-	32,  // 269: rpc.v1.CollaborationService.CreateProjectState:output_type -> rpc.v1.CreateProjectStateResponse
-	34,  // 270: rpc.v1.CollaborationService.UpdateProjectState:output_type -> rpc.v1.UpdateProjectStateResponse
-	36,  // 271: rpc.v1.CollaborationService.DeleteProjectState:output_type -> rpc.v1.DeleteProjectStateResponse
-	38,  // 272: rpc.v1.CollaborationService.ReorderProjectStates:output_type -> rpc.v1.ReorderProjectStatesResponse
-	40,  // 273: rpc.v1.CollaborationService.ListProjectStates:output_type -> rpc.v1.ListProjectStatesResponse
-	43,  // 274: rpc.v1.CollaborationService.CreateTaskLevel:output_type -> rpc.v1.CreateTaskLevelResponse
-	45,  // 275: rpc.v1.CollaborationService.UpdateTaskLevel:output_type -> rpc.v1.UpdateTaskLevelResponse
-	47,  // 276: rpc.v1.CollaborationService.DeleteTaskLevel:output_type -> rpc.v1.DeleteTaskLevelResponse
-	49,  // 277: rpc.v1.CollaborationService.ListTaskLevels:output_type -> rpc.v1.ListTaskLevelsResponse
-	54,  // 278: rpc.v1.CollaborationService.CreateTask:output_type -> rpc.v1.CreateTaskResponse
-	56,  // 279: rpc.v1.CollaborationService.GetTask:output_type -> rpc.v1.GetTaskResponse
-	59,  // 280: rpc.v1.CollaborationService.UpdateTask:output_type -> rpc.v1.UpdateTaskResponse
-	62,  // 281: rpc.v1.CollaborationService.DeleteTask:output_type -> rpc.v1.DeleteTaskResponse
-	64,  // 282: rpc.v1.CollaborationService.ListTasks:output_type -> rpc.v1.ListTasksResponse
-	67,  // 283: rpc.v1.CollaborationService.GetAssignedWorkSummary:output_type -> rpc.v1.GetAssignedWorkSummaryResponse
-	69,  // 284: rpc.v1.CollaborationService.MoveTask:output_type -> rpc.v1.MoveTaskResponse
-	71,  // 285: rpc.v1.CollaborationService.GetTaskByIdentifier:output_type -> rpc.v1.GetTaskByIdentifierResponse
-	73,  // 286: rpc.v1.CollaborationService.CreateTaskFromMessage:output_type -> rpc.v1.CreateTaskFromMessageResponse
-	75,  // 287: rpc.v1.CollaborationService.ListTasksBySourceMessages:output_type -> rpc.v1.ListTasksBySourceMessagesResponse
-	78,  // 288: rpc.v1.CollaborationService.GetTaskOrigin:output_type -> rpc.v1.GetTaskOriginResponse
-	80,  // 289: rpc.v1.CollaborationService.GetChannelTaskDestination:output_type -> rpc.v1.GetChannelTaskDestinationResponse
-	82,  // 290: rpc.v1.CollaborationService.SetChannelTaskDestination:output_type -> rpc.v1.SetChannelTaskDestinationResponse
-	84,  // 291: rpc.v1.CollaborationService.AssignTask:output_type -> rpc.v1.AssignTaskResponse
-	86,  // 292: rpc.v1.CollaborationService.UnassignTask:output_type -> rpc.v1.UnassignTaskResponse
-	88,  // 293: rpc.v1.CollaborationService.WatchTask:output_type -> rpc.v1.WatchTaskResponse
-	90,  // 294: rpc.v1.CollaborationService.UnwatchTask:output_type -> rpc.v1.UnwatchTaskResponse
-	96,  // 295: rpc.v1.CollaborationService.CreateCustomField:output_type -> rpc.v1.CreateCustomFieldResponse
-	98,  // 296: rpc.v1.CollaborationService.UpdateCustomField:output_type -> rpc.v1.UpdateCustomFieldResponse
-	100, // 297: rpc.v1.CollaborationService.ArchiveCustomField:output_type -> rpc.v1.ArchiveCustomFieldResponse
-	102, // 298: rpc.v1.CollaborationService.ListCustomFields:output_type -> rpc.v1.ListCustomFieldsResponse
-	104, // 299: rpc.v1.CollaborationService.SetCustomFieldValue:output_type -> rpc.v1.SetCustomFieldValueResponse
-	107, // 300: rpc.v1.CollaborationService.CreateWorkflowRule:output_type -> rpc.v1.CreateWorkflowRuleResponse
-	109, // 301: rpc.v1.CollaborationService.UpdateWorkflowRule:output_type -> rpc.v1.UpdateWorkflowRuleResponse
-	111, // 302: rpc.v1.CollaborationService.DeleteWorkflowRule:output_type -> rpc.v1.DeleteWorkflowRuleResponse
-	113, // 303: rpc.v1.CollaborationService.ListWorkflowRules:output_type -> rpc.v1.ListWorkflowRulesResponse
-	116, // 304: rpc.v1.CollaborationService.AddProjectMember:output_type -> rpc.v1.AddProjectMemberResponse
-	118, // 305: rpc.v1.CollaborationService.RemoveProjectMember:output_type -> rpc.v1.RemoveProjectMemberResponse
-	120, // 306: rpc.v1.CollaborationService.UpdateProjectMemberRole:output_type -> rpc.v1.UpdateProjectMemberRoleResponse
-	122, // 307: rpc.v1.CollaborationService.ListProjectMembers:output_type -> rpc.v1.ListProjectMembersResponse
-	125, // 308: rpc.v1.CollaborationService.CreateSavedView:output_type -> rpc.v1.CreateSavedViewResponse
-	127, // 309: rpc.v1.CollaborationService.UpdateSavedView:output_type -> rpc.v1.UpdateSavedViewResponse
-	129, // 310: rpc.v1.CollaborationService.DeleteSavedView:output_type -> rpc.v1.DeleteSavedViewResponse
-	131, // 311: rpc.v1.CollaborationService.ListSavedViews:output_type -> rpc.v1.ListSavedViewsResponse
-	135, // 312: rpc.v1.CollaborationService.GetTaskAnalytics:output_type -> rpc.v1.GetTaskAnalyticsResponse
-	139, // 313: rpc.v1.CollaborationService.ExportTasksCSV:output_type -> rpc.v1.ExportTasksCSVResponse
-	141, // 314: rpc.v1.CollaborationService.RequestTaskFileUpload:output_type -> rpc.v1.RequestTaskFileUploadResponse
-	143, // 315: rpc.v1.CollaborationService.ConfirmTaskFileUpload:output_type -> rpc.v1.ConfirmTaskFileUploadResponse
-	161, // 316: rpc.v1.CollaborationService.CreateRitualDefinition:output_type -> rpc.v1.CreateRitualDefinitionResponse
-	163, // 317: rpc.v1.CollaborationService.GetRitualDefinition:output_type -> rpc.v1.GetRitualDefinitionResponse
-	165, // 318: rpc.v1.CollaborationService.UpdateRitualDefinition:output_type -> rpc.v1.UpdateRitualDefinitionResponse
-	167, // 319: rpc.v1.CollaborationService.ArchiveRitualDefinition:output_type -> rpc.v1.ArchiveRitualDefinitionResponse
-	169, // 320: rpc.v1.CollaborationService.ListRitualDefinitions:output_type -> rpc.v1.ListRitualDefinitionsResponse
-	171, // 321: rpc.v1.CollaborationService.CreateEvidenceRequirement:output_type -> rpc.v1.CreateEvidenceRequirementResponse
-	173, // 322: rpc.v1.CollaborationService.UpdateEvidenceRequirement:output_type -> rpc.v1.UpdateEvidenceRequirementResponse
-	175, // 323: rpc.v1.CollaborationService.DeleteEvidenceRequirement:output_type -> rpc.v1.DeleteEvidenceRequirementResponse
-	177, // 324: rpc.v1.CollaborationService.ListEvidenceRequirements:output_type -> rpc.v1.ListEvidenceRequirementsResponse
-	179, // 325: rpc.v1.CollaborationService.SubmitEvidence:output_type -> rpc.v1.SubmitEvidenceResponse
-	181, // 326: rpc.v1.CollaborationService.ApproveEvidence:output_type -> rpc.v1.ApproveEvidenceResponse
-	183, // 327: rpc.v1.CollaborationService.RejectEvidence:output_type -> rpc.v1.RejectEvidenceResponse
-	185, // 328: rpc.v1.CollaborationService.ListEvidenceSubmissions:output_type -> rpc.v1.ListEvidenceSubmissionsResponse
-	188, // 329: rpc.v1.CollaborationService.ListEvidenceReviewQueue:output_type -> rpc.v1.ListEvidenceReviewQueueResponse
-	190, // 330: rpc.v1.CollaborationService.GetEvidenceReviewQueueCount:output_type -> rpc.v1.GetEvidenceReviewQueueCountResponse
-	192, // 331: rpc.v1.CollaborationService.RequestEvidenceFileUpload:output_type -> rpc.v1.RequestEvidenceFileUploadResponse
-	194, // 332: rpc.v1.CollaborationService.ConfirmEvidenceFileUpload:output_type -> rpc.v1.ConfirmEvidenceFileUploadResponse
-	196, // 333: rpc.v1.CollaborationService.SkipRitualInstance:output_type -> rpc.v1.SkipRitualInstanceResponse
-	198, // 334: rpc.v1.CollaborationService.GetScheduleChangeImpact:output_type -> rpc.v1.GetScheduleChangeImpactResponse
-	200, // 335: rpc.v1.CollaborationService.ChangeRitualDefinitionSchedule:output_type -> rpc.v1.ChangeRitualDefinitionScheduleResponse
-	202, // 336: rpc.v1.CollaborationService.GetOperationalHealth:output_type -> rpc.v1.GetOperationalHealthResponse
-	204, // 337: rpc.v1.CollaborationService.GetRitualComplianceSummary:output_type -> rpc.v1.GetRitualComplianceSummaryResponse
-	206, // 338: rpc.v1.CollaborationService.ExportRitualComplianceCSV:output_type -> rpc.v1.ExportRitualComplianceCSVResponse
-	264, // [264:339] is the sub-list for method output_type
-	189, // [189:264] is the sub-list for method input_type
-	189, // [189:189] is the sub-list for extension type_name
-	189, // [189:189] is the sub-list for extension extendee
-	0,   // [0:189] is the sub-list for field type_name
+	150, // 123: rpc.v1.RitualDefinition.evidence_requirements:type_name -> rpc.v1.EvidenceRequirementDetail
+	212, // 124: rpc.v1.RitualDefinition.updated_at:type_name -> google.protobuf.Timestamp
+	148, // 125: rpc.v1.RitualDefinition.default_department_pools:type_name -> rpc.v1.RitualDepartmentPool
+	147, // 126: rpc.v1.RitualDefinition.procedure:type_name -> rpc.v1.RitualProcedure
+	216, // 127: rpc.v1.RitualProcedure.status:type_name -> rpc.v1.DocumentStatus
+	13,  // 128: rpc.v1.EvidenceRequirementDetail.evidence_types:type_name -> rpc.v1.EvidenceType
+	14,  // 129: rpc.v1.EvidenceRequirementDetail.approval_mode:type_name -> rpc.v1.ApprovalMode
+	151, // 130: rpc.v1.EvidenceRequirementDetail.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
+	152, // 131: rpc.v1.AutoApproveConfig.gps_target:type_name -> rpc.v1.GpsTarget
+	13,  // 132: rpc.v1.EvidenceSubmission.evidence_type:type_name -> rpc.v1.EvidenceType
+	212, // 133: rpc.v1.EvidenceSubmission.device_timestamp:type_name -> google.protobuf.Timestamp
+	212, // 134: rpc.v1.EvidenceSubmission.server_timestamp:type_name -> google.protobuf.Timestamp
+	154, // 135: rpc.v1.EvidenceSubmission.gps_coordinates:type_name -> rpc.v1.GpsCoordinates
+	15,  // 136: rpc.v1.EvidenceSubmission.approval_status:type_name -> rpc.v1.ApprovalStatus
+	212, // 137: rpc.v1.EvidenceSubmission.reviewed_at:type_name -> google.protobuf.Timestamp
+	150, // 138: rpc.v1.TaskEvidenceRequirementStatus.requirement:type_name -> rpc.v1.EvidenceRequirementDetail
+	15,  // 139: rpc.v1.TaskEvidenceRequirementStatus.status:type_name -> rpc.v1.ApprovalStatus
+	153, // 140: rpc.v1.TaskEvidenceRequirementStatus.latest_submission:type_name -> rpc.v1.EvidenceSubmission
+	144, // 141: rpc.v1.CreateRitualDefinitionRequest.recurrence_rule:type_name -> rpc.v1.RecurrenceRule
+	161, // 142: rpc.v1.CreateRitualDefinitionRequest.evidence_requirements:type_name -> rpc.v1.CreateEvidenceRequirementInput
+	149, // 143: rpc.v1.CreateRitualDefinitionRequest.default_department_pools:type_name -> rpc.v1.RitualDepartmentPoolInput
+	13,  // 144: rpc.v1.CreateEvidenceRequirementInput.evidence_types:type_name -> rpc.v1.EvidenceType
+	14,  // 145: rpc.v1.CreateEvidenceRequirementInput.approval_mode:type_name -> rpc.v1.ApprovalMode
+	151, // 146: rpc.v1.CreateEvidenceRequirementInput.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
+	146, // 147: rpc.v1.CreateRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
+	146, // 148: rpc.v1.GetRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
+	144, // 149: rpc.v1.UpdateRitualDefinitionRequest.recurrence_rule:type_name -> rpc.v1.RecurrenceRule
+	149, // 150: rpc.v1.UpdateRitualDefinitionRequest.default_department_pools:type_name -> rpc.v1.RitualDepartmentPoolInput
+	146, // 151: rpc.v1.UpdateRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
+	146, // 152: rpc.v1.ArchiveRitualDefinitionResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
+	146, // 153: rpc.v1.ListRitualDefinitionsResponse.ritual_definitions:type_name -> rpc.v1.RitualDefinition
+	147, // 154: rpc.v1.GetRitualProcedureResponse.procedure:type_name -> rpc.v1.RitualProcedure
+	13,  // 155: rpc.v1.CreateEvidenceRequirementRequest.evidence_types:type_name -> rpc.v1.EvidenceType
+	14,  // 156: rpc.v1.CreateEvidenceRequirementRequest.approval_mode:type_name -> rpc.v1.ApprovalMode
+	151, // 157: rpc.v1.CreateEvidenceRequirementRequest.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
+	150, // 158: rpc.v1.CreateEvidenceRequirementResponse.evidence_requirement:type_name -> rpc.v1.EvidenceRequirementDetail
+	13,  // 159: rpc.v1.UpdateEvidenceRequirementRequest.evidence_types:type_name -> rpc.v1.EvidenceType
+	14,  // 160: rpc.v1.UpdateEvidenceRequirementRequest.approval_mode:type_name -> rpc.v1.ApprovalMode
+	151, // 161: rpc.v1.UpdateEvidenceRequirementRequest.auto_approve_config:type_name -> rpc.v1.AutoApproveConfig
+	150, // 162: rpc.v1.UpdateEvidenceRequirementResponse.evidence_requirement:type_name -> rpc.v1.EvidenceRequirementDetail
+	150, // 163: rpc.v1.ListEvidenceRequirementsResponse.evidence_requirements:type_name -> rpc.v1.EvidenceRequirementDetail
+	13,  // 164: rpc.v1.SubmitEvidenceRequest.evidence_type:type_name -> rpc.v1.EvidenceType
+	212, // 165: rpc.v1.SubmitEvidenceRequest.device_timestamp:type_name -> google.protobuf.Timestamp
+	154, // 166: rpc.v1.SubmitEvidenceRequest.gps_coordinates:type_name -> rpc.v1.GpsCoordinates
+	153, // 167: rpc.v1.SubmitEvidenceResponse.evidence_submission:type_name -> rpc.v1.EvidenceSubmission
+	153, // 168: rpc.v1.ApproveEvidenceResponse.evidence_submission:type_name -> rpc.v1.EvidenceSubmission
+	153, // 169: rpc.v1.RejectEvidenceResponse.evidence_submission:type_name -> rpc.v1.EvidenceSubmission
+	153, // 170: rpc.v1.ListEvidenceSubmissionsResponse.evidence_submissions:type_name -> rpc.v1.EvidenceSubmission
+	212, // 171: rpc.v1.ReviewQueueEntry.server_timestamp:type_name -> google.protobuf.Timestamp
+	212, // 172: rpc.v1.ReviewQueueEntry.device_timestamp:type_name -> google.protobuf.Timestamp
+	13,  // 173: rpc.v1.ReviewQueueEntry.evidence_type:type_name -> rpc.v1.EvidenceType
+	154, // 174: rpc.v1.ReviewQueueEntry.gps_coordinates:type_name -> rpc.v1.GpsCoordinates
+	212, // 175: rpc.v1.ReviewQueueEntry.instance_completion_deadline:type_name -> google.protobuf.Timestamp
+	16,  // 176: rpc.v1.ReviewQueueEntry.urgency:type_name -> rpc.v1.ReviewUrgency
+	189, // 177: rpc.v1.ListEvidenceReviewQueueResponse.entries:type_name -> rpc.v1.ReviewQueueEntry
+	50,  // 178: rpc.v1.SkipRitualInstanceResponse.task:type_name -> rpc.v1.Task
+	144, // 179: rpc.v1.GetScheduleChangeImpactRequest.new_recurrence_rule:type_name -> rpc.v1.RecurrenceRule
+	144, // 180: rpc.v1.ChangeRitualDefinitionScheduleRequest.new_recurrence_rule:type_name -> rpc.v1.RecurrenceRule
+	146, // 181: rpc.v1.ChangeRitualDefinitionScheduleResponse.ritual_definition:type_name -> rpc.v1.RitualDefinition
+	212, // 182: rpc.v1.GetOperationalHealthRequest.start_date:type_name -> google.protobuf.Timestamp
+	212, // 183: rpc.v1.GetOperationalHealthRequest.end_date:type_name -> google.protobuf.Timestamp
+	155, // 184: rpc.v1.GetOperationalHealthResponse.summary:type_name -> rpc.v1.OperationalHealthSummary
+	156, // 185: rpc.v1.GetOperationalHealthResponse.ritual_details:type_name -> rpc.v1.RitualHealthDetail
+	212, // 186: rpc.v1.GetRitualComplianceSummaryRequest.start_date:type_name -> google.protobuf.Timestamp
+	212, // 187: rpc.v1.GetRitualComplianceSummaryRequest.end_date:type_name -> google.protobuf.Timestamp
+	157, // 188: rpc.v1.GetRitualComplianceSummaryResponse.employee_summaries:type_name -> rpc.v1.EmployeeComplianceSummary
+	212, // 189: rpc.v1.ExportRitualComplianceCSVRequest.start_date:type_name -> google.protobuf.Timestamp
+	212, // 190: rpc.v1.ExportRitualComplianceCSVRequest.end_date:type_name -> google.protobuf.Timestamp
+	217, // 191: rpc.v1.AnalyticsRow.DimensionsEntry.value:type_name -> google.protobuf.Value
+	19,  // 192: rpc.v1.CollaborationService.CreateProject:input_type -> rpc.v1.CreateProjectRequest
+	22,  // 193: rpc.v1.CollaborationService.GetProject:input_type -> rpc.v1.GetProjectRequest
+	24,  // 194: rpc.v1.CollaborationService.UpdateProject:input_type -> rpc.v1.UpdateProjectRequest
+	26,  // 195: rpc.v1.CollaborationService.ListProjects:input_type -> rpc.v1.ListProjectsRequest
+	28,  // 196: rpc.v1.CollaborationService.ArchiveProject:input_type -> rpc.v1.ArchiveProjectRequest
+	31,  // 197: rpc.v1.CollaborationService.CreateProjectState:input_type -> rpc.v1.CreateProjectStateRequest
+	33,  // 198: rpc.v1.CollaborationService.UpdateProjectState:input_type -> rpc.v1.UpdateProjectStateRequest
+	35,  // 199: rpc.v1.CollaborationService.DeleteProjectState:input_type -> rpc.v1.DeleteProjectStateRequest
+	37,  // 200: rpc.v1.CollaborationService.ReorderProjectStates:input_type -> rpc.v1.ReorderProjectStatesRequest
+	39,  // 201: rpc.v1.CollaborationService.ListProjectStates:input_type -> rpc.v1.ListProjectStatesRequest
+	42,  // 202: rpc.v1.CollaborationService.CreateTaskLevel:input_type -> rpc.v1.CreateTaskLevelRequest
+	44,  // 203: rpc.v1.CollaborationService.UpdateTaskLevel:input_type -> rpc.v1.UpdateTaskLevelRequest
+	46,  // 204: rpc.v1.CollaborationService.DeleteTaskLevel:input_type -> rpc.v1.DeleteTaskLevelRequest
+	48,  // 205: rpc.v1.CollaborationService.ListTaskLevels:input_type -> rpc.v1.ListTaskLevelsRequest
+	52,  // 206: rpc.v1.CollaborationService.CreateTask:input_type -> rpc.v1.CreateTaskRequest
+	55,  // 207: rpc.v1.CollaborationService.GetTask:input_type -> rpc.v1.GetTaskRequest
+	58,  // 208: rpc.v1.CollaborationService.UpdateTask:input_type -> rpc.v1.UpdateTaskRequest
+	61,  // 209: rpc.v1.CollaborationService.DeleteTask:input_type -> rpc.v1.DeleteTaskRequest
+	63,  // 210: rpc.v1.CollaborationService.ListTasks:input_type -> rpc.v1.ListTasksRequest
+	65,  // 211: rpc.v1.CollaborationService.GetAssignedWorkSummary:input_type -> rpc.v1.GetAssignedWorkSummaryRequest
+	68,  // 212: rpc.v1.CollaborationService.MoveTask:input_type -> rpc.v1.MoveTaskRequest
+	70,  // 213: rpc.v1.CollaborationService.GetTaskByIdentifier:input_type -> rpc.v1.GetTaskByIdentifierRequest
+	72,  // 214: rpc.v1.CollaborationService.CreateTaskFromMessage:input_type -> rpc.v1.CreateTaskFromMessageRequest
+	74,  // 215: rpc.v1.CollaborationService.ListTasksBySourceMessages:input_type -> rpc.v1.ListTasksBySourceMessagesRequest
+	77,  // 216: rpc.v1.CollaborationService.GetTaskOrigin:input_type -> rpc.v1.GetTaskOriginRequest
+	79,  // 217: rpc.v1.CollaborationService.GetChannelTaskDestination:input_type -> rpc.v1.GetChannelTaskDestinationRequest
+	81,  // 218: rpc.v1.CollaborationService.SetChannelTaskDestination:input_type -> rpc.v1.SetChannelTaskDestinationRequest
+	83,  // 219: rpc.v1.CollaborationService.AssignTask:input_type -> rpc.v1.AssignTaskRequest
+	85,  // 220: rpc.v1.CollaborationService.UnassignTask:input_type -> rpc.v1.UnassignTaskRequest
+	87,  // 221: rpc.v1.CollaborationService.WatchTask:input_type -> rpc.v1.WatchTaskRequest
+	89,  // 222: rpc.v1.CollaborationService.UnwatchTask:input_type -> rpc.v1.UnwatchTaskRequest
+	95,  // 223: rpc.v1.CollaborationService.CreateCustomField:input_type -> rpc.v1.CreateCustomFieldRequest
+	97,  // 224: rpc.v1.CollaborationService.UpdateCustomField:input_type -> rpc.v1.UpdateCustomFieldRequest
+	99,  // 225: rpc.v1.CollaborationService.ArchiveCustomField:input_type -> rpc.v1.ArchiveCustomFieldRequest
+	101, // 226: rpc.v1.CollaborationService.ListCustomFields:input_type -> rpc.v1.ListCustomFieldsRequest
+	103, // 227: rpc.v1.CollaborationService.SetCustomFieldValue:input_type -> rpc.v1.SetCustomFieldValueRequest
+	106, // 228: rpc.v1.CollaborationService.CreateWorkflowRule:input_type -> rpc.v1.CreateWorkflowRuleRequest
+	108, // 229: rpc.v1.CollaborationService.UpdateWorkflowRule:input_type -> rpc.v1.UpdateWorkflowRuleRequest
+	110, // 230: rpc.v1.CollaborationService.DeleteWorkflowRule:input_type -> rpc.v1.DeleteWorkflowRuleRequest
+	112, // 231: rpc.v1.CollaborationService.ListWorkflowRules:input_type -> rpc.v1.ListWorkflowRulesRequest
+	115, // 232: rpc.v1.CollaborationService.AddProjectMember:input_type -> rpc.v1.AddProjectMemberRequest
+	117, // 233: rpc.v1.CollaborationService.RemoveProjectMember:input_type -> rpc.v1.RemoveProjectMemberRequest
+	119, // 234: rpc.v1.CollaborationService.UpdateProjectMemberRole:input_type -> rpc.v1.UpdateProjectMemberRoleRequest
+	121, // 235: rpc.v1.CollaborationService.ListProjectMembers:input_type -> rpc.v1.ListProjectMembersRequest
+	124, // 236: rpc.v1.CollaborationService.CreateSavedView:input_type -> rpc.v1.CreateSavedViewRequest
+	126, // 237: rpc.v1.CollaborationService.UpdateSavedView:input_type -> rpc.v1.UpdateSavedViewRequest
+	128, // 238: rpc.v1.CollaborationService.DeleteSavedView:input_type -> rpc.v1.DeleteSavedViewRequest
+	130, // 239: rpc.v1.CollaborationService.ListSavedViews:input_type -> rpc.v1.ListSavedViewsRequest
+	132, // 240: rpc.v1.CollaborationService.GetTaskAnalytics:input_type -> rpc.v1.GetTaskAnalyticsRequest
+	138, // 241: rpc.v1.CollaborationService.ExportTasksCSV:input_type -> rpc.v1.ExportTasksCSVRequest
+	140, // 242: rpc.v1.CollaborationService.RequestTaskFileUpload:input_type -> rpc.v1.RequestTaskFileUploadRequest
+	142, // 243: rpc.v1.CollaborationService.ConfirmTaskFileUpload:input_type -> rpc.v1.ConfirmTaskFileUploadRequest
+	160, // 244: rpc.v1.CollaborationService.CreateRitualDefinition:input_type -> rpc.v1.CreateRitualDefinitionRequest
+	163, // 245: rpc.v1.CollaborationService.GetRitualDefinition:input_type -> rpc.v1.GetRitualDefinitionRequest
+	165, // 246: rpc.v1.CollaborationService.UpdateRitualDefinition:input_type -> rpc.v1.UpdateRitualDefinitionRequest
+	167, // 247: rpc.v1.CollaborationService.ArchiveRitualDefinition:input_type -> rpc.v1.ArchiveRitualDefinitionRequest
+	169, // 248: rpc.v1.CollaborationService.ListRitualDefinitions:input_type -> rpc.v1.ListRitualDefinitionsRequest
+	171, // 249: rpc.v1.CollaborationService.GetRitualProcedure:input_type -> rpc.v1.GetRitualProcedureRequest
+	173, // 250: rpc.v1.CollaborationService.CreateEvidenceRequirement:input_type -> rpc.v1.CreateEvidenceRequirementRequest
+	175, // 251: rpc.v1.CollaborationService.UpdateEvidenceRequirement:input_type -> rpc.v1.UpdateEvidenceRequirementRequest
+	177, // 252: rpc.v1.CollaborationService.DeleteEvidenceRequirement:input_type -> rpc.v1.DeleteEvidenceRequirementRequest
+	179, // 253: rpc.v1.CollaborationService.ListEvidenceRequirements:input_type -> rpc.v1.ListEvidenceRequirementsRequest
+	181, // 254: rpc.v1.CollaborationService.SubmitEvidence:input_type -> rpc.v1.SubmitEvidenceRequest
+	183, // 255: rpc.v1.CollaborationService.ApproveEvidence:input_type -> rpc.v1.ApproveEvidenceRequest
+	185, // 256: rpc.v1.CollaborationService.RejectEvidence:input_type -> rpc.v1.RejectEvidenceRequest
+	187, // 257: rpc.v1.CollaborationService.ListEvidenceSubmissions:input_type -> rpc.v1.ListEvidenceSubmissionsRequest
+	190, // 258: rpc.v1.CollaborationService.ListEvidenceReviewQueue:input_type -> rpc.v1.ListEvidenceReviewQueueRequest
+	192, // 259: rpc.v1.CollaborationService.GetEvidenceReviewQueueCount:input_type -> rpc.v1.GetEvidenceReviewQueueCountRequest
+	194, // 260: rpc.v1.CollaborationService.RequestEvidenceFileUpload:input_type -> rpc.v1.RequestEvidenceFileUploadRequest
+	196, // 261: rpc.v1.CollaborationService.ConfirmEvidenceFileUpload:input_type -> rpc.v1.ConfirmEvidenceFileUploadRequest
+	198, // 262: rpc.v1.CollaborationService.SkipRitualInstance:input_type -> rpc.v1.SkipRitualInstanceRequest
+	200, // 263: rpc.v1.CollaborationService.GetScheduleChangeImpact:input_type -> rpc.v1.GetScheduleChangeImpactRequest
+	202, // 264: rpc.v1.CollaborationService.ChangeRitualDefinitionSchedule:input_type -> rpc.v1.ChangeRitualDefinitionScheduleRequest
+	204, // 265: rpc.v1.CollaborationService.GetOperationalHealth:input_type -> rpc.v1.GetOperationalHealthRequest
+	206, // 266: rpc.v1.CollaborationService.GetRitualComplianceSummary:input_type -> rpc.v1.GetRitualComplianceSummaryRequest
+	208, // 267: rpc.v1.CollaborationService.ExportRitualComplianceCSV:input_type -> rpc.v1.ExportRitualComplianceCSVRequest
+	21,  // 268: rpc.v1.CollaborationService.CreateProject:output_type -> rpc.v1.CreateProjectResponse
+	23,  // 269: rpc.v1.CollaborationService.GetProject:output_type -> rpc.v1.GetProjectResponse
+	25,  // 270: rpc.v1.CollaborationService.UpdateProject:output_type -> rpc.v1.UpdateProjectResponse
+	27,  // 271: rpc.v1.CollaborationService.ListProjects:output_type -> rpc.v1.ListProjectsResponse
+	29,  // 272: rpc.v1.CollaborationService.ArchiveProject:output_type -> rpc.v1.ArchiveProjectResponse
+	32,  // 273: rpc.v1.CollaborationService.CreateProjectState:output_type -> rpc.v1.CreateProjectStateResponse
+	34,  // 274: rpc.v1.CollaborationService.UpdateProjectState:output_type -> rpc.v1.UpdateProjectStateResponse
+	36,  // 275: rpc.v1.CollaborationService.DeleteProjectState:output_type -> rpc.v1.DeleteProjectStateResponse
+	38,  // 276: rpc.v1.CollaborationService.ReorderProjectStates:output_type -> rpc.v1.ReorderProjectStatesResponse
+	40,  // 277: rpc.v1.CollaborationService.ListProjectStates:output_type -> rpc.v1.ListProjectStatesResponse
+	43,  // 278: rpc.v1.CollaborationService.CreateTaskLevel:output_type -> rpc.v1.CreateTaskLevelResponse
+	45,  // 279: rpc.v1.CollaborationService.UpdateTaskLevel:output_type -> rpc.v1.UpdateTaskLevelResponse
+	47,  // 280: rpc.v1.CollaborationService.DeleteTaskLevel:output_type -> rpc.v1.DeleteTaskLevelResponse
+	49,  // 281: rpc.v1.CollaborationService.ListTaskLevels:output_type -> rpc.v1.ListTaskLevelsResponse
+	54,  // 282: rpc.v1.CollaborationService.CreateTask:output_type -> rpc.v1.CreateTaskResponse
+	56,  // 283: rpc.v1.CollaborationService.GetTask:output_type -> rpc.v1.GetTaskResponse
+	59,  // 284: rpc.v1.CollaborationService.UpdateTask:output_type -> rpc.v1.UpdateTaskResponse
+	62,  // 285: rpc.v1.CollaborationService.DeleteTask:output_type -> rpc.v1.DeleteTaskResponse
+	64,  // 286: rpc.v1.CollaborationService.ListTasks:output_type -> rpc.v1.ListTasksResponse
+	67,  // 287: rpc.v1.CollaborationService.GetAssignedWorkSummary:output_type -> rpc.v1.GetAssignedWorkSummaryResponse
+	69,  // 288: rpc.v1.CollaborationService.MoveTask:output_type -> rpc.v1.MoveTaskResponse
+	71,  // 289: rpc.v1.CollaborationService.GetTaskByIdentifier:output_type -> rpc.v1.GetTaskByIdentifierResponse
+	73,  // 290: rpc.v1.CollaborationService.CreateTaskFromMessage:output_type -> rpc.v1.CreateTaskFromMessageResponse
+	75,  // 291: rpc.v1.CollaborationService.ListTasksBySourceMessages:output_type -> rpc.v1.ListTasksBySourceMessagesResponse
+	78,  // 292: rpc.v1.CollaborationService.GetTaskOrigin:output_type -> rpc.v1.GetTaskOriginResponse
+	80,  // 293: rpc.v1.CollaborationService.GetChannelTaskDestination:output_type -> rpc.v1.GetChannelTaskDestinationResponse
+	82,  // 294: rpc.v1.CollaborationService.SetChannelTaskDestination:output_type -> rpc.v1.SetChannelTaskDestinationResponse
+	84,  // 295: rpc.v1.CollaborationService.AssignTask:output_type -> rpc.v1.AssignTaskResponse
+	86,  // 296: rpc.v1.CollaborationService.UnassignTask:output_type -> rpc.v1.UnassignTaskResponse
+	88,  // 297: rpc.v1.CollaborationService.WatchTask:output_type -> rpc.v1.WatchTaskResponse
+	90,  // 298: rpc.v1.CollaborationService.UnwatchTask:output_type -> rpc.v1.UnwatchTaskResponse
+	96,  // 299: rpc.v1.CollaborationService.CreateCustomField:output_type -> rpc.v1.CreateCustomFieldResponse
+	98,  // 300: rpc.v1.CollaborationService.UpdateCustomField:output_type -> rpc.v1.UpdateCustomFieldResponse
+	100, // 301: rpc.v1.CollaborationService.ArchiveCustomField:output_type -> rpc.v1.ArchiveCustomFieldResponse
+	102, // 302: rpc.v1.CollaborationService.ListCustomFields:output_type -> rpc.v1.ListCustomFieldsResponse
+	104, // 303: rpc.v1.CollaborationService.SetCustomFieldValue:output_type -> rpc.v1.SetCustomFieldValueResponse
+	107, // 304: rpc.v1.CollaborationService.CreateWorkflowRule:output_type -> rpc.v1.CreateWorkflowRuleResponse
+	109, // 305: rpc.v1.CollaborationService.UpdateWorkflowRule:output_type -> rpc.v1.UpdateWorkflowRuleResponse
+	111, // 306: rpc.v1.CollaborationService.DeleteWorkflowRule:output_type -> rpc.v1.DeleteWorkflowRuleResponse
+	113, // 307: rpc.v1.CollaborationService.ListWorkflowRules:output_type -> rpc.v1.ListWorkflowRulesResponse
+	116, // 308: rpc.v1.CollaborationService.AddProjectMember:output_type -> rpc.v1.AddProjectMemberResponse
+	118, // 309: rpc.v1.CollaborationService.RemoveProjectMember:output_type -> rpc.v1.RemoveProjectMemberResponse
+	120, // 310: rpc.v1.CollaborationService.UpdateProjectMemberRole:output_type -> rpc.v1.UpdateProjectMemberRoleResponse
+	122, // 311: rpc.v1.CollaborationService.ListProjectMembers:output_type -> rpc.v1.ListProjectMembersResponse
+	125, // 312: rpc.v1.CollaborationService.CreateSavedView:output_type -> rpc.v1.CreateSavedViewResponse
+	127, // 313: rpc.v1.CollaborationService.UpdateSavedView:output_type -> rpc.v1.UpdateSavedViewResponse
+	129, // 314: rpc.v1.CollaborationService.DeleteSavedView:output_type -> rpc.v1.DeleteSavedViewResponse
+	131, // 315: rpc.v1.CollaborationService.ListSavedViews:output_type -> rpc.v1.ListSavedViewsResponse
+	135, // 316: rpc.v1.CollaborationService.GetTaskAnalytics:output_type -> rpc.v1.GetTaskAnalyticsResponse
+	139, // 317: rpc.v1.CollaborationService.ExportTasksCSV:output_type -> rpc.v1.ExportTasksCSVResponse
+	141, // 318: rpc.v1.CollaborationService.RequestTaskFileUpload:output_type -> rpc.v1.RequestTaskFileUploadResponse
+	143, // 319: rpc.v1.CollaborationService.ConfirmTaskFileUpload:output_type -> rpc.v1.ConfirmTaskFileUploadResponse
+	162, // 320: rpc.v1.CollaborationService.CreateRitualDefinition:output_type -> rpc.v1.CreateRitualDefinitionResponse
+	164, // 321: rpc.v1.CollaborationService.GetRitualDefinition:output_type -> rpc.v1.GetRitualDefinitionResponse
+	166, // 322: rpc.v1.CollaborationService.UpdateRitualDefinition:output_type -> rpc.v1.UpdateRitualDefinitionResponse
+	168, // 323: rpc.v1.CollaborationService.ArchiveRitualDefinition:output_type -> rpc.v1.ArchiveRitualDefinitionResponse
+	170, // 324: rpc.v1.CollaborationService.ListRitualDefinitions:output_type -> rpc.v1.ListRitualDefinitionsResponse
+	172, // 325: rpc.v1.CollaborationService.GetRitualProcedure:output_type -> rpc.v1.GetRitualProcedureResponse
+	174, // 326: rpc.v1.CollaborationService.CreateEvidenceRequirement:output_type -> rpc.v1.CreateEvidenceRequirementResponse
+	176, // 327: rpc.v1.CollaborationService.UpdateEvidenceRequirement:output_type -> rpc.v1.UpdateEvidenceRequirementResponse
+	178, // 328: rpc.v1.CollaborationService.DeleteEvidenceRequirement:output_type -> rpc.v1.DeleteEvidenceRequirementResponse
+	180, // 329: rpc.v1.CollaborationService.ListEvidenceRequirements:output_type -> rpc.v1.ListEvidenceRequirementsResponse
+	182, // 330: rpc.v1.CollaborationService.SubmitEvidence:output_type -> rpc.v1.SubmitEvidenceResponse
+	184, // 331: rpc.v1.CollaborationService.ApproveEvidence:output_type -> rpc.v1.ApproveEvidenceResponse
+	186, // 332: rpc.v1.CollaborationService.RejectEvidence:output_type -> rpc.v1.RejectEvidenceResponse
+	188, // 333: rpc.v1.CollaborationService.ListEvidenceSubmissions:output_type -> rpc.v1.ListEvidenceSubmissionsResponse
+	191, // 334: rpc.v1.CollaborationService.ListEvidenceReviewQueue:output_type -> rpc.v1.ListEvidenceReviewQueueResponse
+	193, // 335: rpc.v1.CollaborationService.GetEvidenceReviewQueueCount:output_type -> rpc.v1.GetEvidenceReviewQueueCountResponse
+	195, // 336: rpc.v1.CollaborationService.RequestEvidenceFileUpload:output_type -> rpc.v1.RequestEvidenceFileUploadResponse
+	197, // 337: rpc.v1.CollaborationService.ConfirmEvidenceFileUpload:output_type -> rpc.v1.ConfirmEvidenceFileUploadResponse
+	199, // 338: rpc.v1.CollaborationService.SkipRitualInstance:output_type -> rpc.v1.SkipRitualInstanceResponse
+	201, // 339: rpc.v1.CollaborationService.GetScheduleChangeImpact:output_type -> rpc.v1.GetScheduleChangeImpactResponse
+	203, // 340: rpc.v1.CollaborationService.ChangeRitualDefinitionSchedule:output_type -> rpc.v1.ChangeRitualDefinitionScheduleResponse
+	205, // 341: rpc.v1.CollaborationService.GetOperationalHealth:output_type -> rpc.v1.GetOperationalHealthResponse
+	207, // 342: rpc.v1.CollaborationService.GetRitualComplianceSummary:output_type -> rpc.v1.GetRitualComplianceSummaryResponse
+	209, // 343: rpc.v1.CollaborationService.ExportRitualComplianceCSV:output_type -> rpc.v1.ExportRitualComplianceCSVResponse
+	268, // [268:344] is the sub-list for method output_type
+	192, // [192:268] is the sub-list for method input_type
+	192, // [192:192] is the sub-list for extension type_name
+	192, // [192:192] is the sub-list for extension extendee
+	0,   // [0:192] is the sub-list for field type_name
 }
 
 func init() { file_rpc_v1_collaboration_proto_init() }
@@ -15667,6 +15974,7 @@ func file_rpc_v1_collaboration_proto_init() {
 		return
 	}
 	file_rpc_v1_chat_proto_init()
+	file_rpc_v1_document_proto_init()
 	file_rpc_v1_files_proto_init()
 	file_rpc_v1_rbac_proto_init()
 	file_rpc_v1_collaboration_proto_msgTypes[6].OneofWrappers = []any{}
@@ -15734,18 +16042,21 @@ func file_rpc_v1_collaboration_proto_init() {
 	file_rpc_v1_collaboration_proto_msgTypes[106].OneofWrappers = []any{}
 	file_rpc_v1_collaboration_proto_msgTypes[108].OneofWrappers = []any{}
 	file_rpc_v1_collaboration_proto_msgTypes[114].OneofWrappers = []any{}
-	file_rpc_v1_collaboration_proto_msgTypes[146].OneofWrappers = []any{}
+	file_rpc_v1_collaboration_proto_msgTypes[128].OneofWrappers = []any{}
+	file_rpc_v1_collaboration_proto_msgTypes[142].OneofWrappers = []any{}
+	file_rpc_v1_collaboration_proto_msgTypes[147].OneofWrappers = []any{}
 	file_rpc_v1_collaboration_proto_msgTypes[154].OneofWrappers = []any{}
-	file_rpc_v1_collaboration_proto_msgTypes[169].OneofWrappers = []any{}
-	file_rpc_v1_collaboration_proto_msgTypes[170].OneofWrappers = []any{}
-	file_rpc_v1_collaboration_proto_msgTypes[171].OneofWrappers = []any{}
+	file_rpc_v1_collaboration_proto_msgTypes[157].OneofWrappers = []any{}
+	file_rpc_v1_collaboration_proto_msgTypes[172].OneofWrappers = []any{}
+	file_rpc_v1_collaboration_proto_msgTypes[173].OneofWrappers = []any{}
+	file_rpc_v1_collaboration_proto_msgTypes[174].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_v1_collaboration_proto_rawDesc), len(file_rpc_v1_collaboration_proto_rawDesc)),
 			NumEnums:      18,
-			NumMessages:   191,
+			NumMessages:   194,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

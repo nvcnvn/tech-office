@@ -22,6 +22,7 @@ import { Image } from "expo-image";
 import { getDownloadUrl, type ReviewQueueEntry } from "apis";
 
 import { SFIcon } from "@/components/ui/sf-icon";
+import { ProcedureSheet } from "@/components/rituals/procedure-sheet";
 import {
   border,
   lightPalette,
@@ -261,6 +262,10 @@ export function ReviewQueueCard({
   onApprove: (entry: ReviewQueueEntry) => void;
   onReject: (entry: ReviewQueueEntry) => void;
 }) {
+  // Feature 043. The sheet draws over this card rather than navigating, so the reviewer's
+  // place in the queue and any rejection reason already typed into RejectReasonSheet are
+  // untouched by reading the procedure (D5, FR-014).
+  const [showProcedure, setShowProcedure] = useState(false);
   const isLate = entry.urgency === "late";
   const deadline = formatDeadline(entry.instanceCompletionDeadline);
 
@@ -302,6 +307,27 @@ export function ReviewQueueCard({
       <View style={styles.evidenceBlock}>
         <ReviewEvidence entry={entry} />
       </View>
+
+      {/* Nothing at all when the ritual has no procedure (FR-017). The title and content
+          are fetched only when it is opened, so a page of entries costs no extra reads. */}
+      {entry.procedureDocumentId ? (
+        <Pressable
+          onPress={() => setShowProcedure(true)}
+          style={({ pressed }) => [styles.procedureButton, pressed && styles.pressed]}
+          testID="review-procedure-button"
+        >
+          <SFIcon name="book" size={14} color={lightPalette.info.main} />
+          <Text style={styles.procedureButtonText}>Procedure</Text>
+        </Pressable>
+      ) : null}
+
+      {entry.procedureDocumentId ? (
+        <ProcedureSheet
+          ritualDefinitionId={entry.ritualDefinitionId}
+          visible={showProcedure}
+          onClose={() => setShowProcedure(false)}
+        />
+      ) : null}
 
       <View style={styles.actions}>
         <Pressable
@@ -466,6 +492,21 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     ...mobileTypography.buttonSm,
     color: lightPalette.primary.main,
+  },
+  procedureButton: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[0.5],
+    minHeight: touch.comfortable,
+    paddingHorizontal: spacing[1],
+    marginTop: spacing[1],
+    borderRadius: radius.base,
+    borderCurve: "continuous",
+  },
+  procedureButtonText: {
+    ...mobileTypography.buttonSm,
+    color: lightPalette.info.main,
   },
   actions: {
     flexDirection: "row",

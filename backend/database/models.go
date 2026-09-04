@@ -1599,6 +1599,8 @@ type CollaborationRitualDefinition struct {
 	GenerationWindowDays  int32              `json:"generation_window_days"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	ScheduleVersion       int32              `json:"schedule_version"`
+	// The workspace document that is this ritual's written procedure. NULL means no procedure. Readers of an instance may read this document without their own docs grant, through CollaborationService.GetRitualProcedure only.
+	ProcedureDocumentID dbuuid.NullUUID `json:"procedure_document_id"`
 }
 
 func (s *CollaborationRitualDefinition) TableName() string {
@@ -1621,6 +1623,7 @@ func (s *CollaborationRitualDefinition) Fields() ([]string, []any) {
 			"generation_window_days",
 			"updated_at",
 			"schedule_version",
+			"procedure_document_id",
 		}, []any{
 			&s.ID,
 			&s.OrganizationID,
@@ -1636,6 +1639,7 @@ func (s *CollaborationRitualDefinition) Fields() ([]string, []any) {
 			&s.GenerationWindowDays,
 			&s.UpdatedAt,
 			&s.ScheduleVersion,
+			&s.ProcedureDocumentID,
 		}
 }
 
@@ -1655,6 +1659,7 @@ func (s *CollaborationRitualDefinition) FieldsMap() map[string]any {
 		"generation_window_days":  &s.GenerationWindowDays,
 		"updated_at":              &s.UpdatedAt,
 		"schedule_version":        &s.ScheduleVersion,
+		"procedure_document_id":   &s.ProcedureDocumentID,
 	}
 }
 

@@ -309,6 +309,16 @@ enum DocumentStatus {
   DOCUMENT_STATUS_ARCHIVED = 3;
 }
 
+// Mirrors the CHECK constraint on docs.document.document_type. Already load bearing —
+// ListRootDocuments and ListChildDocuments filter on it so that task-description and
+// project-brief documents never appear in the workspace tree — but not previously on the wire.
+enum DocumentType {
+  DOCUMENT_TYPE_UNSPECIFIED = 0;
+  DOCUMENT_TYPE_WORKSPACE_DOC = 1;
+  DOCUMENT_TYPE_TASK_DESCRIPTION = 2;
+  DOCUMENT_TYPE_PROJECT_BRIEF = 3;
+}
+
 enum DocumentVisibility {
   DOCUMENT_VISIBILITY_UNSPECIFIED = 0;
   DOCUMENT_VISIBILITY_PUBLIC = 1;
@@ -354,6 +364,10 @@ message Document {
   int32 follower_count = 13;
   google.protobuf.Timestamp updated_at = 14;
   repeated string path = 15; // Ancestor IDs from root to parent
+  // Whether this document is reached through the workspace tree or through an owning
+  // resource (a task's description, a project's brief). Feature 043 needs it to refuse
+  // attaching a non-workspace document as a ritual procedure.
+  DocumentType document_type = 16;
 }
 
 message DocumentSummary {

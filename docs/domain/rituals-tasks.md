@@ -207,6 +207,69 @@ safety inspection, a closing procedure.
 | `last_generated_date` | generation waterline |
 | `schedule_version` | monotonic, incremented on every recurrence change |
 | `is_archived` | archived definitions stop generating |
+| `procedure_document_id` | nullable FK to a workspace document — the ritual's written procedure (feature 043) |
+
+### The procedure document (feature 043)
+
+A definition may point at **one** workspace document as its written procedure. The foreign
+key is composite and organization-leading — `(organization_id, procedure_document_id)`
+references `docs.document(organization_id, id)` — with `ON DELETE RESTRICT`, and it carries
+no index and no unique key: one document may be the procedure of any number of definitions
+across any number of projects, and a definition never carries two.
+
+Nothing is snapshotted. The title, status and content are resolved on every read, so
+correcting the document corrects every open instance at once and there is no version of the
+procedure to reconcile.
+
+**Writing it.** `CreateRitualDefinition` and `UpdateRitualDefinition` both take
+`procedure_document_id`. On update the field is three-valued and the three values differ:
+omitted leaves the column alone, an empty string detaches, an id attaches or replaces.
+
+The candidate must be a `workspace_doc` **and** must pass `DocsLogic.CheckAccess` for the
+caller: a manager may only attach a document they could already open themselves, because
+attaching hands sight of it to everyone who can see the ritual. A `task_description` or
+`project_brief`, a document in another organization, one the caller has no grant on, a
+soft-deleted one and a nonexistent one are all refused the same way — an `InvalidArgument`
+with a `google.rpc.BadRequest` field violation on `procedure_document_id`. Those cases are
+deliberately indistinguishable, so the refusal never reports whether a document the caller
+cannot see exists. Any `status` is accepted, `archived` included.
+
+Note the asymmetry, which is the heart of the design: the **write** path checks the caller's
+own `docs.document_access`, the **read** path deliberately does not. `DocsLogic` exposes both
+`GetDocument` (no access check, used for reading) and `CheckAccess` (used for writing), and
+mixing them up in either direction breaks the feature — one way a worker cannot read the
+procedure, the other way a manager can hand out a document they were never allowed to see.
+
+Attaching, replacing or detaching creates, deletes and detaches **no instances**, bumps no
+`schedule_version`, notifies nobody, and never modifies the document itself. Detaching
+leaves the document in the workspace untouched.
+
+**Reading it.** `RitualDefinition.procedure` carries the resolved
+`{document_id, title, slug, status, is_available}`, and `GetRitualProcedure` returns the
+same plus the document's current `content_json`. Anyone who can see the definition's project
+may call it — `CheckProjectAccess` with no required role, the same bar as seeing the
+instance — and anyone outside the project gets a bare `PermissionDenied` with no detail.
+
+That read is **implicit**: it does not consult `docs.document_access` and grants nothing
+else. The reader does not get the document in their tree, their search results, their
+followed documents, its comments, reactions, versions or child pages, and cannot edit it.
+The grant ends the moment the attachment is removed or the definition is deleted. See
+[docs-knowledge.md](docs-knowledge.md#implicit-reads-through-a-ritual-procedure).
+
+**Absent and unavailable are different states.** A null column resolves to no `procedure` at
+all and every client renders nothing — no entry point, no placeholder, no layout shift. A
+set column whose document no longer resolves returns `{document_id, is_available: false}`
+with an empty title and unspecified status, and clients render an explicit unavailable
+state. Collapsing the two would tell a worker there was never a procedure for a ritual that
+has one. A docs failure degrades that one entry point and is never returned as an error:
+`GetRitualDefinition` still succeeds, and evidence can still be submitted, approved,
+rejected and the instance still reaches `verified`.
+
+**Authorization.** `UpdateRitualDefinition` now performs a project owner/admin resource
+check via `GetProjectMemberRole`, matching what `CreateRitualDefinition` already enforced.
+A plain project `member` editing a definition previously succeeded; it is now refused with a
+bare `PermissionDenied`. This is a behaviour change beyond the procedure field — it applies
+to every field on the RPC.
 
 ### Assignment
 
@@ -540,8 +603,15 @@ notification.
 per-reviewer marker. It returns every `pending_review` submission the caller may decide,
 across all their projects, joined to the context needed to decide it without a second
 request: ritual name, task identifier and title, project, submitter's display name, the
-requirement's position and required flag, the evidence content itself, and the ritual
-instance's state category and completion deadline.
+requirement's position and required flag, the evidence content itself, the ritual
+instance's state category and completion deadline, and `procedure_document_id`.
+
+`procedure_document_id` is sourced from the `ritual_definition` join the projection already
+performs for `ritual_name`, so it costs no additional query per page. It is the id only,
+never a resolved procedure: a reviewer who opens the procedure fetches its title and content
+with `GetRitualProcedure` at that moment, so listing a page of 25 entries reads no
+documents. It is empty for an entry whose definition could not be resolved, and such an
+entry stays listed and stays decidable.
 
 Ordering is `(urgency_rank, server_timestamp, id)`: `urgency_rank` is `0` when the
 instance's `project_state.category` is `overdue` or `missed` and `1` otherwise, so late work
@@ -686,6 +756,29 @@ re-exports, so a notification tap lands on the same banner. It is deliberately *
 for an instance that simply has no assignee configured: claiming a rota is missing when no
 pool exists would be false.
 
+The procedure entry point (feature 043) appears on every surface that shows a ritual
+instance, and only when `RitualDefinition.procedure` is present: the web instance page
+`workspace/projects/[id]/tasks/[taskId]/page.tsx`, `TaskDetailSidePanel.tsx`, the evidence
+capture form `EvidenceSubmitForm.tsx`, the web review queue row
+`workspace/reviews/components/ReviewQueueRow.tsx`, the mobile instance screen
+`app/(app)/(tasks)/[projectId]/task/[taskId].tsx` (which the shared deep-link route
+re-exports), and the mobile review card `src/components/review/review-queue-card.tsx`. It is
+labelled with the document's *current* title.
+
+It opens an **overlay**, never a route: `workspace/components/ProcedureDialog.tsx` on web
+and `src/components/rituals/procedure-sheet.tsx` on mobile. That is load-bearing rather than
+cosmetic — the surfaces underneath hold an attached file, a typed note, a typed rejection
+reason and a position in the queue, and because they are never unmounted none of it can be
+lost. Converting an entry point to a route reintroduces exactly that loss.
+
+Attaching, replacing and removing is **web-only**, in the ritual definition editor, behind a
+client-side confirmation stating that everyone who can see an instance of this ritual will
+be able to read the chosen document. No acknowledgement of the warning is persisted. The
+chooser is backed by `searchDocuments`, which is organization-scoped rather than
+access-scoped (drift D49), so it may offer a document the manager cannot open — the server
+refuses that attachment, which is where the rule is actually enforced. Mobile reads the
+procedure and never configures it.
+
 ## Tests
 
 `collaboration_project_test.go`, `collaboration_task_test.go`,
@@ -696,7 +789,8 @@ pool exists would be false.
 `collaboration_ritual_notification_test.go`, `collaboration_ritual_ux_redesign_test.go`,
 `ritual_submission_flow_test.go`, `ritual_tasks_improvement_test.go`,
 `workflow_task_lifecycle_test.go`, `workflow_project_team_test.go`,
-`chat_task_capture_test.go`, plus the unit tests `evidence_logic_test.go`,
+`chat_task_capture_test.go`, `collaboration_ritual_procedure_test.go`, plus the unit tests
+`evidence_logic_test.go`,
 `ritual_schedule_change_test.go` and `task_from_message_logic_test.go`.
 
 ## Known drift

@@ -102,7 +102,11 @@ func extractEmbedIds(contentJSON string) ([]dbuuid.UUID, error) {
 // This layer is pool-agnostic and receives transactions from the Connect layer.
 type DocumentLogic interface {
 	// Document CRUD
-	CreateDocument(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.CreateDocumentRequest) (*rpcv1.Document, error)
+	// documentType is one of the DocumentType* constants. It decides whether the document
+	// is reached through the workspace tree or only through its owning resource, so it is a
+	// parameter rather than a request field: a client must not be able to mint a
+	// task_description document out of band.
+	CreateDocument(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.CreateDocumentRequest, documentType string) (*rpcv1.Document, error)
 	GetDocument(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, docID dbuuid.UUID) (*rpcv1.Document, error)
 	GetDocumentBySlug(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, slug string) (*rpcv1.Document, error)
 	UpdateDocument(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.UpdateDocumentRequest) (*rpcv1.Document, int32, error)
@@ -344,7 +348,11 @@ func (l *documentLogicImpl) CreateDocument(
 	tx database.DBTX,
 	orgID, employeeID dbuuid.UUID,
 	req *rpcv1.CreateDocumentRequest,
+	documentType string,
 ) (*rpcv1.Document, error) {
+	if !IsValidDocumentType(documentType) {
+		return nil, fmt.Errorf("invalid document type %q", documentType)
+	}
 	slog.DebugContext(ctx, "DocumentLogic.CreateDocument",
 		"title", req.Title,
 		"parentID", req.ParentDocumentId,
@@ -413,6 +421,7 @@ func (l *documentLogicImpl) CreateDocument(
 		Visibility:       visibility,
 		OwnerEmployeeID:  employeeID,
 		Path:             path,
+		DocumentType:     documentType,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create document",
@@ -999,6 +1008,7 @@ func (l *documentLogicImpl) documentToProto(doc *database.DocsDocument, ownerNam
 		FollowerCount:    doc.FollowerCount,
 		UpdatedAt:        timestamppb.New(doc.UpdatedAt.Time),
 		Path:             pathStrings,
+		DocumentType:     documentTypeToProto(doc.DocumentType),
 	}
 }
 
@@ -1068,6 +1078,19 @@ func statusToProto(status string) rpcv1.DocumentStatus {
 		return rpcv1.DocumentStatus_DOCUMENT_STATUS_ARCHIVED
 	default:
 		return rpcv1.DocumentStatus_DOCUMENT_STATUS_UNSPECIFIED
+	}
+}
+
+func documentTypeToProto(docType string) rpcv1.DocumentType {
+	switch docType {
+	case DocumentTypeWorkspaceDoc:
+		return rpcv1.DocumentType_DOCUMENT_TYPE_WORKSPACE_DOC
+	case DocumentTypeTaskDescription:
+		return rpcv1.DocumentType_DOCUMENT_TYPE_TASK_DESCRIPTION
+	case DocumentTypeProjectBrief:
+		return rpcv1.DocumentType_DOCUMENT_TYPE_PROJECT_BRIEF
+	default:
+		return rpcv1.DocumentType_DOCUMENT_TYPE_UNSPECIFIED
 	}
 }
 

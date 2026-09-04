@@ -15,6 +15,7 @@ import {
 	CircularProgress,
 	Typography,
 } from '@mui/material';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { useThemeColors } from '@/theme/useThemeColors';
 import {
 	submitEvidence,
@@ -33,6 +34,17 @@ interface EvidenceSubmitFormProps {
 	mode?: 'submit' | 'resubmit';
 	onClose: () => void;
 	onSubmitted: () => void;
+	/**
+	 * Feature 043. The attached procedure's title, or undefined when the ritual has none —
+	 * in which case no entry point is rendered here at all (FR-017).
+	 */
+	procedureTitle?: string;
+	/**
+	 * Opens the procedure overlay, which is owned by the page above this form. The overlay
+	 * portals over this component rather than replacing it, so an already-uploaded file and
+	 * a typed note are still here when the reader closes it (D5, FR-013).
+	 */
+	onOpenProcedure?: () => void;
 }
 
 export default function EvidenceSubmitForm({
@@ -44,6 +56,8 @@ export default function EvidenceSubmitForm({
 	mode = 'submit',
 	onClose,
 	onSubmitted,
+	procedureTitle,
+	onOpenProcedure,
 }: EvidenceSubmitFormProps) {
 	const colors = useThemeColors();
 	const [textContent, setTextContent] = useState('');
@@ -170,6 +184,18 @@ export default function EvidenceSubmitForm({
 			<Typography variant="body2" sx={{ ...colors.text.secondary.style, mb: 1.5 }}>
 				{requirementName ? `${requirementName} on this ritual instance.` : 'Send proof for this ritual step.'}
 			</Typography>
+
+			{onOpenProcedure && (
+				<Button
+					size="small"
+					startIcon={<MenuBookIcon fontSize="small" />}
+					onClick={onOpenProcedure}
+					sx={{ mb: 1.5, textTransform: 'none' }}
+					data-testid="evidence-procedure-entry"
+				>
+					{procedureTitle || 'Procedure'}
+				</Button>
+			)}
 
 			{error && (
 				<Alert severity="error" sx={{ mb: 1 }} onClose={() => setError(null)}>

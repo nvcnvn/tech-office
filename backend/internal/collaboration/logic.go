@@ -68,7 +68,29 @@ type ChatLogic interface {
 // Used to create task description documents
 type DocsLogic interface {
 	// CreateDocument creates a new document for task description
-	CreateDocument(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.CreateDocumentRequest) (*rpcv1.Document, error)
+	CreateDocument(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.CreateDocumentRequest, documentType string) (*rpcv1.Document, error)
+
+	// GetDocument reads one document by id WITHOUT applying the caller's per-document
+	// access grants. That is deliberate and is the whole mechanism behind a ritual
+	// procedure: a worker who can see a ritual instance may read the document attached to
+	// its definition even with no row in docs.document_access. The access decision is made
+	// on the collaboration side (can this caller see the definition's project), and never
+	// becomes a grant row, so it cannot leak the document into the reader's tree, search
+	// results, followed-document list, comments, versions or reactions.
+	//
+	// Callers MUST make their own authorization decision before calling this.
+	GetDocument(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, docID dbuuid.UUID) (*rpcv1.Document, error)
+
+	// CheckAccess answers the question GetDocument deliberately does not: may
+	// THIS employee read this document with their own docs access? It is used on the
+	// write side only — attaching a procedure must be refused when the manager could not
+	// open the document themselves (FR-007), because the attachment grants sight of it to
+	// everyone who can see the ritual. Without this check a manager could hand out a
+	// document they were never allowed to read.
+	//
+	// It is deliberately NOT used on the read side: a worker reading a procedure has no
+	// grant of their own, and requiring one would defeat the feature.
+	CheckAccess(ctx context.Context, tx database.DBTX, orgID, employeeID, docID dbuuid.UUID) (rpcv1.AccessLevel, bool, error)
 }
 
 // NotificationPublisher defines the interface for publishing notifications
@@ -195,9 +217,19 @@ type Logic interface {
 	// Ritual Definition CRUD
 	CreateRitualDefinition(ctx context.Context, tx database.DBTX, orgID, creatorID dbuuid.UUID, req *rpcv1.CreateRitualDefinitionRequest) (*rpcv1.RitualDefinition, error)
 	GetRitualDefinition(ctx context.Context, tx database.DBTX, orgID, defID dbuuid.UUID) (*rpcv1.RitualDefinition, error)
-	UpdateRitualDefinition(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, defID dbuuid.UUID, req *rpcv1.UpdateRitualDefinitionRequest) (*rpcv1.RitualDefinition, error)
+	// employeeID is the authenticated caller, NOT the definition id — the definition is
+	// named by req.RitualDefinitionId. Before feature 043 the connect layer passed the
+	// definition id into this slot and the logic ignored it, so UpdateRitualDefinition
+	// performed no project owner/admin check at all while CreateRitualDefinition did.
+	UpdateRitualDefinition(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, req *rpcv1.UpdateRitualDefinitionRequest) (*rpcv1.RitualDefinition, error)
 	ArchiveRitualDefinition(ctx context.Context, tx database.DBTX, orgID, defID dbuuid.UUID, archive bool) (*rpcv1.RitualDefinition, error)
 	ListRitualDefinitions(ctx context.Context, tx database.DBTX, orgID, projectID dbuuid.UUID, includeArchived bool) ([]*rpcv1.RitualDefinition, error)
+
+	// GetRitualProcedure resolves the workspace document attached to a ritual definition
+	// and returns it with its current content, for read-only rendering next to an
+	// instance. The resource check is "can this caller see the definition's project",
+	// with no required role — the same bar as seeing the instance.
+	GetRitualProcedure(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, defID dbuuid.UUID) (*rpcv1.RitualProcedure, string, error)
 
 	// Evidence Requirements
 	CreateEvidenceRequirement(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, req *rpcv1.CreateEvidenceRequirementRequest) (*rpcv1.EvidenceRequirementDetail, error)

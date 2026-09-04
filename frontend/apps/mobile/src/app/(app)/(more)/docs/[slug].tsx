@@ -24,6 +24,10 @@ import { formatDistanceToNow } from "date-fns";
 import { useCurrentMembership } from "@/hooks/use-current-membership";
 import { EmptyState } from "@/components/ui/empty-state";
 import {
+  DocumentContent,
+  documentContentToText,
+} from "@/components/docs/document-content";
+import {
   extractCanonicalResourceLinks,
   getCanonicalLinkPreviewDisplay,
   removeCanonicalResourceLinksFromContent,
@@ -43,25 +47,6 @@ import {
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
-
-/** Extract plain text from TipTap/ProseMirror JSON document */
-function extractText(node: any): string {
-  if (!node) return "";
-  if (node.type === "text") return node.text ?? "";
-  if (Array.isArray(node.content)) {
-    const childText = node.content.map(extractText).join("");
-    // Add paragraph breaks
-    if (
-      node.type === "paragraph" ||
-      node.type === "heading" ||
-      node.type === "listItem"
-    ) {
-      return childText + "\n";
-    }
-    return childText;
-  }
-  return "";
-}
 
 /** Small preview card for a canonical resource link in the document */
 function CanonicalLinkPreviewCard({ url }: { url: string }) {
@@ -183,13 +168,7 @@ export default function DocViewerScreen() {
   }
 
   const d = doc as any;
-  let bodyText = "";
-  try {
-    const content = typeof d?.content === "string" ? JSON.parse(d.content) : d?.content;
-    bodyText = extractText(content);
-  } catch {
-    bodyText = typeof d?.content === "string" ? d.content : "";
-  }
+  const bodyText = documentContentToText(d?.content);
 
   const canonicalLinks = extractCanonicalResourceLinks(bodyText);
   const displayBodyText = (
@@ -229,9 +208,7 @@ export default function DocViewerScreen() {
       ) : null}
 
       {displayBodyText ? (
-        <Text selectable style={styles.body}>
-          {displayBodyText}
-        </Text>
+        <DocumentContent text={displayBodyText} />
       ) : canonicalLinks.length === 0 ? (
         <EmptyState
           sfSymbol="doc.text"
@@ -277,11 +254,6 @@ const styles = StyleSheet.create({
   meta: {
     fontSize: mobileTypography.caption.fontSize as number,
     color: lightPalette.text.secondary,
-  },
-  body: {
-    fontSize: mobileTypography.listPrimary.fontSize as number,
-    lineHeight: 24,
-    color: lightPalette.text.primary,
   },
   linksSection: {
     gap: spacing[1],

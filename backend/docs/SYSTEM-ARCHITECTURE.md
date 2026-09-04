@@ -450,6 +450,16 @@ type DocsLogic interface {
     CreateDocument(ctx context.Context, tx database.DBTX,
         orgID, employeeID dbuuid.UUID,
         req *rpcv1.CreateDocumentRequest) (*rpcv1.Document, error)
+
+    // Reads one document through the caller's own docs access. Collaboration uses it
+    // twice for a ritual's procedure document (feature 043): to validate a candidate
+    // before attaching it, so a manager can only attach what they could already read;
+    // and to resolve an existing attachment's current title, status and content on
+    // every read, since no procedure is ever snapshotted. A failure here degrades one
+    // entry point and is never propagated — GetRitualDefinition still succeeds.
+    GetDocument(ctx context.Context, tx database.DBTX,
+        orgID, employeeID dbuuid.UUID,
+        documentID dbuuid.UUID) (*rpcv1.Document, error)
 }
 
 // Shared across chat, docs, collaboration — defined per consumer
@@ -459,7 +469,7 @@ type NotificationPublisher interface {
 }
 ```
 
-**Key principle**: Each consumer defines only the interface methods it needs (Interface Segregation). Collaboration needs 1 method from Chat (40+ total) and 1 from Docs (30+ total).
+**Key principle**: Each consumer defines only the interface methods it needs (Interface Segregation). Collaboration needs 1 method from Chat (40+ total) and 2 from Docs (30+ total).
 
 ### Pattern 2: Post-Init Injection (Cycle Breaking)
 
@@ -689,6 +699,7 @@ graph TD
 | `collaboration.channel_task_destination.(org, channel_id)` | → `chat.channel.(org, id)` | T3 → T2 ✅ |
 | `collaboration.channel_task_destination.(org, project_id)` | → `collaboration.project.(org, id)` | T3 → T3 ✅ |
 | `collaboration.task.(org, description_document_id)` | → `docs.document.(org, id)` | T3 → T2 ✅ |
+| `collaboration.ritual_definition.(org, procedure_document_id)` | → `docs.document.(org, id)` | T3 → T2 ✅ |
 | `collaboration.task_assignee.(org, employee_id)` | → `organization.employee.(org, id)` | T3 → T0 ✅ |
 | `calendar.event.(org, organizer_id)` | → `organization.employee.(org, id)` | T4 → T0 ✅ |
 | `calendar.attendee.(org, employee_id)` | → `organization.employee.(org, id)` | T4 → T0 ✅ |

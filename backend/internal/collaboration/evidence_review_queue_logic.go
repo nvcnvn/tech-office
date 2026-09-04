@@ -204,6 +204,11 @@ func reviewQueueRowToProto(row *database.ListEvidenceReviewQueueRow) *rpcv1.Revi
 	if row.RitualDefinitionID.Valid {
 		entry.RitualDefinitionId = row.RitualDefinitionID.UUID.String()
 	}
+	// Empty for an entry whose definition could not be resolved. Such an entry stays
+	// listed and stays decidable, exactly as before.
+	if row.ProcedureDocumentID.Valid {
+		entry.ProcedureDocumentId = row.ProcedureDocumentID.UUID.String()
+	}
 	if row.ServerTimestamp.Valid {
 		entry.ServerTimestamp = timestamppb.New(row.ServerTimestamp.Time)
 	}

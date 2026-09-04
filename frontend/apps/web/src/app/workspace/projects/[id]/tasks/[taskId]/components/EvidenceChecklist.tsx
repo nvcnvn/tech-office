@@ -240,6 +240,13 @@ interface RequirementRowProps {
 	canReview: boolean;
 	autoOpen?: boolean;
 	highlighted?: boolean;
+	/**
+	 * Feature 043. Opens the procedure overlay owned by the page. The row does not own the
+	 * dialog: the whole point is that opening the procedure does not unmount the capture
+	 * form under it, so the in-progress file and note survive (D5, FR-013).
+	 */
+	procedureTitle?: string;
+	onOpenProcedure?: () => void;
 }
 
 function RequirementRow({
@@ -251,6 +258,8 @@ function RequirementRow({
 	canReview,
 	autoOpen,
 	highlighted = false,
+	procedureTitle,
+	onOpenProcedure,
 }: RequirementRowProps) {
 	const colors = useThemeColors();
 	const [submitOpen, setSubmitOpen] = useState(false);
@@ -625,6 +634,8 @@ function RequirementRow({
 						setSubmitOpen(false);
 						onSubmitted();
 					}}
+					procedureTitle={procedureTitle}
+					onOpenProcedure={onOpenProcedure}
 				/>
 			)}
 		</ListItem>
@@ -644,6 +655,9 @@ interface EvidenceChecklistProps {
 	autoOpenRequirementId?: string | null;
 	highlightedRequirementId?: string | null;
 	autoFocusFirstActionable?: boolean;
+	/** Feature 043. Undefined when the ritual has no procedure — the row then renders no entry point. */
+	procedureTitle?: string;
+	onOpenProcedure?: () => void;
 }
 
 export default function EvidenceChecklist({
@@ -655,6 +669,8 @@ export default function EvidenceChecklist({
 	autoOpenRequirementId,
 	highlightedRequirementId,
 	autoFocusFirstActionable = false,
+	procedureTitle,
+	onOpenProcedure,
 }: EvidenceChecklistProps) {
 	const colors = useThemeColors();
 	const [requirements, setRequirements] = useState<EvidenceRequirementDetail[]>([]);
@@ -799,6 +815,8 @@ export default function EvidenceChecklist({
 						canReview={canReview}
 						autoOpen={(autoOpenRequirementId ?? actionableRequirementId) === req.id}
 						highlighted={actionableRequirementId === req.id}
+						procedureTitle={procedureTitle}
+						onOpenProcedure={onOpenProcedure}
 					/>
 				))}
 			</List>

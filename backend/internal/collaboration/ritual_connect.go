@@ -137,17 +137,15 @@ func (s *CollaborationServiceConnect) UpdateRitualDefinition(
 ) (*connect.Response[rpcv1.UpdateRitualDefinitionResponse], error) {
 	slog.DebugContext(ctx, "UpdateRitualDefinition RPC called", "defID", req.Msg.GetRitualDefinitionId())
 
-	_, organizationID, err := extractAuthContext(ctx)
+	employeeID, organizationID, err := extractAuthContext(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	defID := dbuuid.MustParse(req.Msg.GetRitualDefinitionId())
-
 	var def *rpcv1.RitualDefinition
 	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
 		var txErr error
-		def, txErr = s.Logic.UpdateRitualDefinition(ctx, tx, organizationID, defID, req.Msg)
+		def, txErr = s.Logic.UpdateRitualDefinition(ctx, tx, organizationID, employeeID, req.Msg)
 		if txErr != nil {
 			return txErr
 		}
@@ -727,4 +725,43 @@ func timestampToDate(ts *timestamppb.Timestamp) pgtype.Date {
 		return pgtype.Date{}
 	}
 	return pgtype.Date{Time: ts.AsTime(), Valid: true}
+}
+
+// GetRitualProcedure returns the workspace document attached to a ritual definition, for
+// read-only rendering next to an instance.
+//
+// The connect layer extracts the auth context and opens the transaction; the resource check
+// — can this caller see the definition's project — belongs to the logic layer
+// (Constitution III).
+func (s *CollaborationServiceConnect) GetRitualProcedure(
+	ctx context.Context,
+	req *connect.Request[rpcv1.GetRitualProcedureRequest],
+) (*connect.Response[rpcv1.GetRitualProcedureResponse], error) {
+	slog.DebugContext(ctx, "GetRitualProcedure RPC called", "defID", req.Msg.GetRitualDefinitionId())
+
+	employeeID, organizationID, err := extractAuthContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	defID, err := dbuuid.Parse(req.Msg.GetRitualDefinitionId())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
+
+	var procedure *rpcv1.RitualProcedure
+	var contentJSON string
+	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		var txErr error
+		procedure, contentJSON, txErr = s.Logic.GetRitualProcedure(ctx, tx, organizationID, employeeID, defID)
+		return txErr
+	})
+	if err != nil {
+		return nil, handleError(err)
+	}
+
+	return connect.NewResponse(&rpcv1.GetRitualProcedureResponse{
+		Procedure:   procedure,
+		ContentJson: contentJSON,
+	}), nil
 }

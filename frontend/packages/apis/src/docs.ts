@@ -197,7 +197,12 @@ export interface DocumentTreeNode {
 // Proto Enum Converters
 // =============================================================================
 
-function protoStatusToString(status: document.DocumentStatus): DocumentStatus {
+/**
+ * Exported so the ritual procedure surface can report an attached document's status
+ * without duplicating the mapping. A ritual reads a document through
+ * CollaborationService, never DocumentService, but the status vocabulary is the same one.
+ */
+export function protoStatusToString(status: document.DocumentStatus): DocumentStatus {
 	switch (status) {
 		case document.DocumentStatus.ACTIVE:
 			return 'active';

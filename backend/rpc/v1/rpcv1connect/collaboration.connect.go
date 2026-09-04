@@ -204,6 +204,9 @@ const (
 	// CollaborationServiceListRitualDefinitionsProcedure is the fully-qualified name of the
 	// CollaborationService's ListRitualDefinitions RPC.
 	CollaborationServiceListRitualDefinitionsProcedure = "/rpc.v1.CollaborationService/ListRitualDefinitions"
+	// CollaborationServiceGetRitualProcedureProcedure is the fully-qualified name of the
+	// CollaborationService's GetRitualProcedure RPC.
+	CollaborationServiceGetRitualProcedureProcedure = "/rpc.v1.CollaborationService/GetRitualProcedure"
 	// CollaborationServiceCreateEvidenceRequirementProcedure is the fully-qualified name of the
 	// CollaborationService's CreateEvidenceRequirement RPC.
 	CollaborationServiceCreateEvidenceRequirementProcedure = "/rpc.v1.CollaborationService/CreateEvidenceRequirement"
@@ -328,6 +331,27 @@ type CollaborationServiceClient interface {
 	UpdateRitualDefinition(context.Context, *connect.Request[v1.UpdateRitualDefinitionRequest]) (*connect.Response[v1.UpdateRitualDefinitionResponse], error)
 	ArchiveRitualDefinition(context.Context, *connect.Request[v1.ArchiveRitualDefinitionRequest]) (*connect.Response[v1.ArchiveRitualDefinitionResponse], error)
 	ListRitualDefinitions(context.Context, *connect.Request[v1.ListRitualDefinitionsRequest]) (*connect.Response[v1.ListRitualDefinitionsResponse], error)
+	// GetRitualProcedure returns the content of the workspace document attached to a ritual
+	// definition, for read-only rendering next to an instance.
+	//
+	// This is the ONLY way the content is reachable for a reader without their own grant on
+	// the document, and it is deliberately served here rather than by DocumentService:
+	// internal/docs must not learn what a ritual is, and the implicit read must not become a
+	// row in docs.document_access that would surface the document in the reader's tree,
+	// search results or followed-document list.
+	//
+	// Authorization is two-layer. The interceptor checks `collab.viewTask` — may this caller
+	// use the tasks feature at all. The logic layer then checks project access on the
+	// definition's project with no required role, because "can see an instance" is exactly
+	// "can see the project": a viewer and a reader of a public project both pass. A caller
+	// outside the project is refused with a bare PermissionDenied and no error detail, for
+	// the same reason the evidence decision path is: naming the project or the ritual would
+	// disclose work the caller may not know exists.
+	//
+	// It grants nothing else. Commenting, reacting, editing and version history stay on
+	// DocumentService, where the reader's own access decides. The grant does not extend to
+	// child pages or to documents this one links to.
+	GetRitualProcedure(context.Context, *connect.Request[v1.GetRitualProcedureRequest]) (*connect.Response[v1.GetRitualProcedureResponse], error)
 	CreateEvidenceRequirement(context.Context, *connect.Request[v1.CreateEvidenceRequirementRequest]) (*connect.Response[v1.CreateEvidenceRequirementResponse], error)
 	UpdateEvidenceRequirement(context.Context, *connect.Request[v1.UpdateEvidenceRequirementRequest]) (*connect.Response[v1.UpdateEvidenceRequirementResponse], error)
 	DeleteEvidenceRequirement(context.Context, *connect.Request[v1.DeleteEvidenceRequirementRequest]) (*connect.Response[v1.DeleteEvidenceRequirementResponse], error)
@@ -719,6 +743,12 @@ func NewCollaborationServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(collaborationServiceMethods.ByName("ListRitualDefinitions")),
 			connect.WithClientOptions(opts...),
 		),
+		getRitualProcedure: connect.NewClient[v1.GetRitualProcedureRequest, v1.GetRitualProcedureResponse](
+			httpClient,
+			baseURL+CollaborationServiceGetRitualProcedureProcedure,
+			connect.WithSchema(collaborationServiceMethods.ByName("GetRitualProcedure")),
+			connect.WithClientOptions(opts...),
+		),
 		createEvidenceRequirement: connect.NewClient[v1.CreateEvidenceRequirementRequest, v1.CreateEvidenceRequirementResponse](
 			httpClient,
 			baseURL+CollaborationServiceCreateEvidenceRequirementProcedure,
@@ -889,6 +919,7 @@ type collaborationServiceClient struct {
 	updateRitualDefinition         *connect.Client[v1.UpdateRitualDefinitionRequest, v1.UpdateRitualDefinitionResponse]
 	archiveRitualDefinition        *connect.Client[v1.ArchiveRitualDefinitionRequest, v1.ArchiveRitualDefinitionResponse]
 	listRitualDefinitions          *connect.Client[v1.ListRitualDefinitionsRequest, v1.ListRitualDefinitionsResponse]
+	getRitualProcedure             *connect.Client[v1.GetRitualProcedureRequest, v1.GetRitualProcedureResponse]
 	createEvidenceRequirement      *connect.Client[v1.CreateEvidenceRequirementRequest, v1.CreateEvidenceRequirementResponse]
 	updateEvidenceRequirement      *connect.Client[v1.UpdateEvidenceRequirementRequest, v1.UpdateEvidenceRequirementResponse]
 	deleteEvidenceRequirement      *connect.Client[v1.DeleteEvidenceRequirementRequest, v1.DeleteEvidenceRequirementResponse]
@@ -1194,6 +1225,11 @@ func (c *collaborationServiceClient) ListRitualDefinitions(ctx context.Context, 
 	return c.listRitualDefinitions.CallUnary(ctx, req)
 }
 
+// GetRitualProcedure calls rpc.v1.CollaborationService.GetRitualProcedure.
+func (c *collaborationServiceClient) GetRitualProcedure(ctx context.Context, req *connect.Request[v1.GetRitualProcedureRequest]) (*connect.Response[v1.GetRitualProcedureResponse], error) {
+	return c.getRitualProcedure.CallUnary(ctx, req)
+}
+
 // CreateEvidenceRequirement calls rpc.v1.CollaborationService.CreateEvidenceRequirement.
 func (c *collaborationServiceClient) CreateEvidenceRequirement(ctx context.Context, req *connect.Request[v1.CreateEvidenceRequirementRequest]) (*connect.Response[v1.CreateEvidenceRequirementResponse], error) {
 	return c.createEvidenceRequirement.CallUnary(ctx, req)
@@ -1352,6 +1388,27 @@ type CollaborationServiceHandler interface {
 	UpdateRitualDefinition(context.Context, *connect.Request[v1.UpdateRitualDefinitionRequest]) (*connect.Response[v1.UpdateRitualDefinitionResponse], error)
 	ArchiveRitualDefinition(context.Context, *connect.Request[v1.ArchiveRitualDefinitionRequest]) (*connect.Response[v1.ArchiveRitualDefinitionResponse], error)
 	ListRitualDefinitions(context.Context, *connect.Request[v1.ListRitualDefinitionsRequest]) (*connect.Response[v1.ListRitualDefinitionsResponse], error)
+	// GetRitualProcedure returns the content of the workspace document attached to a ritual
+	// definition, for read-only rendering next to an instance.
+	//
+	// This is the ONLY way the content is reachable for a reader without their own grant on
+	// the document, and it is deliberately served here rather than by DocumentService:
+	// internal/docs must not learn what a ritual is, and the implicit read must not become a
+	// row in docs.document_access that would surface the document in the reader's tree,
+	// search results or followed-document list.
+	//
+	// Authorization is two-layer. The interceptor checks `collab.viewTask` — may this caller
+	// use the tasks feature at all. The logic layer then checks project access on the
+	// definition's project with no required role, because "can see an instance" is exactly
+	// "can see the project": a viewer and a reader of a public project both pass. A caller
+	// outside the project is refused with a bare PermissionDenied and no error detail, for
+	// the same reason the evidence decision path is: naming the project or the ritual would
+	// disclose work the caller may not know exists.
+	//
+	// It grants nothing else. Commenting, reacting, editing and version history stay on
+	// DocumentService, where the reader's own access decides. The grant does not extend to
+	// child pages or to documents this one links to.
+	GetRitualProcedure(context.Context, *connect.Request[v1.GetRitualProcedureRequest]) (*connect.Response[v1.GetRitualProcedureResponse], error)
 	CreateEvidenceRequirement(context.Context, *connect.Request[v1.CreateEvidenceRequirementRequest]) (*connect.Response[v1.CreateEvidenceRequirementResponse], error)
 	UpdateEvidenceRequirement(context.Context, *connect.Request[v1.UpdateEvidenceRequirementRequest]) (*connect.Response[v1.UpdateEvidenceRequirementResponse], error)
 	DeleteEvidenceRequirement(context.Context, *connect.Request[v1.DeleteEvidenceRequirementRequest]) (*connect.Response[v1.DeleteEvidenceRequirementResponse], error)
@@ -1739,6 +1796,12 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 		connect.WithSchema(collaborationServiceMethods.ByName("ListRitualDefinitions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	collaborationServiceGetRitualProcedureHandler := connect.NewUnaryHandler(
+		CollaborationServiceGetRitualProcedureProcedure,
+		svc.GetRitualProcedure,
+		connect.WithSchema(collaborationServiceMethods.ByName("GetRitualProcedure")),
+		connect.WithHandlerOptions(opts...),
+	)
 	collaborationServiceCreateEvidenceRequirementHandler := connect.NewUnaryHandler(
 		CollaborationServiceCreateEvidenceRequirementProcedure,
 		svc.CreateEvidenceRequirement,
@@ -1963,6 +2026,8 @@ func NewCollaborationServiceHandler(svc CollaborationServiceHandler, opts ...con
 			collaborationServiceArchiveRitualDefinitionHandler.ServeHTTP(w, r)
 		case CollaborationServiceListRitualDefinitionsProcedure:
 			collaborationServiceListRitualDefinitionsHandler.ServeHTTP(w, r)
+		case CollaborationServiceGetRitualProcedureProcedure:
+			collaborationServiceGetRitualProcedureHandler.ServeHTTP(w, r)
 		case CollaborationServiceCreateEvidenceRequirementProcedure:
 			collaborationServiceCreateEvidenceRequirementHandler.ServeHTTP(w, r)
 		case CollaborationServiceUpdateEvidenceRequirementProcedure:
@@ -2234,6 +2299,10 @@ func (UnimplementedCollaborationServiceHandler) ArchiveRitualDefinition(context.
 
 func (UnimplementedCollaborationServiceHandler) ListRitualDefinitions(context.Context, *connect.Request[v1.ListRitualDefinitionsRequest]) (*connect.Response[v1.ListRitualDefinitionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.ListRitualDefinitions is not implemented"))
+}
+
+func (UnimplementedCollaborationServiceHandler) GetRitualProcedure(context.Context, *connect.Request[v1.GetRitualProcedureRequest]) (*connect.Response[v1.GetRitualProcedureResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.CollaborationService.GetRitualProcedure is not implemented"))
 }
 
 func (UnimplementedCollaborationServiceHandler) CreateEvidenceRequirement(context.Context, *connect.Request[v1.CreateEvidenceRequirementRequest]) (*connect.Response[v1.CreateEvidenceRequirementResponse], error) {

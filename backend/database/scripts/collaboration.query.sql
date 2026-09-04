@@ -743,11 +743,13 @@ WHERE t.organization_id = @organization_id
 INSERT INTO collaboration.ritual_definition (
     id, organization_id, project_id, name, description,
     recurrence_rule, completion_window_hours, timezone,
-    created_by_employee_id, generation_window_days, updated_at
+    created_by_employee_id, generation_window_days, updated_at,
+    procedure_document_id
 ) VALUES (
     @id, @organization_id, @project_id, @name, @description,
     @recurrence_rule, @completion_window_hours, @timezone,
-    @created_by_employee_id, @generation_window_days, @updated_at
+    @created_by_employee_id, @generation_window_days, @updated_at,
+    sqlc.narg('procedure_document_id')
 ) RETURNING *;
 
 -- name: GetRitualDefinition :one
@@ -762,6 +764,14 @@ SET name = COALESCE(sqlc.narg('name'), name),
     completion_window_hours = COALESCE(sqlc.narg('completion_window_hours'), completion_window_hours),
     timezone = COALESCE(sqlc.narg('timezone'), timezone),
     generation_window_days = COALESCE(sqlc.narg('generation_window_days'), generation_window_days),
+    -- Three-valued, and therefore not a COALESCE: COALESCE cannot express "set this to
+    -- NULL". update_procedure = false leaves the attachment alone (the field was absent
+    -- from the request); true with a NULL id detaches; true with an id attaches or
+    -- replaces.
+    procedure_document_id = CASE
+        WHEN sqlc.arg('update_procedure')::boolean THEN sqlc.narg('procedure_document_id')::uuid
+        ELSE procedure_document_id
+    END,
     updated_at = @updated_at
 WHERE organization_id = @organization_id AND id = @id
 RETURNING *;
@@ -1033,6 +1043,10 @@ WITH queue AS (
     p.name AS project_name,
     t.ritual_definition_id,
     COALESCE(rd.name, '')::text AS ritual_name,
+    -- The id only, from the ritual_definition join the queue already performs: a page of
+    -- entries costs zero additional queries. The reviewer's control is labelled
+    -- "Procedure" and fetches the title and content from GetRitualProcedure when opened.
+    rd.procedure_document_id,
     es.evidence_requirement_id,
     COALESCE(er.name, '')::text AS evidence_requirement_name,
     COALESCE(er.position, 0)::int AS evidence_requirement_position,

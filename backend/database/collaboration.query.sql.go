@@ -153,7 +153,7 @@ const archiveRitualDefinition = `-- name: ArchiveRitualDefinition :one
 UPDATE collaboration.ritual_definition
 SET is_archived = $1, updated_at = $2
 WHERE organization_id = $3 AND id = $4
-RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
+RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id
 `
 
 type ArchiveRitualDefinitionParams struct {
@@ -186,6 +186,7 @@ func (q *Queries) ArchiveRitualDefinition(ctx context.Context, db DBTX, arg *Arc
 		&i.GenerationWindowDays,
 		&i.UpdatedAt,
 		&i.ScheduleVersion,
+		&i.ProcedureDocumentID,
 	)
 	return &i, err
 }
@@ -738,12 +739,14 @@ const createRitualDefinition = `-- name: CreateRitualDefinition :one
 INSERT INTO collaboration.ritual_definition (
     id, organization_id, project_id, name, description,
     recurrence_rule, completion_window_hours, timezone,
-    created_by_employee_id, generation_window_days, updated_at
+    created_by_employee_id, generation_window_days, updated_at,
+    procedure_document_id
 ) VALUES (
     $1, $2, $3, $4, $5,
     $6, $7, $8,
-    $9, $10, $11
-) RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
+    $9, $10, $11,
+    $12
+) RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id
 `
 
 type CreateRitualDefinitionParams struct {
@@ -758,6 +761,7 @@ type CreateRitualDefinitionParams struct {
 	CreatedByEmployeeID   dbuuid.UUID        `json:"created_by_employee_id"`
 	GenerationWindowDays  int32              `json:"generation_window_days"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
+	ProcedureDocumentID   dbuuid.NullUUID    `json:"procedure_document_id"`
 }
 
 // ============================================================
@@ -776,6 +780,7 @@ func (q *Queries) CreateRitualDefinition(ctx context.Context, db DBTX, arg *Crea
 		arg.CreatedByEmployeeID,
 		arg.GenerationWindowDays,
 		arg.UpdatedAt,
+		arg.ProcedureDocumentID,
 	)
 	var i CollaborationRitualDefinition
 	err := row.Scan(
@@ -793,6 +798,7 @@ func (q *Queries) CreateRitualDefinition(ctx context.Context, db DBTX, arg *Crea
 		&i.GenerationWindowDays,
 		&i.UpdatedAt,
 		&i.ScheduleVersion,
+		&i.ProcedureDocumentID,
 	)
 	return &i, err
 }
@@ -2269,7 +2275,7 @@ func (q *Queries) GetProjectTaskSummary(ctx context.Context, db DBTX, arg *GetPr
 }
 
 const getRitualDefinition = `-- name: GetRitualDefinition :one
-SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version FROM collaboration.ritual_definition
+SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id FROM collaboration.ritual_definition
 WHERE organization_id = $1 AND id = $2
 `
 
@@ -2296,6 +2302,7 @@ func (q *Queries) GetRitualDefinition(ctx context.Context, db DBTX, arg *GetRitu
 		&i.GenerationWindowDays,
 		&i.UpdatedAt,
 		&i.ScheduleVersion,
+		&i.ProcedureDocumentID,
 	)
 	return &i, err
 }
@@ -3007,7 +3014,7 @@ func (q *Queries) ListActiveDepartmentMembers(ctx context.Context, db DBTX, arg 
 }
 
 const listActiveRitualDefinitionsForGeneration = `-- name: ListActiveRitualDefinitionsForGeneration :many
-SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version FROM collaboration.ritual_definition
+SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id FROM collaboration.ritual_definition
 WHERE organization_id = $1
   AND is_archived = FALSE
   AND (last_generated_date IS NULL OR last_generated_date < $2::date + generation_window_days)
@@ -3043,6 +3050,7 @@ func (q *Queries) ListActiveRitualDefinitionsForGeneration(ctx context.Context, 
 			&i.GenerationWindowDays,
 			&i.UpdatedAt,
 			&i.ScheduleVersion,
+			&i.ProcedureDocumentID,
 		); err != nil {
 			return nil, err
 		}
@@ -3304,6 +3312,10 @@ WITH queue AS (
     p.name AS project_name,
     t.ritual_definition_id,
     COALESCE(rd.name, '')::text AS ritual_name,
+    -- The id only, from the ritual_definition join the queue already performs: a page of
+    -- entries costs zero additional queries. The reviewer's control is labelled
+    -- "Procedure" and fetches the title and content from GetRitualProcedure when opened.
+    rd.procedure_document_id,
     es.evidence_requirement_id,
     COALESCE(er.name, '')::text AS evidence_requirement_name,
     COALESCE(er.position, 0)::int AS evidence_requirement_position,
@@ -3347,7 +3359,7 @@ WITH queue AS (
     AND pm.role <> 'viewer'
     AND ($7::uuid IS NULL OR t.project_id = $7::uuid)
 )
-SELECT evidence_submission_id, task_id, task_identifier, task_title, project_id, project_name, ritual_definition_id, ritual_name, evidence_requirement_id, evidence_requirement_name, evidence_requirement_position, evidence_requirement_is_required, requirement_unresolved, submitted_by_employee_id, submitted_by_display_name, server_timestamp, device_timestamp, evidence_type, file_id, text_content, link_url, gps_latitude, gps_longitude, gps_accuracy_meters, instance_state_category, instance_completion_deadline, urgency_rank FROM queue
+SELECT evidence_submission_id, task_id, task_identifier, task_title, project_id, project_name, ritual_definition_id, ritual_name, procedure_document_id, evidence_requirement_id, evidence_requirement_name, evidence_requirement_position, evidence_requirement_is_required, requirement_unresolved, submitted_by_employee_id, submitted_by_display_name, server_timestamp, device_timestamp, evidence_type, file_id, text_content, link_url, gps_latitude, gps_longitude, gps_accuracy_meters, instance_state_category, instance_completion_deadline, urgency_rank FROM queue
 WHERE $1::uuid IS NULL
    OR (urgency_rank, server_timestamp, evidence_submission_id)
       > ($2::int, $3::timestamptz, $1::uuid)
@@ -3374,6 +3386,7 @@ type ListEvidenceReviewQueueRow struct {
 	ProjectName                   string             `json:"project_name"`
 	RitualDefinitionID            dbuuid.NullUUID    `json:"ritual_definition_id"`
 	RitualName                    string             `json:"ritual_name"`
+	ProcedureDocumentID           dbuuid.NullUUID    `json:"procedure_document_id"`
 	EvidenceRequirementID         dbuuid.UUID        `json:"evidence_requirement_id"`
 	EvidenceRequirementName       string             `json:"evidence_requirement_name"`
 	EvidenceRequirementPosition   int32              `json:"evidence_requirement_position"`
@@ -3435,6 +3448,7 @@ func (q *Queries) ListEvidenceReviewQueue(ctx context.Context, db DBTX, arg *Lis
 			&i.ProjectName,
 			&i.RitualDefinitionID,
 			&i.RitualName,
+			&i.ProcedureDocumentID,
 			&i.EvidenceRequirementID,
 			&i.EvidenceRequirementName,
 			&i.EvidenceRequirementPosition,
@@ -4014,7 +4028,7 @@ func (q *Queries) ListRitualDefinitionDepartmentPools(ctx context.Context, db DB
 }
 
 const listRitualDefinitions = `-- name: ListRitualDefinitions :many
-SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version FROM collaboration.ritual_definition
+SELECT id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id FROM collaboration.ritual_definition
 WHERE organization_id = $1
   AND project_id = $2
   AND ($3::boolean = TRUE OR is_archived = FALSE)
@@ -4051,6 +4065,7 @@ func (q *Queries) ListRitualDefinitions(ctx context.Context, db DBTX, arg *ListR
 			&i.GenerationWindowDays,
 			&i.UpdatedAt,
 			&i.ScheduleVersion,
+			&i.ProcedureDocumentID,
 		); err != nil {
 			return nil, err
 		}
@@ -5512,9 +5527,17 @@ SET name = COALESCE($1, name),
     completion_window_hours = COALESCE($4, completion_window_hours),
     timezone = COALESCE($5, timezone),
     generation_window_days = COALESCE($6, generation_window_days),
-    updated_at = $7
-WHERE organization_id = $8 AND id = $9
-RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
+    -- Three-valued, and therefore not a COALESCE: COALESCE cannot express "set this to
+    -- NULL". update_procedure = false leaves the attachment alone (the field was absent
+    -- from the request); true with a NULL id detaches; true with an id attaches or
+    -- replaces.
+    procedure_document_id = CASE
+        WHEN $7::boolean THEN $8::uuid
+        ELSE procedure_document_id
+    END,
+    updated_at = $9
+WHERE organization_id = $10 AND id = $11
+RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id
 `
 
 type UpdateRitualDefinitionParams struct {
@@ -5524,6 +5547,8 @@ type UpdateRitualDefinitionParams struct {
 	CompletionWindowHours pgtype.Int4        `json:"completion_window_hours"`
 	Timezone              pgtype.Text        `json:"timezone"`
 	GenerationWindowDays  pgtype.Int4        `json:"generation_window_days"`
+	UpdateProcedure       bool               `json:"update_procedure"`
+	ProcedureDocumentID   dbuuid.NullUUID    `json:"procedure_document_id"`
 	UpdatedAt             pgtype.Timestamptz `json:"updated_at"`
 	OrganizationID        dbuuid.UUID        `json:"organization_id"`
 	ID                    dbuuid.UUID        `json:"id"`
@@ -5537,6 +5562,8 @@ func (q *Queries) UpdateRitualDefinition(ctx context.Context, db DBTX, arg *Upda
 		arg.CompletionWindowHours,
 		arg.Timezone,
 		arg.GenerationWindowDays,
+		arg.UpdateProcedure,
+		arg.ProcedureDocumentID,
 		arg.UpdatedAt,
 		arg.OrganizationID,
 		arg.ID,
@@ -5557,6 +5584,7 @@ func (q *Queries) UpdateRitualDefinition(ctx context.Context, db DBTX, arg *Upda
 		&i.GenerationWindowDays,
 		&i.UpdatedAt,
 		&i.ScheduleVersion,
+		&i.ProcedureDocumentID,
 	)
 	return &i, err
 }
@@ -5594,7 +5622,7 @@ SET
   updated_at = NOW()
 WHERE organization_id = $3
   AND id = $4
-RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version
+RETURNING id, organization_id, project_id, name, description, recurrence_rule, completion_window_hours, timezone, is_archived, created_by_employee_id, last_generated_date, generation_window_days, updated_at, schedule_version, procedure_document_id
 `
 
 type UpdateRitualDefinitionScheduleParams struct {
@@ -5632,6 +5660,7 @@ func (q *Queries) UpdateRitualDefinitionSchedule(ctx context.Context, db DBTX, a
 		&i.GenerationWindowDays,
 		&i.UpdatedAt,
 		&i.ScheduleVersion,
+		&i.ProcedureDocumentID,
 	)
 	return &i, err
 }

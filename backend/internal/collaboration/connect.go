@@ -155,6 +155,10 @@ func handleError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, ErrAccessDenied):
 		return connect.NewError(connect.CodePermissionDenied, err)
+	case errors.Is(err, ErrProcedureDocumentInvalid), errors.Is(err, ErrProcedureDocumentNotWorkspaceDoc):
+		// Named field, so the chooser can mark the picked document rather than showing a
+		// whole-request error the manager has to guess the cause of (Principle X).
+		return fieldViolation(connect.CodeInvalidArgument, err, "procedure_document_id", err.Error())
 	case errors.Is(err, ErrEmptyTaskTitle):
 		// Named field, so the quick sheet can mark the title input rather than showing a
 		// whole-request error the user has to guess the cause of (Principle X).

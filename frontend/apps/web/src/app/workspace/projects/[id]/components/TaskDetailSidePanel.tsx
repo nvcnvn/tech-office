@@ -42,6 +42,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import { useRouter } from 'next/navigation';
 import { useThemeColors } from '@/theme/useThemeColors';
 import { useProjectContext } from '../ProjectContext';
@@ -55,10 +56,13 @@ import {
 	type UpdateTaskParams,
 	type Document,
 	type FileMetadata,
+	getRitualDefinition,
+	type RitualDefinition,
 } from 'apis';
 import FileAttachment from '@/app/workspace/chat/components/FileAttachment';
 import AttachFileIcon from '@mui/icons-material/AttachFile';
 import DocumentEditor from '@/app/workspace/docs/components/DocumentEditor';
+import ProcedureDialog from '@/app/workspace/components/ProcedureDialog';
 
 // =============================================================================
 // Types
@@ -120,6 +124,10 @@ export function TaskDetailSidePanel({
 	const [loadingAttachments, setLoadingAttachments] = useState(false);
 
 	// UI state
+	// Feature 043. Only loaded for a ritual instance, and only to learn whether there is a
+	// procedure and what it is called — the content is fetched when the overlay opens.
+	const [ritualDefinition, setRitualDefinition] = useState<RitualDefinition | null>(null);
+	const [procedureOpen, setProcedureOpen] = useState(false);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
@@ -186,6 +194,16 @@ export function TaskDetailSidePanel({
 					});
 			} else {
 				setFileAttachments([]);
+			}
+
+			// Feature 043. A ritual instance may carry a written procedure; a plain task
+			// never does, so it costs nothing to open a task in this panel.
+			if (task.taskKind === 'ritual_instance' && task.ritualDefinitionId) {
+				getRitualDefinition(task.ritualDefinitionId)
+					.then(setRitualDefinition)
+					.catch(() => setRitualDefinition(null));
+			} else {
+				setRitualDefinition(null);
 			}
 		}
 	}, [task]);
@@ -393,6 +411,33 @@ export function TaskDetailSidePanel({
 						instance is unassigned on purpose. It will be assigned as soon as a covering shift is
 						published.
 					</Alert>
+				)}
+
+				{/*
+				  Feature 043. Absent procedure renders nothing at all — no empty entry point,
+				  no placeholder, no layout shift (FR-017). The dialog portals over the panel
+				  rather than navigating, so nothing being edited here is unmounted (D5).
+				*/}
+				{ritualDefinition?.procedure && task.ritualDefinitionId && (
+					<>
+						<Button
+							size="small"
+							startIcon={<MenuBookIcon fontSize="small" />}
+							onClick={() => setProcedureOpen(true)}
+							sx={{ mb: 2, textTransform: 'none' }}
+							data-testid="ritual-procedure-entry"
+						>
+							{ritualDefinition.procedure.isAvailable
+								? ritualDefinition.procedure.title
+								: 'Procedure unavailable'}
+						</Button>
+						<ProcedureDialog
+							open={procedureOpen}
+							onClose={() => setProcedureOpen(false)}
+							ritualDefinitionId={task.ritualDefinitionId}
+							title={ritualDefinition.procedure.title}
+						/>
+					</>
 				)}
 
 				{/* Compact Status + Assignees Row */}

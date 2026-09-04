@@ -1,13 +1,15 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { Box, Button, Chip, Paper, Typography } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import MenuBookIcon from '@mui/icons-material/MenuBook';
 import type { ReviewQueueEntry } from 'apis';
 import { useThemeColors } from '@/theme/useThemeColors';
 import ReviewQueueEvidence from './ReviewQueueEvidence';
+import ProcedureDialog from '@/app/workspace/components/ProcedureDialog';
 
 /** Relative age of the submission, from the server's clock rather than the device's. */
 function formatAge(at: Date | undefined): string {
@@ -43,6 +45,10 @@ export interface ReviewQueueRowProps {
  */
 export default function ReviewQueueRow({ entry, busy, onApprove, onReject }: ReviewQueueRowProps) {
 	const colors = useThemeColors();
+	// Feature 043. The overlay is what makes this safe: opening the procedure must not
+	// unmount the row, or a rejection reason typed into RejectReasonDialog and the
+	// reviewer's place in the queue both go with it (D5, FR-014).
+	const [procedureOpen, setProcedureOpen] = useState(false);
 	const isLate = entry.urgency === 'late';
 	const deadline = formatDeadline(entry.instanceCompletionDeadline);
 
@@ -98,6 +104,20 @@ export default function ReviewQueueRow({ entry, busy, onApprove, onReject }: Rev
 				</Box>
 
 				<Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+					{/* Nothing at all when the ritual has no procedure (FR-017). Title and
+					    content are fetched only when the reviewer actually opens it, so a
+					    page of 25 entries costs no extra document reads. */}
+					{entry.procedureDocumentId && (
+						<Button
+							variant="text"
+							size="small"
+							startIcon={<MenuBookIcon fontSize="small" />}
+							onClick={() => setProcedureOpen(true)}
+							data-testid="review-queue-procedure-btn"
+						>
+							Procedure
+						</Button>
+					)}
 					<Button
 						variant="contained"
 						color="success"
@@ -122,6 +142,14 @@ export default function ReviewQueueRow({ entry, busy, onApprove, onReject }: Rev
 					</Button>
 				</Box>
 			</Box>
+
+			{entry.procedureDocumentId && (
+				<ProcedureDialog
+					open={procedureOpen}
+					onClose={() => setProcedureOpen(false)}
+					ritualDefinitionId={entry.ritualDefinitionId}
+				/>
+			)}
 		</Paper>
 	);
 }

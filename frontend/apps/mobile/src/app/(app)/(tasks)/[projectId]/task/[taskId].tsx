@@ -40,6 +40,8 @@ import {
   type TaskEvidenceProgressSummary,
   getDownloadUrl,
 } from "apis";
+
+import { ProcedureSheet } from "@/components/rituals/procedure-sheet";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { useAuth } from "@/hooks/use-auth";
@@ -57,6 +59,7 @@ import {
   shadows,
   spacing,
   statusColors,
+  touch,
 } from "@tech-office/theme-tokens";
 
 type CardTone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -874,6 +877,7 @@ function EvidenceRequirementCard({
             placeholder="Describe what happened for this step"
             textAlignVertical="top"
             style={styles.inlineComposerInput}
+            testID="evidence-text-composer-input"
           />
           <View style={styles.inlineComposerActions}>
             <Pressable
@@ -1189,6 +1193,11 @@ export default function TaskDetailScreen() {
     queryFn: () => listProjectStates(projectId!),
     enabled: !!projectId,
   });
+
+  // Feature 043. Held at screen level, not inside the checklist rows: the sheet must draw
+  // over the capture flow without unmounting it, or a typed note and an attached photo go
+  // with it (D5, FR-013).
+  const [showProcedure, setShowProcedure] = useState(false);
 
   const ritualDefinitionQuery = useQuery({
     queryKey: ["ritual-definition", ritualDefinitionId],
@@ -1886,6 +1895,30 @@ export default function TaskDetailScreen() {
               ) : null}
             </View>
 
+            {/*
+              Feature 043. Absent procedure renders nothing at all — no empty entry point,
+              no placeholder, no layout shift (FR-017). It sits at the top of the proof
+              checklist because that is where the worker is standing when they need it, and
+              because the capture rows below it are never unmounted by opening it.
+              Mobile reads the procedure and never configures it (FR-011).
+            */}
+            {ritualDefinition?.procedure && ritualDefinitionId ? (
+              <Pressable
+                onPress={() => setShowProcedure(true)}
+                style={({ pressed }) => [styles.procedureButton, pressed && styles.heroLinkButtonPressed]}
+                testID="ritual-procedure-entry"
+              >
+                <View style={styles.templateLinkButtonContent}>
+                  <SFIcon name="book" size={14} color={lightPalette.info.main} />
+                  <Text style={styles.procedureButtonText} numberOfLines={1}>
+                    {ritualDefinition.procedure.isAvailable
+                      ? ritualDefinition.procedure.title
+                      : "Procedure unavailable"}
+                  </Text>
+                </View>
+              </Pressable>
+            ) : null}
+
             {evidenceProgress ? (
               <View style={styles.proofSummaryRow}>
                 <View style={[styles.compactStatChip, styles.compactStatChipInfo]}>
@@ -1966,6 +1999,14 @@ export default function TaskDetailScreen() {
           </View>
         ) : null}
       </ScrollView>
+      {ritualDefinitionId ? (
+        <ProcedureSheet
+          ritualDefinitionId={ritualDefinitionId}
+          title={ritualDefinition?.procedure?.title}
+          visible={showProcedure}
+          onClose={() => setShowProcedure(false)}
+        />
+      ) : null}
       <PhotoEvidencePreflightSheet
         visible={showPhotoEvidencePreflight}
         onConfirm={() => {
@@ -2057,6 +2098,23 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[0.5],
     borderRadius: radius.md,
     backgroundColor: "#eef6ff",
+  },
+  procedureButton: {
+    alignSelf: "flex-start",
+    minHeight: touch.comfortable,
+    justifyContent: "center",
+    paddingHorizontal: spacing[1.5],
+    paddingVertical: spacing[0.5],
+    borderRadius: radius.md,
+    borderCurve: "continuous",
+    backgroundColor: "#eef6ff",
+    maxWidth: "100%",
+  },
+  procedureButtonText: {
+    fontSize: mobileTypography.buttonSm.fontSize as number,
+    fontWeight: "600" as const,
+    color: lightPalette.info.main,
+    flexShrink: 1,
   },
   heroLinkButtonPressed: {
     opacity: 0.85,

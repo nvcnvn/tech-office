@@ -568,6 +568,8 @@ export async function createRitualDefinition(
     defaultAssigneeIds?: string[];
     description?: string;
     completionWindowHours?: number;
+    /** Feature 043: a workspace document to attach as the ritual's written procedure. */
+    procedureDocumentId?: string;
   },
 ) {
   return apiCall<{
@@ -575,6 +577,7 @@ export async function createRitualDefinition(
       id: string;
       name: string;
       evidenceRequirements: Array<{ id: string; name: string }>;
+      procedure?: { documentId: string; title: string; isAvailable: boolean };
     };
   }>(user, '/rpc.v1.CollaborationService/CreateRitualDefinition', {
     projectId: opts.projectId,
@@ -590,6 +593,33 @@ export async function createRitualDefinition(
     timezone: 'UTC',
     defaultAssigneeIds: opts.defaultAssigneeIds ?? [],
     defaultDepartmentPools: [],
+    procedureDocumentId: opts.procedureDocumentId,
+  });
+}
+
+/**
+ * Feature 043. `procedureDocumentId` is three-valued and the three values differ: omitted
+ * leaves the attachment alone, `''` detaches, an id attaches or replaces.
+ */
+export async function updateRitualDefinitionProcedure(
+  user: TestUser,
+  ritualDefinitionId: string,
+  procedureDocumentId: string,
+) {
+  return apiCall<{
+    ritualDefinition: {
+      id: string;
+      procedure?: { documentId: string; title: string; isAvailable: boolean };
+    };
+  }>(user, '/rpc.v1.CollaborationService/UpdateRitualDefinition', {
+    ritualDefinitionId,
+    procedureDocumentId,
+  });
+}
+
+export async function deleteDocument(user: TestUser, documentId: string) {
+  return apiCall<{ success: boolean }>(user, '/rpc.v1.DocumentService/DeleteDocument', {
+    id: documentId,
   });
 }
 

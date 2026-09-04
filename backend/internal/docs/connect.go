@@ -86,7 +86,7 @@ func (s *DocumentServiceConnect) CreateDocument(
 	var document *rpcv1.Document
 	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
 		var txErr error
-		document, txErr = s.Logic.CreateDocument(ctx, tx, organizationID, employeeID, req.Msg)
+		document, txErr = s.Logic.CreateDocument(ctx, tx, organizationID, employeeID, req.Msg, DocumentTypeWorkspaceDoc)
 		return txErr
 	})
 	if err != nil {

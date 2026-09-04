@@ -1,0 +1,83 @@
+appId: com.devguards.TechOffice
+name: "Ritual Procedure Document"
+tags:
+  - rituals
+  - docs
+env:
+  # A ritual instance whose definition HAS a procedure attached.
+  RITUAL_TASK_LABEL: ${MAESTRO_RITUAL_TASK_LABEL}
+  # The procedure document's exact current title. The entry point is labelled with it, so
+  # this is also what proves the label tracks a rename rather than a stored copy.
+  PROCEDURE_TITLE: ${MAESTRO_PROCEDURE_TITLE}
+  # A text-note requirement on that ritual, whose composer holds an in-progress draft.
+  RITUAL_TEXT_REQUIREMENT_LABEL: ${MAESTRO_RITUAL_TEXT_REQUIREMENT_LABEL}
+  # A ritual instance whose definition has NO procedure attached.
+  RITUAL_TASK_WITHOUT_PROCEDURE_LABEL: ${MAESTRO_RITUAL_TASK_WITHOUT_PROCEDURE_LABEL}
+---
+- runFlow: "auth/signin.yaml"
+- tapOn:
+    id: "tab-tasks"
+- extendedWaitUntil:
+    visible: "Focus"
+    timeout: 8000
+
+# 1. The entry point is present on the instance and labelled with the document's title.
+- tapOn: ${RITUAL_TASK_LABEL}
+- extendedWaitUntil:
+    visible: "Proof checklist"
+    timeout: 8000
+- assertVisible:
+    id: "ritual-procedure-entry"
+- assertVisible: ${PROCEDURE_TITLE}
+
+# 2. Tapping it renders the procedure read-only, and closing returns the instance unchanged.
+- tapOn:
+    id: "ritual-procedure-entry"
+- extendedWaitUntil:
+    visible:
+        id: "ritual-procedure-sheet"
+    timeout: 8000
+- assertVisible:
+    id: "ritual-procedure-sheet-content"
+- tapOn:
+    id: "ritual-procedure-sheet-close"
+- extendedWaitUntil:
+    visible: "Proof checklist"
+    timeout: 8000
+- assertVisible: "Proof checklist"
+
+# 3. A note typed into the capture composer before opening the procedure is still there
+#    after closing it. The sheet draws over the capture flow, so nothing underneath is ever
+#    unmounted (FR-013). Photo evidence on mobile uploads and submits in one step, so the
+#    typed draft is the in-progress capture state there actually is to lose.
+- tapOn: ${RITUAL_TEXT_REQUIREMENT_LABEL}
+- extendedWaitUntil:
+    visible:
+        id: "evidence-text-composer-input"
+    timeout: 8000
+- tapOn:
+    id: "evidence-text-composer-input"
+- inputText: "Gate checked at 07:04"
+- tapOn:
+    id: "ritual-procedure-entry"
+- extendedWaitUntil:
+    visible:
+        id: "ritual-procedure-sheet"
+    timeout: 8000
+- tapOn:
+    id: "ritual-procedure-sheet-close"
+- assertVisible: "Gate checked at 07:04"
+
+# 4. An instance with no procedure shows no entry point at all — not a disabled control,
+#    not a placeholder (FR-017).
+- tapOn:
+    id: "tab-tasks"
+- extendedWaitUntil:
+    visible: "Focus"
+    timeout: 8000
+- tapOn: ${RITUAL_TASK_WITHOUT_PROCEDURE_LABEL}
+- extendedWaitUntil:
+    visible: "Proof checklist"
+    timeout: 8000
+- assertNotVisible:
+    id: "ritual-procedure-entry"

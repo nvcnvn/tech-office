@@ -74,6 +74,61 @@ func (DocumentStatus) EnumDescriptor() ([]byte, []int) {
 	return file_rpc_v1_document_proto_rawDescGZIP(), []int{0}
 }
 
+// Mirrors the CHECK constraint on docs.document.document_type. Already load bearing —
+// ListRootDocuments and ListChildDocuments filter on it so that task-description and
+// project-brief documents never appear in the workspace tree — but not previously on the wire.
+type DocumentType int32
+
+const (
+	DocumentType_DOCUMENT_TYPE_UNSPECIFIED      DocumentType = 0
+	DocumentType_DOCUMENT_TYPE_WORKSPACE_DOC    DocumentType = 1
+	DocumentType_DOCUMENT_TYPE_TASK_DESCRIPTION DocumentType = 2
+	DocumentType_DOCUMENT_TYPE_PROJECT_BRIEF    DocumentType = 3
+)
+
+// Enum value maps for DocumentType.
+var (
+	DocumentType_name = map[int32]string{
+		0: "DOCUMENT_TYPE_UNSPECIFIED",
+		1: "DOCUMENT_TYPE_WORKSPACE_DOC",
+		2: "DOCUMENT_TYPE_TASK_DESCRIPTION",
+		3: "DOCUMENT_TYPE_PROJECT_BRIEF",
+	}
+	DocumentType_value = map[string]int32{
+		"DOCUMENT_TYPE_UNSPECIFIED":      0,
+		"DOCUMENT_TYPE_WORKSPACE_DOC":    1,
+		"DOCUMENT_TYPE_TASK_DESCRIPTION": 2,
+		"DOCUMENT_TYPE_PROJECT_BRIEF":    3,
+	}
+)
+
+func (x DocumentType) Enum() *DocumentType {
+	p := new(DocumentType)
+	*p = x
+	return p
+}
+
+func (x DocumentType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (DocumentType) Descriptor() protoreflect.EnumDescriptor {
+	return file_rpc_v1_document_proto_enumTypes[1].Descriptor()
+}
+
+func (DocumentType) Type() protoreflect.EnumType {
+	return &file_rpc_v1_document_proto_enumTypes[1]
+}
+
+func (x DocumentType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use DocumentType.Descriptor instead.
+func (DocumentType) EnumDescriptor() ([]byte, []int) {
+	return file_rpc_v1_document_proto_rawDescGZIP(), []int{1}
+}
+
 type DocumentVisibility int32
 
 const (
@@ -107,11 +162,11 @@ func (x DocumentVisibility) String() string {
 }
 
 func (DocumentVisibility) Descriptor() protoreflect.EnumDescriptor {
-	return file_rpc_v1_document_proto_enumTypes[1].Descriptor()
+	return file_rpc_v1_document_proto_enumTypes[2].Descriptor()
 }
 
 func (DocumentVisibility) Type() protoreflect.EnumType {
-	return &file_rpc_v1_document_proto_enumTypes[1]
+	return &file_rpc_v1_document_proto_enumTypes[2]
 }
 
 func (x DocumentVisibility) Number() protoreflect.EnumNumber {
@@ -120,7 +175,7 @@ func (x DocumentVisibility) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DocumentVisibility.Descriptor instead.
 func (DocumentVisibility) EnumDescriptor() ([]byte, []int) {
-	return file_rpc_v1_document_proto_rawDescGZIP(), []int{1}
+	return file_rpc_v1_document_proto_rawDescGZIP(), []int{2}
 }
 
 type AccessLevel int32
@@ -159,11 +214,11 @@ func (x AccessLevel) String() string {
 }
 
 func (AccessLevel) Descriptor() protoreflect.EnumDescriptor {
-	return file_rpc_v1_document_proto_enumTypes[2].Descriptor()
+	return file_rpc_v1_document_proto_enumTypes[3].Descriptor()
 }
 
 func (AccessLevel) Type() protoreflect.EnumType {
-	return &file_rpc_v1_document_proto_enumTypes[2]
+	return &file_rpc_v1_document_proto_enumTypes[3]
 }
 
 func (x AccessLevel) Number() protoreflect.EnumNumber {
@@ -172,7 +227,7 @@ func (x AccessLevel) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use AccessLevel.Descriptor instead.
 func (AccessLevel) EnumDescriptor() ([]byte, []int) {
-	return file_rpc_v1_document_proto_rawDescGZIP(), []int{2}
+	return file_rpc_v1_document_proto_rawDescGZIP(), []int{3}
 }
 
 type GranteeType int32
@@ -208,11 +263,11 @@ func (x GranteeType) String() string {
 }
 
 func (GranteeType) Descriptor() protoreflect.EnumDescriptor {
-	return file_rpc_v1_document_proto_enumTypes[3].Descriptor()
+	return file_rpc_v1_document_proto_enumTypes[4].Descriptor()
 }
 
 func (GranteeType) Type() protoreflect.EnumType {
-	return &file_rpc_v1_document_proto_enumTypes[3]
+	return &file_rpc_v1_document_proto_enumTypes[4]
 }
 
 func (x GranteeType) Number() protoreflect.EnumNumber {
@@ -221,7 +276,7 @@ func (x GranteeType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GranteeType.Descriptor instead.
 func (GranteeType) EnumDescriptor() ([]byte, []int) {
-	return file_rpc_v1_document_proto_rawDescGZIP(), []int{3}
+	return file_rpc_v1_document_proto_rawDescGZIP(), []int{4}
 }
 
 type ReactionType int32
@@ -257,11 +312,11 @@ func (x ReactionType) String() string {
 }
 
 func (ReactionType) Descriptor() protoreflect.EnumDescriptor {
-	return file_rpc_v1_document_proto_enumTypes[4].Descriptor()
+	return file_rpc_v1_document_proto_enumTypes[5].Descriptor()
 }
 
 func (ReactionType) Type() protoreflect.EnumType {
-	return &file_rpc_v1_document_proto_enumTypes[4]
+	return &file_rpc_v1_document_proto_enumTypes[5]
 }
 
 func (x ReactionType) Number() protoreflect.EnumNumber {
@@ -270,7 +325,7 @@ func (x ReactionType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ReactionType.Descriptor instead.
 func (ReactionType) EnumDescriptor() ([]byte, []int) {
-	return file_rpc_v1_document_proto_rawDescGZIP(), []int{4}
+	return file_rpc_v1_document_proto_rawDescGZIP(), []int{5}
 }
 
 type Document struct {
@@ -290,8 +345,12 @@ type Document struct {
 	FollowerCount    int32                  `protobuf:"varint,13,opt,name=follower_count,json=followerCount,proto3" json:"follower_count,omitempty"`
 	UpdatedAt        *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	Path             []string               `protobuf:"bytes,15,rep,name=path,proto3" json:"path,omitempty"` // Ancestor IDs from root to parent
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Whether this document is reached through the workspace tree or through an owning
+	// resource (a task's description, a project's brief). Feature 043 needs it to refuse
+	// attaching a non-workspace document as a ritual procedure.
+	DocumentType  DocumentType `protobuf:"varint,16,opt,name=document_type,json=documentType,proto3,enum=rpc.v1.DocumentType" json:"document_type,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Document) Reset() {
@@ -427,6 +486,13 @@ func (x *Document) GetPath() []string {
 		return x.Path
 	}
 	return nil
+}
+
+func (x *Document) GetDocumentType() DocumentType {
+	if x != nil {
+		return x.DocumentType
+	}
+	return DocumentType_DOCUMENT_TYPE_UNSPECIFIED
 }
 
 type DocumentSummary struct {
@@ -5684,7 +5750,7 @@ var File_rpc_v1_document_proto protoreflect.FileDescriptor
 
 const file_rpc_v1_document_proto_rawDesc = "" +
 	"\n" +
-	"\x15rpc/v1/document.proto\x12\x06rpc.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11rpc/v1/rbac.proto\"\x9e\x04\n" +
+	"\x15rpc/v1/document.proto\x12\x06rpc.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x11rpc/v1/rbac.proto\"\xd9\x04\n" +
 	"\bDocument\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
@@ -5706,7 +5772,8 @@ const file_rpc_v1_document_proto_rawDesc = "" +
 	"\x0efollower_count\x18\r \x01(\x05R\rfollowerCount\x129\n" +
 	"\n" +
 	"updated_at\x18\x0e \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12\x12\n" +
-	"\x04path\x18\x0f \x03(\tR\x04path\"\xf6\x02\n" +
+	"\x04path\x18\x0f \x03(\tR\x04path\x129\n" +
+	"\rdocument_type\x18\x10 \x01(\x0e2\x14.rpc.v1.DocumentTypeR\fdocumentType\"\xf6\x02\n" +
 	"\x0fDocumentSummary\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x12\n" +
@@ -6134,7 +6201,12 @@ const file_rpc_v1_document_proto_rawDesc = "" +
 	"\x1bDOCUMENT_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16DOCUMENT_STATUS_ACTIVE\x10\x01\x12\x1c\n" +
 	"\x18DOCUMENT_STATUS_OUTDATED\x10\x02\x12\x1c\n" +
-	"\x18DOCUMENT_STATUS_ARCHIVED\x10\x03*z\n" +
+	"\x18DOCUMENT_STATUS_ARCHIVED\x10\x03*\x93\x01\n" +
+	"\fDocumentType\x12\x1d\n" +
+	"\x19DOCUMENT_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bDOCUMENT_TYPE_WORKSPACE_DOC\x10\x01\x12\"\n" +
+	"\x1eDOCUMENT_TYPE_TASK_DESCRIPTION\x10\x02\x12\x1f\n" +
+	"\x1bDOCUMENT_TYPE_PROJECT_BRIEF\x10\x03*z\n" +
 	"\x12DocumentVisibility\x12#\n" +
 	"\x1fDOCUMENT_VISIBILITY_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aDOCUMENT_VISIBILITY_PUBLIC\x10\x01\x12\x1f\n" +
@@ -6261,252 +6333,254 @@ func file_rpc_v1_document_proto_rawDescGZIP() []byte {
 	return file_rpc_v1_document_proto_rawDescData
 }
 
-var file_rpc_v1_document_proto_enumTypes = make([]protoimpl.EnumInfo, 5)
+var file_rpc_v1_document_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
 var file_rpc_v1_document_proto_msgTypes = make([]protoimpl.MessageInfo, 91)
 var file_rpc_v1_document_proto_goTypes = []any{
 	(DocumentStatus)(0),                      // 0: rpc.v1.DocumentStatus
-	(DocumentVisibility)(0),                  // 1: rpc.v1.DocumentVisibility
-	(AccessLevel)(0),                         // 2: rpc.v1.AccessLevel
-	(GranteeType)(0),                         // 3: rpc.v1.GranteeType
-	(ReactionType)(0),                        // 4: rpc.v1.ReactionType
-	(*Document)(nil),                         // 5: rpc.v1.Document
-	(*DocumentSummary)(nil),                  // 6: rpc.v1.DocumentSummary
-	(*DocumentVersion)(nil),                  // 7: rpc.v1.DocumentVersion
-	(*DocumentAccess)(nil),                   // 8: rpc.v1.DocumentAccess
-	(*Comment)(nil),                          // 9: rpc.v1.Comment
-	(*CommentReply)(nil),                     // 10: rpc.v1.CommentReply
-	(*SectionEmbed)(nil),                     // 11: rpc.v1.SectionEmbed
-	(*ActiveEditor)(nil),                     // 12: rpc.v1.ActiveEditor
-	(*BlameBlock)(nil),                       // 13: rpc.v1.BlameBlock
-	(*DiffChange)(nil),                       // 14: rpc.v1.DiffChange
-	(*CreateDocumentRequest)(nil),            // 15: rpc.v1.CreateDocumentRequest
-	(*CreateDocumentResponse)(nil),           // 16: rpc.v1.CreateDocumentResponse
-	(*GetDocumentRequest)(nil),               // 17: rpc.v1.GetDocumentRequest
-	(*GetDocumentResponse)(nil),              // 18: rpc.v1.GetDocumentResponse
-	(*UpdateDocumentRequest)(nil),            // 19: rpc.v1.UpdateDocumentRequest
-	(*UpdateDocumentResponse)(nil),           // 20: rpc.v1.UpdateDocumentResponse
-	(*DeleteDocumentRequest)(nil),            // 21: rpc.v1.DeleteDocumentRequest
-	(*DeleteDocumentResponse)(nil),           // 22: rpc.v1.DeleteDocumentResponse
-	(*ListDocumentsRequest)(nil),             // 23: rpc.v1.ListDocumentsRequest
-	(*ListDocumentsResponse)(nil),            // 24: rpc.v1.ListDocumentsResponse
-	(*GetDocumentTreeRequest)(nil),           // 25: rpc.v1.GetDocumentTreeRequest
-	(*GetDocumentTreeResponse)(nil),          // 26: rpc.v1.GetDocumentTreeResponse
-	(*DocumentTreeNode)(nil),                 // 27: rpc.v1.DocumentTreeNode
-	(*SearchDocumentsRequest)(nil),           // 28: rpc.v1.SearchDocumentsRequest
-	(*SearchDocumentsResponse)(nil),          // 29: rpc.v1.SearchDocumentsResponse
-	(*SearchResult)(nil),                     // 30: rpc.v1.SearchResult
-	(*UpdateDocumentStatusRequest)(nil),      // 31: rpc.v1.UpdateDocumentStatusRequest
-	(*UpdateDocumentStatusResponse)(nil),     // 32: rpc.v1.UpdateDocumentStatusResponse
-	(*ResolveSlugRequest)(nil),               // 33: rpc.v1.ResolveSlugRequest
-	(*ResolveSlugResponse)(nil),              // 34: rpc.v1.ResolveSlugResponse
-	(*ListVersionsRequest)(nil),              // 35: rpc.v1.ListVersionsRequest
-	(*ListVersionsResponse)(nil),             // 36: rpc.v1.ListVersionsResponse
-	(*GetVersionRequest)(nil),                // 37: rpc.v1.GetVersionRequest
-	(*GetVersionResponse)(nil),               // 38: rpc.v1.GetVersionResponse
-	(*GetVersionDiffRequest)(nil),            // 39: rpc.v1.GetVersionDiffRequest
-	(*GetVersionDiffResponse)(nil),           // 40: rpc.v1.GetVersionDiffResponse
-	(*GetBlameRequest)(nil),                  // 41: rpc.v1.GetBlameRequest
-	(*GetBlameResponse)(nil),                 // 42: rpc.v1.GetBlameResponse
-	(*SetAccessRequest)(nil),                 // 43: rpc.v1.SetAccessRequest
-	(*SetAccessResponse)(nil),                // 44: rpc.v1.SetAccessResponse
-	(*RemoveAccessRequest)(nil),              // 45: rpc.v1.RemoveAccessRequest
-	(*RemoveAccessResponse)(nil),             // 46: rpc.v1.RemoveAccessResponse
-	(*ListAccessRequest)(nil),                // 47: rpc.v1.ListAccessRequest
-	(*ListAccessResponse)(nil),               // 48: rpc.v1.ListAccessResponse
-	(*CheckAccessRequest)(nil),               // 49: rpc.v1.CheckAccessRequest
-	(*CheckAccessResponse)(nil),              // 50: rpc.v1.CheckAccessResponse
-	(*FollowDocumentRequest)(nil),            // 51: rpc.v1.FollowDocumentRequest
-	(*FollowDocumentResponse)(nil),           // 52: rpc.v1.FollowDocumentResponse
-	(*UnfollowDocumentRequest)(nil),          // 53: rpc.v1.UnfollowDocumentRequest
-	(*UnfollowDocumentResponse)(nil),         // 54: rpc.v1.UnfollowDocumentResponse
-	(*ListFollowedDocumentsRequest)(nil),     // 55: rpc.v1.ListFollowedDocumentsRequest
-	(*ListFollowedDocumentsResponse)(nil),    // 56: rpc.v1.ListFollowedDocumentsResponse
-	(*AddCommentRequest)(nil),                // 57: rpc.v1.AddCommentRequest
-	(*AddCommentResponse)(nil),               // 58: rpc.v1.AddCommentResponse
-	(*AddCommentReplyRequest)(nil),           // 59: rpc.v1.AddCommentReplyRequest
-	(*AddCommentReplyResponse)(nil),          // 60: rpc.v1.AddCommentReplyResponse
-	(*ResolveCommentRequest)(nil),            // 61: rpc.v1.ResolveCommentRequest
-	(*ResolveCommentResponse)(nil),           // 62: rpc.v1.ResolveCommentResponse
-	(*ListCommentsRequest)(nil),              // 63: rpc.v1.ListCommentsRequest
-	(*ListCommentsResponse)(nil),             // 64: rpc.v1.ListCommentsResponse
-	(*DeleteCommentRequest)(nil),             // 65: rpc.v1.DeleteCommentRequest
-	(*DeleteCommentResponse)(nil),            // 66: rpc.v1.DeleteCommentResponse
-	(*CreateEmbedRequest)(nil),               // 67: rpc.v1.CreateEmbedRequest
-	(*CreateEmbedResponse)(nil),              // 68: rpc.v1.CreateEmbedResponse
-	(*GetEmbeddedSectionRequest)(nil),        // 69: rpc.v1.GetEmbeddedSectionRequest
-	(*GetEmbeddedSectionResponse)(nil),       // 70: rpc.v1.GetEmbeddedSectionResponse
-	(*ListEmbedsRequest)(nil),                // 71: rpc.v1.ListEmbedsRequest
-	(*ListEmbedsResponse)(nil),               // 72: rpc.v1.ListEmbedsResponse
-	(*DeleteEmbedRequest)(nil),               // 73: rpc.v1.DeleteEmbedRequest
-	(*DeleteEmbedResponse)(nil),              // 74: rpc.v1.DeleteEmbedResponse
-	(*IncomingCitation)(nil),                 // 75: rpc.v1.IncomingCitation
-	(*CitedLineRange)(nil),                   // 76: rpc.v1.CitedLineRange
-	(*ListIncomingCitationsRequest)(nil),     // 77: rpc.v1.ListIncomingCitationsRequest
-	(*ListIncomingCitationsResponse)(nil),    // 78: rpc.v1.ListIncomingCitationsResponse
-	(*JoinDocumentRequest)(nil),              // 79: rpc.v1.JoinDocumentRequest
-	(*JoinDocumentResponse)(nil),             // 80: rpc.v1.JoinDocumentResponse
-	(*LeaveDocumentRequest)(nil),             // 81: rpc.v1.LeaveDocumentRequest
-	(*LeaveDocumentResponse)(nil),            // 82: rpc.v1.LeaveDocumentResponse
-	(*UpdateCursorRequest)(nil),              // 83: rpc.v1.UpdateCursorRequest
-	(*UpdateCursorResponse)(nil),             // 84: rpc.v1.UpdateCursorResponse
-	(*ListActiveEditorsRequest)(nil),         // 85: rpc.v1.ListActiveEditorsRequest
-	(*ListActiveEditorsResponse)(nil),        // 86: rpc.v1.ListActiveEditorsResponse
-	(*HeartbeatRequest)(nil),                 // 87: rpc.v1.HeartbeatRequest
-	(*HeartbeatResponse)(nil),                // 88: rpc.v1.HeartbeatResponse
-	(*AddDocumentReactionRequest)(nil),       // 89: rpc.v1.AddDocumentReactionRequest
-	(*AddDocumentReactionResponse)(nil),      // 90: rpc.v1.AddDocumentReactionResponse
-	(*RemoveDocumentReactionRequest)(nil),    // 91: rpc.v1.RemoveDocumentReactionRequest
-	(*RemoveDocumentReactionResponse)(nil),   // 92: rpc.v1.RemoveDocumentReactionResponse
-	(*GetDocumentReactionStatsRequest)(nil),  // 93: rpc.v1.GetDocumentReactionStatsRequest
-	(*GetDocumentReactionStatsResponse)(nil), // 94: rpc.v1.GetDocumentReactionStatsResponse
-	(*DocumentReaction)(nil),                 // 95: rpc.v1.DocumentReaction
-	(*timestamppb.Timestamp)(nil),            // 96: google.protobuf.Timestamp
+	(DocumentType)(0),                        // 1: rpc.v1.DocumentType
+	(DocumentVisibility)(0),                  // 2: rpc.v1.DocumentVisibility
+	(AccessLevel)(0),                         // 3: rpc.v1.AccessLevel
+	(GranteeType)(0),                         // 4: rpc.v1.GranteeType
+	(ReactionType)(0),                        // 5: rpc.v1.ReactionType
+	(*Document)(nil),                         // 6: rpc.v1.Document
+	(*DocumentSummary)(nil),                  // 7: rpc.v1.DocumentSummary
+	(*DocumentVersion)(nil),                  // 8: rpc.v1.DocumentVersion
+	(*DocumentAccess)(nil),                   // 9: rpc.v1.DocumentAccess
+	(*Comment)(nil),                          // 10: rpc.v1.Comment
+	(*CommentReply)(nil),                     // 11: rpc.v1.CommentReply
+	(*SectionEmbed)(nil),                     // 12: rpc.v1.SectionEmbed
+	(*ActiveEditor)(nil),                     // 13: rpc.v1.ActiveEditor
+	(*BlameBlock)(nil),                       // 14: rpc.v1.BlameBlock
+	(*DiffChange)(nil),                       // 15: rpc.v1.DiffChange
+	(*CreateDocumentRequest)(nil),            // 16: rpc.v1.CreateDocumentRequest
+	(*CreateDocumentResponse)(nil),           // 17: rpc.v1.CreateDocumentResponse
+	(*GetDocumentRequest)(nil),               // 18: rpc.v1.GetDocumentRequest
+	(*GetDocumentResponse)(nil),              // 19: rpc.v1.GetDocumentResponse
+	(*UpdateDocumentRequest)(nil),            // 20: rpc.v1.UpdateDocumentRequest
+	(*UpdateDocumentResponse)(nil),           // 21: rpc.v1.UpdateDocumentResponse
+	(*DeleteDocumentRequest)(nil),            // 22: rpc.v1.DeleteDocumentRequest
+	(*DeleteDocumentResponse)(nil),           // 23: rpc.v1.DeleteDocumentResponse
+	(*ListDocumentsRequest)(nil),             // 24: rpc.v1.ListDocumentsRequest
+	(*ListDocumentsResponse)(nil),            // 25: rpc.v1.ListDocumentsResponse
+	(*GetDocumentTreeRequest)(nil),           // 26: rpc.v1.GetDocumentTreeRequest
+	(*GetDocumentTreeResponse)(nil),          // 27: rpc.v1.GetDocumentTreeResponse
+	(*DocumentTreeNode)(nil),                 // 28: rpc.v1.DocumentTreeNode
+	(*SearchDocumentsRequest)(nil),           // 29: rpc.v1.SearchDocumentsRequest
+	(*SearchDocumentsResponse)(nil),          // 30: rpc.v1.SearchDocumentsResponse
+	(*SearchResult)(nil),                     // 31: rpc.v1.SearchResult
+	(*UpdateDocumentStatusRequest)(nil),      // 32: rpc.v1.UpdateDocumentStatusRequest
+	(*UpdateDocumentStatusResponse)(nil),     // 33: rpc.v1.UpdateDocumentStatusResponse
+	(*ResolveSlugRequest)(nil),               // 34: rpc.v1.ResolveSlugRequest
+	(*ResolveSlugResponse)(nil),              // 35: rpc.v1.ResolveSlugResponse
+	(*ListVersionsRequest)(nil),              // 36: rpc.v1.ListVersionsRequest
+	(*ListVersionsResponse)(nil),             // 37: rpc.v1.ListVersionsResponse
+	(*GetVersionRequest)(nil),                // 38: rpc.v1.GetVersionRequest
+	(*GetVersionResponse)(nil),               // 39: rpc.v1.GetVersionResponse
+	(*GetVersionDiffRequest)(nil),            // 40: rpc.v1.GetVersionDiffRequest
+	(*GetVersionDiffResponse)(nil),           // 41: rpc.v1.GetVersionDiffResponse
+	(*GetBlameRequest)(nil),                  // 42: rpc.v1.GetBlameRequest
+	(*GetBlameResponse)(nil),                 // 43: rpc.v1.GetBlameResponse
+	(*SetAccessRequest)(nil),                 // 44: rpc.v1.SetAccessRequest
+	(*SetAccessResponse)(nil),                // 45: rpc.v1.SetAccessResponse
+	(*RemoveAccessRequest)(nil),              // 46: rpc.v1.RemoveAccessRequest
+	(*RemoveAccessResponse)(nil),             // 47: rpc.v1.RemoveAccessResponse
+	(*ListAccessRequest)(nil),                // 48: rpc.v1.ListAccessRequest
+	(*ListAccessResponse)(nil),               // 49: rpc.v1.ListAccessResponse
+	(*CheckAccessRequest)(nil),               // 50: rpc.v1.CheckAccessRequest
+	(*CheckAccessResponse)(nil),              // 51: rpc.v1.CheckAccessResponse
+	(*FollowDocumentRequest)(nil),            // 52: rpc.v1.FollowDocumentRequest
+	(*FollowDocumentResponse)(nil),           // 53: rpc.v1.FollowDocumentResponse
+	(*UnfollowDocumentRequest)(nil),          // 54: rpc.v1.UnfollowDocumentRequest
+	(*UnfollowDocumentResponse)(nil),         // 55: rpc.v1.UnfollowDocumentResponse
+	(*ListFollowedDocumentsRequest)(nil),     // 56: rpc.v1.ListFollowedDocumentsRequest
+	(*ListFollowedDocumentsResponse)(nil),    // 57: rpc.v1.ListFollowedDocumentsResponse
+	(*AddCommentRequest)(nil),                // 58: rpc.v1.AddCommentRequest
+	(*AddCommentResponse)(nil),               // 59: rpc.v1.AddCommentResponse
+	(*AddCommentReplyRequest)(nil),           // 60: rpc.v1.AddCommentReplyRequest
+	(*AddCommentReplyResponse)(nil),          // 61: rpc.v1.AddCommentReplyResponse
+	(*ResolveCommentRequest)(nil),            // 62: rpc.v1.ResolveCommentRequest
+	(*ResolveCommentResponse)(nil),           // 63: rpc.v1.ResolveCommentResponse
+	(*ListCommentsRequest)(nil),              // 64: rpc.v1.ListCommentsRequest
+	(*ListCommentsResponse)(nil),             // 65: rpc.v1.ListCommentsResponse
+	(*DeleteCommentRequest)(nil),             // 66: rpc.v1.DeleteCommentRequest
+	(*DeleteCommentResponse)(nil),            // 67: rpc.v1.DeleteCommentResponse
+	(*CreateEmbedRequest)(nil),               // 68: rpc.v1.CreateEmbedRequest
+	(*CreateEmbedResponse)(nil),              // 69: rpc.v1.CreateEmbedResponse
+	(*GetEmbeddedSectionRequest)(nil),        // 70: rpc.v1.GetEmbeddedSectionRequest
+	(*GetEmbeddedSectionResponse)(nil),       // 71: rpc.v1.GetEmbeddedSectionResponse
+	(*ListEmbedsRequest)(nil),                // 72: rpc.v1.ListEmbedsRequest
+	(*ListEmbedsResponse)(nil),               // 73: rpc.v1.ListEmbedsResponse
+	(*DeleteEmbedRequest)(nil),               // 74: rpc.v1.DeleteEmbedRequest
+	(*DeleteEmbedResponse)(nil),              // 75: rpc.v1.DeleteEmbedResponse
+	(*IncomingCitation)(nil),                 // 76: rpc.v1.IncomingCitation
+	(*CitedLineRange)(nil),                   // 77: rpc.v1.CitedLineRange
+	(*ListIncomingCitationsRequest)(nil),     // 78: rpc.v1.ListIncomingCitationsRequest
+	(*ListIncomingCitationsResponse)(nil),    // 79: rpc.v1.ListIncomingCitationsResponse
+	(*JoinDocumentRequest)(nil),              // 80: rpc.v1.JoinDocumentRequest
+	(*JoinDocumentResponse)(nil),             // 81: rpc.v1.JoinDocumentResponse
+	(*LeaveDocumentRequest)(nil),             // 82: rpc.v1.LeaveDocumentRequest
+	(*LeaveDocumentResponse)(nil),            // 83: rpc.v1.LeaveDocumentResponse
+	(*UpdateCursorRequest)(nil),              // 84: rpc.v1.UpdateCursorRequest
+	(*UpdateCursorResponse)(nil),             // 85: rpc.v1.UpdateCursorResponse
+	(*ListActiveEditorsRequest)(nil),         // 86: rpc.v1.ListActiveEditorsRequest
+	(*ListActiveEditorsResponse)(nil),        // 87: rpc.v1.ListActiveEditorsResponse
+	(*HeartbeatRequest)(nil),                 // 88: rpc.v1.HeartbeatRequest
+	(*HeartbeatResponse)(nil),                // 89: rpc.v1.HeartbeatResponse
+	(*AddDocumentReactionRequest)(nil),       // 90: rpc.v1.AddDocumentReactionRequest
+	(*AddDocumentReactionResponse)(nil),      // 91: rpc.v1.AddDocumentReactionResponse
+	(*RemoveDocumentReactionRequest)(nil),    // 92: rpc.v1.RemoveDocumentReactionRequest
+	(*RemoveDocumentReactionResponse)(nil),   // 93: rpc.v1.RemoveDocumentReactionResponse
+	(*GetDocumentReactionStatsRequest)(nil),  // 94: rpc.v1.GetDocumentReactionStatsRequest
+	(*GetDocumentReactionStatsResponse)(nil), // 95: rpc.v1.GetDocumentReactionStatsResponse
+	(*DocumentReaction)(nil),                 // 96: rpc.v1.DocumentReaction
+	(*timestamppb.Timestamp)(nil),            // 97: google.protobuf.Timestamp
 }
 var file_rpc_v1_document_proto_depIdxs = []int32{
 	0,   // 0: rpc.v1.Document.status:type_name -> rpc.v1.DocumentStatus
-	1,   // 1: rpc.v1.Document.visibility:type_name -> rpc.v1.DocumentVisibility
-	96,  // 2: rpc.v1.Document.updated_at:type_name -> google.protobuf.Timestamp
-	0,   // 3: rpc.v1.DocumentSummary.status:type_name -> rpc.v1.DocumentStatus
-	1,   // 4: rpc.v1.DocumentSummary.visibility:type_name -> rpc.v1.DocumentVisibility
-	96,  // 5: rpc.v1.DocumentSummary.updated_at:type_name -> google.protobuf.Timestamp
-	96,  // 6: rpc.v1.DocumentVersion.created_at:type_name -> google.protobuf.Timestamp
-	3,   // 7: rpc.v1.DocumentAccess.grantee_type:type_name -> rpc.v1.GranteeType
-	2,   // 8: rpc.v1.DocumentAccess.access_level:type_name -> rpc.v1.AccessLevel
-	96,  // 9: rpc.v1.DocumentAccess.updated_at:type_name -> google.protobuf.Timestamp
-	96,  // 10: rpc.v1.Comment.resolved_at:type_name -> google.protobuf.Timestamp
-	96,  // 11: rpc.v1.Comment.updated_at:type_name -> google.protobuf.Timestamp
-	10,  // 12: rpc.v1.Comment.replies:type_name -> rpc.v1.CommentReply
-	96,  // 13: rpc.v1.CommentReply.updated_at:type_name -> google.protobuf.Timestamp
-	0,   // 14: rpc.v1.SectionEmbed.target_status:type_name -> rpc.v1.DocumentStatus
-	96,  // 15: rpc.v1.ActiveEditor.connected_at:type_name -> google.protobuf.Timestamp
-	96,  // 16: rpc.v1.BlameBlock.authored_at:type_name -> google.protobuf.Timestamp
-	1,   // 17: rpc.v1.CreateDocumentRequest.visibility:type_name -> rpc.v1.DocumentVisibility
-	5,   // 18: rpc.v1.CreateDocumentResponse.document:type_name -> rpc.v1.Document
-	5,   // 19: rpc.v1.GetDocumentResponse.document:type_name -> rpc.v1.Document
-	2,   // 20: rpc.v1.GetDocumentResponse.effective_access:type_name -> rpc.v1.AccessLevel
-	5,   // 21: rpc.v1.UpdateDocumentResponse.document:type_name -> rpc.v1.Document
-	0,   // 22: rpc.v1.ListDocumentsRequest.status_filter:type_name -> rpc.v1.DocumentStatus
-	6,   // 23: rpc.v1.ListDocumentsResponse.documents:type_name -> rpc.v1.DocumentSummary
-	27,  // 24: rpc.v1.GetDocumentTreeResponse.nodes:type_name -> rpc.v1.DocumentTreeNode
-	6,   // 25: rpc.v1.DocumentTreeNode.document:type_name -> rpc.v1.DocumentSummary
-	27,  // 26: rpc.v1.DocumentTreeNode.children:type_name -> rpc.v1.DocumentTreeNode
-	0,   // 27: rpc.v1.SearchDocumentsRequest.status_filter:type_name -> rpc.v1.DocumentStatus
-	30,  // 28: rpc.v1.SearchDocumentsResponse.results:type_name -> rpc.v1.SearchResult
-	6,   // 29: rpc.v1.SearchResult.document:type_name -> rpc.v1.DocumentSummary
-	0,   // 30: rpc.v1.UpdateDocumentStatusRequest.status:type_name -> rpc.v1.DocumentStatus
-	5,   // 31: rpc.v1.UpdateDocumentStatusResponse.document:type_name -> rpc.v1.Document
-	7,   // 32: rpc.v1.ListVersionsResponse.versions:type_name -> rpc.v1.DocumentVersion
-	7,   // 33: rpc.v1.GetVersionResponse.version:type_name -> rpc.v1.DocumentVersion
-	14,  // 34: rpc.v1.GetVersionDiffResponse.changes:type_name -> rpc.v1.DiffChange
-	7,   // 35: rpc.v1.GetVersionDiffResponse.from_version:type_name -> rpc.v1.DocumentVersion
-	7,   // 36: rpc.v1.GetVersionDiffResponse.to_version:type_name -> rpc.v1.DocumentVersion
-	13,  // 37: rpc.v1.GetBlameResponse.blocks:type_name -> rpc.v1.BlameBlock
-	3,   // 38: rpc.v1.SetAccessRequest.grantee_type:type_name -> rpc.v1.GranteeType
-	2,   // 39: rpc.v1.SetAccessRequest.access_level:type_name -> rpc.v1.AccessLevel
-	8,   // 40: rpc.v1.SetAccessResponse.access:type_name -> rpc.v1.DocumentAccess
-	3,   // 41: rpc.v1.RemoveAccessRequest.grantee_type:type_name -> rpc.v1.GranteeType
-	8,   // 42: rpc.v1.ListAccessResponse.access_list:type_name -> rpc.v1.DocumentAccess
-	1,   // 43: rpc.v1.ListAccessResponse.inherited_visibility:type_name -> rpc.v1.DocumentVisibility
-	2,   // 44: rpc.v1.CheckAccessResponse.access_level:type_name -> rpc.v1.AccessLevel
-	6,   // 45: rpc.v1.ListFollowedDocumentsResponse.documents:type_name -> rpc.v1.DocumentSummary
-	9,   // 46: rpc.v1.AddCommentResponse.comment:type_name -> rpc.v1.Comment
-	10,  // 47: rpc.v1.AddCommentReplyResponse.reply:type_name -> rpc.v1.CommentReply
-	9,   // 48: rpc.v1.ResolveCommentResponse.comment:type_name -> rpc.v1.Comment
-	9,   // 49: rpc.v1.ListCommentsResponse.comments:type_name -> rpc.v1.Comment
-	11,  // 50: rpc.v1.CreateEmbedResponse.embed:type_name -> rpc.v1.SectionEmbed
-	11,  // 51: rpc.v1.GetEmbeddedSectionResponse.embed:type_name -> rpc.v1.SectionEmbed
-	11,  // 52: rpc.v1.ListEmbedsResponse.embeds:type_name -> rpc.v1.SectionEmbed
-	96,  // 53: rpc.v1.IncomingCitation.source_updated_at:type_name -> google.protobuf.Timestamp
-	75,  // 54: rpc.v1.ListIncomingCitationsResponse.citations:type_name -> rpc.v1.IncomingCitation
-	76,  // 55: rpc.v1.ListIncomingCitationsResponse.cited_line_ranges:type_name -> rpc.v1.CitedLineRange
-	12,  // 56: rpc.v1.JoinDocumentResponse.current_editors:type_name -> rpc.v1.ActiveEditor
-	12,  // 57: rpc.v1.ListActiveEditorsResponse.editors:type_name -> rpc.v1.ActiveEditor
-	4,   // 58: rpc.v1.AddDocumentReactionRequest.reaction_type:type_name -> rpc.v1.ReactionType
-	95,  // 59: rpc.v1.AddDocumentReactionResponse.reaction:type_name -> rpc.v1.DocumentReaction
-	4,   // 60: rpc.v1.GetDocumentReactionStatsResponse.user_reaction:type_name -> rpc.v1.ReactionType
-	4,   // 61: rpc.v1.DocumentReaction.reaction_type:type_name -> rpc.v1.ReactionType
-	96,  // 62: rpc.v1.DocumentReaction.updated_at:type_name -> google.protobuf.Timestamp
-	15,  // 63: rpc.v1.DocumentService.CreateDocument:input_type -> rpc.v1.CreateDocumentRequest
-	17,  // 64: rpc.v1.DocumentService.GetDocument:input_type -> rpc.v1.GetDocumentRequest
-	19,  // 65: rpc.v1.DocumentService.UpdateDocument:input_type -> rpc.v1.UpdateDocumentRequest
-	21,  // 66: rpc.v1.DocumentService.DeleteDocument:input_type -> rpc.v1.DeleteDocumentRequest
-	23,  // 67: rpc.v1.DocumentService.ListDocuments:input_type -> rpc.v1.ListDocumentsRequest
-	25,  // 68: rpc.v1.DocumentService.GetDocumentTree:input_type -> rpc.v1.GetDocumentTreeRequest
-	28,  // 69: rpc.v1.DocumentService.SearchDocuments:input_type -> rpc.v1.SearchDocumentsRequest
-	31,  // 70: rpc.v1.DocumentService.UpdateDocumentStatus:input_type -> rpc.v1.UpdateDocumentStatusRequest
-	33,  // 71: rpc.v1.DocumentService.ResolveSlug:input_type -> rpc.v1.ResolveSlugRequest
-	35,  // 72: rpc.v1.DocumentVersionService.ListVersions:input_type -> rpc.v1.ListVersionsRequest
-	37,  // 73: rpc.v1.DocumentVersionService.GetVersion:input_type -> rpc.v1.GetVersionRequest
-	39,  // 74: rpc.v1.DocumentVersionService.GetVersionDiff:input_type -> rpc.v1.GetVersionDiffRequest
-	41,  // 75: rpc.v1.DocumentVersionService.GetBlame:input_type -> rpc.v1.GetBlameRequest
-	43,  // 76: rpc.v1.DocumentAccessService.SetAccess:input_type -> rpc.v1.SetAccessRequest
-	45,  // 77: rpc.v1.DocumentAccessService.RemoveAccess:input_type -> rpc.v1.RemoveAccessRequest
-	47,  // 78: rpc.v1.DocumentAccessService.ListAccess:input_type -> rpc.v1.ListAccessRequest
-	49,  // 79: rpc.v1.DocumentAccessService.CheckAccess:input_type -> rpc.v1.CheckAccessRequest
-	51,  // 80: rpc.v1.DocumentFollowerService.FollowDocument:input_type -> rpc.v1.FollowDocumentRequest
-	53,  // 81: rpc.v1.DocumentFollowerService.UnfollowDocument:input_type -> rpc.v1.UnfollowDocumentRequest
-	55,  // 82: rpc.v1.DocumentFollowerService.ListFollowedDocuments:input_type -> rpc.v1.ListFollowedDocumentsRequest
-	57,  // 83: rpc.v1.CommentService.AddComment:input_type -> rpc.v1.AddCommentRequest
-	59,  // 84: rpc.v1.CommentService.AddCommentReply:input_type -> rpc.v1.AddCommentReplyRequest
-	61,  // 85: rpc.v1.CommentService.ResolveComment:input_type -> rpc.v1.ResolveCommentRequest
-	63,  // 86: rpc.v1.CommentService.ListComments:input_type -> rpc.v1.ListCommentsRequest
-	65,  // 87: rpc.v1.CommentService.DeleteComment:input_type -> rpc.v1.DeleteCommentRequest
-	67,  // 88: rpc.v1.SectionEmbedService.CreateEmbed:input_type -> rpc.v1.CreateEmbedRequest
-	69,  // 89: rpc.v1.SectionEmbedService.GetEmbeddedSection:input_type -> rpc.v1.GetEmbeddedSectionRequest
-	71,  // 90: rpc.v1.SectionEmbedService.ListEmbeds:input_type -> rpc.v1.ListEmbedsRequest
-	77,  // 91: rpc.v1.SectionEmbedService.ListIncomingCitations:input_type -> rpc.v1.ListIncomingCitationsRequest
-	73,  // 92: rpc.v1.SectionEmbedService.DeleteEmbed:input_type -> rpc.v1.DeleteEmbedRequest
-	79,  // 93: rpc.v1.DocumentEditorService.JoinDocument:input_type -> rpc.v1.JoinDocumentRequest
-	81,  // 94: rpc.v1.DocumentEditorService.LeaveDocument:input_type -> rpc.v1.LeaveDocumentRequest
-	83,  // 95: rpc.v1.DocumentEditorService.UpdateCursor:input_type -> rpc.v1.UpdateCursorRequest
-	85,  // 96: rpc.v1.DocumentEditorService.ListActiveEditors:input_type -> rpc.v1.ListActiveEditorsRequest
-	87,  // 97: rpc.v1.DocumentEditorService.Heartbeat:input_type -> rpc.v1.HeartbeatRequest
-	89,  // 98: rpc.v1.DocumentReactionService.AddReaction:input_type -> rpc.v1.AddDocumentReactionRequest
-	91,  // 99: rpc.v1.DocumentReactionService.RemoveReaction:input_type -> rpc.v1.RemoveDocumentReactionRequest
-	93,  // 100: rpc.v1.DocumentReactionService.GetReactionStats:input_type -> rpc.v1.GetDocumentReactionStatsRequest
-	16,  // 101: rpc.v1.DocumentService.CreateDocument:output_type -> rpc.v1.CreateDocumentResponse
-	18,  // 102: rpc.v1.DocumentService.GetDocument:output_type -> rpc.v1.GetDocumentResponse
-	20,  // 103: rpc.v1.DocumentService.UpdateDocument:output_type -> rpc.v1.UpdateDocumentResponse
-	22,  // 104: rpc.v1.DocumentService.DeleteDocument:output_type -> rpc.v1.DeleteDocumentResponse
-	24,  // 105: rpc.v1.DocumentService.ListDocuments:output_type -> rpc.v1.ListDocumentsResponse
-	26,  // 106: rpc.v1.DocumentService.GetDocumentTree:output_type -> rpc.v1.GetDocumentTreeResponse
-	29,  // 107: rpc.v1.DocumentService.SearchDocuments:output_type -> rpc.v1.SearchDocumentsResponse
-	32,  // 108: rpc.v1.DocumentService.UpdateDocumentStatus:output_type -> rpc.v1.UpdateDocumentStatusResponse
-	34,  // 109: rpc.v1.DocumentService.ResolveSlug:output_type -> rpc.v1.ResolveSlugResponse
-	36,  // 110: rpc.v1.DocumentVersionService.ListVersions:output_type -> rpc.v1.ListVersionsResponse
-	38,  // 111: rpc.v1.DocumentVersionService.GetVersion:output_type -> rpc.v1.GetVersionResponse
-	40,  // 112: rpc.v1.DocumentVersionService.GetVersionDiff:output_type -> rpc.v1.GetVersionDiffResponse
-	42,  // 113: rpc.v1.DocumentVersionService.GetBlame:output_type -> rpc.v1.GetBlameResponse
-	44,  // 114: rpc.v1.DocumentAccessService.SetAccess:output_type -> rpc.v1.SetAccessResponse
-	46,  // 115: rpc.v1.DocumentAccessService.RemoveAccess:output_type -> rpc.v1.RemoveAccessResponse
-	48,  // 116: rpc.v1.DocumentAccessService.ListAccess:output_type -> rpc.v1.ListAccessResponse
-	50,  // 117: rpc.v1.DocumentAccessService.CheckAccess:output_type -> rpc.v1.CheckAccessResponse
-	52,  // 118: rpc.v1.DocumentFollowerService.FollowDocument:output_type -> rpc.v1.FollowDocumentResponse
-	54,  // 119: rpc.v1.DocumentFollowerService.UnfollowDocument:output_type -> rpc.v1.UnfollowDocumentResponse
-	56,  // 120: rpc.v1.DocumentFollowerService.ListFollowedDocuments:output_type -> rpc.v1.ListFollowedDocumentsResponse
-	58,  // 121: rpc.v1.CommentService.AddComment:output_type -> rpc.v1.AddCommentResponse
-	60,  // 122: rpc.v1.CommentService.AddCommentReply:output_type -> rpc.v1.AddCommentReplyResponse
-	62,  // 123: rpc.v1.CommentService.ResolveComment:output_type -> rpc.v1.ResolveCommentResponse
-	64,  // 124: rpc.v1.CommentService.ListComments:output_type -> rpc.v1.ListCommentsResponse
-	66,  // 125: rpc.v1.CommentService.DeleteComment:output_type -> rpc.v1.DeleteCommentResponse
-	68,  // 126: rpc.v1.SectionEmbedService.CreateEmbed:output_type -> rpc.v1.CreateEmbedResponse
-	70,  // 127: rpc.v1.SectionEmbedService.GetEmbeddedSection:output_type -> rpc.v1.GetEmbeddedSectionResponse
-	72,  // 128: rpc.v1.SectionEmbedService.ListEmbeds:output_type -> rpc.v1.ListEmbedsResponse
-	78,  // 129: rpc.v1.SectionEmbedService.ListIncomingCitations:output_type -> rpc.v1.ListIncomingCitationsResponse
-	74,  // 130: rpc.v1.SectionEmbedService.DeleteEmbed:output_type -> rpc.v1.DeleteEmbedResponse
-	80,  // 131: rpc.v1.DocumentEditorService.JoinDocument:output_type -> rpc.v1.JoinDocumentResponse
-	82,  // 132: rpc.v1.DocumentEditorService.LeaveDocument:output_type -> rpc.v1.LeaveDocumentResponse
-	84,  // 133: rpc.v1.DocumentEditorService.UpdateCursor:output_type -> rpc.v1.UpdateCursorResponse
-	86,  // 134: rpc.v1.DocumentEditorService.ListActiveEditors:output_type -> rpc.v1.ListActiveEditorsResponse
-	88,  // 135: rpc.v1.DocumentEditorService.Heartbeat:output_type -> rpc.v1.HeartbeatResponse
-	90,  // 136: rpc.v1.DocumentReactionService.AddReaction:output_type -> rpc.v1.AddDocumentReactionResponse
-	92,  // 137: rpc.v1.DocumentReactionService.RemoveReaction:output_type -> rpc.v1.RemoveDocumentReactionResponse
-	94,  // 138: rpc.v1.DocumentReactionService.GetReactionStats:output_type -> rpc.v1.GetDocumentReactionStatsResponse
-	101, // [101:139] is the sub-list for method output_type
-	63,  // [63:101] is the sub-list for method input_type
-	63,  // [63:63] is the sub-list for extension type_name
-	63,  // [63:63] is the sub-list for extension extendee
-	0,   // [0:63] is the sub-list for field type_name
+	2,   // 1: rpc.v1.Document.visibility:type_name -> rpc.v1.DocumentVisibility
+	97,  // 2: rpc.v1.Document.updated_at:type_name -> google.protobuf.Timestamp
+	1,   // 3: rpc.v1.Document.document_type:type_name -> rpc.v1.DocumentType
+	0,   // 4: rpc.v1.DocumentSummary.status:type_name -> rpc.v1.DocumentStatus
+	2,   // 5: rpc.v1.DocumentSummary.visibility:type_name -> rpc.v1.DocumentVisibility
+	97,  // 6: rpc.v1.DocumentSummary.updated_at:type_name -> google.protobuf.Timestamp
+	97,  // 7: rpc.v1.DocumentVersion.created_at:type_name -> google.protobuf.Timestamp
+	4,   // 8: rpc.v1.DocumentAccess.grantee_type:type_name -> rpc.v1.GranteeType
+	3,   // 9: rpc.v1.DocumentAccess.access_level:type_name -> rpc.v1.AccessLevel
+	97,  // 10: rpc.v1.DocumentAccess.updated_at:type_name -> google.protobuf.Timestamp
+	97,  // 11: rpc.v1.Comment.resolved_at:type_name -> google.protobuf.Timestamp
+	97,  // 12: rpc.v1.Comment.updated_at:type_name -> google.protobuf.Timestamp
+	11,  // 13: rpc.v1.Comment.replies:type_name -> rpc.v1.CommentReply
+	97,  // 14: rpc.v1.CommentReply.updated_at:type_name -> google.protobuf.Timestamp
+	0,   // 15: rpc.v1.SectionEmbed.target_status:type_name -> rpc.v1.DocumentStatus
+	97,  // 16: rpc.v1.ActiveEditor.connected_at:type_name -> google.protobuf.Timestamp
+	97,  // 17: rpc.v1.BlameBlock.authored_at:type_name -> google.protobuf.Timestamp
+	2,   // 18: rpc.v1.CreateDocumentRequest.visibility:type_name -> rpc.v1.DocumentVisibility
+	6,   // 19: rpc.v1.CreateDocumentResponse.document:type_name -> rpc.v1.Document
+	6,   // 20: rpc.v1.GetDocumentResponse.document:type_name -> rpc.v1.Document
+	3,   // 21: rpc.v1.GetDocumentResponse.effective_access:type_name -> rpc.v1.AccessLevel
+	6,   // 22: rpc.v1.UpdateDocumentResponse.document:type_name -> rpc.v1.Document
+	0,   // 23: rpc.v1.ListDocumentsRequest.status_filter:type_name -> rpc.v1.DocumentStatus
+	7,   // 24: rpc.v1.ListDocumentsResponse.documents:type_name -> rpc.v1.DocumentSummary
+	28,  // 25: rpc.v1.GetDocumentTreeResponse.nodes:type_name -> rpc.v1.DocumentTreeNode
+	7,   // 26: rpc.v1.DocumentTreeNode.document:type_name -> rpc.v1.DocumentSummary
+	28,  // 27: rpc.v1.DocumentTreeNode.children:type_name -> rpc.v1.DocumentTreeNode
+	0,   // 28: rpc.v1.SearchDocumentsRequest.status_filter:type_name -> rpc.v1.DocumentStatus
+	31,  // 29: rpc.v1.SearchDocumentsResponse.results:type_name -> rpc.v1.SearchResult
+	7,   // 30: rpc.v1.SearchResult.document:type_name -> rpc.v1.DocumentSummary
+	0,   // 31: rpc.v1.UpdateDocumentStatusRequest.status:type_name -> rpc.v1.DocumentStatus
+	6,   // 32: rpc.v1.UpdateDocumentStatusResponse.document:type_name -> rpc.v1.Document
+	8,   // 33: rpc.v1.ListVersionsResponse.versions:type_name -> rpc.v1.DocumentVersion
+	8,   // 34: rpc.v1.GetVersionResponse.version:type_name -> rpc.v1.DocumentVersion
+	15,  // 35: rpc.v1.GetVersionDiffResponse.changes:type_name -> rpc.v1.DiffChange
+	8,   // 36: rpc.v1.GetVersionDiffResponse.from_version:type_name -> rpc.v1.DocumentVersion
+	8,   // 37: rpc.v1.GetVersionDiffResponse.to_version:type_name -> rpc.v1.DocumentVersion
+	14,  // 38: rpc.v1.GetBlameResponse.blocks:type_name -> rpc.v1.BlameBlock
+	4,   // 39: rpc.v1.SetAccessRequest.grantee_type:type_name -> rpc.v1.GranteeType
+	3,   // 40: rpc.v1.SetAccessRequest.access_level:type_name -> rpc.v1.AccessLevel
+	9,   // 41: rpc.v1.SetAccessResponse.access:type_name -> rpc.v1.DocumentAccess
+	4,   // 42: rpc.v1.RemoveAccessRequest.grantee_type:type_name -> rpc.v1.GranteeType
+	9,   // 43: rpc.v1.ListAccessResponse.access_list:type_name -> rpc.v1.DocumentAccess
+	2,   // 44: rpc.v1.ListAccessResponse.inherited_visibility:type_name -> rpc.v1.DocumentVisibility
+	3,   // 45: rpc.v1.CheckAccessResponse.access_level:type_name -> rpc.v1.AccessLevel
+	7,   // 46: rpc.v1.ListFollowedDocumentsResponse.documents:type_name -> rpc.v1.DocumentSummary
+	10,  // 47: rpc.v1.AddCommentResponse.comment:type_name -> rpc.v1.Comment
+	11,  // 48: rpc.v1.AddCommentReplyResponse.reply:type_name -> rpc.v1.CommentReply
+	10,  // 49: rpc.v1.ResolveCommentResponse.comment:type_name -> rpc.v1.Comment
+	10,  // 50: rpc.v1.ListCommentsResponse.comments:type_name -> rpc.v1.Comment
+	12,  // 51: rpc.v1.CreateEmbedResponse.embed:type_name -> rpc.v1.SectionEmbed
+	12,  // 52: rpc.v1.GetEmbeddedSectionResponse.embed:type_name -> rpc.v1.SectionEmbed
+	12,  // 53: rpc.v1.ListEmbedsResponse.embeds:type_name -> rpc.v1.SectionEmbed
+	97,  // 54: rpc.v1.IncomingCitation.source_updated_at:type_name -> google.protobuf.Timestamp
+	76,  // 55: rpc.v1.ListIncomingCitationsResponse.citations:type_name -> rpc.v1.IncomingCitation
+	77,  // 56: rpc.v1.ListIncomingCitationsResponse.cited_line_ranges:type_name -> rpc.v1.CitedLineRange
+	13,  // 57: rpc.v1.JoinDocumentResponse.current_editors:type_name -> rpc.v1.ActiveEditor
+	13,  // 58: rpc.v1.ListActiveEditorsResponse.editors:type_name -> rpc.v1.ActiveEditor
+	5,   // 59: rpc.v1.AddDocumentReactionRequest.reaction_type:type_name -> rpc.v1.ReactionType
+	96,  // 60: rpc.v1.AddDocumentReactionResponse.reaction:type_name -> rpc.v1.DocumentReaction
+	5,   // 61: rpc.v1.GetDocumentReactionStatsResponse.user_reaction:type_name -> rpc.v1.ReactionType
+	5,   // 62: rpc.v1.DocumentReaction.reaction_type:type_name -> rpc.v1.ReactionType
+	97,  // 63: rpc.v1.DocumentReaction.updated_at:type_name -> google.protobuf.Timestamp
+	16,  // 64: rpc.v1.DocumentService.CreateDocument:input_type -> rpc.v1.CreateDocumentRequest
+	18,  // 65: rpc.v1.DocumentService.GetDocument:input_type -> rpc.v1.GetDocumentRequest
+	20,  // 66: rpc.v1.DocumentService.UpdateDocument:input_type -> rpc.v1.UpdateDocumentRequest
+	22,  // 67: rpc.v1.DocumentService.DeleteDocument:input_type -> rpc.v1.DeleteDocumentRequest
+	24,  // 68: rpc.v1.DocumentService.ListDocuments:input_type -> rpc.v1.ListDocumentsRequest
+	26,  // 69: rpc.v1.DocumentService.GetDocumentTree:input_type -> rpc.v1.GetDocumentTreeRequest
+	29,  // 70: rpc.v1.DocumentService.SearchDocuments:input_type -> rpc.v1.SearchDocumentsRequest
+	32,  // 71: rpc.v1.DocumentService.UpdateDocumentStatus:input_type -> rpc.v1.UpdateDocumentStatusRequest
+	34,  // 72: rpc.v1.DocumentService.ResolveSlug:input_type -> rpc.v1.ResolveSlugRequest
+	36,  // 73: rpc.v1.DocumentVersionService.ListVersions:input_type -> rpc.v1.ListVersionsRequest
+	38,  // 74: rpc.v1.DocumentVersionService.GetVersion:input_type -> rpc.v1.GetVersionRequest
+	40,  // 75: rpc.v1.DocumentVersionService.GetVersionDiff:input_type -> rpc.v1.GetVersionDiffRequest
+	42,  // 76: rpc.v1.DocumentVersionService.GetBlame:input_type -> rpc.v1.GetBlameRequest
+	44,  // 77: rpc.v1.DocumentAccessService.SetAccess:input_type -> rpc.v1.SetAccessRequest
+	46,  // 78: rpc.v1.DocumentAccessService.RemoveAccess:input_type -> rpc.v1.RemoveAccessRequest
+	48,  // 79: rpc.v1.DocumentAccessService.ListAccess:input_type -> rpc.v1.ListAccessRequest
+	50,  // 80: rpc.v1.DocumentAccessService.CheckAccess:input_type -> rpc.v1.CheckAccessRequest
+	52,  // 81: rpc.v1.DocumentFollowerService.FollowDocument:input_type -> rpc.v1.FollowDocumentRequest
+	54,  // 82: rpc.v1.DocumentFollowerService.UnfollowDocument:input_type -> rpc.v1.UnfollowDocumentRequest
+	56,  // 83: rpc.v1.DocumentFollowerService.ListFollowedDocuments:input_type -> rpc.v1.ListFollowedDocumentsRequest
+	58,  // 84: rpc.v1.CommentService.AddComment:input_type -> rpc.v1.AddCommentRequest
+	60,  // 85: rpc.v1.CommentService.AddCommentReply:input_type -> rpc.v1.AddCommentReplyRequest
+	62,  // 86: rpc.v1.CommentService.ResolveComment:input_type -> rpc.v1.ResolveCommentRequest
+	64,  // 87: rpc.v1.CommentService.ListComments:input_type -> rpc.v1.ListCommentsRequest
+	66,  // 88: rpc.v1.CommentService.DeleteComment:input_type -> rpc.v1.DeleteCommentRequest
+	68,  // 89: rpc.v1.SectionEmbedService.CreateEmbed:input_type -> rpc.v1.CreateEmbedRequest
+	70,  // 90: rpc.v1.SectionEmbedService.GetEmbeddedSection:input_type -> rpc.v1.GetEmbeddedSectionRequest
+	72,  // 91: rpc.v1.SectionEmbedService.ListEmbeds:input_type -> rpc.v1.ListEmbedsRequest
+	78,  // 92: rpc.v1.SectionEmbedService.ListIncomingCitations:input_type -> rpc.v1.ListIncomingCitationsRequest
+	74,  // 93: rpc.v1.SectionEmbedService.DeleteEmbed:input_type -> rpc.v1.DeleteEmbedRequest
+	80,  // 94: rpc.v1.DocumentEditorService.JoinDocument:input_type -> rpc.v1.JoinDocumentRequest
+	82,  // 95: rpc.v1.DocumentEditorService.LeaveDocument:input_type -> rpc.v1.LeaveDocumentRequest
+	84,  // 96: rpc.v1.DocumentEditorService.UpdateCursor:input_type -> rpc.v1.UpdateCursorRequest
+	86,  // 97: rpc.v1.DocumentEditorService.ListActiveEditors:input_type -> rpc.v1.ListActiveEditorsRequest
+	88,  // 98: rpc.v1.DocumentEditorService.Heartbeat:input_type -> rpc.v1.HeartbeatRequest
+	90,  // 99: rpc.v1.DocumentReactionService.AddReaction:input_type -> rpc.v1.AddDocumentReactionRequest
+	92,  // 100: rpc.v1.DocumentReactionService.RemoveReaction:input_type -> rpc.v1.RemoveDocumentReactionRequest
+	94,  // 101: rpc.v1.DocumentReactionService.GetReactionStats:input_type -> rpc.v1.GetDocumentReactionStatsRequest
+	17,  // 102: rpc.v1.DocumentService.CreateDocument:output_type -> rpc.v1.CreateDocumentResponse
+	19,  // 103: rpc.v1.DocumentService.GetDocument:output_type -> rpc.v1.GetDocumentResponse
+	21,  // 104: rpc.v1.DocumentService.UpdateDocument:output_type -> rpc.v1.UpdateDocumentResponse
+	23,  // 105: rpc.v1.DocumentService.DeleteDocument:output_type -> rpc.v1.DeleteDocumentResponse
+	25,  // 106: rpc.v1.DocumentService.ListDocuments:output_type -> rpc.v1.ListDocumentsResponse
+	27,  // 107: rpc.v1.DocumentService.GetDocumentTree:output_type -> rpc.v1.GetDocumentTreeResponse
+	30,  // 108: rpc.v1.DocumentService.SearchDocuments:output_type -> rpc.v1.SearchDocumentsResponse
+	33,  // 109: rpc.v1.DocumentService.UpdateDocumentStatus:output_type -> rpc.v1.UpdateDocumentStatusResponse
+	35,  // 110: rpc.v1.DocumentService.ResolveSlug:output_type -> rpc.v1.ResolveSlugResponse
+	37,  // 111: rpc.v1.DocumentVersionService.ListVersions:output_type -> rpc.v1.ListVersionsResponse
+	39,  // 112: rpc.v1.DocumentVersionService.GetVersion:output_type -> rpc.v1.GetVersionResponse
+	41,  // 113: rpc.v1.DocumentVersionService.GetVersionDiff:output_type -> rpc.v1.GetVersionDiffResponse
+	43,  // 114: rpc.v1.DocumentVersionService.GetBlame:output_type -> rpc.v1.GetBlameResponse
+	45,  // 115: rpc.v1.DocumentAccessService.SetAccess:output_type -> rpc.v1.SetAccessResponse
+	47,  // 116: rpc.v1.DocumentAccessService.RemoveAccess:output_type -> rpc.v1.RemoveAccessResponse
+	49,  // 117: rpc.v1.DocumentAccessService.ListAccess:output_type -> rpc.v1.ListAccessResponse
+	51,  // 118: rpc.v1.DocumentAccessService.CheckAccess:output_type -> rpc.v1.CheckAccessResponse
+	53,  // 119: rpc.v1.DocumentFollowerService.FollowDocument:output_type -> rpc.v1.FollowDocumentResponse
+	55,  // 120: rpc.v1.DocumentFollowerService.UnfollowDocument:output_type -> rpc.v1.UnfollowDocumentResponse
+	57,  // 121: rpc.v1.DocumentFollowerService.ListFollowedDocuments:output_type -> rpc.v1.ListFollowedDocumentsResponse
+	59,  // 122: rpc.v1.CommentService.AddComment:output_type -> rpc.v1.AddCommentResponse
+	61,  // 123: rpc.v1.CommentService.AddCommentReply:output_type -> rpc.v1.AddCommentReplyResponse
+	63,  // 124: rpc.v1.CommentService.ResolveComment:output_type -> rpc.v1.ResolveCommentResponse
+	65,  // 125: rpc.v1.CommentService.ListComments:output_type -> rpc.v1.ListCommentsResponse
+	67,  // 126: rpc.v1.CommentService.DeleteComment:output_type -> rpc.v1.DeleteCommentResponse
+	69,  // 127: rpc.v1.SectionEmbedService.CreateEmbed:output_type -> rpc.v1.CreateEmbedResponse
+	71,  // 128: rpc.v1.SectionEmbedService.GetEmbeddedSection:output_type -> rpc.v1.GetEmbeddedSectionResponse
+	73,  // 129: rpc.v1.SectionEmbedService.ListEmbeds:output_type -> rpc.v1.ListEmbedsResponse
+	79,  // 130: rpc.v1.SectionEmbedService.ListIncomingCitations:output_type -> rpc.v1.ListIncomingCitationsResponse
+	75,  // 131: rpc.v1.SectionEmbedService.DeleteEmbed:output_type -> rpc.v1.DeleteEmbedResponse
+	81,  // 132: rpc.v1.DocumentEditorService.JoinDocument:output_type -> rpc.v1.JoinDocumentResponse
+	83,  // 133: rpc.v1.DocumentEditorService.LeaveDocument:output_type -> rpc.v1.LeaveDocumentResponse
+	85,  // 134: rpc.v1.DocumentEditorService.UpdateCursor:output_type -> rpc.v1.UpdateCursorResponse
+	87,  // 135: rpc.v1.DocumentEditorService.ListActiveEditors:output_type -> rpc.v1.ListActiveEditorsResponse
+	89,  // 136: rpc.v1.DocumentEditorService.Heartbeat:output_type -> rpc.v1.HeartbeatResponse
+	91,  // 137: rpc.v1.DocumentReactionService.AddReaction:output_type -> rpc.v1.AddDocumentReactionResponse
+	93,  // 138: rpc.v1.DocumentReactionService.RemoveReaction:output_type -> rpc.v1.RemoveDocumentReactionResponse
+	95,  // 139: rpc.v1.DocumentReactionService.GetReactionStats:output_type -> rpc.v1.GetDocumentReactionStatsResponse
+	102, // [102:140] is the sub-list for method output_type
+	64,  // [64:102] is the sub-list for method input_type
+	64,  // [64:64] is the sub-list for extension type_name
+	64,  // [64:64] is the sub-list for extension extendee
+	0,   // [0:64] is the sub-list for field type_name
 }
 
 func init() { file_rpc_v1_document_proto_init() }
@@ -6529,7 +6603,7 @@ func file_rpc_v1_document_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_v1_document_proto_rawDesc), len(file_rpc_v1_document_proto_rawDesc)),
-			NumEnums:      5,
+			NumEnums:      6,
 			NumMessages:   91,
 			NumExtensions: 0,
 			NumServices:   8,
