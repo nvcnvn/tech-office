@@ -1,0 +1,168 @@
+syntax = "proto3";
+
+package rpc.v1;
+
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// SearchService answers the workspace search box.
+//
+// One request, eight sources, one ranked list. The fan-out, the access filtering, the
+// ranking and the truncation all happen on the server, so web and mobile — which used to
+// fan out separately in `packages/apis/src/search.ts` over four of the eight — now see the
+// same results in the same order by construction.
+//
+// Every source enforces its own access rules inside its own query. This service owns no
+// SQL and no access rule of its own; it depends on the six domains' logic-layer interfaces
+// (Constitution IV) and merges what they return.
+//
+// Neither organization nor employee is a request field: both come from the auth context
+// (Constitution I).
+service SearchService {
+  // Search fans out over every source the caller is permitted to search and returns one
+  // ranked list plus a per-source outcome report.
+  //
+  // AUTHORIZATION. Empty required_permissions with allow_unauthenticated: false is the
+  // deliberate "any authenticated caller" choice, not an omission (Constitution III).
+  // It has to be: each of the eight sources has its own permission, and declaring any one
+  // of them here would deny the whole search to somebody entitled to the other seven.
+  // The connect layer reads the caller's effective permissions and reports each source it
+  // may not search as SOURCE_STATUS_NOT_PERMITTED — a skip, not a failure (FR-012).
+  //
+  // FAILURE. A source that errors or misses its deadline is reported UNAVAILABLE and the
+  // search still returns everything else (FR-005). The only error response is when no
+  // source answered at all, which is Unavailable — an empty list would tell the caller
+  // their workspace is empty (FR-004, US3).
+  rpc Search(SearchRequest) returns (SearchResponse) {
+    option (rpc.v1.access_control) = {
+      allow_unauthenticated: false
+    };
+  }
+}
+
+// SearchKind is the closed set of things a search can return. Adding a value is a change
+// to this contract, not an extension of it.
+enum SearchKind {
+  // In a request: the mixed list over every source. In a hit: never set.
+  SEARCH_KIND_UNSPECIFIED = 0;
+  SEARCH_KIND_PERSON = 1;
+  SEARCH_KIND_DEPARTMENT = 2;
+  SEARCH_KIND_CHANNEL = 3;
+  SEARCH_KIND_MESSAGE = 4;
+  SEARCH_KIND_DOCUMENT = 5;
+  SEARCH_KIND_FILE = 6;
+  // Ordinary tasks and ritual instances alike — to the person searching they are the same
+  // kind of thing, work with a name and a due date. The row says which it is.
+  SEARCH_KIND_WORK_ITEM = 7;
+  SEARCH_KIND_EVENT = 8;
+}
+
+// SourceStatus is what makes a short answer legible instead of silently short.
+enum SourceStatus {
+  SOURCE_STATUS_UNSPECIFIED = 0;
+  // The source answered. hit_count may still be zero: "no documents match".
+  SOURCE_STATUS_OK = 1;
+  // The source errored or missed its deadline: "documents could not be searched".
+  // Distinct from OK-with-zero, which is the whole point of this enum.
+  SOURCE_STATUS_UNAVAILABLE = 2;
+  // The caller lacks the permission to search this source. Not an error and not a
+  // failure — it is not broken, it is not theirs.
+  SOURCE_STATUS_NOT_PERMITTED = 3;
+}
+
+message SearchRequest {
+  // What was typed. Trimmed server-side; fewer than 2 characters is InvalidArgument, so a
+  // one-character query cannot fan out to eight sources. Longer than 200 characters is
+  // truncated rather than rejected.
+  string query = 1;
+
+  // UNSPECIFIED for the mixed list; any other value narrows to that one source and
+  // returns a deeper list of it.
+  SearchKind kind_filter = 2;
+
+  // Clamped, never rejected. Mixed: default 40, max 80 — and capped at 5 per source, so
+  // no source can crowd the others out of the first screen. Narrowed: default 20, max 50.
+  int32 limit = 3;
+}
+
+message SearchResponse {
+  // One ranked list, already merged, capped and ordered. Clients render it in order.
+  repeated SearchHit hits = 1;
+
+  // Always eight entries, in the fixed source order, whatever happened. A client tells
+  // "no documents match" from "documents could not be searched" by reading this.
+  repeated SourceOutcome outcomes = 2;
+}
+
+message SearchHit {
+  SearchKind kind = 1;
+
+  // The thing's name — what someone typed to find it.
+  string title = 2;
+
+  // One line saying where it lives: the person's email, "in #general", the project name,
+  // the event's date, the file's upload context.
+  string context_line = 3;
+
+  // Matched-content excerpt, where the source produces one. Empty for any kind whose
+  // content the caller may not read.
+  string snippet = 4;
+
+  // 0-based position within this hit's own source, as that source ranked it. Cross-source
+  // ordering is the server's job and is already applied to `hits`; this is exposed so a
+  // client can group or explain the ordering without re-deriving it.
+  int32 rank = 5;
+
+  // Everything needed to open it, without a second lookup.
+  SearchTarget target = 6;
+}
+
+// SearchTarget carries the identifiers each kind needs to be opened. A client switches on
+// SearchHit.kind and reads the fields that kind populates; unpopulated fields are empty.
+//
+// Named fields rather than a map of string keys, so both platforms get generated types
+// and a typo is a compile error (Constitution VIII).
+message SearchTarget {
+  // PERSON. Mobile opens or creates the DM with this employee; web opens their profile.
+  string employee_id = 1;
+
+  // DEPARTMENT. Web only — mobile has no department screen, so these rows are
+  // informational there.
+  string department_id = 2;
+
+  // CHANNEL, and MESSAGE — a message opens the channel it was posted in, not itself.
+  string channel_id = 3;
+
+  // MESSAGE. The message to highlight once the channel is open.
+  string message_id = 4;
+
+  // DOCUMENT. A slug, not an id: both document viewers route by slug, and a hit carrying
+  // only the id would push /docs/undefined.
+  string document_slug = 5;
+
+  // FILE.
+  string file_id = 6;
+
+  // WORK_ITEM. Both task routes are project-scoped, so the project id travels with the
+  // task id rather than costing a GetTask round-trip on every tap.
+  string project_id = 7;
+  string task_id = 8;
+
+  // EVENT.
+  string event_id = 9;
+}
+
+message SourceOutcome {
+  SearchKind kind = 1;
+  SourceStatus status = 2;
+
+  // How many of this source's hits are in the response, after capping. It counts only
+  // what was returned — there is no "and 40 more you cannot see", because a count of
+  // withheld results discloses the existence of work the caller may not know about.
+  int32 hit_count = 3;
+
+  // Short, non-sensitive reason when status is not OK: "timed out",
+  // "missing permission docs.view". Safe to show to the person searching.
+  string detail = 4;
+}
