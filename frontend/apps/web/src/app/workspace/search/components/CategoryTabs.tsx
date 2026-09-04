@@ -1,63 +1,57 @@
 'use client';
 
 import React from 'react';
-import { Tabs, Tab, Badge, Box } from '@mui/material';
-import PeopleIcon from '@mui/icons-material/People';
+import { Badge, Box, Tab, Tabs } from '@mui/material';
+import PersonIcon from '@mui/icons-material/Person';
 import BusinessIcon from '@mui/icons-material/Business';
 import TagIcon from '@mui/icons-material/Tag';
 import ChatIcon from '@mui/icons-material/Chat';
-import ViewListIcon from '@mui/icons-material/ViewList';
+import DescriptionIcon from '@mui/icons-material/Description';
 import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import EventIcon from '@mui/icons-material/Event';
+import ViewListIcon from '@mui/icons-material/ViewList';
+import type { SearchKind } from 'apis';
 
-export type SearchCategory = 'all' | 'employees' | 'departments' | 'channels' | 'messages' | 'files';
+/** 'all' is the mixed list; every other value narrows to one source. */
+export type SearchCategory = 'all' | SearchKind;
 
 interface CategoryTabsProps {
-	/**
-	 * Currently active category
-	 */
 	activeCategory: SearchCategory;
-	/**
-	 * Callback when category changes
-	 */
 	onCategoryChange: (category: SearchCategory) => void;
 	/**
-	 * Result counts per category for badge display
+	 * How many hits each source contributed, read from the mixed search's outcome report.
+	 * Narrowing does not change these — they describe the workspace, not the current tab.
 	 */
-	resultCounts: {
-		employees: number;
-		departments: number;
-		channels: number;
-		messages: number;
-		files: number;
-	};
+	hitCounts: Partial<Record<SearchKind, number>>;
 }
 
-/**
- * Category tabs component for search results filtering
- * 
- * Displays tabs for each search category with result count badges
- */
-export default function CategoryTabs({
-	activeCategory,
-	onCategoryChange,
-	resultCounts,
-}: CategoryTabsProps) {
-	const handleChange = (_event: React.SyntheticEvent, newValue: SearchCategory) => {
-		onCategoryChange(newValue);
-	};
+/** One tab per kind, in the server's source order, so the tabs match the list. */
+const TABS: { kind: SearchKind; label: string; icon: React.ReactElement }[] = [
+	{ kind: 'person', label: 'People', icon: <PersonIcon /> },
+	{ kind: 'channel', label: 'Channels', icon: <TagIcon /> },
+	{ kind: 'document', label: 'Documents', icon: <DescriptionIcon /> },
+	{ kind: 'work_item', label: 'Work items', icon: <AssignmentIcon /> },
+	{ kind: 'event', label: 'Events', icon: <EventIcon /> },
+	{ kind: 'file', label: 'Files', icon: <InsertDriveFileIcon /> },
+	{ kind: 'department', label: 'Departments', icon: <BusinessIcon /> },
+	{ kind: 'message', label: 'Messages', icon: <ChatIcon /> },
+];
 
-	const totalResults =
-		resultCounts.employees +
-		resultCounts.departments +
-		resultCounts.channels +
-		resultCounts.messages +
-		resultCounts.files;
+export default function CategoryTabs({ activeCategory, onCategoryChange, hitCounts }: CategoryTabsProps) {
+	const total = TABS.reduce((sum, tab) => sum + (hitCounts[tab.kind] ?? 0), 0);
+
+	const labelWithCount = (label: string, count: number) => (
+		<Badge badgeContent={count} color="primary" max={999}>
+			<span style={{ marginRight: count > 0 ? 20 : 0 }}>{label}</span>
+		</Badge>
+	);
 
 	return (
 		<Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
 			<Tabs
 				value={activeCategory}
-				onChange={handleChange}
+				onChange={(_event, value: SearchCategory) => onCategoryChange(value)}
 				aria-label="search category tabs"
 				variant="scrollable"
 				scrollButtons="auto"
@@ -65,73 +59,20 @@ export default function CategoryTabs({
 				<Tab
 					icon={<ViewListIcon />}
 					iconPosition="start"
-					label={
-						<Badge badgeContent={totalResults} color="primary" max={999}>
-							<span style={{ marginRight: totalResults > 0 ? 20 : 0 }}>All</span>
-						</Badge>
-					}
+					label={labelWithCount('All', total)}
 					value="all"
+					data-testid="search-tab-all"
 				/>
-				<Tab
-					icon={<PeopleIcon />}
-					iconPosition="start"
-					label={
-						<Badge badgeContent={resultCounts.employees} color="primary" max={999}>
-							<span style={{ marginRight: resultCounts.employees > 0 ? 20 : 0 }}>
-								Employees
-							</span>
-						</Badge>
-					}
-					value="employees"
-				/>
-				<Tab
-					icon={<BusinessIcon />}
-					iconPosition="start"
-					label={
-						<Badge badgeContent={resultCounts.departments} color="primary" max={999}>
-							<span style={{ marginRight: resultCounts.departments > 0 ? 20 : 0 }}>
-								Departments
-							</span>
-						</Badge>
-					}
-					value="departments"
-				/>
-				<Tab
-					icon={<TagIcon />}
-					iconPosition="start"
-					label={
-						<Badge badgeContent={resultCounts.channels} color="primary" max={999}>
-							<span style={{ marginRight: resultCounts.channels > 0 ? 20 : 0 }}>
-								Channels
-							</span>
-						</Badge>
-					}
-					value="channels"
-				/>
-				<Tab
-					icon={<ChatIcon />}
-					iconPosition="start"
-					label={
-						<Badge badgeContent={resultCounts.messages} color="primary" max={999}>
-							<span style={{ marginRight: resultCounts.messages > 0 ? 20 : 0 }}>
-								Messages
-							</span>
-						</Badge>
-					}
-					value="messages"
-				/>
-				<Tab
-					icon={<InsertDriveFileIcon />}
-					iconPosition="start"
-					label={
-						<Badge badgeContent={resultCounts.files} color="primary" max={999}>
-							<span style={{ marginRight: resultCounts.files > 0 ? 20 : 0 }}>
-								Files
-							</span>
-						</Badge>
-					}
-					value="files"
-				/>
+				{TABS.map((tab) => (
+					<Tab
+						key={tab.kind}
+						icon={tab.icon}
+						iconPosition="start"
+						label={labelWithCount(tab.label, hitCounts[tab.kind] ?? 0)}
+						value={tab.kind}
+						data-testid={`search-tab-${tab.kind}`}
+					/>
+				))}
 			</Tabs>
 		</Box>
 	);

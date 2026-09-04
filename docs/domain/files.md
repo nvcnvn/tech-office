@@ -4,7 +4,7 @@ Binary storage on Cloudflare R2 with per-org quota, virus scanning, MIME validat
 context-scoped access rules, PDF conversion and content indexing. Owned by
 `internal/files`; contract in `rpc/v1/files.proto` (`FileService`, 15 RPCs).
 
-**Status date: 2026-08-30.** Supersedes specs 014, 015.
+**Status date: 2026-09-04.** Supersedes specs 014, 015, 045.
 
 ## Upload flow
 
@@ -148,9 +148,22 @@ registered so runs execute if enqueued.
 
 ## Search
 
-`SearchFiles` (`files.search`) searches filenames and extracted content with access control
-applied — `SearchLogic` filters by the caller's context membership before returning hits,
-so a file you cannot download never appears in results.
+`SearchFiles` (`files.search`) matches `original_filename` and extracted content with
+PGroonga, backed by `idx_file_metadata_filename_pgroonga` and the content index.
+`SearchLogic` resolves the caller's accessible context ids — their chat channels and
+department docs contexts — and the query requires the file's `file_access_rule.context_id`
+to be one of them, so a file you cannot download never appears in results.
+
+The predicate is unconditional: `far.context_id = ANY(@context_ids)`, with no "unfiltered
+if the list is null" escape. It used to have one, and a caller who belonged to no context
+at all sent an empty array, which arrives as SQL `NULL` and disabled the filter entirely —
+so the person with the least access saw every file in the organization. A caller with no
+contexts must match nothing, and a file with no access-rule row has no context and is
+likewise unreachable. Found and closed by feature 045's "nothing in the list is a door I
+cannot open" scenarios.
+
+The same `SearchFiles` is the `FILE` source of `SearchService.Search`; there is one
+implementation of this rule, not two.
 
 ## Client surfaces
 

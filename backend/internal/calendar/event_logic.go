@@ -905,11 +905,14 @@ func (l *logicImpl) SearchEvents(ctx context.Context, tx database.DBTX, orgID, a
 		limit = 20
 	}
 
+	// actorID is the authenticated employee: it is what the visibility predicate scopes
+	// the search to (feature 045, FR-008).
 	params := &database.SearchEventsParams{
-		OrganizationID:     orgID,
-		WebsearchToTsquery: req.Query,
-		Limit:              limit,
-		Cursor:             req.Cursor,
+		OrganizationID: orgID,
+		Query:          req.Query,
+		EmployeeID:     actorID,
+		SearchLimit:    limit,
+		Cursor:         req.Cursor,
 	}
 	if req.EventType != "" {
 		params.EventType = toPgText(req.EventType)

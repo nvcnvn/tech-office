@@ -84,16 +84,39 @@ WHERE organization_id = $1 AND id = $2
 RETURNING *;
 
 -- name: SearchEvents :many
-SELECT * FROM calendar.event
-WHERE organization_id = $1
-  AND cancelled_at IS NULL
-  AND to_tsvector('simple', title || ' ' || coalesce(description, '')) @@ websearch_to_tsquery('simple', $2)
-  AND (sqlc.narg('event_type')::text IS NULL OR event_type = sqlc.narg('event_type'))
-  AND (sqlc.narg('from_time')::timestamptz IS NULL OR start_time >= sqlc.narg('from_time'))
-  AND (sqlc.narg('until_time')::timestamptz IS NULL OR end_time <= sqlc.narg('until_time'))
-  AND (sqlc.narg('cursor')::uuid IS NULL OR id < sqlc.narg('cursor'))
-ORDER BY updated_at DESC, id DESC
-LIMIT $3;
+-- Two properties this query did not have before feature 045:
+--
+--   * the visibility predicate is byte-for-byte the rule ListEventsForEmployee and
+--     ListEventsForOrg already ship between them, so the `visibility` column has one
+--     interpretation rather than two. `personal_shared` is deliberately outside the
+--     third arm: it means organiser-and-attendees-only.
+--   * PGroonga &@~ instead of to_tsvector('simple'). The old matcher had NO index behind
+--     it, so every calendar search was a sequential scan over every event in the
+--     database, and it segments Vietnamese worse than the matcher the other seven search
+--     sources already use. idx_event_pgroonga backs this one.
+--
+-- Cancelled events are already excluded and stay excluded.
+SELECT e.* FROM calendar.event e
+WHERE e.organization_id = @organization_id
+  AND e.cancelled_at IS NULL
+  AND (e.title &@~ @query OR e.description &@~ @query)
+  -- Visibility scoping (feature 045, FR-008).
+  AND (
+    e.organizer_id = @employee_id
+    OR EXISTS (
+      SELECT 1 FROM calendar.attendee a
+       WHERE a.organization_id = e.organization_id
+         AND a.event_id        = e.id
+         AND a.employee_id     = @employee_id
+    )
+    OR e.visibility IN ('team', 'org_wide')
+  )
+  AND (sqlc.narg('event_type')::text IS NULL OR e.event_type = sqlc.narg('event_type'))
+  AND (sqlc.narg('from_time')::timestamptz IS NULL OR e.start_time >= sqlc.narg('from_time'))
+  AND (sqlc.narg('until_time')::timestamptz IS NULL OR e.end_time <= sqlc.narg('until_time'))
+  AND (sqlc.narg('cursor')::uuid IS NULL OR e.id < sqlc.narg('cursor'))
+ORDER BY pgroonga_score(e.tableoid, e.ctid) DESC, e.updated_at DESC, e.id DESC
+LIMIT @search_limit;
 
 -- =============================================================================
 -- ATTENDEE QUERIES

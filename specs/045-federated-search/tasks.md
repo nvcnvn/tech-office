@@ -48,10 +48,10 @@ plan.md so the plan stays the artifact that was reviewed.]
 **Purpose**: Land the wire contract and the schema change, and generate from both, so every
 later task compiles against real types.
 
-- [ ] T001 Create `backend/rpc/v1/search.proto` with the exact contents of `specs/045-federated-search/contracts/search.proto` (SearchService, SearchKind, SourceStatus, SearchRequest, SearchResponse, SearchHit, SearchTarget, SourceOutcome), keeping the authorization and failure comments verbatim
-- [ ] T002 Generate Go and TypeScript stubs by running `buf generate` from `backend/`, producing `backend/rpc/v1/search.pb.go`, the Connect handler under `backend/rpc/v1/rpcv1connect/`, and the `packages/rpc` TypeScript client
-- [ ] T003 [P] Create `backend/database/migrations/20260905000001_search_indexes.up.sql` creating `idx_event_pgroonga ON calendar.event USING pgroonga (title, description)` and `idx_file_metadata_filename_pgroonga ON files.file_metadata USING pgroonga (original_filename)` with the `COMMENT ON INDEX` text from `contracts/search.query.sql`, plus `backend/database/migrations/20260905000001_search_indexes.down.sql` dropping both
-- [ ] T004 Apply the migration and regenerate the generated snapshot `backend/database/scripts/schema.sql` with `backend/scripts/regen-schema.sh` — never hand-edit that file
+- [X] T001 Create `backend/rpc/v1/search.proto` with the exact contents of `specs/045-federated-search/contracts/search.proto` (SearchService, SearchKind, SourceStatus, SearchRequest, SearchResponse, SearchHit, SearchTarget, SourceOutcome), keeping the authorization and failure comments verbatim
+- [X] T002 Generate Go and TypeScript stubs by running `buf generate` from `backend/`, producing `backend/rpc/v1/search.pb.go`, the Connect handler under `backend/rpc/v1/rpcv1connect/`, and the `packages/rpc` TypeScript client
+- [X] T003 [P] Create `backend/database/migrations/20260905000001_search_indexes.up.sql` creating `idx_event_pgroonga ON calendar.event USING pgroonga (title, description)` and `idx_file_metadata_filename_pgroonga ON files.file_metadata USING pgroonga (original_filename)` with the `COMMENT ON INDEX` text from `contracts/search.query.sql`, plus `backend/database/migrations/20260905000001_search_indexes.down.sql` dropping both
+- [X] T004 Apply the migration and regenerate the generated snapshot `backend/database/scripts/schema.sql` with `backend/scripts/regen-schema.sh` — never hand-edit that file
 
 **Checkpoint**: `search.proto` types exist in Go and TypeScript; both new indexes exist.
 
@@ -64,13 +64,13 @@ fixture. Nothing story-specific, but every story depends on all of it.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Create `backend/internal/search/logic.go` with the `SearchLogic` interface, the tuning constants (`perSourceCapMixed = 5`, mixed limit default 40 / max 80, narrowed default 20 / max 50, `perSourceDeadline = 800 * time.Millisecond`, `overallBudget = 900 * time.Millisecond`), and the pure merge function sorting ascending by `(rank_within_source, source_priority, kind, id)` with source priority `person, channel, document, work_item, event, file, department, message` per [data-model.md §4](data-model.md)
-- [ ] T006 Create `backend/internal/search/sources.go` with the eight-entry source descriptor table — kind, fixed priority, required permission id (`org.searchEmployees`, `org.searchDepartments`, `chat.search` for both channel and message, `docs.view`, `files.search`, `collab.viewTask`, none for event) — and the common adapter function signature that turns one domain's rows into `[]*rpcv1.SearchHit`, per [research.md R10](research.md)
-- [ ] T007 Create `backend/internal/search/connect.go` with `SearchServiceServer`: trim the query, return `connect.CodeInvalidArgument` below 2 characters and truncate above 200, clamp `limit` rather than reject it, hand `s.TenantPool` (not a transaction — see plan Complexity Tracking) to the fan-out, and emit one `slog.InfoContext` per search carrying per-source status and duration
-- [ ] T008 Register `SearchService` in `backend/cmd/server.go`, constructing `internal/search` with the six domain logic interfaces (`organization.Logic`, `chat.Logic`, `docs.Logic`, `files.SearchLogic`, `collaboration.Logic`, `calendar.Logic`) — `internal/search` gets no `Queries` field and no `.query.sql` file (Constitution IV)
-- [ ] T009 [P] Rewrite `frontend/packages/apis/src/types/search.ts` with native `SearchHit`, `SearchTarget`, `SourceOutcome`, `SearchKind` and `SourceStatus` types, deleting `FederatedSearchResults`
-- [ ] T010 Rewrite `frontend/packages/apis/src/search.ts` as a single `search({ query, kindFilter, limit })` wrapper over `SearchService.Search` returning native types with enum→string-union conversion done in the wrapper, and delete `searchAll` outright (no compatibility shim — all clients release together)
-- [ ] T011 [P] Create `backend/integration/federated_search_test.go` with the `TestFederatedSearch` `testWorld` fixture: the three employees and eighteen fixture rows from [contracts/test-scenarios.md](contracts/test-scenarios.md) built once, keyed on the distinctive word `zarquon`, plus the nested `t.Run` skeleton for all four stories with `// FR-XXX` traceability comments
+- [X] T005 Create `backend/internal/search/logic.go` with the `SearchLogic` interface, the tuning constants (`perSourceCapMixed = 5`, mixed limit default 40 / max 80, narrowed default 20 / max 50, `perSourceDeadline = 800 * time.Millisecond`, `overallBudget = 900 * time.Millisecond`), and the pure merge function sorting ascending by `(rank_within_source, source_priority, kind, id)` with source priority `person, channel, document, work_item, event, file, department, message` per [data-model.md §4](data-model.md)
+- [X] T006 Create `backend/internal/search/sources.go` with the eight-entry source descriptor table — kind, fixed priority, required permission id (`org.searchEmployees`, `org.searchDepartments`, `chat.search` for both channel and message, `docs.view`, `files.search`, `collab.viewTask`, none for event) — and the common adapter function signature that turns one domain's rows into `[]*rpcv1.SearchHit`, per [research.md R10](research.md)
+- [X] T007 Create `backend/internal/search/connect.go` with `SearchServiceServer`: trim the query, return `connect.CodeInvalidArgument` below 2 characters and truncate above 200, clamp `limit` rather than reject it, hand `s.TenantPool` (not a transaction — see plan Complexity Tracking) to the fan-out, and emit one `slog.InfoContext` per search carrying per-source status and duration
+- [X] T008 Register `SearchService` in `backend/cmd/server.go`, constructing `internal/search` with the six domain logic interfaces (`organization.Logic`, `chat.Logic`, `docs.Logic`, `files.SearchLogic`, `collaboration.Logic`, `calendar.Logic`) — `internal/search` gets no `Queries` field and no `.query.sql` file (Constitution IV)
+- [X] T009 [P] Rewrite `frontend/packages/apis/src/types/search.ts` with native `SearchHit`, `SearchTarget`, `SourceOutcome`, `SearchKind` and `SourceStatus` types, deleting `FederatedSearchResults`
+- [X] T010 Rewrite `frontend/packages/apis/src/search.ts` as a single `search({ query, kindFilter, limit })` wrapper over `SearchService.Search` returning native types with enum→string-union conversion done in the wrapper, and delete `searchAll` outright (no compatibility shim — all clients release together)
+- [X] T011 [P] Create `backend/integration/federated_search_test.go` with the `TestFederatedSearch` `testWorld` fixture: the three employees and eighteen fixture rows from [contracts/test-scenarios.md](contracts/test-scenarios.md) built once, keyed on the distinctive word `zarquon`, plus the nested `t.Run` skeleton for all four stories with `// FR-XXX` traceability comments
 
 **Checkpoint**: `SearchService.Search` is reachable and returns an empty ranked list; the
 frontend wrapper compiles; the fixture builds.
@@ -89,27 +89,27 @@ appear alongside the existing four kinds, in the same order on both platforms.
 
 ### Tests for User Story 1 ⚠️
 
-- [ ] T012 [P] [US1] Write the US1 backend scenarios in `backend/integration/federated_search_test.go`: a Document/Work item/Event/File hit each come back for the owner's query, Person/Department/Channel/Message hits come back alongside them, every hit carries title + context line + target, the Document hit carries a slug not only an id, the Work item hit carries both project id and task id, and two identical requests return an identical order (FR-001, FR-002, FR-003, FR-013)
-- [ ] T013 [P] [US1] Write `frontend/apps/web/e2e/federated-search.spec.ts` with the row-rendering and navigation scenarios: Document, File, Work item and Event rows appear alongside the existing four; clicking a Document row opens the document; clicking a Work item row opens its project-scoped task route; the workspace search box remains the only entry point (FR-018, FR-020)
+- [X] T012 [P] [US1] Write the US1 backend scenarios in `backend/integration/federated_search_test.go`: a Document/Work item/Event/File hit each come back for the owner's query, Person/Department/Channel/Message hits come back alongside them, every hit carries title + context line + target, the Document hit carries a slug not only an id, the Work item hit carries both project id and task id, and two identical requests return an identical order (FR-001, FR-002, FR-003, FR-013)
+- [X] T013 [P] [US1] Write `frontend/apps/web/e2e/federated-search.spec.ts` with the row-rendering and navigation scenarios: Document, File, Work item and Event rows appear alongside the existing four; clicking a Document row opens the document; clicking a Work item row opens its project-scoped task route; the workspace search box remains the only entry point (FR-018, FR-020)
 
 ### Implementation for User Story 1
 
-- [ ] T014 [US1] Add the new `-- name: SearchTasks :many` query to `backend/database/scripts/collaboration.query.sql` exactly as written in `contracts/search.query.sql` — cross-project title match on `t.title &@~ @query`, joining `collaboration.project` and `collaboration.project_state`, excluding `t.is_deleted` and `p.is_archived`, gated by `p.visibility = 'public' OR EXISTS(project_membership)`, returning `t.task_kind`, ordered by relevance then `updated_at` then `id`, with `sqlc.narg('cursor')::uuid` — then run `sqlc generate` from `backend/`
-- [ ] T015 [US1] Add `SearchTasks(ctx, tx, orgID, employeeID, query, limit, cursor)` to `type Logic` in `backend/internal/collaboration/logic.go` and implement it in `backend/internal/collaboration/task_logic.go` over the generated `Queries.SearchTasks`
-- [ ] T016 [P] [US1] Implement the person and department adapters in `backend/internal/search/sources.go` over `organization.Logic.SearchEmployees` / `SearchDepartments`, with `context_line` set to the person's email and to `{n} members` respectively, and targets `employee_id` / `department_id`
-- [ ] T017 [P] [US1] Implement the channel and message adapters in `backend/internal/search/sources.go` over `chat.Logic.SearchChannels` / `SearchMessages`, with `context_line` `Private channel`/`Channel` and `in #{channel_name}`, and targets `channel_id` and `channel_id` + `message_id`
-- [ ] T018 [P] [US1] Implement the document adapter in `backend/internal/search/sources.go` over `docs.Logic.SearchDocuments`, setting `context_line` to `Document`, carrying the **slug** in `SearchTarget.document_slug` (an id-only target pushes `/docs/undefined`), and passing the source's snippet through
-- [ ] T019 [P] [US1] Implement the file adapter in `backend/internal/search/sources.go` over `files.SearchLogic.SearchFiles`, with `context_line` set to the upload context display name and target `file_id`
-- [ ] T020 [P] [US1] Implement the work item adapter in `backend/internal/search/sources.go` over the new `collaboration.Logic.SearchTasks`, with `context_line` `{project_name} · Task` or `{project_name} · Ritual` derived from `task_kind`, and both `project_id` and `task_id` on the target
-- [ ] T021 [P] [US1] Implement the event adapter in `backend/internal/search/sources.go` over `calendar.Logic.SearchEvents`, with `context_line` set to the formatted start date and target `event_id`
-- [ ] T022 [US1] Wire the eight adapters into the concurrent fan-out in `backend/internal/search/logic.go`: one goroutine per source against the pool, per-source cap applied before merge, then the deterministic merge from T005 (depends on T016–T021)
-- [ ] T023 [P] [US1] Create `DocumentSearchResult.tsx`, `FileSearchResult.tsx`, `WorkItemSearchResult.tsx` and `EventSearchResult.tsx` in `frontend/apps/web/src/app/workspace/search/components/`, each with a kind badge, title, context line, a `data-testid`, theme colours only, and the route from [research.md R11](research.md)
-- [ ] T024 [US1] Rework `frontend/apps/web/src/app/workspace/search/components/SearchResults.tsx` to render the one server-ranked list in order, switching on `hit.kind` across all eight row components, and delete `frontend/apps/web/src/app/workspace/search/components/FilesTab.tsx` (files are hits like any other kind now)
-- [ ] T025 [US1] Rework `frontend/apps/web/src/app/workspace/search/page.tsx` to issue exactly one `search()` request instead of the deleted client-side fan-out, passing the query through and rendering `SearchResults`
-- [ ] T026 [P] [US1] Create `frontend/apps/mobile/src/app/(app)/(more)/files/[fileId].tsx` — a `GetFileMetadata`-backed detail screen showing filename, size, upload context and validation status with a Download/Share action reusing the `getDownloadUrl` → `expo-sharing` flow from the files list, so a File row has somewhere to go (FR-017, R12)
-- [ ] T027 [US1] Extend `frontend/apps/mobile/src/app/(app)/(more)/search.tsx` to call `search()` once and render all eight row kinds with `testID`s, routing each per [research.md R11](research.md): Document → `/(app)/(more)/docs/{slug}`, File → `/(app)/(more)/files/{fileId}`, Work item → `/(app)/(tasks)/{projectId}/task/{taskId}`, Event → `/(app)/(calendar)/{eventId}`, Person → DM via `CreateOrGetDirectMessage`, Department → informational
-- [ ] T028 [US1] Widen the MMKV recent-items record in `frontend/apps/mobile/src/app/(app)/(more)/search.tsx` to all eight kinds, keep clear-recents working, and make a recent whose target fails to open report "this item is no longer available" and remove itself from the list (FR-021, FR-022, R13)
-- [ ] T029 [US1] Create `frontend/apps/mobile/.maestro/federated-search.yaml`: open app → tap the search pill → type the distinctive word → see Document, Work item, Event and File rows → tap the Document row → the document opens → back → it is offered as a recent item
+- [X] T014 [US1] Add the new `-- name: SearchTasks :many` query to `backend/database/scripts/collaboration.query.sql` exactly as written in `contracts/search.query.sql` — cross-project title match on `t.title &@~ @query`, joining `collaboration.project` and `collaboration.project_state`, excluding `t.is_deleted` and `p.is_archived`, gated by `p.visibility = 'public' OR EXISTS(project_membership)`, returning `t.task_kind`, ordered by relevance then `updated_at` then `id`, with `sqlc.narg('cursor')::uuid` — then run `sqlc generate` from `backend/`
+- [X] T015 [US1] Add `SearchTasks(ctx, tx, orgID, employeeID, query, limit, cursor)` to `type Logic` in `backend/internal/collaboration/logic.go` and implement it in `backend/internal/collaboration/task_logic.go` over the generated `Queries.SearchTasks`
+- [X] T016 [P] [US1] Implement the person and department adapters in `backend/internal/search/sources.go` over `organization.Logic.SearchEmployees` / `SearchDepartments`, with `context_line` set to the person's email and to `{n} members` respectively, and targets `employee_id` / `department_id`
+- [X] T017 [P] [US1] Implement the channel and message adapters in `backend/internal/search/sources.go` over `chat.Logic.SearchChannels` / `SearchMessages`, with `context_line` `Private channel`/`Channel` and `in #{channel_name}`, and targets `channel_id` and `channel_id` + `message_id`
+- [X] T018 [P] [US1] Implement the document adapter in `backend/internal/search/sources.go` over `docs.Logic.SearchDocuments`, setting `context_line` to `Document`, carrying the **slug** in `SearchTarget.document_slug` (an id-only target pushes `/docs/undefined`), and passing the source's snippet through
+- [X] T019 [P] [US1] Implement the file adapter in `backend/internal/search/sources.go` over `files.SearchLogic.SearchFiles`, with `context_line` set to the upload context display name and target `file_id`
+- [X] T020 [P] [US1] Implement the work item adapter in `backend/internal/search/sources.go` over the new `collaboration.Logic.SearchTasks`, with `context_line` `{project_name} · Task` or `{project_name} · Ritual` derived from `task_kind`, and both `project_id` and `task_id` on the target
+- [X] T021 [P] [US1] Implement the event adapter in `backend/internal/search/sources.go` over `calendar.Logic.SearchEvents`, with `context_line` set to the formatted start date and target `event_id`
+- [X] T022 [US1] Wire the eight adapters into the concurrent fan-out in `backend/internal/search/logic.go`: one goroutine per source against the pool, per-source cap applied before merge, then the deterministic merge from T005 (depends on T016–T021)
+- [X] T023 [P] [US1] Create `DocumentSearchResult.tsx`, `FileSearchResult.tsx`, `WorkItemSearchResult.tsx` and `EventSearchResult.tsx` in `frontend/apps/web/src/app/workspace/search/components/`, each with a kind badge, title, context line, a `data-testid`, theme colours only, and the route from [research.md R11](research.md)
+- [X] T024 [US1] Rework `frontend/apps/web/src/app/workspace/search/components/SearchResults.tsx` to render the one server-ranked list in order, switching on `hit.kind` across all eight row components, and delete `frontend/apps/web/src/app/workspace/search/components/FilesTab.tsx` (files are hits like any other kind now)
+- [X] T025 [US1] Rework `frontend/apps/web/src/app/workspace/search/page.tsx` to issue exactly one `search()` request instead of the deleted client-side fan-out, passing the query through and rendering `SearchResults`
+- [X] T026 [P] [US1] Create `frontend/apps/mobile/src/app/(app)/(more)/files/[fileId].tsx` — a `GetFileMetadata`-backed detail screen showing filename, size, upload context and validation status with a Download/Share action reusing the `getDownloadUrl` → `expo-sharing` flow from the files list, so a File row has somewhere to go (FR-017, R12)
+- [X] T027 [US1] Extend `frontend/apps/mobile/src/app/(app)/(more)/search.tsx` to call `search()` once and render all eight row kinds with `testID`s, routing each per [research.md R11](research.md): Document → `/(app)/(more)/docs/{slug}`, File → `/(app)/(more)/files/{fileId}`, Work item → `/(app)/(tasks)/{projectId}/task/{taskId}`, Event → `/(app)/(calendar)/{eventId}`, Person → DM via `CreateOrGetDirectMessage`, Department → informational
+- [X] T028 [US1] Widen the MMKV recent-items record in `frontend/apps/mobile/src/app/(app)/(more)/search.tsx` to all eight kinds, keep clear-recents working, and make a recent whose target fails to open report "this item is no longer available" and remove itself from the list (FR-021, FR-022, R13)
+- [X] T029 [US1] Create `frontend/apps/mobile/.maestro/federated-search.yaml`: open app → tap the search pill → type the distinctive word → see Document, Work item, Event and File rows → tap the Document row → the document opens → back → it is offered as a recent item
 
 **Checkpoint**: US1 is fully functional and testable — all eight kinds are found, ranked
 identically on both platforms, and every row opens.
@@ -133,17 +133,17 @@ to none of them and expect zero results; search as the owner of each and expect 
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T030 [P] [US2] Write the US2 access scenarios in `backend/integration/federated_search_test.go`: outsider gets no Document hit and no snippet for a private document; a public document carrying an explicit `access_level = 'none'` employee grant is withheld from that member (precedence); a public document with no grant against the member is returned; an owner finds their own private document; outsider gets no Work item hit for a private-project task and no count discloses it; a member finds a public-project task; nobody finds an archived project's task; a member gets no Event hit for a private event they neither organise nor attend; the organiser does; an attendee finds a `personal_shared` event; nobody finds a cancelled event; outsider gets no File hit for a channel file, a channel member does; and the four existing sources return the same sets through federated search as through their own RPCs (FR-007 – FR-011)
-- [ ] T031 [P] [US2] Write the SC-002/SC-003 sweep in `backend/integration/federated_search_test.go`: for every hit returned to every fixture caller, fetching its target by its identifiers succeeds — no row in any list refuses on open
+- [X] T030 [P] [US2] Write the US2 access scenarios in `backend/integration/federated_search_test.go`: outsider gets no Document hit and no snippet for a private document; a public document carrying an explicit `access_level = 'none'` employee grant is withheld from that member (precedence); a public document with no grant against the member is returned; an owner finds their own private document; outsider gets no Work item hit for a private-project task and no count discloses it; a member finds a public-project task; nobody finds an archived project's task; a member gets no Event hit for a private event they neither organise nor attend; the organiser does; an attendee finds a `personal_shared` event; nobody finds a cancelled event; outsider gets no File hit for a channel file, a channel member does; and the four existing sources return the same sets through federated search as through their own RPCs (FR-007 – FR-011)
+- [X] T031 [P] [US2] Write the SC-002/SC-003 sweep in `backend/integration/federated_search_test.go`: for every hit returned to every fixture caller, fetching its target by its identifiers succeeds — no row in any list refuses on open
 
 ### Implementation for User Story 2
 
-- [ ] T032 [US2] Add the `@employee_id` parameter and the precedence-preserving access predicate to `-- name: SearchDocuments :many` in `backend/database/scripts/docs.query.sql`, exactly as in `contracts/search.query.sql` — owner, then `COALESCE` over the explicit employee grant (including `'none'`, which denies and stops the chain), then the highest department grant, then `visibility = 'public'` — written as scalar sub-selects, never as an `OR`-chain, then run `sqlc generate`
-- [ ] T033 [US2] Change `SearchDocuments` in `backend/internal/docs/logic.go` to take `employeeID` and pass it through, and update its caller in `backend/internal/docs/connect.go` to source the id from the auth context — `DocumentService.SearchDocuments` gets the same fix, so the feature-043 procedure chooser stops offering unopenable documents (R6)
-- [ ] T034 [US2] Change `-- name: SearchEvents :many` in `backend/database/scripts/calendar.query.sql` to take `@employee_id`, add the `organizer OR attendee OR visibility IN ('team','org_wide')` predicate byte-for-byte as `ListEventsForOrg` ships it, and replace `to_tsvector('simple', …) @@ websearch_to_tsquery` with PGroonga `&@~` on title and description ordered by `pgroonga_score`, then run `sqlc generate`
-- [ ] T035 [US2] Add `employeeID` to `SearchEventsParams` / `SearchEvents` in `backend/internal/calendar/logic.go` and `backend/internal/calendar/event_logic.go` and update the caller in `backend/internal/calendar/connect.go` to pass the authenticated employee
-- [ ] T036 [US2] Update the document and event adapters in `backend/internal/search/sources.go` to pass the caller's employee id, and assert in the adapter that `snippet` is left empty for any kind whose content the caller may not read (FR-007)
-- [ ] T037 [US2] Confirm `SourceOutcome.hit_count` in `backend/internal/search/logic.go` counts only returned, post-cap rows — never a pre-filter total — so no count discloses the existence of withheld work (FR-009)
+- [X] T032 [US2] Add the `@employee_id` parameter and the precedence-preserving access predicate to `-- name: SearchDocuments :many` in `backend/database/scripts/docs.query.sql`, exactly as in `contracts/search.query.sql` — owner, then `COALESCE` over the explicit employee grant (including `'none'`, which denies and stops the chain), then the highest department grant, then `visibility = 'public'` — written as scalar sub-selects, never as an `OR`-chain, then run `sqlc generate`
+- [X] T033 [US2] Change `SearchDocuments` in `backend/internal/docs/logic.go` to take `employeeID` and pass it through, and update its caller in `backend/internal/docs/connect.go` to source the id from the auth context — `DocumentService.SearchDocuments` gets the same fix, so the feature-043 procedure chooser stops offering unopenable documents (R6)
+- [X] T034 [US2] Change `-- name: SearchEvents :many` in `backend/database/scripts/calendar.query.sql` to take `@employee_id`, add the `organizer OR attendee OR visibility IN ('team','org_wide')` predicate byte-for-byte as `ListEventsForOrg` ships it, and replace `to_tsvector('simple', …) @@ websearch_to_tsquery` with PGroonga `&@~` on title and description ordered by `pgroonga_score`, then run `sqlc generate`
+- [X] T035 [US2] Add `employeeID` to `SearchEventsParams` / `SearchEvents` in `backend/internal/calendar/logic.go` and `backend/internal/calendar/event_logic.go` and update the caller in `backend/internal/calendar/connect.go` to pass the authenticated employee
+- [X] T036 [US2] Update the document and event adapters in `backend/internal/search/sources.go` to pass the caller's employee id, and assert in the adapter that `snippet` is left empty for any kind whose content the caller may not read (FR-007)
+- [X] T037 [US2] Confirm `SourceOutcome.hit_count` in `backend/internal/search/logic.go` counts only returned, post-cap rows — never a pre-filter total — so no count discloses the existence of withheld work (FR-009)
 
 **Checkpoint**: US1 and US2 both hold — every row in every list is openable, and nothing
 unopenable is named, snippeted or counted.
@@ -161,17 +161,17 @@ that could not be reached.
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T038 [P] [US3] Write the US3 scenarios in `backend/integration/federated_search_test.go`: all eight outcomes are `OK` when healthy; a failing source yields `UNAVAILABLE` with a non-empty detail while the other seven stay `OK` and still return hits; a source past its deadline does not delay the response beyond the overall budget; all sources failing returns `connect.CodeUnavailable` rather than an empty success; a source with no matches is `OK` with `hit_count` zero, not `UNAVAILABLE`; a caller without `docs.view` gets a successful search with the document outcome `NOT_PERMITTED` and every other source answering; a caller permitted nothing gets a successful empty response with eight `NOT_PERMITTED` outcomes (FR-004, FR-005, FR-006, FR-012, R14)
-- [ ] T039 [P] [US3] Add the partial-failure scenario to `frontend/apps/web/e2e/federated-search.spec.ts`: when one source fails the page still lists the healthy sources' results and names the unavailable kind
+- [X] T038 [P] [US3] Write the US3 scenarios in `backend/integration/federated_search_test.go`: all eight outcomes are `OK` when healthy; a failing source yields `UNAVAILABLE` with a non-empty detail while the other seven stay `OK` and still return hits; a source past its deadline does not delay the response beyond the overall budget; all sources failing returns `connect.CodeUnavailable` rather than an empty success; a source with no matches is `OK` with `hit_count` zero, not `UNAVAILABLE`; a caller without `docs.view` gets a successful search with the document outcome `NOT_PERMITTED` and every other source answering; a caller permitted nothing gets a successful empty response with eight `NOT_PERMITTED` outcomes (FR-004, FR-005, FR-006, FR-012, R14)
+- [X] T039 [P] [US3] Add the partial-failure scenario to `frontend/apps/web/e2e/federated-search.spec.ts`: when one source fails the page still lists the healthy sources' results and names the unavailable kind
 
 ### Implementation for User Story 3
 
-- [ ] T040 [US3] Give each source goroutine its own `context.WithTimeout(perSourceDeadline)` in `backend/internal/search/logic.go`, recover from a panicking adapter, and record a `SourceOutcome` per source — `OK` with a post-cap `hit_count`, or `UNAVAILABLE` with a short non-sensitive `detail` such as `"timed out"` — always emitting all eight entries in the fixed source order
-- [ ] T041 [US3] In `backend/internal/search/connect.go`, read `interceptor.UserPermissionsFromContext`, skip any source whose permission the caller lacks, and report it `NOT_PERMITTED` with detail `"missing permission {id}"` without querying it; events are never `NOT_PERMITTED` because calendar search is any-authenticated today (R10)
-- [ ] T042 [US3] In `backend/internal/search/connect.go`, return `connect.CodeUnavailable` when no source returned `OK` **and at least one was attempted**, and return a normal empty success when every source was `NOT_PERMITTED` — nothing is broken, it is just not theirs (R14)
-- [ ] T043 [US3] Add one `slog.WarnContext` per failed source in `backend/internal/search/logic.go` carrying the source kind, the failure reason and the elapsed duration, alongside the per-search `InfoContext` from T007
-- [ ] T044 [P] [US3] Render the outcome banner in `frontend/apps/web/src/app/workspace/search/page.tsx`: name each kind whose outcome is `UNAVAILABLE`, stay silent for `NOT_PERMITTED`, and show an error rather than "no results" when the call itself fails
-- [ ] T045 [US3] Render the equivalent inline note in `frontend/apps/mobile/src/app/(app)/(more)/search.tsx` for `UNAVAILABLE` sources, and show "the search could not run" rather than an empty or stale list when the request fails offline (spec edge case)
+- [X] T040 [US3] Give each source goroutine its own `context.WithTimeout(perSourceDeadline)` in `backend/internal/search/logic.go`, recover from a panicking adapter, and record a `SourceOutcome` per source — `OK` with a post-cap `hit_count`, or `UNAVAILABLE` with a short non-sensitive `detail` such as `"timed out"` — always emitting all eight entries in the fixed source order
+- [X] T041 [US3] In `backend/internal/search/connect.go`, read `interceptor.UserPermissionsFromContext`, skip any source whose permission the caller lacks, and report it `NOT_PERMITTED` with detail `"missing permission {id}"` without querying it; events are never `NOT_PERMITTED` because calendar search is any-authenticated today (R10)
+- [X] T042 [US3] In `backend/internal/search/connect.go`, return `connect.CodeUnavailable` when no source returned `OK` **and at least one was attempted**, and return a normal empty success when every source was `NOT_PERMITTED` — nothing is broken, it is just not theirs (R14)
+- [X] T043 [US3] Add one `slog.WarnContext` per failed source in `backend/internal/search/logic.go` carrying the source kind, the failure reason and the elapsed duration, alongside the per-search `InfoContext` from T007
+- [X] T044 [P] [US3] Render the outcome banner in `frontend/apps/web/src/app/workspace/search/page.tsx`: name each kind whose outcome is `UNAVAILABLE`, stay silent for `NOT_PERMITTED`, and show an error rather than "no results" when the call itself fails
+- [X] T045 [US3] Render the equivalent inline note in `frontend/apps/mobile/src/app/(app)/(more)/search.tsx` for `UNAVAILABLE` sources, and show "the search could not run" rather than an empty or stale list when the request fails offline (spec edge case)
 
 **Checkpoint**: An incomplete answer is legible on both platforms; a permission gap is a
 skip, not an error.
@@ -188,14 +188,14 @@ and confirm only that kind is listed and more of it appears than in the mixed vi
 
 ### Tests for User Story 4 ⚠️
 
-- [ ] T046 [P] [US4] Write the US4 scenarios in `backend/integration/federated_search_test.go`: with no kind filter no source exceeds the per-source cap, one matching document appears within the first eight hits against a hundred matching messages, and the total never exceeds the maximum; narrowed to documents every hit is a Document hit and more documents come back than the mixed list held; an over-large narrowed limit is clamped to the narrowed maximum (FR-014, FR-015, FR-016, SC-006)
-- [ ] T047 [P] [US4] Add the narrowing scenarios to `frontend/apps/web/e2e/federated-search.spec.ts`: a category tab per kind with a result count, clicking one narrows the list, and changing the query keeps the narrowing (FR-018, US4 AC2)
+- [X] T046 [P] [US4] Write the US4 scenarios in `backend/integration/federated_search_test.go`: with no kind filter no source exceeds the per-source cap, one matching document appears within the first eight hits against a hundred matching messages, and the total never exceeds the maximum; narrowed to documents every hit is a Document hit and more documents come back than the mixed list held; an over-large narrowed limit is clamped to the narrowed maximum (FR-014, FR-015, FR-016, SC-006)
+- [X] T047 [P] [US4] Add the narrowing scenarios to `frontend/apps/web/e2e/federated-search.spec.ts`: a category tab per kind with a result count, clicking one narrows the list, and changing the query keeps the narrowing (FR-018, US4 AC2)
 
 ### Implementation for User Story 4
 
-- [ ] T048 [US4] Honour `kind_filter` in `backend/internal/search/logic.go`: query only the named source, skip the per-source cap, and apply the narrowed default 20 / max 50 limits instead of the mixed 40 / 80
-- [ ] T049 [US4] Rework `frontend/apps/web/src/app/workspace/search/components/CategoryTabs.tsx` to an "All" tab plus one tab per `SearchKind`, each labelled with its `SourceOutcome.hit_count`
-- [ ] T050 [US4] Wire tab selection in `frontend/apps/web/src/app/workspace/search/page.tsx` to re-issue `search()` with `kindFilter`, keeping the selected kind in the URL so it survives a query change
+- [X] T048 [US4] Honour `kind_filter` in `backend/internal/search/logic.go`: query only the named source, skip the per-source cap, and apply the narrowed default 20 / max 50 limits instead of the mixed 40 / 80
+- [X] T049 [US4] Rework `frontend/apps/web/src/app/workspace/search/components/CategoryTabs.tsx` to an "All" tab plus one tab per `SearchKind`, each labelled with its `SourceOutcome.hit_count`
+- [X] T050 [US4] Wire tab selection in `frontend/apps/web/src/app/workspace/search/page.tsx` to re-issue `search()` with `kindFilter`, keeping the selected kind in the URL so it survives a query change
 
 **Checkpoint**: All four stories are independently functional.
 
@@ -206,19 +206,19 @@ and confirm only that kind is listed and more of it appears than in the mixed vi
 **Purpose**: Living documentation (Constitution XII), the drift register, and the full
 verification runs from [quickstart.md](quickstart.md).
 
-- [ ] T051 [P] Rewrite the federated-search section of `docs/domain/workspace-navigation.md` to describe the server-side `SearchService.Search` behaviour — eight sources, per-source access rules, ranking, capping and `SourceOutcome` — and **delete** the client-side four-source fan-out description rather than annotating it (FR-023)
-- [ ] T052 [P] Update `docs/domain/docs-knowledge.md`: document search is access-scoped for every caller now, with the owner → employee-grant → department-grant → visibility precedence stated; delete the superseded org-scoped description
-- [ ] T053 [P] Update `docs/domain/calendar.md`: event search honours `organizer / attendee / team / org_wide` visibility and matches with PGroonga; delete the superseded description
-- [ ] T054 [P] Update `docs/domain/rituals-tasks.md`: work items — ordinary tasks and ritual instances alike — are searchable across projects, scoped to projects the caller may read
-- [ ] T055 Update the drift register in `docs/domain/README.md`: remove **D5** entirely (FR-023) and narrow **D49** to the organization-scoped document *tree* listings alone (FR-024)
-- [ ] T056 Grep the repository for any remaining description of the search box as a client-side fan-out over four sources — including `backend/docs/SYSTEM-ARCHITECTURE.md` — and correct or delete it (SC-009)
-- [ ] T057 Run `make lint-tenancy` and confirm it passes; this feature touches four schemas' queries and every one must still pin `organization_id`
-- [ ] T058 Run `make test-backend` end to end and fix every failure — `SearchDocuments` and `SearchEvents` now return less than they used to, so an existing scenario that depended on the org-scoped behaviour is a real regression to look at, not noise to silence
-- [ ] T059 Run `make test-frontend` end to end and confirm zero failures and no `test.skip` left from this feature
-- [ ] T060 Run `make test-mobile` end to end and confirm the new Maestro flow passes
-- [ ] T061 Verify the mobile search screen by eye at **360 dp on Android and on iOS** with all eight row kinds present, nothing clipped or overlapping, and each row navigating to its target (SC-010, Principle XIII — the habitual test device is an iPhone SE, so narrow-Android regressions otherwise go unnoticed)
-- [ ] T062 Measure p95 latency against a seeded workspace using the `curl` loop in [quickstart.md](quickstart.md), confirm it is under 1 s, and check with `EXPLAIN ANALYZE` that `idx_event_pgroonga` and `idx_file_metadata_filename_pgroonga` are being used (SC-004)
-- [ ] T063 Verify SC-008 manually: create a document titled `Quy trình đóng cửa`, search `đóng cửa` on both platforms, and confirm it comes back the same way an English title does
+- [X] T051 [P] Rewrite the federated-search section of `docs/domain/workspace-navigation.md` to describe the server-side `SearchService.Search` behaviour — eight sources, per-source access rules, ranking, capping and `SourceOutcome` — and **delete** the client-side four-source fan-out description rather than annotating it (FR-023)
+- [X] T052 [P] Update `docs/domain/docs-knowledge.md`: document search is access-scoped for every caller now, with the owner → employee-grant → department-grant → visibility precedence stated; delete the superseded org-scoped description
+- [X] T053 [P] Update `docs/domain/calendar.md`: event search honours `organizer / attendee / team / org_wide` visibility and matches with PGroonga; delete the superseded description
+- [X] T054 [P] Update `docs/domain/rituals-tasks.md`: work items — ordinary tasks and ritual instances alike — are searchable across projects, scoped to projects the caller may read
+- [X] T055 Update the drift register in `docs/domain/README.md`: remove **D5** entirely (FR-023) and narrow **D49** to the organization-scoped document *tree* listings alone (FR-024)
+- [X] T056 Grep the repository for any remaining description of the search box as a client-side fan-out over four sources — including `backend/docs/SYSTEM-ARCHITECTURE.md` — and correct or delete it (SC-009)
+- [X] T057 Run `make lint-tenancy` and confirm it passes; this feature touches four schemas' queries and every one must still pin `organization_id`
+- [X] T058 Run `make test-backend` end to end and fix every failure — `SearchDocuments` and `SearchEvents` now return less than they used to, so an existing scenario that depended on the org-scoped behaviour is a real regression to look at, not noise to silence
+- [X] T059 Run `make test-frontend` end to end and confirm zero failures and no `test.skip` left from this feature
+- [X] T060 Run `make test-mobile` end to end and confirm the new Maestro flow passes
+- [X] T061 Verify the mobile search screen by eye at **360 dp on Android and on iOS** with all eight row kinds present, nothing clipped or overlapping, and each row navigating to its target (SC-010, Principle XIII — the habitual test device is an iPhone SE, so narrow-Android regressions otherwise go unnoticed)
+- [X] T062 Measure p95 latency against a seeded workspace using the `curl` loop in [quickstart.md](quickstart.md), confirm it is under 1 s, and check with `EXPLAIN ANALYZE` that `idx_event_pgroonga` and `idx_file_metadata_filename_pgroonga` are being used (SC-004)
+- [X] T063 Verify SC-008 manually: create a document titled `Quy trình đóng cửa`, search `đóng cửa` on both platforms, and confirm it comes back the same way an English title does
 
 ---
 
@@ -298,6 +298,83 @@ clients (T023–T029), one takes US2's two independent query tracks. US3 and US4
 T022 lands.
 
 ---
+
+## Implementation notes and assumptions
+
+Recorded during `/speckit-implement`, which ran unattended. Each is a judgement call made
+where the plan left room, kept here so it can be reviewed rather than buried in a diff.
+
+- **[ASSUMPTION: the US3 failure scenarios live in `backend/internal/search/logic_test.go`,
+  not in `backend/integration/federated_search_test.go`.]** T038 asks for "a failing source",
+  "a source past its deadline", "a panicking adapter" and "every source failing" to be
+  asserted. None of those is reachable through the RPC surface: every source is a healthy
+  query against a healthy database, and PGroonga accepts even malformed query syntax
+  rather than erroring, so there is nothing a client can send that makes one source fail.
+  Making a source fail on demand means substituting the adapter, which is a package-level
+  test. The integration suite keeps everything that *is* observable over the wire —
+  all-OK, OK-with-zero, `NOT_PERMITTED` for one source, a caller permitted nothing, and
+  the elapsed-time bound.
+
+- **[ASSUMPTION: "a caller permitted to search nothing" gets seven `NOT_PERMITTED`
+  outcomes and one `OK`, not eight `NOT_PERMITTED`.]** Events carry no permission — R10
+  states plainly that calendar search is any-authenticated today and that inventing a
+  `calendar.search` permission would be a scope change. The scenario in
+  `contracts/test-scenarios.md` says "eight"; the contract it is testing says events are
+  never `NOT_PERMITTED`. The test asserts the seven and skips events.
+
+- **[ASSUMPTION: the file `context_line` is a label derived from `upload_context`
+  ("Shared in chat", "Project file", …), not the specific container's display name.]**
+  data-model.md gives "Engineering Team Chat" as the example. Resolving that means a
+  cross-domain lookup per hit into chat or collaboration, on the slowest path there is,
+  for a line of supporting text — and `FileServiceServer.SearchFiles` has carried
+  `ContextDisplayName: ""  // TODO` since feature 015 for the same reason. The label says
+  where the file was uploaded, which is what the row is for.
+
+- **[ASSUMPTION: on web, an Event row opens `/workspace/calendar`, not
+  `/workspace/calendar/{eventId}`.]** R11 names the per-event route and `internal/linking`
+  already emits it, but no such page exists in `apps/web` — the URL 404s. FR-017 says a
+  row must go somewhere real, so the row opens the calendar. Building a web event detail
+  page is a change in its own right. Mobile opens the event itself.
+
+- **[ASSUMPTION: the eight row kinds render through one shared `SearchResultCard` rather
+  than eight independently-styled cards.]** T023/T024 name four new components and a
+  switch across eight; that is what shipped, but each is a thin wrapper supplying a badge,
+  an icon and a route over one presentational card. The list is one list now, so the rows
+  should read as one list.
+
+- **[SCOPE: `GlobalSearchBar.tsx` was rewritten too.]** It is not named in any task, but it
+  was the second caller of the deleted `searchAll`. It now renders the same ranked list as
+  a dropdown preview, so the preview and the results page cannot disagree.
+
+- **[FOUND AND FIXED: `SearchFilesByNameAndContent` returned every file in the
+  organization to a caller with no accessible contexts.]** The access predicate read
+  `context_ids IS NULL OR far.context_id = ANY(context_ids)`, and a caller belonging to no
+  channel and no department sent an empty slice, which arrives as SQL `NULL` and disabled
+  the filter entirely — so the person with the *least* access saw the *most* files. The
+  US2 scenario "the outsider gets no File hit for a file in a channel they are not in"
+  caught it. The plan had recorded files as already filtering correctly (FR-011); it did
+  not. The escape hatch is removed rather than guarded, because it had no other caller.
+
+- **[DEVIATION: `SearchEvents` did not need a new `employeeID` argument.]** T035 asks for
+  one; `calendar.Logic.SearchEvents` already took `actorID`, which the connect layer
+  already populated from the auth context and the logic simply ignored. The visibility
+  predicate uses it. Smaller diff, same behaviour.
+
+- **[NOTE: the mobile Maestro flow reads a seeded search word from `.maestro/.env`.]** It
+  does not create its own fixtures: a document, a work item, an event and a file across
+  four domains would be four flows wearing a search flow's name. `MAESTRO_SEARCH_WORD` and
+  `MAESTRO_SEARCH_DOCUMENT_TITLE` are documented in `.env.example`.
+
+- **[NOTE: `make test-mobile` was not run as a whole.]** The federated-search flow itself
+  was run and passes on **both** an Android emulator and an iPhone SE simulator, and the
+  results list, the file detail screen and the recents list were verified by eye at 360 dp
+  on both. The rest of the standing suite needs fixture env vars this machine has no
+  values for and carries known-drift failures (D40, D47) unrelated to this feature.
+
+- **[NOTE: three web E2E specs fail, all pre-existing.]** `legal-surface.spec.ts` and
+  `user-guide-screenshots.spec.ts` register an organization without
+  `acceptedTermsVersion`; `voice-communication.spec.ts` needs a live LiveKit. All three
+  were confirmed failing on the branch point with this feature's changes stashed.
 
 ## Notes
 

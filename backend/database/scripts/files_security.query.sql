@@ -132,11 +132,16 @@ WHERE fm.organization_id = $1
     -- Search in indexed content using PGroonga
     (fci.extracted_text IS NOT NULL AND fci.extracted_text &@~ $2)
   )
-  -- Access control: filter by context_ids if provided
-  AND (
-    sqlc.narg('context_ids')::uuid[] IS NULL 
-    OR far.context_id = ANY(sqlc.narg('context_ids')::uuid[])
-  )
+  -- Access control: the file must sit in a context the caller belongs to.
+  --
+  -- There is deliberately no "if provided" escape here. It used to read
+  -- `context_ids IS NULL OR far.context_id = ANY(context_ids)`, and a caller who
+  -- belonged to no context at all sent an empty array, which arrives as NULL and
+  -- disabled the filter entirely — so the person with the least access saw every file
+  -- in the organization. A caller with no contexts must match nothing, which is exactly
+  -- what `= ANY('{}')` does. A file with no access rule row has no context and is
+  -- likewise unreachable, which is the safe reading of an unowned file.
+  AND far.context_id = ANY(@context_ids::uuid[])
 ORDER BY relevance_score DESC, fm.updated_at DESC
 LIMIT $3 OFFSET $4;
 

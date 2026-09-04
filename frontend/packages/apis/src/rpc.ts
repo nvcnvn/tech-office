@@ -12,7 +12,7 @@
 import { Interceptor, createClient, type Transport } from "@connectrpc/connect";
 import { getAuthToken } from "./token";
 import { hasPlatform, getPlatform } from "./platform";
-import { iam, organizations, department, notification, chat, preference, files, chat_files, document, collaboration, calendar, voice, compliance, tour } from "rpc";
+import { iam, organizations, department, notification, chat, preference, files, chat_files, document, collaboration, calendar, voice, compliance, tour, search } from "rpc";
 
 declare const require: ((id: string) => unknown) | undefined;
 
@@ -124,3 +124,6 @@ export const complianceClient = createClient(compliance.ComplianceService, proxy
 
 // Feature tour client (Feature 039: server-driven orientation tours)
 export const tourClient = createClient(tour.TourService, proxyTransport);
+
+// Federated search client (Feature 045: one request, eight sources, one ranked list)
+export const searchClient = createClient(search.SearchService, proxyTransport);

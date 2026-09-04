@@ -4,7 +4,7 @@ Tenant creation, the employee roster, and the department hierarchy. Owned by
 `internal/organization` (`OrganizationService`) and `internal/department`
 (`DepartmentService`).
 
-**Status date: 2026-08-27.** Supersedes specs 001, 003, 004, 005, 006, 025, 035.
+**Status date: 2026-09-04.** Supersedes specs 001, 003, 004, 005, 006, 025, 035.
 
 ## Organization
 
@@ -173,7 +173,9 @@ Multilingual matching uses PostgreSQL trigram GIN indexes plus language detectio
 in `schema.sql` gives the reason: smaller indexes, with result merging done in the
 application layer.
 
-These four RPCs are half of what the federated search box actually calls; see
+`SearchEmployees` and `SearchDepartments` are also two of the eight sources
+`SearchService.Search` fans out over; the federated searcher calls this domain's logic
+layer rather than its RPCs, and neither query changed. See
 [workspace-navigation.md](workspace-navigation.md#federated-search).
 
 ## Client surfaces

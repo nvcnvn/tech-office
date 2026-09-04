@@ -12,12 +12,10 @@ import {
 	Paper,
 	Typography,
 	List,
-	ListItem,
 	ListItemButton,
 	ListItemText,
 	ListItemAvatar,
 	Avatar,
-	Divider,
 	ClickAwayListener,
 } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -26,8 +24,12 @@ import PersonIcon from '@mui/icons-material/Person';
 import BusinessIcon from '@mui/icons-material/Business';
 import TagIcon from '@mui/icons-material/Tag';
 import MessageIcon from '@mui/icons-material/Message';
-import { createOrGetDirectMessage, searchAll } from 'apis';
-import type { FederatedSearchResults } from 'apis';
+import DescriptionIcon from '@mui/icons-material/Description';
+import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import EventIcon from '@mui/icons-material/Event';
+import { createOrGetDirectMessage, search } from 'apis';
+import type { SearchHit, SearchKind } from 'apis';
 
 interface GlobalSearchBarProps {
 	/**
@@ -40,20 +42,45 @@ interface GlobalSearchBarProps {
 	initialQuery?: string;
 }
 
+/** The icon each kind wears in the preview list. */
+const ICON_BY_KIND: Record<SearchKind, React.ReactNode> = {
+	person: <PersonIcon fontSize="small" />,
+	department: <BusinessIcon fontSize="small" />,
+	channel: <TagIcon fontSize="small" />,
+	message: <MessageIcon fontSize="small" />,
+	document: <DescriptionIcon fontSize="small" />,
+	file: <InsertDriveFileIcon fontSize="small" />,
+	work_item: <AssignmentIcon fontSize="small" />,
+	event: <EventIcon fontSize="small" />,
+};
+
+/** A stable key per row: the target identifier its own kind is opened by. */
+function hitKey(hit: SearchHit): string {
+	const t = hit.target;
+	const id =
+		t.messageId || t.taskId || t.documentSlug || t.fileId || t.eventId ||
+		t.channelId || t.employeeId || t.departmentId;
+	return `${hit.kind}:${id}`;
+}
+
 /**
  * Global search bar component for workspace layout
- * 
+ *
+ * The preview is the same ranked list the results page shows, just shorter: one request
+ * to SearchService.Search over all eight sources, rendered in the order the server
+ * returned. There is no client-side fan-out and nothing here to re-rank.
+ *
  * Features:
  * - Debounced input (300ms)
- * - Dropdown preview of search results
- * - Click on result to navigate to item
+ * - Dropdown preview of the ranked results
+ * - Click on a result to open it
  * - Press Enter or click search icon to navigate to full search page
  * - Keyboard shortcuts (Cmd+K / Ctrl+K to focus)
  * - Clear button
  * - Loading indicator
  */
 export default function GlobalSearchBar({
-	placeholder = 'Search employees, departments, channels, messages...',
+	placeholder = 'Search people, documents, work items, events, files and messages...',
 	initialQuery = '',
 }: GlobalSearchBarProps) {
 	const router = useRouter();
@@ -63,7 +90,7 @@ export default function GlobalSearchBar({
 	const [isOpeningDM, setIsOpeningDM] = useState(false);
 	const [debouncedQuery, setDebouncedQuery] = useState(initialQuery);
 	const [showDropdown, setShowDropdown] = useState(false);
-	const [results, setResults] = useState<FederatedSearchResults | null>(null);
+	const [hits, setHits] = useState<SearchHit[]>([]);
 	const searchInputRef = useRef<HTMLInputElement>(null);
 
 	// Debounce query input (300ms)
@@ -75,26 +102,29 @@ export default function GlobalSearchBar({
 		return () => clearTimeout(timer);
 	}, [query]);
 
-	// Execute search when debounced query changes
+	// Execute search when debounced query changes. Two characters is the server's
+	// minimum, so a single character never fans out.
 	useEffect(() => {
-		if (debouncedQuery.trim()) {
-			setIsLoading(true);
-			searchAll(debouncedQuery.trim(), 5) // Limit to 5 results per category for preview
-				.then((searchResults) => {
-					setResults(searchResults);
-					setShowDropdown(true);
-				})
-				.catch((err) => {
-					console.error('Search preview error:', err);
-					setResults(null);
-				})
-				.finally(() => {
-					setIsLoading(false);
-				});
-		} else {
-			setResults(null);
+		const trimmed = debouncedQuery.trim();
+		if (trimmed.length < 2) {
+			setHits([]);
 			setShowDropdown(false);
+			return;
 		}
+
+		setIsLoading(true);
+		search({ query: trimmed, limit: 16 })
+			.then((results) => {
+				setHits(results.hits);
+				setShowDropdown(true);
+			})
+			.catch((err) => {
+				console.error('Search preview error:', err);
+				setHits([]);
+			})
+			.finally(() => {
+				setIsLoading(false);
+			});
 	}, [debouncedQuery]);
 
 	// Keyboard shortcut: Cmd+K / Ctrl+K to focus search
@@ -113,37 +143,32 @@ export default function GlobalSearchBar({
 	const handleClear = useCallback(() => {
 		setQuery('');
 		setDebouncedQuery('');
-		setResults(null);
+		setHits([]);
 		setShowDropdown(false);
 		searchInputRef.current?.focus();
 	}, []);
 
-	const handleSubmit = useCallback(
-		(e: React.FormEvent) => {
-			e.preventDefault();
-			if (query.trim()) {
-				setShowDropdown(false);
-				router.push(`/workspace/search?q=${encodeURIComponent(query)}`);
-			}
-		},
-		[query, router]
-	);
-
-	const handleSearchIconClick = useCallback(() => {
+	const goToResultsPage = useCallback(() => {
 		if (query.trim()) {
 			setShowDropdown(false);
 			router.push(`/workspace/search?q=${encodeURIComponent(query)}`);
 		}
 	}, [query, router]);
 
+	const handleSubmit = useCallback(
+		(e: React.FormEvent) => {
+			e.preventDefault();
+			goToResultsPage();
+		},
+		[goToResultsPage]
+	);
+
 	const handleClickAway = useCallback(() => {
 		setShowDropdown(false);
 	}, []);
 
-	const handleEmployeeClick = async (employeeId: string) => {
-		setShowDropdown(false);
+	const openPerson = async (employeeId: string) => {
 		setIsOpeningDM(true);
-
 		try {
 			const result = await createOrGetDirectMessage(employeeId);
 			await Promise.all([
@@ -153,46 +178,46 @@ export default function GlobalSearchBar({
 			]);
 			router.push(`/workspace/chat?channel=${result.channel.id}`);
 		} catch (error) {
-			console.error('Failed to create/get DM from global search:', error);
+			console.error('Failed to open the conversation from global search:', error);
 		} finally {
 			setIsOpeningDM(false);
 		}
 	};
 
-	const handleDepartmentClick = (departmentId: string) => {
+	// Every kind has somewhere to go. The hit already carries the identifiers, so opening
+	// one costs no second lookup.
+	const handleHitClick = (hit: SearchHit) => {
 		setShowDropdown(false);
-		// TODO: Navigate to department page when route exists
-		console.log('Navigate to department:', departmentId);
-	};
-
-	const handleChannelClick = (channelId: string) => {
-		setShowDropdown(false);
-		router.push(`/workspace/chat?channel=${channelId}`);
-	};
-
-	const handleMessageClick = (channelId: string, messageId: string) => {
-		setShowDropdown(false);
-		// Navigate to message in channel context using query parameters
-		router.push(`/workspace/chat?channel=${channelId}&message=${messageId}`);
-	};
-
-	const handleViewAllResults = useCallback(() => {
-		if (query.trim()) {
-			setShowDropdown(false);
-			router.push(`/workspace/search?q=${encodeURIComponent(query)}`);
+		const t = hit.target;
+		switch (hit.kind) {
+			case 'person':
+				void openPerson(t.employeeId);
+				return;
+			case 'department':
+				router.push('/workspace/organization');
+				return;
+			case 'channel':
+				router.push(`/workspace/chat?channel=${t.channelId}`);
+				return;
+			case 'message':
+				router.push(`/workspace/chat?channel=${t.channelId}&message=${t.messageId}`);
+				return;
+			case 'document':
+				router.push(`/workspace/docs/${t.documentSlug}`);
+				return;
+			case 'file':
+				router.push('/workspace/files');
+				return;
+			case 'work_item':
+				router.push(`/workspace/projects/${t.projectId}/tasks/${t.taskId}`);
+				return;
+			case 'event':
+				// The web calendar has no per-event route, so an event row opens the
+				// calendar itself rather than a URL that would 404.
+				router.push('/workspace/calendar');
+				return;
 		}
-	}, [query, router]);
-
-	const hasResults = results && (
-		results.employees.length > 0 ||
-		results.departments.length > 0 ||
-		results.channels.length > 0 ||
-		results.messages.length > 0
-	);
-
-	const totalResults = results
-		? results.employees.length + results.departments.length + results.channels.length + results.messages.length
-		: 0;
+	};
 
 	return (
 		<ClickAwayListener onClickAway={handleClickAway}>
@@ -204,10 +229,7 @@ export default function GlobalSearchBar({
 					position: 'relative',
 				}}
 			>
-				<Box
-					component="form"
-					onSubmit={handleSubmit}
-				>
+				<Box component="form" onSubmit={handleSubmit}>
 					<TextField
 						id="global-search-input"
 						inputRef={searchInputRef}
@@ -217,7 +239,7 @@ export default function GlobalSearchBar({
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
 						onFocus={() => {
-							if (results && query.trim()) {
+							if (hits.length > 0 && query.trim()) {
 								setShowDropdown(true);
 							}
 						}}
@@ -230,7 +252,7 @@ export default function GlobalSearchBar({
 										) : (
 											<IconButton
 												size="small"
-												onClick={handleSearchIconClick}
+												onClick={goToResultsPage}
 												edge="start"
 												aria-label="search"
 											>
@@ -267,8 +289,8 @@ export default function GlobalSearchBar({
 					/>
 				</Box>
 
-				{/* Search Results Dropdown */}
-				{showDropdown && hasResults && (
+				{/* Ranked preview, in the server's order */}
+				{showDropdown && hits.length > 0 && (
 					<Paper
 						elevation={0}
 						sx={{
@@ -281,172 +303,37 @@ export default function GlobalSearchBar({
 							overflow: 'auto',
 							zIndex: 1300,
 						}}
+						data-testid="global-search-preview"
 					>
 						<List disablePadding dense>
-							{/* Employees */}
-							{results.employees.length > 0 && (
-								<>
-									<ListItem sx={{ py: 0.5, minHeight: 'auto' }}>
-										<Typography variant="caption" color="text.secondary" fontWeight="bold">
-											EMPLOYEES
-										</Typography>
-									</ListItem>
-									{results.employees.map((employee) => (
-										<ListItemButton
-											key={employee.id}
-											onClick={() => handleEmployeeClick(employee.id)}
-											disabled={isOpeningDM}
-											sx={{ py: 0.5 }}
-										>
-											<ListItemAvatar sx={{ minWidth: 40 }}>
-												<Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
-													<PersonIcon fontSize="small" />
-												</Avatar>
-											</ListItemAvatar>
-											<ListItemText
-												primary={`${employee.givenName} ${employee.familyName}`}
-												secondary={employee.email}
-												primaryTypographyProps={{
-													variant: 'body2',
-													noWrap: true,
-													fontWeight: 500,
-												}}
-												secondaryTypographyProps={{
-													variant: 'caption',
-													noWrap: true,
-												}}
-											/>
-										</ListItemButton>
-									))}
-									<Divider />
-								</>
-							)}
+							{hits.map((hit) => (
+								<ListItemButton
+									key={hitKey(hit)}
+									onClick={() => handleHitClick(hit)}
+									disabled={isOpeningDM && hit.kind === 'person'}
+									sx={{ py: 0.5 }}
+									data-testid={`global-search-hit-${hit.kind}`}
+								>
+									<ListItemAvatar sx={{ minWidth: 40 }}>
+										<Avatar sx={{ bgcolor: 'action.selected', color: 'text.secondary', width: 32, height: 32 }}>
+											{ICON_BY_KIND[hit.kind]}
+										</Avatar>
+									</ListItemAvatar>
+									<ListItemText
+										primary={hit.title}
+										secondary={hit.contextLine}
+										primaryTypographyProps={{ variant: 'body2', noWrap: true, fontWeight: 500 }}
+										secondaryTypographyProps={{ variant: 'caption', noWrap: true }}
+									/>
+								</ListItemButton>
+							))}
 
-							{/* Departments */}
-							{results.departments.length > 0 && (
-								<>
-									<ListItem sx={{ py: 0.5, minHeight: 'auto' }}>
-										<Typography variant="caption" color="text.secondary" fontWeight="bold">
-											DEPARTMENTS
-										</Typography>
-									</ListItem>
-									{results.departments.map((department) => (
-										<ListItemButton
-											key={department.id}
-											onClick={() => handleDepartmentClick(department.id)}
-											sx={{ py: 0.5 }}
-										>
-											<ListItemAvatar sx={{ minWidth: 40 }}>
-												<Avatar sx={{ bgcolor: 'secondary.main', width: 32, height: 32 }}>
-													<BusinessIcon fontSize="small" />
-												</Avatar>
-											</ListItemAvatar>
-											<ListItemText
-												primary={department.name}
-												secondary={department.description}
-												primaryTypographyProps={{
-													variant: 'body2',
-													noWrap: true,
-													fontWeight: 500,
-												}}
-												secondaryTypographyProps={{
-													variant: 'caption',
-													noWrap: true,
-												}}
-											/>
-										</ListItemButton>
-									))}
-									<Divider />
-								</>
-							)}
-
-							{/* Channels */}
-							{results.channels.length > 0 && (
-								<>
-									<ListItem sx={{ py: 0.5, minHeight: 'auto' }}>
-										<Typography variant="caption" color="text.secondary" fontWeight="bold">
-											CHANNELS
-										</Typography>
-									</ListItem>
-									{results.channels.map((channel) => (
-										<ListItemButton
-											key={channel.id}
-													onClick={() => handleChannelClick(channel.id)}
-											sx={{ py: 0.5 }}
-										>
-											<ListItemAvatar sx={{ minWidth: 40 }}>
-												<Avatar sx={{ bgcolor: 'success.main', width: 32, height: 32 }}>
-													<TagIcon fontSize="small" />
-												</Avatar>
-											</ListItemAvatar>
-											<ListItemText
-												primary={channel.displayName}
-												secondary={channel.description || (channel.isPrivate ? 'Private channel' : 'Public channel')}
-												primaryTypographyProps={{
-													variant: 'body2',
-													noWrap: true,
-													fontWeight: 500,
-												}}
-												secondaryTypographyProps={{
-													variant: 'caption',
-													noWrap: true,
-												}}
-											/>
-										</ListItemButton>
-									))}
-									<Divider />
-								</>
-							)}
-
-							{/* Messages */}
-							{results.messages.length > 0 && (
-								<>
-									<ListItem sx={{ py: 0.5, minHeight: 'auto' }}>
-										<Typography variant="caption" color="text.secondary" fontWeight="bold">
-											MESSAGES
-										</Typography>
-									</ListItem>
-									{results.messages.map((message) => (
-										<ListItemButton
-											key={message.id}
-													onClick={() => handleMessageClick(message.channelId, message.id)}
-											sx={{ py: 0.5 }}
-										>
-											<ListItemAvatar sx={{ minWidth: 40 }}>
-												<Avatar sx={{ bgcolor: 'info.main', width: 32, height: 32 }}>
-													<MessageIcon fontSize="small" />
-												</Avatar>
-											</ListItemAvatar>
-											<ListItemText
-												primary={message.messageText}
-												secondary={`in ${message.channelName}`}
-												primaryTypographyProps={{
-													variant: 'body2',
-													noWrap: true,
-													fontWeight: 500,
-												}}
-												secondaryTypographyProps={{
-													variant: 'caption',
-													noWrap: true,
-												}}
-											/>
-										</ListItemButton>
-									))}
-									<Divider />
-								</>
-							)}
-
-							{/* View All Results Footer */}
 							<ListItemButton
-								onClick={handleViewAllResults}
-								sx={{
-									justifyContent: 'center',
-									py: 1,
-									bgcolor: 'action.hover',
-								}}
+								onClick={goToResultsPage}
+								sx={{ justifyContent: 'center', py: 1, bgcolor: 'action.hover' }}
 							>
 								<Typography variant="caption" fontWeight="bold" color="primary">
-									View all {totalResults} results
+									View all results
 								</Typography>
 							</ListItemButton>
 						</List>
@@ -454,7 +341,7 @@ export default function GlobalSearchBar({
 				)}
 
 				{/* Empty State in Dropdown */}
-				{showDropdown && !hasResults && !isLoading && query.trim() && (
+				{showDropdown && hits.length === 0 && !isLoading && query.trim() && (
 					<Paper
 						elevation={0}
 						sx={{

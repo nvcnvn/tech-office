@@ -85,8 +85,12 @@ func (l *searchLogic) SearchFiles(ctx context.Context, tx database.DBTX, orgID, 
 		"chat_channels", len(chatChannelIDs),
 		"departments", len(departmentDocIDs))
 
-	// Step 2: Combine all accessible context IDs for SQL filtering
-	allContextIDs := append(chatChannelIDs, departmentDocIDs...)
+	// Step 2: Combine all accessible context IDs for SQL filtering.
+	// Non-nil even when empty: the query filters on `= ANY(@context_ids)` with no
+	// "unfiltered if null" escape, and a caller with no contexts must match nothing.
+	allContextIDs := make([]dbuuid.UUID, 0, len(chatChannelIDs)+len(departmentDocIDs))
+	allContextIDs = append(allContextIDs, chatChannelIDs...)
+	allContextIDs = append(allContextIDs, departmentDocIDs...)
 
 	// Step 3: Execute PGroonga search with context filtering
 	rows, err := l.queries.SearchFilesByNameAndContent(ctx, tx, &database.SearchFilesByNameAndContentParams{

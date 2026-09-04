@@ -3,26 +3,19 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
-import { Paper, Box, Chip } from '@mui/material';
-import { createOrGetDirectMessage, type EmployeeSearchResult as EmployeeResult } from 'apis';
-import { UserCard } from '@/components/user';
+import PersonIcon from '@mui/icons-material/Person';
+import { createOrGetDirectMessage, type SearchHit } from 'apis';
+import SearchResultCard from './SearchResultCard';
 
-interface EmployeeSearchResultProps {
-	employee: EmployeeResult;
-}
-
-/**
- * Employee search result card component
- * 
- * Displays employee name, email, and relevance score
- */
-export default function EmployeeSearchResult({ employee }: EmployeeSearchResultProps) {
+export default function EmployeeSearchResult({ hit }: { hit: SearchHit }) {
 	const router = useRouter();
 	const queryClient = useQueryClient();
 
+	// Opening a person means opening the conversation with them, creating it if this is
+	// the first one.
 	const handleClick = async () => {
 		try {
-			const result = await createOrGetDirectMessage(employee.id);
+			const result = await createOrGetDirectMessage(hit.target.employeeId);
 			await Promise.all([
 				queryClient.invalidateQueries({ queryKey: ['recentChannels'] }),
 				queryClient.invalidateQueries({ queryKey: ['allChannels'] }),
@@ -30,44 +23,18 @@ export default function EmployeeSearchResult({ employee }: EmployeeSearchResultP
 			]);
 			router.push(`/workspace/chat?channel=${result.channel.id}`);
 		} catch (error) {
-			console.error('Failed to create/get DM from search results:', error);
+			console.error('Failed to open the conversation from a search result:', error);
 		}
 	};
 
 	return (
-		<Paper
-			sx={{
-				p: 2,
-				cursor: 'pointer',
-				transition: 'border-color 0.2s',
-				'&:hover': {
-					borderColor: 'text.disabled',
-				},
-			}}
+		<SearchResultCard
+			badge="Person"
+			icon={<PersonIcon />}
+			title={hit.title}
+			contextLine={hit.contextLine}
+			testId="search-result-person"
 			onClick={handleClick}
-		>
-			<Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-				<UserCard
-					employeeId={employee.id}
-					userInfo={{
-						givenName: employee.givenName,
-						familyName: employee.familyName,
-						email: employee.email,
-						isActive: employee.isActive,
-					}}
-					variant="standard"
-					showPresence
-					sx={{ flex: 1, minWidth: 0 }}
-				/>
-
-				{/* Relevance Score */}
-				<Chip
-					label={`${Math.round(employee.relevanceScore * 100)}%`}
-					size="small"
-					color="primary"
-					variant="outlined"
-				/>
-			</Box>
-		</Paper>
+		/>
 	);
 }

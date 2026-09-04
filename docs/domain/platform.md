@@ -30,6 +30,13 @@ The two-layer split (Connect layer / Logic layer) is Constitution principle III.
 constructors never take a pool; they take `database.DBTX` per call so the Connect layer
 decides transaction scope.
 
+`SearchService` is the one place a Connect layer hands the logic layer the **tenant pool**
+rather than a transaction. Its fan-out runs eight sources concurrently, and a `pgx.Tx` is
+not safe for concurrent use — eight goroutines sharing one would interleave protocol frames
+on a single connection. `*pgxpool.Pool` satisfies `database.DBTX` and gives each source its
+own connection. Search is a pure read with no cross-source consistency requirement, so the
+transaction bought nothing it was giving up latency for. The shape holds everywhere else.
+
 ## Multi-tenancy
 
 Tenant isolation is **application-enforced, not RLS-enforced**.

@@ -56,6 +56,9 @@ export default function MoreLayout() {
             list you were reading. */}
         <Stack.Screen name="docs/[slug]" options={{ title: "Document" }} />
         <Stack.Screen name="files/index" options={{ title: "Files", ...childBackOptions }} />
+        {/* Not childBackOptions: a file is opened from the Files list or from a search
+            result, so its back button belongs to whichever brought you here. */}
+        <Stack.Screen name="files/[fileId]" options={{ title: "File" }} />
         {/* Maestro's shared-route smoke harness. The screen itself refuses to
             render outside development — see navigation-debug.tsx. */}
         <Stack.Screen

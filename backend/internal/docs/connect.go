@@ -381,7 +381,7 @@ func (s *DocumentServiceConnect) SearchDocuments(
 		"query", req.Msg.Query,
 	)
 
-	_, organizationID, err := s.extractAuthContext(ctx)
+	employeeID, organizationID, err := s.extractAuthContext(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -407,7 +407,7 @@ func (s *DocumentServiceConnect) SearchDocuments(
 		}
 
 		var txErr error
-		results, txErr = s.Logic.SearchDocuments(ctx, tx, organizationID, req.Msg.Query, status, cursor, limit)
+		results, txErr = s.Logic.SearchDocuments(ctx, tx, organizationID, employeeID, req.Msg.Query, status, cursor, limit)
 		return txErr
 	})
 	if err != nil {

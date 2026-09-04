@@ -123,6 +123,12 @@ export type {
 	ChannelSuggestion,
 	MessageSearchResult,
 	SearchCategory,
+	SearchKind,
+	SourceStatus,
+	SearchTarget,
+	SearchHit,
+	SourceOutcome,
+	SearchResults,
 } from './types/search';
 
 // Export IAM constants and types

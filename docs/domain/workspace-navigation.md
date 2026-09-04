@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-04.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044.
+**Status date: 2026-09-04.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045.
 
 ## Canonical resource links
 
@@ -85,28 +85,85 @@ Entry point is the workspace search box; results page at `/workspace/search`, mo
 point is the `SearchPill` at the top of Chat, Today, My Work and Schedule — the More menu
 no longer lists Search, because a menu row made a top-level verb look like a setting.
 
-There is **no backend federated-search service**. `packages/apis/src/search.ts` fans out
-client-side with `Promise.all` over four RPCs, each individually `.catch(() => [])` so one
-failing domain does not empty the page:
+Search is **server-side**. `SearchService.Search` (`backend/rpc/v1/search.proto`,
+`internal/search/`) answers one request by fanning out over **eight** sources concurrently
+and returning one ranked list plus a per-source outcome report. `packages/apis/src/search.ts`
+is a thin wrapper over that one RPC; there is no client-side fan-out and neither client
+merges, ranks or caps anything.
 
-| Source | RPC |
-|---|---|
-| Employees | `OrganizationService.SearchEmployees` |
-| Departments | `OrganizationService.SearchDepartments` |
-| Channels | `ChatService.SearchChannels` |
-| Messages | `ChatService.SearchMessages` |
+`internal/search` owns **no SQL** and no access rule of its own. It depends on six domains'
+logic-layer interfaces, injected in `cmd/server.go`, and merges what they return
+(Constitution IV). It holds no `Queries` field and has no `.query.sql` file.
 
-Because those four are all that come back, the mobile screen renders and routes exactly
-four row kinds. Person rows open (or create) the DM via `CreateOrGetDirectMessage` and
-surface a failure rather than swallowing it; Channel rows open the channel; Message rows
-open the channel they were posted in with `highlightedMessageId` set — they used to be
-inert; Department rows are informational, because mobile has no department screen. Task,
-Event and Document rows were configured with tap handlers that nothing could ever reach.
+| Source (`SearchKind`) | Logic method | Permission | Access rule enforced in the query |
+|---|---|---|---|
+| `PERSON` | `organization.SearchEmployees` | `org.searchEmployees` | org-scoped by design |
+| `CHANNEL` | `chat.SearchChannels` | `chat.search` | public channel or member of private |
+| `DOCUMENT` | `docs.SearchDocuments` | `docs.view` | owner → employee grant (incl. an explicit `none`, which denies) → highest department grant → `visibility = 'public'` |
+| `WORK_ITEM` | `collaboration.SearchTasks` | `collab.viewTask` | `p.visibility = 'public' OR project_membership`; excludes deleted tasks and archived projects |
+| `EVENT` | `calendar.SearchEvents` | *(none — any authenticated caller)* | organiser OR attendee OR `visibility IN ('team','org_wide')`; cancelled events excluded |
+| `FILE` | `files.SearchFiles` | `files.search` | the file's `file_access_rule.context_id` must be one of the caller's contexts |
+| `DEPARTMENT` | `organization.SearchDepartments` | `org.searchDepartments` | org-scoped by design |
+| `MESSAGE` | `chat.SearchMessages` | `chat.search` | messages in channels the caller can read |
 
-Matching is PostgreSQL trigram (fuzzy) and PGroonga (multilingual full text), with language
-detection via `lingua-go` in `internal/organization/language_detector.go`. Autocomplete has
-its own narrower RPCs (`AutocompleteEmployees`, `AutocompleteDepartments`,
-`AutocompleteChannels`).
+That table is also the fixed **source-priority order**, and the order the eight
+`SourceOutcome` entries always come back in.
+
+**Ranking.** The eight matchers score on incomparable scales, so there is no cross-source
+relevance number. The merge is round-robin by within-source rank, sorted ascending by
+`(rank_within_source, source_priority, kind, id)`. The key ends in an identifier, so the
+order is total: the same query over the same data produces the same list on web and on
+mobile by construction. Every source's best hit precedes any source's second-best, so one
+matching document sits inside the first screen even against a hundred matching messages.
+
+**Bounding.** Mixed list: `limit` defaults to 40, max 80, capped at **5 hits per source**
+before the merge. Narrowed to one kind (`kind_filter`): default 20, max 50, per-source cap
+skipped. Limits are clamped, never rejected. A query shorter than 2 characters after
+trimming is `InvalidArgument`; longer than 200 characters is truncated. Constants live in
+`internal/search/logic.go`, not in the wire contract.
+
+**Failure and permissions.** Each source runs in its own goroutine with an 800 ms deadline
+inside a 900 ms overall budget, and a panicking adapter is caught. A source that errors or
+times out is reported `SOURCE_STATUS_UNAVAILABLE` with a short non-sensitive detail and the
+search still returns everything else. A source whose permission the caller lacks is
+reported `SOURCE_STATUS_NOT_PERMITTED` and is never queried — a skip, not a failure. The
+only error response is `CodeUnavailable`, and only when at least one source was attempted
+and none returned `OK`; a caller permitted to search nothing gets a normal empty success.
+`SourceOutcome.hit_count` counts only rows actually in the response, after capping, so no
+count discloses withheld work.
+
+**What a row carries.** `SearchHit` is `kind`, `title`, `context_line`, `snippet`, `rank`
+and a flat `SearchTarget` with one named field per identifier, so a client opens a row with
+no second lookup. Two fields are load-bearing: a document carries its **slug** (both
+viewers route by slug), and a work item carries its **project id** alongside the task id
+(both task routes are project-scoped). `snippet` is populated only by documents and
+messages — the two sources that produce one and whose content the caller is entitled to
+read.
+
+**Clients.** Both render the one list in the order returned:
+
+- Web `/workspace/search` — one row component per kind under `search/components/`, all
+  through the shared `SearchResultCard`; an "All" tab plus one tab per kind, each labelled
+  with its `hit_count`; the selected kind lives in the URL (`?kind=`) so narrowing survives
+  a query change. Unavailable sources are named in a banner; not-permitted sources stay
+  silent. `GlobalSearchBar` renders the same ranked list as a dropdown preview.
+- Mobile `(more)/search.tsx` — the same eight kinds with badges and `testID`s, routing:
+  Person → DM via `CreateOrGetDirectMessage`, Channel/Message → `(chat)/{channelId}`,
+  Document → `(more)/docs/{slug}`, File → `(more)/files/{fileId}`, Work item →
+  `(tasks)/{projectId}/task/{taskId}`, Event → `(calendar)/{eventId}`, Department
+  informational (mobile has no department screen). Recent items stay in device MMKV, never
+  on the server, and a recent whose target will not open says "this item is no longer
+  available" and removes itself.
+
+Web routes events to `/workspace/calendar` rather than a per-event page, because the web
+app has no event detail route; mobile opens the event itself.
+
+Matching is PostgreSQL trigram (fuzzy, people and departments) and PGroonga (multilingual
+full text, everything else), with language detection via `lingua-go` in
+`internal/organization/language_detector.go`. `idx_event_pgroonga` and
+`idx_file_metadata_filename_pgroonga` back the two sources that previously matched with no
+index at all. Autocomplete keeps its own narrower RPCs (`AutocompleteEmployees`,
+`AutocompleteDepartments`, `AutocompleteChannels`).
 
 ## Context rail
 
@@ -408,8 +465,15 @@ workspace-address rules `deriveSubdomain` / `isValidSubdomain` / `normalizeSubdo
 ## Tests
 
 `integration/canonical_links_test.go`, `context_rail_test.go`, `preference_test.go`,
-`feature_tour_test.go`; `apps/web/e2e/`; Maestro flows for mobile, including
-`.maestro/feature-tour/`.
+`feature_tour_test.go`, `federated_search_test.go`; `apps/web/e2e/`, including
+`federated-search.spec.ts`; Maestro flows for mobile, including `.maestro/feature-tour/`
+and `.maestro/federated-search.yaml`.
+
+`internal/search/logic_test.go` covers the fan-out's failure paths — a failing source, a
+panicking adapter, a source past its deadline, every source failing, and the round-robin
+merge's determinism. They live there rather than in the integration suite because no
+source can be made to fail through the RPC surface: every one is a healthy query against a
+healthy database, and PGroonga accepts even malformed query syntax rather than erroring.
 
 `feature_tour_test.go` also carries `TestTourPermissionIdsExist`, which asserts that every
 permission id named in `internal/tour/content.go` still exists in `public.permission`.
@@ -469,15 +533,6 @@ accessibility tree, so Maestro can neither see it, tap it, nor type past it, and
 AutoFill opt-out does, at the cost of password-manager fill on the credential that is the
 owner's PIN-recovery anchor. US2 and US3 therefore have backend scenario coverage but no
 passing blackbox flow.
-
-**D5 — spec 011's "global search system" is four client-side calls.** Server-side search
-exists for documents (`SearchDocuments`), files (`SearchFiles`, with access filtering),
-calendar (`SearchEvents`) and tasks (PGroonga + trigram indexes on `collaboration.task`
-`title`), but none of them are in `searchAll`. A user searching for a document title from
-the workspace search box gets nothing. Wiring them in is additive — the client aggregator
-already tolerates per-source failure — but it also needs result-type handling in
-`CategoryTabs`/`SearchResults`, and files/docs results must respect their own access rules
-rather than being filtered client-side.
 
 **Legacy route normalisation is open-ended.** `normalizeLegacyRoute` in
 `internal/linking/normalize.go` accepts non-canonical paths and rewrites them. Given the

@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044 (034 and
+**Status date: 2026-09-04.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044, 045 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 
@@ -84,6 +84,16 @@ level is used, which is where an ordinary top-level task belongs. This resolutio
 before anything parses the field, because the parse panics on an empty string.
 
 Search indexes on `title`: PGroonga (multilingual full text) **and** trigram (fuzzy).
+
+`SearchTasks` is the cross-project work-item search behind the workspace search box
+(feature 045). Ordinary tasks and ritual instances alike — to the person searching they are
+the same kind of thing, work with a name and a due date, and the row says which via
+`task_kind`. It matches `t.title &@~ @query` on `idx_task_title_pgroonga`, joins
+`collaboration.project` and `collaboration.project_state` for the project name and state,
+and is scoped by the same project-access predicate `ListTasksBySourceMessages` uses:
+`p.visibility = 'public' OR EXISTS(project_membership)`. Deleted tasks and archived
+projects are excluded, and `hit_count` counts only returned rows, so no count discloses
+work the caller may not see.
 
 `collaboration.task_assignee` supports roles `assignee | reviewer | approver`.
 
@@ -824,9 +834,9 @@ lost. Converting an entry point to a route reintroduces exactly that loss.
 Attaching, replacing and removing is **web-only**, in the ritual definition editor, behind a
 client-side confirmation stating that everyone who can see an instance of this ritual will
 be able to read the chosen document. No acknowledgement of the warning is persisted. The
-chooser is backed by `searchDocuments`, which is organization-scoped rather than
-access-scoped (drift D49), so it may offer a document the manager cannot open — the server
-refuses that attachment, which is where the rule is actually enforced. Mobile reads the
+chooser is backed by `searchDocuments`, which is access-scoped as of feature 045, so it
+only offers documents the manager can actually open; the server still validates the
+attachment with `CheckAccess`, which is where the rule is enforced. Mobile reads the
 procedure and never configures it — its create screen does not offer attachment either, and
 sends no `procedure_document_id`.
 

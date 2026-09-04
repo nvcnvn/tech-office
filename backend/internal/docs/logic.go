@@ -113,7 +113,10 @@ type DocumentLogic interface {
 	DeleteDocument(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, docID dbuuid.UUID) (int32, error)
 	ListDocuments(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, parentID *dbuuid.UUID, status *string, cursor *dbuuid.UUID, limit int32) ([]*rpcv1.DocumentSummary, error)
 	GetDocumentTree(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, rootID *dbuuid.UUID, maxDepth int32) ([]*rpcv1.DocumentTreeNode, error)
-	SearchDocuments(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, query string, status *string, cursor *dbuuid.UUID, limit int32) ([]*rpcv1.SearchResult, error)
+	// SearchDocuments is access-scoped: it returns only documents the employee may read,
+	// by the same owner -> employee-grant -> department-grant -> visibility precedence
+	// CheckAccess applies (feature 045, FR-007).
+	SearchDocuments(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, query string, status *string, cursor *dbuuid.UUID, limit int32) ([]*rpcv1.SearchResult, error)
 	UpdateDocumentStatus(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, docID dbuuid.UUID, status string) (*rpcv1.Document, error)
 	ResolveSlug(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, slug string) (currentSlug string, isRedirect bool, docID dbuuid.UUID, err error)
 
@@ -785,7 +788,7 @@ func (l *documentLogicImpl) GetDocumentTree(
 func (l *documentLogicImpl) SearchDocuments(
 	ctx context.Context,
 	tx database.DBTX,
-	orgID dbuuid.UUID,
+	orgID, employeeID dbuuid.UUID,
 	query string,
 	status *string,
 	cursor *dbuuid.UUID,
@@ -803,6 +806,7 @@ func (l *documentLogicImpl) SearchDocuments(
 
 	results, err := l.Queries.SearchDocuments(ctx, tx, &database.SearchDocumentsParams{
 		OrganizationID: orgID,
+		EmployeeID:     employeeID,
 		Query:          query,
 		Status:         statusFilter,
 		Cursor:         cursorUUID,

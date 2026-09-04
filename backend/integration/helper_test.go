@@ -162,6 +162,7 @@ type testWorld struct {
 	cal         rpcv1connect.CalendarServiceClient
 	compliance  rpcv1connect.ComplianceServiceClient
 	tour        rpcv1connect.TourServiceClient
+	search      rpcv1connect.SearchServiceClient
 }
 
 func newTestWorld(t *testing.T) *testWorld {
@@ -189,6 +190,7 @@ func newTestWorld(t *testing.T) *testWorld {
 		cal:         rpcv1connect.NewCalendarServiceClient(http.DefaultClient, serverBaseURL),
 		compliance:  rpcv1connect.NewComplianceServiceClient(http.DefaultClient, serverBaseURL),
 		tour:        rpcv1connect.NewTourServiceClient(http.DefaultClient, serverBaseURL),
+		search:      rpcv1connect.NewSearchServiceClient(http.DefaultClient, serverBaseURL),
 	}
 }
 

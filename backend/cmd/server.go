@@ -32,6 +32,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/internal/notification"
 	"github.com/nvcnvn/tech-office/backend/internal/organization"
 	"github.com/nvcnvn/tech-office/backend/internal/preference"
+	"github.com/nvcnvn/tech-office/backend/internal/search"
 	"github.com/nvcnvn/tech-office/backend/internal/tour"
 	"github.com/nvcnvn/tech-office/backend/internal/voice"
 	"github.com/nvcnvn/tech-office/backend/rpc/v1/rpcv1connect"
@@ -620,6 +621,21 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	complianceConnect := compliance.NewServiceConnect(complianceLogic, tenantPool)
 	mux.Handle(rpcv1connect.NewComplianceServiceHandler(complianceConnect, interceptors))
 	slog.InfoContext(ctx, "compliance service registered")
+
+	// Register Search Service (Feature 045: server-side federated search).
+	// Registered last because it depends on six other domains' logic layers, all of
+	// which are built above. internal/search owns no SQL and no access rule of its own.
+	slog.InfoContext(ctx, "initializing search service")
+	searchConnect := search.NewService(tenantPool, search.Deps{
+		Organization:  orgLogic,
+		Chat:          chatLogic,
+		Docs:          docsLogic,
+		Files:         searchLogic,
+		Collaboration: collaborationLogic,
+		Calendar:      calendarLogic,
+	})
+	mux.Handle(rpcv1connect.NewSearchServiceHandler(searchConnect, interceptors))
+	slog.InfoContext(ctx, "search service registered")
 
 	listener, err := net.Listen("tcp", "0.0.0.0:"+port)
 	if err != nil {

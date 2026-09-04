@@ -58,7 +58,7 @@ Domains are organized into **four tiers**. Dependencies MUST only point **downwa
 | **T1 — Support Kernel** | Infrastructure services consumed by business domains | `notification`, `files`, `preference`, `tour` | T0 only |
 | **T2 — Core Domain** | Primary business capabilities | `chat`, `docs` | T0, T1 |
 | **T3 — Orchestrator** | High-level features composing multiple core domains | `collaboration`, `voice` | T0, T1, T2 |
-| **T4 — Aggregation** | Cross-domain composition with overlay readers | `calendar` | T0, T1, T3 |
+| **T4 — Aggregation** | Cross-domain composition with overlay readers | `calendar`, `compliance`, `search` | T0, T1, T2, T3 |
 
 ### Dependency Direction Rule
 
@@ -108,7 +108,16 @@ graph TD
 
     subgraph "T4 — Aggregation"
         CAL["calendar<br/><i>events, recurrence,<br/>resources, overlays,<br/>booking, reminders</i>"]
+        SEARCH["search<br/><i>federated search fan-out<br/>over eight sources</i>"]
     end
+
+    %% T4 search: pure read fan-out over six domains' logic layers. Owns no SQL.
+    SEARCH -->|"SearchEmployees()<br/>SearchDepartments()"| ORG
+    SEARCH -->|"SearchChannels()<br/>SearchMessages()"| CHAT
+    SEARCH -->|"SearchDocuments()"| DOCS
+    SEARCH -->|"SearchFiles()"| FILES
+    SEARCH -->|"SearchTasks()"| COLLAB
+    SEARCH -->|"SearchEvents()"| CAL
 
     %% T4 → T3 dependencies (overlay readers)
     CAL -->|"CollaborationOverlayReader<br/>GetTasksDueInRange()<br/>GetRitualInstancesInRange()"| COLLAB
@@ -149,7 +158,7 @@ graph TD
     class NOTIF,FILES,PREF kernel
     class CHAT,DOCS core
     class COLLAB,VOICE orchestrator
-    class CAL aggregation
+    class CAL,SEARCH aggregation
 ```
 
 ### Key Observations
@@ -404,6 +413,15 @@ graph LR
 - **Consumed by collaboration** through `EmployeesOnShift`, satisfying the `ShiftCoverageReader` interface `internal/collaboration` declares (feature 042). Calendar does not import collaboration for this; the wiring is a setter in `cmd/server.go`. See §7, "The inverted collaboration → calendar edge".
 - **Workflows**: `CalendarReminderWorkflow` (`calendar_reminder_poll`) — polls pending reminders every minute and publishes notifications. Presence at event boundaries is **not** a server-side job: since the presence ping-pong protocol, `presence_status` is written only by client pongs.
 - **Why T4 Aggregation**: Calendar reads from T3 (Collaboration) and T2 (Docs) domains through thin read-only overlay interfaces. It is the first domain to compose data from the orchestrator tier, establishing T4 as the aggregation layer. **Import** dependencies remain strictly one-directional — neither Collaboration nor Docs import Calendar. Since feature 042 collaboration does *call* into calendar at runtime, but only through an interface it declares itself and is handed in `cmd/server.go`.
+
+#### `search` (Federated Search)
+- **Schema**: none — `internal/search` owns **no SQL**, has no `.query.sql` file and holds no `Queries` field
+- **Role**: One `SearchService.Search` RPC that fans out concurrently over eight sources — people, channels, documents, work items, events, files, departments, messages — and returns one ranked, per-source-capped list plus a per-source outcome report
+- **Code dependencies**: `organization`, `chat`, `docs`, `files`, `collaboration`, `calendar` — all six as logic-layer interfaces injected in `cmd/server.go`
+- **Access control**: none of its own. Every source enforces its own rule inside its own query, so the rule for documents has exactly one implementation, shared with `DocumentService.SearchDocuments`
+- **Pool strategy**: the connect layer hands the **tenant pool**, not a transaction, to the fan-out. A `pgx.Tx` is not safe for concurrent use; `*pgxpool.Pool` is, and gives each source its own connection. Search is a pure read with no cross-source consistency requirement. This is the one documented departure from the usual `txn.WithTxn` shape
+- **Failure model**: 800 ms per-source deadline inside a 900 ms overall budget; a failing, slow or panicking source is reported `UNAVAILABLE` and costs only itself. A source the caller lacks the permission for is reported `NOT_PERMITTED` and never queried. `CodeUnavailable` only when at least one source was attempted and none answered
+- **Why T4 Aggregation**: it composes six domains through read-only logic interfaces and joins none of their schemas. Dependencies are strictly one-directional — no domain imports `search`
 
 #### `compliance` (Compliance & Safety)
 - **Schema**: `compliance`

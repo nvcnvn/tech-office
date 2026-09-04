@@ -5166,6 +5166,20 @@ CREATE INDEX idx_event_org_time_range ON calendar.event USING btree (organizatio
 
 
 --
+-- Name: idx_event_pgroonga; Type: INDEX; Schema: calendar; Owner: -
+--
+
+CREATE INDEX idx_event_pgroonga ON calendar.event USING pgroonga (title, description);
+
+
+--
+-- Name: INDEX idx_event_pgroonga; Type: COMMENT; Schema: calendar; Owner: -
+--
+
+COMMENT ON INDEX calendar.idx_event_pgroonga IS 'PGroonga index for multilingual full-text search on event title and description. Added by feature 045: SearchEvents previously used an unindexed to_tsvector(''simple'') match and scanned every event in the database on every search.';
+
+
+--
 -- Name: idx_recurrence_exception_series; Type: INDEX; Schema: calendar; Owner: -
 --
 
@@ -5954,6 +5968,20 @@ CREATE INDEX idx_file_metadata_active ON files.file_metadata USING btree (organi
 --
 
 CREATE INDEX idx_file_metadata_context ON files.file_metadata USING btree (organization_id, upload_context, updated_at DESC);
+
+
+--
+-- Name: idx_file_metadata_filename_pgroonga; Type: INDEX; Schema: files; Owner: -
+--
+
+CREATE INDEX idx_file_metadata_filename_pgroonga ON files.file_metadata USING pgroonga (original_filename);
+
+
+--
+-- Name: INDEX idx_file_metadata_filename_pgroonga; Type: COMMENT; Schema: files; Owner: -
+--
+
+COMMENT ON INDEX files.idx_file_metadata_filename_pgroonga IS 'PGroonga index for multilingual full-text search on uploaded file names. SearchFilesByNameAndContent has always matched original_filename with &@~; only the extracted content side was indexed.';
 
 
 --

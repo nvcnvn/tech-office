@@ -998,7 +998,7 @@ export async function createDocument(
   },
 ) {
   return apiCall<{
-    document: { id: string; title: string; contentJson: string };
+    document: { id: string; title: string; slug: string; contentJson: string };
   }>(user, '/rpc.v1.DocumentService/CreateDocument', {
     title: opts.title,
     contentJson:
@@ -1246,5 +1246,89 @@ export async function updateTourProgress(
     user,
     '/rpc.v1.TourService/UpdateTourProgress',
     { status, currentStop },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+/**
+ * Uploads a file into a chat channel through the real three-step flow — request an
+ * upload URL, PUT the bytes, confirm — because that is what registers the access rule
+ * search filters on.
+ */
+export async function uploadChannelFile(
+  user: TestUser,
+  channelId: string,
+  filename: string,
+  content: string,
+  mimeType = 'text/plain',
+) {
+  const requested = await apiCall<{ fileId: string; uploadUrl: string }>(
+    user,
+    '/rpc.v1.ChatFileService/RequestChannelFileUpload',
+    { channelId, filename, mimeType, sizeBytes: String(Buffer.byteLength(content)) },
+  );
+
+  const put = await fetch(requested.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': mimeType },
+    body: content,
+  });
+  if (!put.ok) {
+    throw new Error(`Uploading ${filename} failed (${put.status})`);
+  }
+
+  await apiCall(user, '/rpc.v1.ChatFileService/ConfirmChannelFileUpload', {
+    channelId,
+    fileId: requested.fileId,
+  });
+  return requested.fileId;
+}
+
+// ---------------------------------------------------------------------------
+// Federated search
+// ---------------------------------------------------------------------------
+
+export interface SearchHitJSON {
+  kind: string;
+  title: string;
+  contextLine: string;
+  snippet?: string;
+  rank?: number;
+  target: Record<string, string>;
+}
+
+export async function search(
+  user: TestUser,
+  query: string,
+  opts?: { kindFilter?: string; limit?: number },
+) {
+  return apiCall<{
+    hits: SearchHitJSON[];
+    outcomes: Array<{ kind: string; status: string; hitCount?: number; detail?: string }>;
+  }>(user, '/rpc.v1.SearchService/Search', {
+    query,
+    kindFilter: opts?.kindFilter,
+    limit: opts?.limit,
+  });
+}
+
+/**
+ * Renames an employee. Every test employee is created through the invite flow with the
+ * same display name, so a fixture that needs a person findable by a distinctive word has
+ * to set one.
+ */
+export function renameEmployee(organizationId: string, employeeId: string, given: string, family: string) {
+  for (const id of [organizationId, employeeId]) {
+    if (!/^[0-9a-f-]{36}$/i.test(id)) {
+      throw new Error(`Invalid id: ${id}`);
+    }
+  }
+  const safe = (value: string) => value.replace(/'/g, "''");
+  execSql(
+    `UPDATE organization.employee SET given_name = '${safe(given)}', family_name = '${safe(family)}' ` +
+      `WHERE organization_id = '${organizationId}'::uuid AND id = '${employeeId}'::uuid;`,
   );
 }

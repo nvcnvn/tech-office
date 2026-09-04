@@ -75,6 +75,9 @@ flows=(
   $APP_DIR/.maestro/projects/create-project.yaml
   $APP_DIR/.maestro/rituals/create-ritual.yaml
   $APP_DIR/.maestro/rituals/archive-ritual.yaml
+  # Feature 045. Reads a seeded search word from .env rather than creating its own
+  # fixtures, so it runs after the flows that populate the workspace.
+  $APP_DIR/.maestro/federated-search.yaml
 )
 failures=0
 

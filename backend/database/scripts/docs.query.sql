@@ -427,9 +427,59 @@ WHERE d.organization_id = @organization_id
   -- name is not a search; the ritual procedure picker (feature 043) is title-driven and
   -- found nothing at all until this matched titles too.
   AND (d.title &@~ @query OR d.content_text &@~ @query)
+  -- Access scoping (feature 045, FR-007). Mirrors documentLogicImpl.CheckAccess
+  -- INCLUDING ITS PRECEDENCE, which is the part that is easy to get wrong:
+  --
+  --   1. owner                        -> access
+  --   2. else explicit employee grant -> that level, INCLUDING an explicit 'none',
+  --                                      which is a deny that stops the chain
+  --   3. else highest department grant among the caller's departments
+  --   4. else visibility = 'public'   -> access
+  --   5. else                         -> no access
+  --
+  -- Steps 2 and 3 must short-circuit, which is why this is a COALESCE over scalar
+  -- sub-selects and not an OR-chain: an OR-chain silently loses the deny, and a caller
+  -- with an employee grant of 'none' on a public document would still match
+  -- `d.visibility = 'public'` and get the hit.
+  AND (
+    d.owner_employee_id = @employee_id
+    OR COALESCE(
+         -- 2. explicit employee grant, if any — 'none' included, and it wins
+         (SELECT a.access_level
+            FROM docs.document_access a
+           WHERE a.organization_id = d.organization_id
+             AND a.document_id     = d.id
+             AND a.grantee_type    = 'employee'
+             AND a.grantee_id      = @employee_id),
+         -- 3. else the highest department grant the caller inherits
+         (SELECT a.access_level
+            FROM docs.document_access a
+            JOIN organization.department_member dm
+              ON (dm.organization_id, dm.department_id) = (a.organization_id, a.grantee_id)
+           WHERE a.organization_id = d.organization_id
+             AND a.document_id     = d.id
+             AND a.grantee_type    = 'department'
+             AND dm.employee_id    = @employee_id
+           ORDER BY CASE a.access_level
+                      WHEN 'write_update' THEN 2
+                      WHEN 'read_comment' THEN 1
+                      ELSE 0
+                    END DESC
+           LIMIT 1),
+         -- 4. else visibility
+         CASE WHEN d.visibility = 'public' THEN 'write_update' ELSE 'none' END
+       ) <> 'none'
+  )
   AND (sqlc.narg('cursor')::uuid IS NULL OR d.id < sqlc.narg('cursor'))
 ORDER BY score DESC, d.id DESC
 LIMIT @search_limit;
+
+-- NOTE. docs.document_access joins organization.department_member across schemas here.
+-- Constitution IV forbids cross-schema joins that carry *domain data*; this one carries
+-- only the caller's own department membership, which is the same join
+-- GetDepartmentDocumentAccess already performs in this same file to answer the same
+-- question. Keeping it inline is what makes the rule a predicate instead of a post-filter.
+-- Both sides pin organization_id.
 
 -- name: UpsertDocumentReaction :one
 INSERT INTO docs.document_reaction (

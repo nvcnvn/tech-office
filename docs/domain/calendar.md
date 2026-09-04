@@ -4,7 +4,7 @@ Events, recurrence, RSVP, room/equipment resources, free-busy and slot suggestio
 booking links, delegation, and attendance check-in with evidence. Owned by
 `internal/calendar`; contract in `rpc/v1/calendar.proto` (`CalendarService`, 26 RPCs).
 
-**Status date: 2026-09-04.** Supersedes spec 026; shift coverage added by spec 042.
+**Status date: 2026-09-04.** Supersedes specs 026 and 045; shift coverage added by spec 042.
 
 ## Events
 
@@ -39,6 +39,26 @@ that expands occurrences in Go.
 
 `calendar.attendee` — `role IN ('required','optional','organizer')`, `rsvp_status` with
 `response_time` and `response_note`. `RespondToInvite` / `ListEventAttendees`.
+
+### Search
+
+`SearchEvents` (`CalendarService.SearchEvents`, and the `EVENT` source of
+`SearchService.Search`) matches `title` and `description` with PGroonga `&@~`, backed by
+`idx_event_pgroonga`, ordered by `pgroonga_score` then `updated_at` then `id`.
+
+It is **visibility-scoped**, using byte-for-byte the rule `ListEventsForEmployee` and
+`ListEventsForOrg` already ship between them, so the `visibility` column has one
+interpretation rather than two:
+
+```
+organizer_id = @employee_id
+OR EXISTS (attendee row for @employee_id on this event)
+OR visibility IN ('team', 'org_wide')
+```
+
+`personal_shared` is deliberately outside the third arm: it means organiser-and-attendees
+only. Cancelled events are excluded by `cancelled_at IS NULL`. The employee id comes from
+the auth context, never from the request.
 
 ## Scheduling helpers
 

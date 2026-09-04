@@ -1,0 +1,82 @@
+appId: com.devguards.TechOffice
+name: "Federated Search"
+tags:
+  - search
+env:
+  # A word that matches in several sources of the test workspace at once — a document, a
+  # work item, an event and a file. Seeded once alongside the other .env fixtures; the
+  # flow deliberately does not create it, because creating four things across four
+  # domains through the UI would be four flows wearing a search flow's name.
+  SEARCH_WORD: ${MAESTRO_SEARCH_WORD}
+  # The exact title of the document that word matches, so tapping the right row and
+  # asserting the right screen are both unambiguous.
+  SEARCH_DOCUMENT_TITLE: ${MAESTRO_SEARCH_DOCUMENT_TITLE}
+---
+- runFlow: "auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+# The search box is the only entry point: the pill on a tab, not a new surface.
+- tapOn:
+    id: "tab-today"
+- extendedWaitUntil:
+    visible:
+      id: "global-search-pill"
+    timeout: 8000
+- tapOn:
+    id: "global-search-pill"
+- extendedWaitUntil:
+    visible:
+      id: "global-search-input"
+    timeout: 8000
+
+- tapOn:
+    id: "global-search-input"
+- inputText: ${SEARCH_WORD}
+
+# All four kinds that did not exist before feature 045 come back in the one list,
+# alongside the four that did.
+- extendedWaitUntil:
+    visible:
+      id: "search-result-document"
+    timeout: 15000
+- assertVisible:
+    id: "search-result-work_item"
+- assertVisible:
+    id: "search-result-event"
+- assertVisible:
+    id: "search-result-file"
+- takeScreenshot: "tmp/maestro-screenshots/01-federated-search-results"
+
+# A row is a door: tapping the document opens the document itself.
+- tapOn: ${SEARCH_DOCUMENT_TITLE}
+- extendedWaitUntil:
+    visible: ${SEARCH_DOCUMENT_TITLE}
+    timeout: 15000
+- takeScreenshot: "tmp/maestro-screenshots/02-federated-search-document"
+
+# The thing just opened is offered as a recent item next time the box is opened.
+#
+# Leaving via the tab bar rather than a back gesture: `back` is a hardware key on Android
+# and an edge swipe on iOS, and the swipe does not reliably pop this stack. The tab bar is
+# visible on both platforms from the document, so one route serves both.
+- tapOn:
+    id: "tab-today"
+- extendedWaitUntil:
+    visible:
+      id: "global-search-pill"
+    timeout: 8000
+- tapOn:
+    id: "global-search-pill"
+- extendedWaitUntil:
+    visible: "Recent"
+    timeout: 8000
+- assertVisible: ${SEARCH_DOCUMENT_TITLE}
+- assertVisible:
+    id: "clear-recents"
+- takeScreenshot: "tmp/maestro-screenshots/03-federated-search-recents"

@@ -1621,3 +1621,33 @@ func (l *logicImpl) SkipRitualInstance(
 
 	return l.taskToProto(updated, nil, nil), nil
 }
+
+// SearchTasks answers the work-item source of the workspace search box (feature 045).
+//
+// The access rule lives in the query — a task in a project the caller may not read is
+// not returned and is not counted, because a count of withheld work discloses its
+// existence (FR-009).
+func (l *logicImpl) SearchTasks(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, employeeID dbuuid.UUID,
+	query string,
+	limit int32,
+	cursor dbuuid.NullUUID,
+) ([]*database.SearchTasksRow, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	rows, err := l.Queries.SearchTasks(ctx, tx, &database.SearchTasksParams{
+		OrganizationID: orgID,
+		EmployeeID:     employeeID,
+		Query:          query,
+		SearchLimit:    limit,
+		Cursor:         cursor,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("search tasks: %w", err)
+	}
+	return rows, nil
+}

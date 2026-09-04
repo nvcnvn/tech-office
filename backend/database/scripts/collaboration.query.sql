@@ -1600,3 +1600,51 @@ SELECT EXISTS (
       AND employee_id = @employee_id
       AND role = 'assignee'
 );
+
+-- name: SearchTasks :many
+-- Cross-project work-item search (feature 045, FR-009): ordinary tasks and ritual
+-- instances alike, scoped to projects the caller may read. Matches on title with
+-- PGroonga, backed by the existing idx_task_title_pgroonga.
+--
+-- Nothing existed to reuse: ListTasksRequest has a `search_query` field, but no query in
+-- this file reads it, and ListTasks is single-project anyway. The project-access
+-- predicate is copied from ListTasksBySourceMessages so the project visibility rule stays
+-- single-sourced even though the query is new. Every join stays inside the collaboration
+-- schema.
+SELECT
+    t.id,
+    t.organization_id,
+    t.project_id,
+    t.identifier,
+    t.title,
+    t.task_kind,
+    t.due_date,
+    t.updated_at,
+    p.name AS project_name,
+    p.key  AS project_key,
+    ps.name     AS state_name,
+    ps.category AS state_category,
+    pgroonga_score(t.tableoid, t.ctid)::real AS relevance_score
+FROM collaboration.task t
+JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+WHERE t.organization_id = @organization_id
+  AND t.is_deleted  = FALSE
+  -- An archived project's work is not findable.
+  AND p.is_archived = FALSE
+  AND t.title &@~ @query
+  -- Project access — same predicate as ListTasksBySourceMessages.
+  AND (
+      p.visibility = 'public'
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+           WHERE pm.organization_id = t.organization_id
+             AND pm.project_id      = t.project_id
+             AND pm.employee_id     = @employee_id
+      )
+  )
+  AND (sqlc.narg('cursor')::uuid IS NULL OR t.id < sqlc.narg('cursor'))
+ORDER BY relevance_score DESC, t.updated_at DESC, t.id DESC
+LIMIT @search_limit;

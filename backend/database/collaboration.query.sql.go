@@ -4924,6 +4924,119 @@ func (q *Queries) ResolveRitualPoolAssignment(ctx context.Context, db DBTX, arg 
 	return &i, err
 }
 
+const searchTasks = `-- name: SearchTasks :many
+SELECT
+    t.id,
+    t.organization_id,
+    t.project_id,
+    t.identifier,
+    t.title,
+    t.task_kind,
+    t.due_date,
+    t.updated_at,
+    p.name AS project_name,
+    p.key  AS project_key,
+    ps.name     AS state_name,
+    ps.category AS state_category,
+    pgroonga_score(t.tableoid, t.ctid)::real AS relevance_score
+FROM collaboration.task t
+JOIN collaboration.project p
+    ON (p.organization_id, p.id) = (t.organization_id, t.project_id)
+JOIN collaboration.project_state ps
+    ON (ps.organization_id, ps.id) = (t.organization_id, t.state_id)
+WHERE t.organization_id = $1
+  AND t.is_deleted  = FALSE
+  -- An archived project's work is not findable.
+  AND p.is_archived = FALSE
+  AND t.title &@~ $2
+  -- Project access — same predicate as ListTasksBySourceMessages.
+  AND (
+      p.visibility = 'public'
+      OR EXISTS (
+          SELECT 1 FROM collaboration.project_membership pm
+           WHERE pm.organization_id = t.organization_id
+             AND pm.project_id      = t.project_id
+             AND pm.employee_id     = $3
+      )
+  )
+  AND ($4::uuid IS NULL OR t.id < $4)
+ORDER BY relevance_score DESC, t.updated_at DESC, t.id DESC
+LIMIT $5
+`
+
+type SearchTasksParams struct {
+	OrganizationID dbuuid.UUID     `json:"organization_id"`
+	Query          string          `json:"query"`
+	EmployeeID     dbuuid.UUID     `json:"employee_id"`
+	Cursor         dbuuid.NullUUID `json:"cursor"`
+	SearchLimit    int32           `json:"search_limit"`
+}
+
+type SearchTasksRow struct {
+	ID             dbuuid.UUID        `json:"id"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	ProjectID      dbuuid.UUID        `json:"project_id"`
+	Identifier     string             `json:"identifier"`
+	Title          string             `json:"title"`
+	TaskKind       string             `json:"task_kind"`
+	DueDate        pgtype.Date        `json:"due_date"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	ProjectName    string             `json:"project_name"`
+	ProjectKey     string             `json:"project_key"`
+	StateName      string             `json:"state_name"`
+	StateCategory  string             `json:"state_category"`
+	RelevanceScore float32            `json:"relevance_score"`
+}
+
+// Cross-project work-item search (feature 045, FR-009): ordinary tasks and ritual
+// instances alike, scoped to projects the caller may read. Matches on title with
+// PGroonga, backed by the existing idx_task_title_pgroonga.
+//
+// Nothing existed to reuse: ListTasksRequest has a `search_query` field, but no query in
+// this file reads it, and ListTasks is single-project anyway. The project-access
+// predicate is copied from ListTasksBySourceMessages so the project visibility rule stays
+// single-sourced even though the query is new. Every join stays inside the collaboration
+// schema.
+func (q *Queries) SearchTasks(ctx context.Context, db DBTX, arg *SearchTasksParams) ([]*SearchTasksRow, error) {
+	rows, err := db.Query(ctx, searchTasks,
+		arg.OrganizationID,
+		arg.Query,
+		arg.EmployeeID,
+		arg.Cursor,
+		arg.SearchLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*SearchTasksRow
+	for rows.Next() {
+		var i SearchTasksRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.ProjectID,
+			&i.Identifier,
+			&i.Title,
+			&i.TaskKind,
+			&i.DueDate,
+			&i.UpdatedAt,
+			&i.ProjectName,
+			&i.ProjectKey,
+			&i.StateName,
+			&i.StateCategory,
+			&i.RelevanceScore,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setChannelTaskDestination = `-- name: SetChannelTaskDestination :exec
 INSERT INTO collaboration.channel_task_destination (
     organization_id, channel_id, project_id, set_by_employee_id, updated_at

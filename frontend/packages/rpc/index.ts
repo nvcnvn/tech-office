@@ -13,5 +13,6 @@ import * as calendar from './rpc/v1/calendar_pb';
 import * as voice from './rpc/v1/voice_pb';
 import * as compliance from './rpc/v1/compliance_pb';
 import * as tour from './rpc/v1/tour_pb';
+import * as search from './rpc/v1/search_pb';
 
-export { rbac, organizations, iam, department, notification, chat, preference, files, chat_files, document, collaboration, calendar, voice, compliance, tour };
+export { rbac, organizations, iam, department, notification, chat, preference, files, chat_files, document, collaboration, calendar, voice, compliance, tour, search };

@@ -4,7 +4,7 @@ A Notion/Confluence-style document system: nested pages, full version history, t
 comments, cross-document section embeds, and live collaborative editing presence. Owned by
 `internal/docs`; contract in `rpc/v1/document.proto`, split across **eight** services.
 
-**Status date: 2026-08-27.** Supersedes spec 016.
+**Status date: 2026-09-04.** Supersedes specs 016, 045.
 
 ## Services
 
@@ -94,13 +94,26 @@ instance shows at once; there is no stored copy of a procedure anywhere.
 
 Related: `SearchDocuments` matches `title` as well as `content_text` (feature 043 made the
 procedure chooser title-driven; a document search that could not find a document by its own
-name was not a search). Both `SearchDocuments` and the tree listings remain **org-scoped
-rather than access-scoped** — they return every non-deleted document in the organization,
-gated only by the `docs.view` permission. Per-document access is enforced on `GetDocument`
-and everything downstream of it, so titles and snippets are visible more widely than content.
-That predates this feature; it is why the procedure chooser can offer a document the manager
-cannot open, and why the attachment is validated server-side rather than trusting the picker.
-See D49 in the drift register.
+name was not a search).
+
+`SearchDocuments` is **access-scoped for every caller** (feature 045). Its SQL carries the
+same precedence `documentLogicImpl.CheckAccess` applies, written as a `COALESCE` over scalar
+sub-selects rather than an `OR`-chain so the short-circuits survive:
+
+1. `owner_employee_id = @employee_id` → access, unconditionally;
+2. otherwise an explicit **employee** grant if one exists — including `'none'`, which is a
+   deny that stops the chain even on a public document;
+3. otherwise the **highest department** grant among the caller's departments;
+4. otherwise `visibility = 'public'` → access;
+5. otherwise no access.
+
+The logic method takes `employeeID`, sourced from the auth context. This applies to
+`DocumentService.SearchDocuments` as well as to `SearchService.Search`, so the feature-043
+procedure chooser no longer offers documents the manager cannot open.
+
+The document **tree listings** (`ListRootDocuments`, `ListChildDocuments`) are still
+org-scoped; that half of D49 is open by design, because scoping the sidebar changes what
+every person sees in it. See D49 in the drift register.
 
 ## Comments and reactions
 
@@ -178,9 +191,7 @@ followers.
 
 ## Known drift
 
-Two things that read as drift but are not:
+One thing that reads as drift but is not:
 
 - `DocumentFollowerService` looks like it should own a table; it does not, by design.
   Following lives in the notification domain.
-- `SearchDocuments` exists and works but is **not** wired into the federated search box —
-  see [D5](workspace-navigation.md#known-drift).

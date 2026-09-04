@@ -168,6 +168,11 @@ type Logic interface {
 	// one call. Links to tasks in projects the caller cannot see are omitted.
 	ListTasksBySourceMessages(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, messageIDs []string) ([]*rpcv1.MessageTaskLink, error)
 
+	// SearchTasks is the cross-project work-item search behind the workspace search box
+	// (feature 045). Ordinary tasks and ritual instances alike, scoped to projects the
+	// caller may read; deleted tasks and archived projects are excluded.
+	SearchTasks(ctx context.Context, tx database.DBTX, orgID, employeeID dbuuid.UUID, query string, limit int32, cursor dbuuid.NullUUID) ([]*database.SearchTasksRow, error)
+
 	// GetTaskOrigin resolves the human-readable origin block on a task created from a
 	// message: channel name, message author and excerpt.
 	GetTaskOrigin(ctx context.Context, tx database.DBTX, orgID, actorID dbuuid.UUID, taskID dbuuid.UUID) (*rpcv1.GetTaskOriginResponse, error)

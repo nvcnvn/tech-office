@@ -1631,37 +1631,62 @@ func (q *Queries) ResetAttendeesRSVP(ctx context.Context, db DBTX, arg *ResetAtt
 }
 
 const searchEvents = `-- name: SearchEvents :many
-SELECT id, organization_id, title, description, event_type, visibility, start_time, end_time, all_day, location_text, virtual_link, organizer_id, recurrence_rule, recurrence_end, series_id, is_exception_instance, original_start_time, description_document_id, discussion_channel_id, requires_check_in, requires_evidence, cancelled_at, cancelled_by_id, updated_at FROM calendar.event
-WHERE organization_id = $1
-  AND cancelled_at IS NULL
-  AND to_tsvector('simple', title || ' ' || coalesce(description, '')) @@ websearch_to_tsquery('simple', $2)
-  AND ($4::text IS NULL OR event_type = $4)
-  AND ($5::timestamptz IS NULL OR start_time >= $5)
-  AND ($6::timestamptz IS NULL OR end_time <= $6)
-  AND ($7::uuid IS NULL OR id < $7)
-ORDER BY updated_at DESC, id DESC
-LIMIT $3
+SELECT e.id, e.organization_id, e.title, e.description, e.event_type, e.visibility, e.start_time, e.end_time, e.all_day, e.location_text, e.virtual_link, e.organizer_id, e.recurrence_rule, e.recurrence_end, e.series_id, e.is_exception_instance, e.original_start_time, e.description_document_id, e.discussion_channel_id, e.requires_check_in, e.requires_evidence, e.cancelled_at, e.cancelled_by_id, e.updated_at FROM calendar.event e
+WHERE e.organization_id = $1
+  AND e.cancelled_at IS NULL
+  AND (e.title &@~ $2 OR e.description &@~ $2)
+  -- Visibility scoping (feature 045, FR-008).
+  AND (
+    e.organizer_id = $3
+    OR EXISTS (
+      SELECT 1 FROM calendar.attendee a
+       WHERE a.organization_id = e.organization_id
+         AND a.event_id        = e.id
+         AND a.employee_id     = $3
+    )
+    OR e.visibility IN ('team', 'org_wide')
+  )
+  AND ($4::text IS NULL OR e.event_type = $4)
+  AND ($5::timestamptz IS NULL OR e.start_time >= $5)
+  AND ($6::timestamptz IS NULL OR e.end_time <= $6)
+  AND ($7::uuid IS NULL OR e.id < $7)
+ORDER BY pgroonga_score(e.tableoid, e.ctid) DESC, e.updated_at DESC, e.id DESC
+LIMIT $8
 `
 
 type SearchEventsParams struct {
-	OrganizationID     dbuuid.UUID        `json:"organization_id"`
-	WebsearchToTsquery string             `json:"websearch_to_tsquery"`
-	Limit              int32              `json:"limit"`
-	EventType          pgtype.Text        `json:"event_type"`
-	FromTime           pgtype.Timestamptz `json:"from_time"`
-	UntilTime          pgtype.Timestamptz `json:"until_time"`
-	Cursor             dbuuid.NullUUID    `json:"cursor"`
+	OrganizationID dbuuid.UUID        `json:"organization_id"`
+	Query          string             `json:"query"`
+	EmployeeID     dbuuid.UUID        `json:"employee_id"`
+	EventType      pgtype.Text        `json:"event_type"`
+	FromTime       pgtype.Timestamptz `json:"from_time"`
+	UntilTime      pgtype.Timestamptz `json:"until_time"`
+	Cursor         dbuuid.NullUUID    `json:"cursor"`
+	SearchLimit    int32              `json:"search_limit"`
 }
 
+// Two properties this query did not have before feature 045:
+//
+//   - the visibility predicate is byte-for-byte the rule ListEventsForEmployee and
+//     ListEventsForOrg already ship between them, so the `visibility` column has one
+//     interpretation rather than two. `personal_shared` is deliberately outside the
+//     third arm: it means organiser-and-attendees-only.
+//   - PGroonga &@~ instead of to_tsvector('simple'). The old matcher had NO index behind
+//     it, so every calendar search was a sequential scan over every event in the
+//     database, and it segments Vietnamese worse than the matcher the other seven search
+//     sources already use. idx_event_pgroonga backs this one.
+//
+// Cancelled events are already excluded and stay excluded.
 func (q *Queries) SearchEvents(ctx context.Context, db DBTX, arg *SearchEventsParams) ([]*CalendarEvent, error) {
 	rows, err := db.Query(ctx, searchEvents,
 		arg.OrganizationID,
-		arg.WebsearchToTsquery,
-		arg.Limit,
+		arg.Query,
+		arg.EmployeeID,
 		arg.EventType,
 		arg.FromTime,
 		arg.UntilTime,
 		arg.Cursor,
+		arg.SearchLimit,
 	)
 	if err != nil {
 		return nil, err
