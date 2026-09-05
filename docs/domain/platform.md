@@ -351,6 +351,12 @@ before Playwright runs, even when the app is serving every real route normally. 
 `pnpm --filter web exec playwright test --config=e2e/playwright.config.ts <spec>` from
 `frontend/` bypasses the guard and works. See D71.
 
+Two repository gates sit outside the test targets. `make lint-tenancy` builds and runs
+`backend/tools/tenancylint` over `schema.sql` and the sqlc queries, and is green.
+`make check-tracked-files` audits every tracked file for binaries and oversized blobs, and
+is **not** green: `backend/tenancylint` is a committed 13.9 MB executable that the audit
+rejects and that nothing needs, since `lint-tenancy` runs the tool with `go run`. See D72.
+
 ## Known drift
 
 **schema.sql no longer leads the migrations.** `schema.sql` used to be hand-written
