@@ -587,6 +587,17 @@ them: `PIN_LENGTH` and `TEMPORARY_PIN_EXPIRY_DAYS` (`iam-org-accounts.ts`), and 
 workspace-address rules `deriveSubdomain` / `isValidSubdomain` / `normalizeSubdomain`
 (`organization.ts`). See Constitution VIII.
 
+Every wrapper routes through `rpcCall` (`rpcWrapper.ts`), which maps Connect codes onto the
+error classes in `errors.ts`: `UNAUTHENTICATED` also notifies the auth-failure listeners,
+`PERMISSION_DENIED` and `NOT_FOUND` become an `APIError`, `INVALID_ARGUMENT` a
+`ValidationError`, and the transport codes a `NetworkError`. Two codes are deliberately
+rethrown as the original `ConnectError` instead, because their **error details** are the
+point and flattening them would leave the caller with a sentence and nothing to act on:
+`RESOURCE_EXHAUSTED` (PIN lockout, read with `extractPinAuthErrorDetail`) and `ABORTED`
+(a document save refused as a version conflict, read with
+`extractDocumentVersionConflict`). Any future surface that attaches a detail must be added
+to that list, or the detail never reaches a component.
+
 ## Tests
 
 `integration/canonical_links_test.go`, `context_rail_test.go`, `preference_test.go`,

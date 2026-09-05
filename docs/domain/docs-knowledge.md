@@ -4,7 +4,7 @@ A Notion/Confluence-style document system: nested pages, full version history, t
 comments, cross-document section embeds, and live collaborative editing presence. Owned by
 `internal/docs`; contract in `rpc/v1/document.proto`, split across **eight** services.
 
-**Status date: 2026-09-05.** Supersedes specs 016, 045, 046.
+**Status date: 2026-09-05.** Supersedes specs 016, 045, 046, 049.
 
 ## Services
 
@@ -160,13 +160,46 @@ backlink view.
 `connection_id`, `instance_id`, `cursor_position` JSONB (`{block_id, offset}`) and
 `last_heartbeat`. Max 10 active editors per document.
 
-This is presence only — cursors and avatars. There is **no OT/CRDT merge**: concurrent
-edits are resolved last-write-wins at the version level, not character-merged. `JoinDocument`
-/ `Heartbeat` / `UpdateCursor` / `LeaveDocument` maintain the row; `ListActiveEditors`
-reads it.
+This is presence only — cursors and avatars. There is **no OT/CRDT merge**: the system
+never merges two people's text. Concurrent edits are resolved by refusing the later one
+(see "Edit conflict protection" below), not by character-merging and not by
+last-write-wins. `JoinDocument` / `Heartbeat` / `UpdateCursor` / `LeaveDocument` maintain
+the row; `ListActiveEditors` reads it.
 
 Note this is a separate heartbeat mechanism from notification presence, which uses the
 client-attested ping-pong protocol. The document editor heartbeat is still server-refreshed.
+
+## Edit conflict protection
+
+`UpdateDocument` is a **compare-and-swap on `docs.document.version_count`**. The request
+carries a required `base_version` — the `version_count` the editing session loaded, which
+every client already receives as `Document.version_count`. Because versions are never
+pruned and never renumbered, `version_count` is also the document's current version
+number, so no separate concurrency token exists.
+
+The check happens twice on one value. `documentLogicImpl.UpdateDocument` compares
+`base_version` against the document it has just read, ahead of the slug-history write, so
+a refusal never writes speculatively. The authority is the SQL itself: the `UPDATE` carries
+`AND version_count = @base_version`, and zero rows updated is the conflict signal. Two
+racing writers serialize on the PostgreSQL row lock, so the guarantee holds across backend
+instances with no in-process lock.
+
+A refusal is total. The error propagates out of `txn.WithTxn`, so the transaction rolls
+back: no content, no title, no `document_version` row, no slug-history row, no follower
+notification. A base version that is behind, ahead, or absent (which arrives as `0`) all
+take the same path, so no client can opt back into last-write-wins.
+
+The refusal is reported as `ABORTED` carrying exactly one `rpc.v1.DocumentVersionConflict`
+detail (`backend/rpc/v1/docs_error_details.proto`) with the current version number, the
+conflicting author's display name, and when they saved. The write-access check runs first,
+so a caller who may not edit the document gets `PERMISSION_DENIED` and never learns who
+edited. On the web, `extractDocumentVersionConflict` reads the detail and `DocumentEditor`
+renders a distinct banner that keeps the person's unsaved text in place and offers "copy my
+changes" and "load the current version". Documents are read-only on mobile, which therefore
+never sends a base version.
+
+`rpcCall` in `frontend/packages/apis` rethrows `ABORTED` as the original `ConnectError`
+rather than flattening it to a `NetworkError`, because the detail is the point.
 
 ## Following
 

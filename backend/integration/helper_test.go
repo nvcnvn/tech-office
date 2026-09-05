@@ -2135,12 +2135,27 @@ func (w *testWorld) createDocument(actor testUser, title, contentJSON string) st
 	return resp.Msg.Document.Id
 }
 
+// updateDocument saves from whatever version the document is currently at, which is
+// what a session that has just loaded the document would send. Scenarios that need a
+// stale or invented base version use updateDocumentAt instead.
 func (w *testWorld) updateDocument(actor testUser, docID, contentJSON string) {
 	w.t.Helper()
-	req := connect.NewRequest(&rpcv1.UpdateDocumentRequest{Id: docID, ContentJson: contentJSON})
+	base := w.getDocument(actor, docID).Document.VersionCount
+	require.NoError(w.t, w.updateDocumentAt(actor, docID, contentJSON, base))
+}
+
+// updateDocumentAt saves against an explicit base version and returns the outcome, so a
+// scenario can assert on the refusal rather than on a successful save.
+func (w *testWorld) updateDocumentAt(actor testUser, docID, contentJSON string, baseVersion int32) error {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.UpdateDocumentRequest{
+		Id:          docID,
+		ContentJson: contentJSON,
+		BaseVersion: baseVersion,
+	})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	_, err := w.doc.UpdateDocument(context.Background(), req)
-	require.NoError(w.t, err)
+	return err
 }
 
 func (w *testWorld) deleteDocument(actor testUser, docID string) {

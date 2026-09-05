@@ -675,6 +675,14 @@ The notification domain handles routing, delivery, presence awareness, push fall
 
 File attachments in chat messages and collaboration tasks use UUID arrays (`file_ids UUID[]`) instead of foreign keys. This keeps the file domain fully decoupled at the schema level while the application layer handles integrity.
 
+### Pattern 5: Optimistic Concurrency in the Database, Not in the Process
+
+Where two people can write the same row at the same time, the check and the write are one statement, serialized by the PostgreSQL row lock. No in-process mutex and no advisory lock, because correctness must not depend on both requests reaching the same backend instance.
+
+`DocumentService.UpdateDocument` is the reference case. The request carries a required `base_version` — the `docs.document.version_count` the editing session loaded — and the `UPDATE` carries `AND version_count = @base_version` alongside its tenancy predicate. Zero rows updated means somebody else committed first: the error propagates out of `txn.WithTxn`, the transaction rolls back whole, and the caller receives `ABORTED` with a `rpc.v1.DocumentVersionConflict` detail naming the version to reload and who wrote it. The solo-save path costs no extra query, because the predicate rides on the `UPDATE` that already ran.
+
+Apply the same shape to any future compare-and-swap: put the guard in the `WHERE` clause, treat zero rows as the conflict signal, and let the row lock do the serializing.
+
 ---
 
 ## 8. Server Initialization Order

@@ -357,6 +357,14 @@ discipline. The reconciling migration stays — it is what makes deployed databa
 `20260828000001_backfill_schema_comments.up.sql` closed the residue of the same split: 18
 table and column comments that only ever existed in the hand-written file.
 
+**`TestPDFConversion` can fail with `permission_denied` under full-suite load.** The DOCX
+conversion scenario's polling call is refused with `permission_denied: insufficient
+permissions` on some `make test-backend` runs; the test passes when run alone and passed on
+an immediate repeat of the full suite. It is a different symptom from
+`TestEvidenceReviewQueuePerformance`'s latency budget — a permission decision, not a clock —
+so it is worth knowing whether something in the permission path is contended under parallel
+load rather than assuming timing. Not investigated.
+
 **No RLS backstop.** Worth restating as a standing risk rather than a defect: because
 isolation is purely the `organization_id` predicate, a single query missing it leaks across
 tenants with nothing to stop it. `integration/multi_tenancy_test.go` is the only guard.

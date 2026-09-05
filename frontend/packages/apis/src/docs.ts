@@ -554,6 +554,14 @@ export async function getDocument(params: GetDocumentParams): Promise<GetDocumen
 
 export interface UpdateDocumentParams {
 	id: string;
+	/**
+	 * The `versionCount` this editing session loaded. Required (Feature 049): a save
+	 * whose base version is no longer the document's current version is refused with
+	 * ABORTED rather than overwriting the newer content. Read the conflict off the
+	 * error with `extractDocumentVersionConflict`, and advance this to
+	 * `newVersionNumber` after every successful save.
+	 */
+	baseVersion: number;
 	title?: string;
 	contentJson?: string;
 	versionSummary?: string;
@@ -571,6 +579,7 @@ export async function updateDocument(params: UpdateDocumentParams): Promise<Upda
 	return await rpcCall(async () => {
 		const response = await documentClient.updateDocument({
 			id: params.id,
+			baseVersion: params.baseVersion,
 			title: params.title ?? '',
 			contentJson: params.contentJson ?? '',
 			versionSummary: params.versionSummary ?? '',

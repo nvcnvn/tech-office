@@ -14,6 +14,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/internal/linking"
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 	"github.com/nvcnvn/tech-office/backend/rpc/v1/rpcv1connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // ============================================================================
@@ -512,8 +513,12 @@ func (s *DocumentServiceConnect) handleError(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, ErrSlugNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
+	// Ahead of the conflict case on purpose: a caller who may not edit the document is
+	// told so, and never learns who edited it.
 	case errors.Is(err, ErrAccessDenied):
 		return connect.NewError(connect.CodePermissionDenied, err)
+	case errors.Is(err, ErrVersionConflict):
+		return s.versionConflictError(err)
 	case errors.Is(err, ErrMaxDepthExceeded):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, ErrInvalidParent):
@@ -521,4 +526,33 @@ func (s *DocumentServiceConnect) handleError(err error) error {
 	default:
 		return connect.NewError(connect.CodeInternal, err)
 	}
+}
+
+// versionConflictError reports a refused save as ABORTED — the canonical code for a
+// failed client-specified test-and-set, and one the client resolves by reloading and
+// saving again. The attached detail is what lets the editor name the person who got
+// there first and reload exactly the version it needs, without a second round trip.
+func (s *DocumentServiceConnect) versionConflictError(err error) error {
+	connectErr := connect.NewError(connect.CodeAborted, err)
+
+	var conflict *VersionConflictError
+	if !errors.As(err, &conflict) {
+		return connectErr
+	}
+
+	detail := &rpcv1.DocumentVersionConflict{
+		CurrentVersionNumber:  conflict.CurrentVersionNumber,
+		ConflictingAuthorName: conflict.ConflictingAuthorName,
+	}
+	if !conflict.ConflictingChangedAt.IsZero() {
+		detail.ConflictingChangedAt = timestamppb.New(conflict.ConflictingChangedAt)
+	}
+
+	errorDetail, detailErr := connect.NewErrorDetail(detail)
+	if detailErr != nil {
+		slog.Error("failed to attach document version conflict detail", "error", detailErr)
+		return connectErr
+	}
+	connectErr.AddDetail(errorDetail)
+	return connectErr
 }

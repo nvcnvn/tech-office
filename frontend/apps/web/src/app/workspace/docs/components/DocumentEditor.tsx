@@ -37,7 +37,7 @@ import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
 import Link from '@tiptap/extension-link';
 import { useTheme } from '@mui/material/styles';
-import { updateDocument, type Document, createEmbed, getDocument, fetchCanonicalPreviews, type CreateEmbedParams, type SectionEmbed } from 'apis';
+import { updateDocument, type Document, createEmbed, getDocument, fetchCanonicalPreviews, extractDocumentVersionConflict, type CreateEmbedParams, type SectionEmbed, type DocumentVersionConflictDetail } from 'apis';
 import { useThemeColors } from '@/theme/useThemeColors';
 import {
 	extractCanonicalResourceLinks,
@@ -631,6 +631,14 @@ export default function DocumentEditor({
 	const [markdownContent, setMarkdownContent] = useState(() => jsonToPlainText(document.contentJson));
 	const [sidebarMarkdown, setSidebarMarkdown] = useState(() => jsonToMarkdown(document.contentJson));
 	const [hasChanges, setHasChanges] = useState(false);
+	// The version this editing session loaded. Sent with every save and advanced from the
+	// response, so a save is refused the moment somebody else's save lands first.
+	const [baseVersion, setBaseVersion] = useState(document.versionCount);
+	const [conflict, setConflict] = useState<DocumentVersionConflictDetail | null>(null);
+	const [copiedChanges, setCopiedChanges] = useState(false);
+	// Read by the content-reset effects, which must not re-run when hasChanges flips.
+	const hasChangesRef = useRef(false);
+	hasChangesRef.current = hasChanges;
 	const markdownInputRef = useRef<HTMLTextAreaElement | null>(null);
 	const embedIdByUrlRef = useRef<Record<string, string>>({});
 	const isApplyingEditorContentRef = useRef(false);
@@ -847,8 +855,14 @@ export default function DocumentEditor({
 	}, [markdownContent]);
 	const canonicalLinks = useMemo(() => extractCanonicalResourceLinks(sidebarMarkdown), [sidebarMarkdown]);
 
-	// Reset when document changes
+	// Reset when document changes.
+	//
+	// Guarded on hasChanges: DocumentView refetches on window focus, so without this a
+	// person who edits, switches tab and comes back would have their unsaved text
+	// silently replaced by the server's copy. Nothing replaces a draft without an
+	// explicit action (Feature 049, FR-010).
 	useEffect(() => {
+		if (hasChangesRef.current) return;
 		setTitle(document.title);
 		const markdown = jsonToMarkdown(document.contentJson);
 		setMarkdownContent(markdown);
@@ -867,7 +881,8 @@ export default function DocumentEditor({
 			});
 		}
 		setHasChanges(false);
-	}, [document.id, document.title, document.contentJson, editor, applyEditorContent]);
+		setBaseVersion(document.versionCount);
+	}, [document.id, document.title, document.contentJson, document.versionCount, editor, applyEditorContent]);
 
 	// Track changes for markdown mode
 	useEffect(() => {
@@ -893,10 +908,13 @@ export default function DocumentEditor({
 		if (!isEditing) return;
 		if (mode !== 'wysiwyg') return;
 		if (!document.contentJson) return;
+		// Same guard as the reset effect above: never overwrite a draft (FR-010).
+		if (hasChangesRef.current) return;
 
 		// Defer to avoid flushSync error - TipTap's setContent uses flushSync internally
 		// Use setTimeout to ensure EditorContent has remounted and attached to DOM
 		setTimeout(() => {
+			if (hasChangesRef.current) return;
 			try {
 				applyEditorContent(JSON.parse(document.contentJson));
 			} catch {
@@ -998,14 +1016,22 @@ export default function DocumentEditor({
 
 			return updateDocument({
 				id: document.id,
+				baseVersion,
 				title: title.trim() || undefined,
 				contentJson,
 			});
 		},
-		onSuccess: () => {
+		onSuccess: (saved) => {
 			queryClient.invalidateQueries({ queryKey: ['docs'] });
 			setHasChanges(false);
+			// This session is now based on the version it just wrote (T026: and the
+			// conflict, if there was one, is over).
+			setBaseVersion(saved.newVersionNumber);
+			setConflict(null);
 			onSaved();
+		},
+		onError: (error) => {
+			setConflict(extractDocumentVersionConflict(error));
 		},
 	});
 
@@ -1013,6 +1039,51 @@ export default function DocumentEditor({
 		if (!hasChanges) return;
 		saveMutation.mutate();
 	}, [hasChanges, saveMutation]);
+
+	// Copy the draft out before reloading, which is what makes "reload and reapply"
+	// possible without leaving the document (Feature 049, SC-003).
+	const handleCopyMyChanges = useCallback(async () => {
+		const markdown = mode === 'wysiwyg' && editor
+			? jsonToMarkdown(JSON.stringify(editor.getJSON()))
+			: markdownContent;
+		try {
+			await navigator.clipboard.writeText(markdown);
+			setCopiedChanges(true);
+		} catch {
+			setCopiedChanges(false);
+		}
+	}, [editor, mode, markdownContent]);
+
+	// Replace the draft with the colleague's current version, on purpose. Only reachable
+	// from the conflict banner, and labelled so the cost to the draft is obvious.
+	const [isLoadingCurrent, setIsLoadingCurrent] = useState(false);
+	const handleLoadCurrentVersion = useCallback(async () => {
+		setIsLoadingCurrent(true);
+		try {
+			const { document: current } = await getDocument({ id: document.id, includeContent: true });
+			setTitle(current.title);
+			const markdown = jsonToMarkdown(current.contentJson);
+			setMarkdownContent(markdown);
+			setSidebarMarkdown(markdown);
+			if (editor && current.contentJson) {
+				try {
+					applyEditorContent(JSON.parse(current.contentJson));
+				} catch {
+					applyEditorContent({ type: 'doc', content: [] });
+				}
+			}
+			// Saving again is now based on what was just loaded, so the next save is
+			// accepted (FR-012).
+			setBaseVersion(current.versionCount);
+			setHasChanges(false);
+			setConflict(null);
+			setCopiedChanges(false);
+			saveMutation.reset();
+			queryClient.invalidateQueries({ queryKey: ['docs'] });
+		} finally {
+			setIsLoadingCurrent(false);
+		}
+	}, [document.id, editor, applyEditorContent, saveMutation, queryClient]);
 
 	// Keyboard shortcut for save
 	useEffect(() => {
@@ -1140,13 +1211,46 @@ export default function DocumentEditor({
 
 	return (
 		<Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-			{saveMutation.error && (
-				<Alert severity="error">
+			{conflict ? (
+				<Alert
+					severity="warning"
+					data-testid="doc-conflict-banner"
+					action={
+						<Box sx={{ display: 'flex', gap: 1 }}>
+							<Button
+								size="small"
+								color="inherit"
+								onClick={handleCopyMyChanges}
+								data-testid="doc-conflict-copy"
+							>
+								{copiedChanges ? 'Copied' : 'Copy my changes'}
+							</Button>
+							<Button
+								size="small"
+								color="inherit"
+								disabled={isLoadingCurrent}
+								onClick={handleLoadCurrentVersion}
+								data-testid="doc-conflict-reload"
+							>
+								Discard mine and load the current version
+							</Button>
+						</Box>
+					}
+				>
+					{conflict.conflictingAuthorName || 'Someone else'} changed this document
+					{conflict.conflictingChangedAt
+						? ` at ${conflict.conflictingChangedAt.toLocaleString()}`
+						: ''}
+					, so your save was not applied. Your text is still here — copy it, then load
+					their version and put your change back.
+				</Alert>
+			) : saveMutation.error ? (
+				<Alert severity="error" data-testid="doc-save-error">
 					{saveMutation.error instanceof Error
 						? saveMutation.error.message
 						: 'Failed to save'}
 				</Alert>
-			)}
+			) : null}
 
 			<TextField
 				fullWidth

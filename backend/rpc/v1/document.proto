@@ -360,6 +360,9 @@ message Document {
   string owner_employee_id = 9;
   string owner_name = 10; // Denormalized for display
   int32 child_count = 11;
+  // The document's current version number. Versions are never pruned and never
+  // renumbered, so the count and the highest version number are the same value.
+  // An editing session echoes this back as UpdateDocumentRequest.base_version.
   int32 version_count = 12;
   int32 follower_count = 13;
   google.protobuf.Timestamp updated_at = 14;
@@ -506,6 +509,13 @@ message UpdateDocumentRequest {
   string title = 2;
   string content_json = 3;
   string version_summary = 4; // Optional commit message
+
+  // The document's version_count as the editing session loaded it. Required: a save
+  // whose base version is not the document's current version is refused as a conflict
+  // rather than overwriting the newer content (feature 049). Omitting it sends 0,
+  // which never matches, so an old or malfunctioning client cannot opt back into
+  // last-write-wins.
+  int32 base_version = 5;
 }
 
 message UpdateDocumentResponse {

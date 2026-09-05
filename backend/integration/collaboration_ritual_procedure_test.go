@@ -472,7 +472,10 @@ func TestRitualProcedureDocumentReading(t *testing.T) {
 		w.getRitualProcedure(s.worker, s.definitionID)
 
 		assert.Error(t, w.addDocumentCommentError(s.worker, s.workspaceDoc, "Can we change this?"))
-		assert.Error(t, w.updateDocumentError(s.worker, s.workspaceDoc, procedureContent("Rewritten by a reader.")))
+		// The base version is read as the owner, who can see the document, so the refusal
+		// under test is about the reader's access and not about a stale base version.
+		currentVersion := w.getDocument(s.owner, s.workspaceDoc).Document.VersionCount
+		assert.Error(t, w.updateDocumentAt(s.worker, s.workspaceDoc, procedureContent("Rewritten by a reader."), currentVersion))
 		assert.Error(t, w.getDocumentError(s.worker, s.workspaceDoc))
 	})
 
@@ -768,14 +771,6 @@ func (w *testWorld) addDocumentCommentError(actor testUser, docID, text string) 
 	req := connect.NewRequest(&rpcv1.AddCommentRequest{DocumentId: docID, CommentText: text})
 	req.Header().Set("Authorization", "Bearer "+actor.Token)
 	_, err := w.docComment.AddComment(context.Background(), req)
-	return err
-}
-
-func (w *testWorld) updateDocumentError(actor testUser, docID, contentJSON string) error {
-	w.t.Helper()
-	req := connect.NewRequest(&rpcv1.UpdateDocumentRequest{Id: docID, ContentJson: contentJSON})
-	req.Header().Set("Authorization", "Bearer "+actor.Token)
-	_, err := w.doc.UpdateDocument(context.Background(), req)
 	return err
 }
 

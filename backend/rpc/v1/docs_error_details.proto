@@ -1,0 +1,30 @@
+
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+// DocumentVersionConflict — attached to ABORTED when DocumentService.UpdateDocument
+// is refused because the base version the editor started from is no longer the
+// document's current version (feature 049).
+//
+// Without this detail a client can only say "that didn't save". With it, the editor
+// can name the person who got there first, say when, and reload exactly the version
+// it needs — without a second round trip.
+//
+// Only ever produced for a caller who already passed the write-access check, so the
+// author's name discloses nothing they could not read in the version history.
+message DocumentVersionConflict {
+  // The document's current version number, i.e. what the client's base version should
+  // have been. Reload this version to be able to save. (FR-005)
+  int32 current_version_number = 1;
+
+  // Display name of the person whose save created current_version_number. (FR-006)
+  string conflicting_author_name = 2;
+
+  // When that version was created. (FR-006)
+  google.protobuf.Timestamp conflicting_changed_at = 3;
+}

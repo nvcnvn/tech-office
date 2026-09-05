@@ -2064,6 +2064,7 @@ SET
     version_count = version_count + 1,
     updated_at = $5
 WHERE organization_id = $6 AND id = $7 AND is_deleted = FALSE
+  AND version_count = $8
 RETURNING id, organization_id, title, slug, document_type, parent_document_id, depth, path, content_json, content_text, status, visibility, owner_employee_id, child_count, version_count, follower_count, is_deleted, updated_at
 `
 
@@ -2075,6 +2076,7 @@ type UpdateDocumentParams struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	OrganizationID dbuuid.UUID        `json:"organization_id"`
 	ID             dbuuid.UUID        `json:"id"`
+	BaseVersion    int32              `json:"base_version"`
 }
 
 func (q *Queries) UpdateDocument(ctx context.Context, db DBTX, arg *UpdateDocumentParams) (*DocsDocument, error) {
@@ -2086,6 +2088,7 @@ func (q *Queries) UpdateDocument(ctx context.Context, db DBTX, arg *UpdateDocume
 		arg.UpdatedAt,
 		arg.OrganizationID,
 		arg.ID,
+		arg.BaseVersion,
 	)
 	var i DocsDocument
 	err := row.Scan(

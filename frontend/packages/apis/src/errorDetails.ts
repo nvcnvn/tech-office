@@ -10,6 +10,8 @@ import {
 	PinAuthErrorDetailSchema,
 	SoleOwnerBlocksDeletionSchema,
 } from "rpc/rpc/v1/iam_error_details_pb";
+import { DocumentVersionConflictSchema } from "rpc/rpc/v1/docs_error_details_pb";
+import { protoTimestampToDate } from "./proto-utils";
 
 // Re-export the PinAuthErrorDetail type from generated code
 export type { PinAuthErrorDetail } from "rpc/rpc/v1/iam_error_details_pb";
@@ -183,6 +185,37 @@ export function extractSoleOwnerBlocksDeletion(error: unknown): BlockingOrganiza
 		organizationName: org.organizationName,
 		memberCount: org.memberCount,
 	}));
+}
+
+/**
+ * A document save refused because somebody else saved first (Feature 049).
+ */
+export interface DocumentVersionConflictDetail {
+	/** The document's current version number — reload this to be able to save. */
+	currentVersionNumber: number;
+	/** Display name of the person whose save created that version. */
+	conflictingAuthorName: string;
+	/** When they saved, or null when the server could not name the moment. */
+	conflictingChangedAt: Date | null;
+}
+
+/**
+ * The conflict behind a refused `updateDocument`, or `null` when the failure was
+ * anything else — a lost connection, a permission failure, a deleted document.
+ *
+ * One call is what lets the editor render "Mai Tran saved this two minutes ago,
+ * here is your text and here is theirs" instead of "that didn't save" (FR-004).
+ */
+export function extractDocumentVersionConflict(error: unknown): DocumentVersionConflictDetail | null {
+	const cErr = ConnectError.from(error);
+	const details = cErr.findDetails(DocumentVersionConflictSchema);
+	if (details.length === 0) return null;
+	const detail = details[0];
+	return {
+		currentVersionNumber: detail.currentVersionNumber,
+		conflictingAuthorName: detail.conflictingAuthorName,
+		conflictingChangedAt: protoTimestampToDate(detail.conflictingChangedAt) ?? null,
+	};
 }
 
 export interface PreconditionViolation {

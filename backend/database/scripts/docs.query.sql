@@ -38,6 +38,7 @@ SET
     version_count = version_count + 1,
     updated_at = @updated_at
 WHERE organization_id = @organization_id AND id = @id AND is_deleted = FALSE
+  AND version_count = @base_version
 RETURNING *;
 
 -- name: UpdateDocumentStatus :one

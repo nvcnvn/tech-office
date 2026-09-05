@@ -40,12 +40,12 @@ never constructs an `UpdateDocumentRequest`.
 it, so every later task compiles against the real generated types rather than a
 hand-mirrored copy (Constitution VIII).
 
-- [ ] T001 Add `int32 base_version = 5;` to `UpdateDocumentRequest` in `backend/rpc/v1/document.proto`, with the comment from `contracts/document-update.md` stating it is required and that omitting it sends `0`, which never matches; and add a comment to `Document.version_count` (field 12) recording that it is the document's current version number because versions are never pruned and never renumbered
-- [ ] T002 [P] Create `backend/rpc/v1/docs_error_details.proto` with `message DocumentVersionConflict { int32 current_version_number = 1; string conflicting_author_name = 2; google.protobuf.Timestamp conflicting_changed_at = 3; }`, verbatim from `contracts/docs_error_details.proto` including its doc comments, following the existing `backend/rpc/v1/iam_error_details.proto` for package, `go_package` and file layout
-- [ ] T003 [P] Add `AND version_count = @base_version` to the `WHERE` clause of `-- name: UpdateDocument :one` in `backend/database/scripts/docs.query.sql` (line 40), keeping `organization_id` as the leading predicate and adding no join
-- [ ] T004 Run `cd backend && buf generate` to regenerate `backend/rpc/v1/document.pb.go`, `backend/rpc/v1/docs_error_details.pb.go` and the TypeScript in `frontend/packages/rpc/rpc/v1/` from T001 and T002
-- [ ] T005 Run `cd backend && sqlc generate` to regenerate `backend/database/docs.query.sql.go` so `UpdateDocumentParams` carries `BaseVersion` from T003
-- [ ] T006 Run `make lint-tenancy` and confirm the changed `UpdateDocument` query is still tenancy-clean; do **not** touch `backend/database/scripts/schema.sql`, which is a generated snapshot and ships no DDL for this feature
+- [X] T001 Add `int32 base_version = 5;` to `UpdateDocumentRequest` in `backend/rpc/v1/document.proto`, with the comment from `contracts/document-update.md` stating it is required and that omitting it sends `0`, which never matches; and add a comment to `Document.version_count` (field 12) recording that it is the document's current version number because versions are never pruned and never renumbered
+- [X] T002 [P] Create `backend/rpc/v1/docs_error_details.proto` with `message DocumentVersionConflict { int32 current_version_number = 1; string conflicting_author_name = 2; google.protobuf.Timestamp conflicting_changed_at = 3; }`, verbatim from `contracts/docs_error_details.proto` including its doc comments, following the existing `backend/rpc/v1/iam_error_details.proto` for package, `go_package` and file layout
+- [X] T003 [P] Add `AND version_count = @base_version` to the `WHERE` clause of `-- name: UpdateDocument :one` in `backend/database/scripts/docs.query.sql` (line 40), keeping `organization_id` as the leading predicate and adding no join
+- [X] T004 Run `cd backend && buf generate` to regenerate `backend/rpc/v1/document.pb.go`, `backend/rpc/v1/docs_error_details.pb.go` and the TypeScript in `frontend/packages/rpc/rpc/v1/` from T001 and T002
+- [X] T005 Run `cd backend && sqlc generate` to regenerate `backend/database/docs.query.sql.go` so `UpdateDocumentParams` carries `BaseVersion` from T003
+- [X] T006 Run `make lint-tenancy` and confirm the changed `UpdateDocument` query is still tenancy-clean; do **not** touch `backend/database/scripts/schema.sql`, which is a generated snapshot and ships no DDL for this feature
 
 **Checkpoint**: The contract exists in both languages and the SQL is a compare-and-swap. The tree does not compile yet — the call sites in Phase 2 have not been migrated.
 
@@ -60,10 +60,10 @@ existing suites compile.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T007 Change `testWorld.updateDocument` in `backend/integration/helper_test.go` (line ~2138) to read the document's current `version_count` and pass it as `BaseVersion`, and add a sibling helper that takes an explicit base version and returns the error rather than asserting success, so conflict scenarios can assert on the refusal
-- [ ] T008 [P] Update the direct `rpcv1.UpdateDocumentRequest{...}` construction in `backend/integration/collaboration_ritual_procedure_test.go` (line ~776) to carry the document's current version as `BaseVersion`
-- [ ] T009 [P] Add a required `baseVersion` argument to the `updateDocument` helper in `frontend/apps/web/e2e/helpers/api.ts` (line ~1020) and update its three call sites in `frontend/apps/web/e2e/document-collab.spec.ts` (lines ~115, ~199, ~207) to pass the version they read
-- [ ] T010 Run `make test-backend-one T='TestDocumentCRUD|TestDocumentVersion|TestDocumentDiff|TestWorkflowDocumentCollab|TestRitualProcedure'` and confirm the pre-existing suites compile and pass against the new predicate
+- [X] T007 Change `testWorld.updateDocument` in `backend/integration/helper_test.go` (line ~2138) to read the document's current `version_count` and pass it as `BaseVersion`, and add a sibling helper that takes an explicit base version and returns the error rather than asserting success, so conflict scenarios can assert on the refusal
+- [X] T008 [P] Update the direct `rpcv1.UpdateDocumentRequest{...}` construction in `backend/integration/collaboration_ritual_procedure_test.go` (line ~776) to carry the document's current version as `BaseVersion`
+- [X] T009 [P] Add a required `baseVersion` argument to the `updateDocument` helper in `frontend/apps/web/e2e/helpers/api.ts` (line ~1020) and update its three call sites in `frontend/apps/web/e2e/document-collab.spec.ts` (lines ~115, ~199, ~207) to pass the version they read
+- [X] T010 Run `make test-backend-one T='TestDocumentCRUD|TestDocumentVersion|TestDocumentDiff|TestWorkflowDocumentCollab|TestRitualProcedure'` and confirm the pre-existing suites compile and pass against the new predicate
 
 **Checkpoint**: Backend builds, existing backend suites are green, and the solo-save path already carries a base version. Conflicts currently surface as an opaque `INTERNAL` — Phase 3 gives them their outcome.
 
@@ -84,17 +84,17 @@ and confirm the second save is refused and the stored document still holds A's c
 
 > Write this file first and confirm the conflict scenarios FAIL before T012–T016.
 
-- [ ] T011 [US1] Author `backend/integration/docs_conflict_test.go` as `TestDocumentEditConflict`, using the testWorld pattern and reproducing every `t.Run` group and leaf from the Backend section of `contracts/test-scenarios.md` with real arrange/act/assert bodies: the common path, a stale save, a stale save that also renamed, a base version ahead of current, an omitted base version, the error-detail round trip, a person's own second session, two saves racing from the same base version in concurrent goroutines, a long gap with no other save, a permission failure that must stay a permission failure, reload-then-save, no notification on a refusal, and the unaffected reading surfaces
+- [X] T011 [US1] Author `backend/integration/docs_conflict_test.go` as `TestDocumentEditConflict`, using the testWorld pattern and reproducing every `t.Run` group and leaf from the Backend section of `contracts/test-scenarios.md` with real arrange/act/assert bodies: the common path, a stale save, a stale save that also renamed, a base version ahead of current, an omitted base version, the error-detail round trip, a person's own second session, two saves racing from the same base version in concurrent goroutines, a long gap with no other save, a permission failure that must stay a permission failure, reload-then-save, no notification on a refusal, and the unaffected reading surfaces
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Add `ErrVersionConflict` beside the existing sentinels (line ~25) and a `VersionConflictError` struct carrying the current version number, the conflicting author's display name and the change timestamp, with `Error()` producing the message from `contracts/document-update.md` and `Is`/`Unwrap` matching `ErrVersionConflict`, in `backend/internal/docs/logic.go`
-- [ ] T013 [US1] In `documentLogicImpl.UpdateDocument` in `backend/internal/docs/logic.go`, compare `req.BaseVersion` against `currentDoc.VersionCount` immediately after the `GetDocumentByID` (line ~544) and **before** the `CreateSlugHistory` call, returning a populated `VersionConflictError` on mismatch so a refusal never speculatively writes
-- [ ] T014 [US1] In the same function, map `pgx.ErrNoRows` from `Queries.UpdateDocument` (line ~580) to the same `VersionConflictError` — the rare lost race where the Go check passed on an older snapshot — populating it by re-reading the document and calling `Queries.GetVersion` for `author_name` and `created_at`; extract the population into one helper both T013 and this path call, in `backend/internal/docs/logic.go`
-- [ ] T015 [US1] Log the refusal once at INFO with the document id, the base version and the current version, in `backend/internal/docs/logic.go` (Constitution V — no new metric, no new counter)
-- [ ] T016 [US1] Add a `VersionConflictError` case to `DocumentServiceConnect.handleError` in `backend/internal/docs/connect.go` (line ~509) returning `connect.CodeAborted` with exactly one `connect.NewErrorDetail(&rpcv1.DocumentVersionConflict{...})`, placed so the pre-existing `ErrAccessDenied` → `PERMISSION_DENIED` case still wins for a caller who may not edit
-- [ ] T017 [US1] Run `make test-backend-one T=TestDocumentEditConflict` until every scenario passes
-- [ ] T018 [US1] Re-run the pre-existing suites from T010 and confirm they are still green — the common save path must be unchanged apart from carrying a base version (FR-008, SC-005)
+- [X] T012 [US1] Add `ErrVersionConflict` beside the existing sentinels (line ~25) and a `VersionConflictError` struct carrying the current version number, the conflicting author's display name and the change timestamp, with `Error()` producing the message from `contracts/document-update.md` and `Is`/`Unwrap` matching `ErrVersionConflict`, in `backend/internal/docs/logic.go`
+- [X] T013 [US1] In `documentLogicImpl.UpdateDocument` in `backend/internal/docs/logic.go`, compare `req.BaseVersion` against `currentDoc.VersionCount` immediately after the `GetDocumentByID` (line ~544) and **before** the `CreateSlugHistory` call, returning a populated `VersionConflictError` on mismatch so a refusal never speculatively writes
+- [X] T014 [US1] In the same function, map `pgx.ErrNoRows` from `Queries.UpdateDocument` (line ~580) to the same `VersionConflictError` — the rare lost race where the Go check passed on an older snapshot — populating it by re-reading the document and calling `Queries.GetVersion` for `author_name` and `created_at`; extract the population into one helper both T013 and this path call, in `backend/internal/docs/logic.go`
+- [X] T015 [US1] Log the refusal once at INFO with the document id, the base version and the current version, in `backend/internal/docs/logic.go` (Constitution V — no new metric, no new counter)
+- [X] T016 [US1] Add a `VersionConflictError` case to `DocumentServiceConnect.handleError` in `backend/internal/docs/connect.go` (line ~509) returning `connect.CodeAborted` with exactly one `connect.NewErrorDetail(&rpcv1.DocumentVersionConflict{...})`, placed so the pre-existing `ErrAccessDenied` → `PERMISSION_DENIED` case still wins for a caller who may not edit
+- [X] T017 [US1] Run `make test-backend-one T=TestDocumentEditConflict` until every scenario passes
+- [X] T018 [US1] Re-run the pre-existing suites from T010 and confirm they are still green — the common save path must be unchanged apart from carrying a base version (FR-008, SC-005)
 
 **Checkpoint**: The data loss is gone at the service boundary. A stale save is refused, nothing is written, and the refusal names who got there first. The web editor still reports it as a generic save error — that is User Story 2.
 
@@ -114,19 +114,19 @@ current version through the offered action.
 
 ### Tests for User Story 2 ⚠️
 
-- [ ] T019 [P] [US2] Author `frontend/apps/web/e2e/document-conflict.spec.ts` reproducing every `test.describe` group and leaf from the Web E2E section of `contracts/test-scenarios.md` — the conflict notice, declining to reload, loading the current version, the same person's two tabs, the tab-switch refetch guard, and the solo save — arranging via `helpers/api.ts` and asserting through the UI
+- [X] T019 [P] [US2] Author `frontend/apps/web/e2e/document-conflict.spec.ts` reproducing every `test.describe` group and leaf from the Web E2E section of `contracts/test-scenarios.md` — the conflict notice, declining to reload, loading the current version, the same person's two tabs, the tab-switch refetch guard, and the solo save — arranging via `helpers/api.ts` and asserting through the UI
 
 ### Implementation for User Story 2
 
-- [ ] T020 [P] [US2] Add `DocumentVersionConflictDetail` and `extractDocumentVersionConflict(error: unknown): DocumentVersionConflictDetail | null` to `frontend/packages/apis/src/errorDetails.ts`, following `extractPinAuthErrorDetail` (line ~151) for the generated-type lookup and returning `null` when the error is not a conflict
-- [ ] T021 [US2] Make `baseVersion: number` a required field of `UpdateDocumentParams` and pass it through to `documentClient.updateDocument` in `frontend/packages/apis/src/docs.ts` (lines ~560–584)
-- [ ] T022 [US2] Hold the base version in `DocumentEditor` state seeded from `document.versionCount`, send it from `saveMutation.mutationFn`, and advance it from the response's `newVersionNumber` in `onSuccess`, in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx` (lines ~627–635, ~934–1010)
-- [ ] T023 [US2] Guard the "Reset when document changes" effect (line ~850) and the enter-edit-mode re-apply effect (line ~890) in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx` so neither calls `applyEditorContent` while `hasChanges` is true — this closes the pre-existing hole where the 30-second `staleTime` refetch on window focus silently replaces unsaved text (research D7, FR-010)
-- [ ] T024 [US2] Replace the generic `saveMutation.error` `Alert` (line ~1143) in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx` with a branch that renders a distinct `warning` conflict banner when `extractDocumentVersionConflict` returns a detail — naming the conflicting author and formatting the timestamp — and keeps the existing `error` alert otherwise, so a conflict reads differently from a lost connection or a permission failure (FR-004, FR-011)
-- [ ] T025 [US2] Add two actions to that banner in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx`: "Copy my changes", writing `jsonToMarkdown(JSON.stringify(editor.getJSON()))` to `navigator.clipboard`; and "Load the current version", labelled so its effect on the unsaved draft is obvious, which refetches the document, applies the returned content and sets the base version to the version just loaded (FR-011, FR-012, SC-003)
-- [ ] T026 [US2] Clear the conflict banner on a successful save and on "Load the current version" in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx`, so the notice does not outlive the conflict
-- [ ] T027 [US2] Run `make test-frontend-one F=document-conflict` until every scenario passes
-- [ ] T028 [US2] Run `make test-frontend-one F=document-collab` and `make test-frontend-one F=task-lifecycle` — the two surfaces that embed the same editor, reached through `TaskDetailSidePanel.tsx` and `projects/[id]/tasks/[taskId]/page.tsx`
+- [X] T020 [P] [US2] Add `DocumentVersionConflictDetail` and `extractDocumentVersionConflict(error: unknown): DocumentVersionConflictDetail | null` to `frontend/packages/apis/src/errorDetails.ts`, following `extractPinAuthErrorDetail` (line ~151) for the generated-type lookup and returning `null` when the error is not a conflict
+- [X] T021 [US2] Make `baseVersion: number` a required field of `UpdateDocumentParams` and pass it through to `documentClient.updateDocument` in `frontend/packages/apis/src/docs.ts` (lines ~560–584)
+- [X] T022 [US2] Hold the base version in `DocumentEditor` state seeded from `document.versionCount`, send it from `saveMutation.mutationFn`, and advance it from the response's `newVersionNumber` in `onSuccess`, in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx` (lines ~627–635, ~934–1010)
+- [X] T023 [US2] Guard the "Reset when document changes" effect (line ~850) and the enter-edit-mode re-apply effect (line ~890) in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx` so neither calls `applyEditorContent` while `hasChanges` is true — this closes the pre-existing hole where the 30-second `staleTime` refetch on window focus silently replaces unsaved text (research D7, FR-010)
+- [X] T024 [US2] Replace the generic `saveMutation.error` `Alert` (line ~1143) in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx` with a branch that renders a distinct `warning` conflict banner when `extractDocumentVersionConflict` returns a detail — naming the conflicting author and formatting the timestamp — and keeps the existing `error` alert otherwise, so a conflict reads differently from a lost connection or a permission failure (FR-004, FR-011)
+- [X] T025 [US2] Add two actions to that banner in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx`: "Copy my changes", writing `jsonToMarkdown(JSON.stringify(editor.getJSON()))` to `navigator.clipboard`; and "Load the current version", labelled so its effect on the unsaved draft is obvious, which refetches the document, applies the returned content and sets the base version to the version just loaded (FR-011, FR-012, SC-003)
+- [X] T026 [US2] Clear the conflict banner on a successful save and on "Load the current version" in `frontend/apps/web/src/app/workspace/docs/components/DocumentEditor.tsx`, so the notice does not outlive the conflict
+- [X] T027 [US2] Run `make test-frontend-one F=document-conflict` until every scenario passes
+- [X] T028 [US2] Run `make test-frontend-one F=document-collab` and `make test-frontend-one F=task-lifecycle` — the two surfaces that embed the same editor, reached through `TaskDetailSidePanel.tsx` and `projects/[id]/tasks/[taskId]/page.tsx`
 
 **Checkpoint**: The full feature works as a person experiences it. A refused save keeps their text, tells them who saved first, and gets them to a successful re-save without leaving the document.
 
@@ -134,12 +134,12 @@ current version through the offered action.
 
 ## Phase 5: Polish & Cross-Cutting Concerns
 
-- [ ] T029 [P] Rewrite the sentence in `docs/domain/docs-knowledge.md` stating that concurrent edits are resolved last-write-wins — it is false after this change — and describe the base-version refusal, the `ABORTED` outcome and the `DocumentVersionConflict` detail instead, deleting the behaviour that no longer exists (Constitution XII)
-- [ ] T030 [P] Add the concurrency-control note to `backend/docs/SYSTEM-ARCHITECTURE.md`: `UpdateDocument` is a compare-and-swap on `docs.document.version_count`, serialized by the PostgreSQL row lock rather than by any in-process lock, so it is correct across backend instances (Constitution XI, XII)
-- [ ] T031 [P] Record the entry in the drift register in `docs/domain/README.md` if the last-write-wins statement was listed there, and remove it if the drift it recorded is now resolved
-- [ ] T032 [P] Confirm `frontend/apps/mobile` still typechecks and its read-only document screens still open — it never constructs an `UpdateDocumentRequest`, so this is a verification, not a change (Constitution XIII)
-- [ ] T033 Run `make test-backend`, `make test-frontend` and `make lint-tenancy` and confirm all three are green
-- [ ] T034 Walk the manual scenario in `quickstart.md` §3 in two browser profiles, including the solo-save, two-tabs and tab-switching checks, and tick off the Definition of Done at the foot of `quickstart.md`
+- [X] T029 [P] Rewrite the sentence in `docs/domain/docs-knowledge.md` stating that concurrent edits are resolved last-write-wins — it is false after this change — and describe the base-version refusal, the `ABORTED` outcome and the `DocumentVersionConflict` detail instead, deleting the behaviour that no longer exists (Constitution XII)
+- [X] T030 [P] Add the concurrency-control note to `backend/docs/SYSTEM-ARCHITECTURE.md`: `UpdateDocument` is a compare-and-swap on `docs.document.version_count`, serialized by the PostgreSQL row lock rather than by any in-process lock, so it is correct across backend instances (Constitution XI, XII)
+- [X] T031 [P] Record the entry in the drift register in `docs/domain/README.md` if the last-write-wins statement was listed there, and remove it if the drift it recorded is now resolved
+- [X] T032 [P] Confirm `frontend/apps/mobile` still typechecks and its read-only document screens still open — it never constructs an `UpdateDocumentRequest`, so this is a verification, not a change (Constitution XIII)
+- [X] T033 Run `make test-backend`, `make test-frontend` and `make lint-tenancy` and confirm all three are green
+- [X] T034 Walk the manual scenario in `quickstart.md` §3 in two browser profiles, including the solo-save, two-tabs and tab-switching checks, and tick off the Definition of Done at the foot of `quickstart.md`
 
 ---
 
@@ -265,6 +265,34 @@ the spec's own scope statement.
   being filed as a separate defect. Research D7 identifies it as a pre-existing hole in
   the same component that FR-010 forbids, reachable by the very two-tab scenario this
   feature exists for, so it is fixed at its root here rather than worked around.]
+
+---
+
+## Assumptions Resolved While Implementing
+
+- [ASSUMPTION: `rpcCall` in `frontend/packages/apis/src/rpcWrapper.ts` was changed to
+  rethrow `Code.Aborted` as the original `ConnectError` instead of flattening it into a
+  `NetworkError`. No task called for this, but without it `extractDocumentVersionConflict`
+  can never see the detail, because every error reaching a component had already been
+  stripped to a message. The fix is at the shared wrapper rather than in `DocumentEditor`,
+  so no future caller of an ABORTED surface hits the same wall, and it follows the
+  precedent already documented there for `ResourceExhausted` and PIN-auth details.]
+- [ASSUMPTION: `documentLogicImpl.UpdateDocument` also had to pass `BaseVersion` into
+  `database.UpdateDocumentParams`. T013 describes only the Go comparison and T003 only the
+  SQL predicate; without the parameter the predicate compared against a zero default, so
+  every save fell into the lost-race branch and no save could ever succeed.]
+- [ASSUMPTION: `updateDocumentError` in
+  `backend/integration/collaboration_ritual_procedure_test.go` was deleted rather than
+  given a base version as T008 describes. Its only caller asserts that a reader who cannot
+  even read the document is refused, so the helper cannot read the current version as that
+  actor. The scenario now reads the version as the owner and calls the `updateDocumentAt`
+  sibling from T007 — reuse rather than a second near-identical helper.]
+- [ASSUMPTION: T031 was a verification, not an edit. The drift register in
+  `docs/domain/README.md` never carried an entry for the last-write-wins statement, so
+  there was nothing to remove.]
+- [ASSUMPTION: T034's manual walkthrough was executed as the automated
+  `document-conflict.spec.ts` because this was an unattended run; the substitution and its
+  limits are recorded in `quickstart.md` under Definition of done.]
 
 ---
 

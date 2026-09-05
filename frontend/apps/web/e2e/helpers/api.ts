@@ -1010,22 +1010,33 @@ export async function createDocument(
 
 export async function getDocument(user: TestUser, documentId: string) {
   return apiCall<{
-    document: { id: string; title: string; contentJson: string };
+    document: { id: string; title: string; contentJson: string; versionCount: number };
   }>(user, '/rpc.v1.DocumentService/GetDocument', {
     id: documentId,
     includeContent: true,
   });
 }
 
+/**
+ * baseVersion is required (feature 049): a save whose base version is not the
+ * document's current version_count is refused as a conflict. Read it from
+ * getDocument first, or from the newVersionNumber a previous save returned.
+ */
 export async function updateDocument(
   user: TestUser,
   documentId: string,
   contentJson: string,
+  baseVersion: number,
 ) {
-  return apiCall(user, '/rpc.v1.DocumentService/UpdateDocument', {
-    id: documentId,
-    contentJson,
-  });
+  return apiCall<{ newVersionNumber: number }>(
+    user,
+    '/rpc.v1.DocumentService/UpdateDocument',
+    {
+      id: documentId,
+      contentJson,
+      baseVersion,
+    },
+  );
 }
 
 export async function listDocuments(

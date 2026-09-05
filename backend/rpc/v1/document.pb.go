@@ -341,10 +341,13 @@ type Document struct {
 	OwnerEmployeeId  string                 `protobuf:"bytes,9,opt,name=owner_employee_id,json=ownerEmployeeId,proto3" json:"owner_employee_id,omitempty"`
 	OwnerName        string                 `protobuf:"bytes,10,opt,name=owner_name,json=ownerName,proto3" json:"owner_name,omitempty"` // Denormalized for display
 	ChildCount       int32                  `protobuf:"varint,11,opt,name=child_count,json=childCount,proto3" json:"child_count,omitempty"`
-	VersionCount     int32                  `protobuf:"varint,12,opt,name=version_count,json=versionCount,proto3" json:"version_count,omitempty"`
-	FollowerCount    int32                  `protobuf:"varint,13,opt,name=follower_count,json=followerCount,proto3" json:"follower_count,omitempty"`
-	UpdatedAt        *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Path             []string               `protobuf:"bytes,15,rep,name=path,proto3" json:"path,omitempty"` // Ancestor IDs from root to parent
+	// The document's current version number. Versions are never pruned and never
+	// renumbered, so the count and the highest version number are the same value.
+	// An editing session echoes this back as UpdateDocumentRequest.base_version.
+	VersionCount  int32                  `protobuf:"varint,12,opt,name=version_count,json=versionCount,proto3" json:"version_count,omitempty"`
+	FollowerCount int32                  `protobuf:"varint,13,opt,name=follower_count,json=followerCount,proto3" json:"follower_count,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	Path          []string               `protobuf:"bytes,15,rep,name=path,proto3" json:"path,omitempty"` // Ancestor IDs from root to parent
 	// Whether this document is reached through the workspace tree or through an owning
 	// resource (a task's description, a project's brief). Feature 043 needs it to refuse
 	// attaching a non-workspace document as a ritual procedure.
@@ -1680,8 +1683,14 @@ type UpdateDocumentRequest struct {
 	Title          string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
 	ContentJson    string                 `protobuf:"bytes,3,opt,name=content_json,json=contentJson,proto3" json:"content_json,omitempty"`
 	VersionSummary string                 `protobuf:"bytes,4,opt,name=version_summary,json=versionSummary,proto3" json:"version_summary,omitempty"` // Optional commit message
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The document's version_count as the editing session loaded it. Required: a save
+	// whose base version is not the document's current version is refused as a conflict
+	// rather than overwriting the newer content (feature 049). Omitting it sends 0,
+	// which never matches, so an old or malfunctioning client cannot opt back into
+	// last-write-wins.
+	BaseVersion   int32 `protobuf:"varint,5,opt,name=base_version,json=baseVersion,proto3" json:"base_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpdateDocumentRequest) Reset() {
@@ -1740,6 +1749,13 @@ func (x *UpdateDocumentRequest) GetVersionSummary() string {
 		return x.VersionSummary
 	}
 	return ""
+}
+
+func (x *UpdateDocumentRequest) GetBaseVersion() int32 {
+	if x != nil {
+		return x.BaseVersion
+	}
+	return 0
 }
 
 type UpdateDocumentResponse struct {
@@ -5910,12 +5926,13 @@ const file_rpc_v1_document_proto_rawDesc = "" +
 	"\bdocument\x18\x01 \x01(\v2\x10.rpc.v1.DocumentR\bdocument\x12!\n" +
 	"\fis_following\x18\x02 \x01(\bR\visFollowing\x12>\n" +
 	"\x10effective_access\x18\x03 \x01(\x0e2\x13.rpc.v1.AccessLevelR\x0feffectiveAccess\x12.\n" +
-	"\x13active_editor_count\x18\x04 \x01(\x05R\x11activeEditorCount\"\x89\x01\n" +
+	"\x13active_editor_count\x18\x04 \x01(\x05R\x11activeEditorCount\"\xac\x01\n" +
 	"\x15UpdateDocumentRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12!\n" +
 	"\fcontent_json\x18\x03 \x01(\tR\vcontentJson\x12'\n" +
-	"\x0fversion_summary\x18\x04 \x01(\tR\x0eversionSummary\"t\n" +
+	"\x0fversion_summary\x18\x04 \x01(\tR\x0eversionSummary\x12!\n" +
+	"\fbase_version\x18\x05 \x01(\x05R\vbaseVersion\"t\n" +
 	"\x16UpdateDocumentResponse\x12,\n" +
 	"\bdocument\x18\x01 \x01(\v2\x10.rpc.v1.DocumentR\bdocument\x12,\n" +
 	"\x12new_version_number\x18\x02 \x01(\x05R\x10newVersionNumber\"'\n" +

@@ -30,7 +30,28 @@ var (
 	ErrEditorLimitReached       = errors.New("maximum editors limit reached")
 	ErrVersionNotFound          = errors.New("version not found")
 	ErrCannotDeleteWithChildren = errors.New("cannot delete document with children")
+	// ErrVersionConflict marks a save refused because the base version the editing
+	// session started from is no longer the document's current version. Match on this
+	// sentinel; read the specifics off VersionConflictError.
+	ErrVersionConflict = errors.New("document version conflict")
 )
+
+// VersionConflictError is a refused save (feature 049). It carries what the person who
+// lost needs in order to recover: which version to reload, and who got there first.
+type VersionConflictError struct {
+	CurrentVersionNumber  int32
+	ConflictingAuthorName string
+	ConflictingChangedAt  time.Time
+}
+
+func (e *VersionConflictError) Error() string {
+	return fmt.Sprintf("document changed since it was loaded (now at version %d, saved by %s)",
+		e.CurrentVersionNumber, e.ConflictingAuthorName)
+}
+
+func (e *VersionConflictError) Is(target error) bool { return target == ErrVersionConflict }
+
+func (e *VersionConflictError) Unwrap() error { return ErrVersionConflict }
 
 // extractEmbedIds parses TipTap JSON content and extracts all embedId attributes from embed nodes
 func extractEmbedIds(contentJSON string) ([]dbuuid.UUID, error) {
@@ -517,6 +538,40 @@ func (l *documentLogicImpl) GetDocumentBySlug(
 	return l.documentToProto(doc, ownerName), nil
 }
 
+// newVersionConflict builds the refusal both conflict paths return: the version the
+// client must reload, plus who created it and when. The author details come from the
+// version row that GetVersion already joins to the employee, so a conflict costs one
+// extra read on a path that is rare by construction. A missing or unreadable version
+// still yields a conflict — the refusal itself is never downgraded to an internal error.
+func (l *documentLogicImpl) newVersionConflict(
+	ctx context.Context,
+	tx database.DBTX,
+	orgID, docID dbuuid.UUID,
+	currentVersionNumber int32,
+) *VersionConflictError {
+	conflict := &VersionConflictError{CurrentVersionNumber: currentVersionNumber}
+
+	version, err := l.Queries.GetVersion(ctx, tx, &database.GetVersionParams{
+		OrganizationID: orgID,
+		DocumentID:     docID,
+		VersionNumber:  currentVersionNumber,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "version conflict could not name the conflicting author",
+			"error", err,
+			"docID", docID,
+			"currentVersion", currentVersionNumber,
+		)
+		return conflict
+	}
+
+	conflict.ConflictingAuthorName = interfaceToString(version.AuthorName)
+	if version.CreatedAt.Valid {
+		conflict.ConflictingChangedAt = version.CreatedAt.Time
+	}
+	return conflict
+}
+
 func (l *documentLogicImpl) UpdateDocument(
 	ctx context.Context,
 	tx database.DBTX,
@@ -541,6 +596,18 @@ func (l *documentLogicImpl) UpdateDocument(
 			return nil, 0, ErrDocumentNotFound
 		}
 		return nil, 0, fmt.Errorf("failed to get document: %w", err)
+	}
+
+	// Refuse a stale save before anything is written. The SQL predicate below is the
+	// authority; this check is the fast, well-diagnosed path and, being ahead of the
+	// slug-history write, it also keeps a refusal from writing speculatively.
+	if req.BaseVersion != currentDoc.VersionCount {
+		slog.InfoContext(ctx, "document save refused: base version is not current",
+			"docID", req.Id,
+			"baseVersion", req.BaseVersion,
+			"currentVersion", currentDoc.VersionCount,
+		)
+		return nil, 0, l.newVersionConflict(ctx, tx, orgID, docID, currentDoc.VersionCount)
 	}
 
 	// Check if title changed (need new slug)
@@ -576,8 +643,27 @@ func (l *documentLogicImpl) UpdateDocument(
 		ContentJson:    []byte(req.ContentJson),
 		ContentText:    contentText,
 		UpdatedAt:      now,
+		// The compare-and-swap: zero rows updated means somebody else saved first.
+		BaseVersion: req.BaseVersion,
 	})
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			// Somebody else's UPDATE committed between our read and ours, so the row no
+			// longer matches the base version. Re-read to say what it is now.
+			fresh, readErr := l.Queries.GetDocumentByID(ctx, tx, &database.GetDocumentByIDParams{
+				OrganizationID: orgID,
+				ID:             docID,
+			})
+			if readErr != nil {
+				return nil, 0, fmt.Errorf("failed to read document after version conflict: %w", readErr)
+			}
+			slog.InfoContext(ctx, "document save refused: another save landed mid-transaction",
+				"docID", req.Id,
+				"baseVersion", req.BaseVersion,
+				"currentVersion", fresh.VersionCount,
+			)
+			return nil, 0, l.newVersionConflict(ctx, tx, orgID, docID, fresh.VersionCount)
+		}
 		slog.ErrorContext(ctx, "failed to update document",
 			"error", err,
 			"docID", req.Id,

@@ -55,13 +55,21 @@ export async function rpcCall<T>(fn: () => Promise<T>): Promise<T> {
 			throw new APIError("NOT_FOUND", cErr.message || "Resource not found", undefined, 404);
 		}
 
+		// Aborted means a client-specified test-and-set failed — a document save from a
+		// stale base version, for instance. It is not a transport problem and it carries a
+		// typed detail the caller has to read, so the ConnectError is rethrown intact.
+		// Flattening it here would leave every caller with "that didn't save" and no way
+		// to say who got there first (Feature 049).
+		if (cErr.code === Code.Aborted) {
+			throw cErr;
+		}
+
 		// Transport / server problems -> NetworkError
 		switch (cErr.code) {
 			case Code.Unavailable:
 			case Code.DeadlineExceeded:
 			case Code.Internal:
 			case Code.Unknown:
-			case Code.Aborted:
 				throw new NetworkError(cErr.message || "RPC network error", 503);
 			// Note: Code.ResourceExhausted is intentionally NOT included here.
 			// Callers of PIN-auth endpoints must handle ConnectError with code

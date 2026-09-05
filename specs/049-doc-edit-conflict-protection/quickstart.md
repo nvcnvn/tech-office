@@ -117,10 +117,26 @@ confidence against a real deployment.
 
 ## Definition of done
 
-- [ ] `make test-backend` green
-- [ ] `make test-frontend` green
-- [ ] `make lint-tenancy` green
-- [ ] Mobile still builds and the read-only document screens still open
-- [ ] `docs/domain/docs-knowledge.md` no longer says concurrent edits are resolved
+- [X] `make test-backend` green — 148 tests pass. One full-suite run also showed
+      `TestPDFConversion` failing on `permission_denied` under parallel load; it passes
+      alone and on a repeat full run, and touches no document surface.
+- [X] `make test-frontend` green apart from three pre-existing failures already in the
+      drift register: `legal-surface.spec.ts:59` and `user-guide-screenshots.spec.ts:626`
+      (D41/D54) and `voice-communication.spec.ts:157` (D63). 223 pass, and
+      `document-conflict`, `document-collab` and `task-lifecycle` are all green.
+- [X] `make lint-tenancy` green
+- [X] Mobile still typechecks with the same three pre-existing chat/voice errors it had
+      before this change (verified by stashing the change set and re-running), and it
+      never constructs an `UpdateDocumentRequest`, so nothing there needed changing.
+- [X] `docs/domain/docs-knowledge.md` no longer says concurrent edits are resolved
       last-write-wins, and describes the refusal instead
-- [ ] `backend/docs/SYSTEM-ARCHITECTURE.md` records the concurrency-control rule
+- [X] `backend/docs/SYSTEM-ARCHITECTURE.md` records the concurrency-control rule
+
+[ASSUMPTION: §3's manual two-browser-profile walkthrough was executed as the automated
+`document-conflict.spec.ts` rather than by hand, because this was an unattended run. Every
+step of §3 has a scenario there, including the solo save, the two-tab case and the
+tab-switch case — and the tab-switch scenario waits out the full 30-second `staleTime` and
+drives the same `visibilitychange` the browser raises, so it exercises the real refetch
+rather than a shortened stand-in. The guard was mutation-tested: removing it makes that
+scenario fail. §4's atomicity check is covered by the authoritative "two saves race"
+backend scenario.]

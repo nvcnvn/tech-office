@@ -111,8 +111,9 @@ test.describe('Document Collaboration', () => {
       updateDocId = resp.document.id;
       await api.setDocumentAccess(owner, updateDocId, editor.id, 'ACCESS_LEVEL_WRITE_UPDATE');
 
-      // Editor updates content via API
-      await api.updateDocument(editor, updateDocId, updatedContent);
+      // Editor updates content via API, from the version it just read.
+      const loaded = await api.getDocument(editor, updateDocId);
+      await api.updateDocument(editor, updateDocId, updatedContent, loaded.document.versionCount);
     });
 
     test('the updated content is visible to the author', async ({ page }, testInfo) => {
@@ -195,14 +196,16 @@ test.describe('Document Collaboration', () => {
       const resp = await api.createDocument(owner, { title: versionDocTitle });
       versionDocId = resp.document.id;
 
-      // Create multiple versions via API
-      await api.updateDocument(
+      // Create multiple versions via API, each save based on the one before it.
+      const created = await api.getDocument(owner, versionDocId);
+      const second = await api.updateDocument(
         owner,
         versionDocId,
         JSON.stringify({
           type: 'doc',
           content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Version 2 content' }] }],
         }),
+        created.document.versionCount,
       );
       await api.updateDocument(
         owner,
@@ -211,6 +214,7 @@ test.describe('Document Collaboration', () => {
           type: 'doc',
           content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Version 3 content' }] }],
         }),
+        second.newVersionNumber,
       );
     });
 
