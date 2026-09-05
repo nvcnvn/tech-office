@@ -1,0 +1,1 @@
+Notification preference completeness. Allow the calendar domain to be muted like every other domain, and move the in-app alert toggle from device-local storage to the server preference so it follows the person. The settings screen promises a control that does not fully apply. Clears drift D28.
