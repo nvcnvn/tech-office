@@ -1,0 +1,111 @@
+// Contract excerpt for feature 051 — Notification Preference Completeness.
+//
+// This file is the reviewable statement of the contract. The change lands in
+// backend/rpc/v1/notification.proto: the two rpcs are appended to the existing
+// NotificationService (beside GetPresenceSettings / SetPresenceVisibility,
+// whose shape they follow) and the four messages are appended beside the
+// PresenceVisibility block.
+
+syntax = "proto3";
+
+package rpc.v1;
+
+import "google/protobuf/timestamp.proto";
+import "rpc/v1/rbac.proto";
+
+option go_package = "github.com/nvcnvn/tech-office/backend/rpc/v1;rpcv1";
+
+service NotificationService {
+  // ... existing rpcs unchanged ...
+
+  // GetNotificationPreferences returns the caller's own notification
+  // preferences. When no record has been stored, the documented defaults are
+  // returned with exists = false rather than an error (FR-006).
+  //
+  // muted_domains is filtered to domains the system currently recognises, so a
+  // stored value naming a removed domain neither blocks the read nor is handed
+  // back to the client to be re-saved.
+  rpc GetNotificationPreferences(GetNotificationPreferencesRequest)
+      returns (GetNotificationPreferencesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["pref.view"]
+    };
+  }
+
+  // UpdateNotificationPreferences replaces the caller's own notification
+  // preferences as a whole, creating the record on first change (FR-004,
+  // FR-009). There is no partial update: every field the caller omits is
+  // written at its proto default, so a client must send the record it read.
+  //
+  // Fails with CodeInvalidArgument, naming the offending value and writing
+  // nothing, when muted_domains contains a domain the system does not
+  // recognise (FR-007) or a do-not-disturb time is not "HH:MM".
+  rpc UpdateNotificationPreferences(UpdateNotificationPreferencesRequest)
+      returns (UpdateNotificationPreferencesResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["pref.update"]
+    };
+  }
+}
+
+// A person's notification preferences, as stored.
+//
+// Note that in_app_alerts_enabled is stored and returned by the server but is
+// never consulted by the delivery pipeline. It gates one client-drawn banner
+// and nothing else: the notification is still recorded, still listed, still
+// counted as unread, and still pushed (FR-012).
+message NotificationPreferences {
+  // Draw the foreground banner while the app is open. Defaults to true.
+  bool in_app_alerts_enabled = 1;
+
+  // Source domains whose push notifications are suppressed for this person.
+  //
+  // Values are from the same set the publisher accepts as source_domain:
+  // chat, crm, projects, docs, hr, support, finance, system, calendar.
+  // Muting suppresses push only — SSE delivery, the notification list and the
+  // unread count are unaffected (FR-016) — and never applies to priority 0
+  // notifications, which is how mentions and incoming calls always come
+  // through (FR-017).
+  //
+  // Stored deduplicated and sorted (FR-008).
+  repeated string muted_domains = 2;
+
+  // Do-not-disturb window. Carried by this contract so that a change cannot
+  // silently erase a window the person did not edit (FR-009); no screen in
+  // feature 051 edits these three fields.
+  bool dnd_enabled = 3;
+
+  // "HH:MM" in the server's local time, or empty when unset. Windows that wrap
+  // midnight (dnd_start > dnd_end) are supported by the existing reader.
+  string dnd_start = 4;
+  string dnd_end = 5;
+
+  // When the record was last written. Unset when no record exists.
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+// No fields — the person is taken from the auth context, never from the
+// caller (FR-005).
+message GetNotificationPreferencesRequest {}
+
+message GetNotificationPreferencesResponse {
+  NotificationPreferences preferences = 1;
+
+  // False when no record is stored and preferences holds the defaults.
+  bool exists = 2;
+}
+
+// The whole record. Inline scalars rather than a NotificationPreferences
+// message, because updated_at is server-owned and would have to be ignored.
+message UpdateNotificationPreferencesRequest {
+  bool in_app_alerts_enabled = 1;
+  repeated string muted_domains = 2;
+  bool dnd_enabled = 3;
+  string dnd_start = 4;
+  string dnd_end = 5;
+}
+
+message UpdateNotificationPreferencesResponse {
+  // The record as stored, after deduplication and sorting.
+  NotificationPreferences preferences = 1;
+}
