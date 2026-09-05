@@ -36,6 +36,20 @@ export type VoiceInvitationStatus = 'pending' | 'accepted' | 'declined' | 'expir
 export type VoiceArtifactType = 'recording' | 'transcript';
 export type VoiceArtifactStatus = 'pending' | 'processing' | 'ready' | 'unavailable' | 'failed';
 export type VoiceMessageStatus = 'requested' | 'uploading' | 'posted' | 'failed' | 'cancelled';
+// Why a call ended. Diagnostic, not a branch point: the UI reads `outcome` to decide what
+// to show, and this only tells two calls with the same outcome apart — a missed call that
+// rang out from one that never reached a device. Kept in step with the EndedReason*
+// constants in backend/internal/voice/constants.go by voice_constants_test.go.
+export type VoiceCallEndedReason =
+        | 'ended_by_user'
+        | 'direct_participant_left'
+        | 'final_participant_left'
+        | 'direct_invite_declined'
+        | 'direct_invite_expired'
+        | 'ring_timeout'
+        | 'livekit_room_finished'
+        | 'callee_unreachable';
+
 export type VoiceInviteDecision = 'accept' | 'decline';
 
 // LiveKit DisconnectReason values (see @livekit/protocol) that mean the room

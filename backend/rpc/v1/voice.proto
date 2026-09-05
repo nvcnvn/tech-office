@@ -235,6 +235,13 @@ message VoiceCallSession {
   bool recording_permitted = 7;
   google.protobuf.Timestamp started_at = 8;
   google.protobuf.Timestamp ended_at = 9;
+
+  // Why the call ended, as a free-form diagnostic string. Empty while the call is live.
+  // Clients branch on `outcome`, never on this — it distinguishes two calls that share an
+  // outcome, such as a missed call that rang out (`ring_timeout`) from one that never
+  // reached a device (`callee_unreachable`). Values are the EndedReason* constants in
+  // backend/internal/voice/constants.go.
+  string ended_reason = 10;
 }
 
 message VoiceCallRecord {

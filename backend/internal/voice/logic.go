@@ -1115,6 +1115,7 @@ func (l *Logic) callToProto(ctx context.Context, tx database.DBTX, call *databas
 		RecordingPermitted:  call.RecordingPolicy != "not_allowed",
 		StartedAt:           timestampOrNil(call.StartedAt),
 		EndedAt:             timestampOrNil(call.EndedAt),
+		EndedReason:         textOrEmpty(call.EndedReason),
 	}, nil
 }
 

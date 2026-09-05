@@ -142,15 +142,15 @@ set being exposed).
 
 ### Tests for User Story 3 ⚠️
 
-- [ ] T021 [P] [US3] Extend `backend/integration/voice_constants_test.go` with the ended-reason synchronisation scenario — assert the `EndedReason*` set matches the literals in `backend/database/scripts/voice.query.sql` (including the `ring_timeout` literal inside `ClaimExpiredRingingCalls`) and the TypeScript union in `frontend/packages/apis/src/voice.ts` (Constitution VIII, FR-009)
+- [X] T021 [P] [US3] Extend `backend/integration/voice_constants_test.go` with the ended-reason synchronisation scenario — assert the `EndedReason*` set matches the literals in `backend/database/scripts/voice.query.sql` (including the `ring_timeout` literal inside `ClaimExpiredRingingCalls`) and the TypeScript union in `frontend/packages/apis/src/voice.ts` (Constitution VIII, FR-009)
 
 ### Implementation for User Story 3
 
-- [ ] T022 [US3] Add `string ended_reason = 10;` to `message VoiceCallSession` in `backend/rpc/v1/voice.proto` with the comment from [contracts/voice-service.md](contracts/voice-service.md) §C1 stating that clients branch on `outcome` and never on this field. `VoiceCallRecord` embeds `VoiceCallSession`, so call history picks it up with no second field
-- [ ] T023 [US3] Populate `EndedReason` in `Logic.callToProto` in `backend/internal/voice/logic.go` (empty while the call is live), then run `cd backend && buf generate` to regenerate `backend/rpc/v1/voice.pb.go` and `frontend/packages/rpc/rpc/v1/voice_pb.ts`
-- [ ] T024 [US3] Add the `VoiceCallEndedReason` TypeScript union of the eight values to `frontend/packages/apis/src/voice.ts`, which is what T021's sync scenario asserts against
-- [ ] T025 [US3] Add the call-history block from [contracts/test-scenarios.md](contracts/test-scenarios.md) to `backend/integration/voice_unreachable_missed_call_test.go` — both calls read as missed (US3.1), each carries a distinct recorded reason (FR-009, SC-006), and the unreachable record shows no answer time and no duration (US3.2)
-- [ ] T026 [US3] Run `make test-backend-one T=TestUnreachableCalleeStillGetsAMissedCall` and `make test-backend-one T=TestVoiceConstantSync` until both pass
+- [X] T022 [US3] Add `string ended_reason = 10;` to `message VoiceCallSession` in `backend/rpc/v1/voice.proto` with the comment from [contracts/voice-service.md](contracts/voice-service.md) §C1 stating that clients branch on `outcome` and never on this field. `VoiceCallRecord` embeds `VoiceCallSession`, so call history picks it up with no second field
+- [X] T023 [US3] Populate `EndedReason` in `Logic.callToProto` in `backend/internal/voice/logic.go` (empty while the call is live), then run `cd backend && buf generate` to regenerate `backend/rpc/v1/voice.pb.go` and `frontend/packages/rpc/rpc/v1/voice_pb.ts`
+- [X] T024 [US3] Add the `VoiceCallEndedReason` TypeScript union of the eight values to `frontend/packages/apis/src/voice.ts`, which is what T021's sync scenario asserts against
+- [X] T025 [US3] Add the call-history block from [contracts/test-scenarios.md](contracts/test-scenarios.md) to `backend/integration/voice_unreachable_missed_call_test.go` — both calls read as missed (US3.1), each carries a distinct recorded reason (FR-009, SC-006), and the unreachable record shows no answer time and no duration (US3.2)
+- [X] T026 [US3] Run `make test-backend-one T=TestUnreachableCalleeStillGetsAMissedCall` and `make test-backend-one T=TestVoiceConstantSync` until both pass
 
 **Checkpoint**: All three user stories are independently functional.
 

@@ -112,6 +112,41 @@ func TestVoiceConstantSync(t *testing.T) {
 		assertContainsAll(t, voiceAPI, values)
 	})
 
+	t.Run("when checking voice call ended reasons", func(t *testing.T) {
+		// FR-009, Constitution VIII. The reason used to be an internal diagnostic; now
+		// that VoiceCallSession.ended_reason is on the wire it spans Go, SQL and
+		// TypeScript, and the three must not drift.
+		values := []string{
+			"ended_by_user", "direct_participant_left", "final_participant_left",
+			"direct_invite_declined", "direct_invite_expired", "ring_timeout",
+			"livekit_room_finished", "callee_unreachable",
+		}
+		assert.ElementsMatch(t, values, []string{
+			voice.EndedReasonEndedByUser,
+			voice.EndedReasonDirectParticipantLeft,
+			voice.EndedReasonFinalParticipantLeft,
+			voice.EndedReasonDirectInviteDeclined,
+			voice.EndedReasonDirectInviteExpired,
+			voice.EndedReasonRingTimeout,
+			voice.EndedReasonLiveKitRoomFinished,
+			voice.EndedReasonCalleeUnreachable,
+		})
+		for _, value := range values {
+			assert.True(t, voice.IsValidEndedReason(value), "ended reason should be valid: %s", value)
+		}
+		assertContainsAll(t, voiceAPI, values)
+
+		// Two of the eight are written by SQL rather than by Go — the sweep ends an
+		// expired call inside its claiming UPDATE, and the unreachable record is one
+		// INSERT — so those literals have to match the constants by assertion, there
+		// being nothing else to hold them together.
+		voiceQueries := readProjectFile(t, "backend/database/scripts/voice.query.sql")
+		assertContainsAll(t, voiceQueries, []string{
+			voice.EndedReasonRingTimeout,
+			voice.EndedReasonCalleeUnreachable,
+		})
+	})
+
 	t.Run("when checking voice notification constants", func(t *testing.T) {
 		values := []string{"voice_call_incoming", "voice_call_started", "voice_call_updated", "voice_call_ended"}
 		assert.ElementsMatch(t, values, []string{

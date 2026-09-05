@@ -1836,8 +1836,14 @@ type VoiceCallSession struct {
 	RecordingPermitted  bool                    `protobuf:"varint,7,opt,name=recording_permitted,json=recordingPermitted,proto3" json:"recording_permitted,omitempty"`
 	StartedAt           *timestamppb.Timestamp  `protobuf:"bytes,8,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`
 	EndedAt             *timestamppb.Timestamp  `protobuf:"bytes,9,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Why the call ended, as a free-form diagnostic string. Empty while the call is live.
+	// Clients branch on `outcome`, never on this — it distinguishes two calls that share an
+	// outcome, such as a missed call that rang out (`ring_timeout`) from one that never
+	// reached a device (`callee_unreachable`). Values are the EndedReason* constants in
+	// backend/internal/voice/constants.go.
+	EndedReason   string `protobuf:"bytes,10,opt,name=ended_reason,json=endedReason,proto3" json:"ended_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *VoiceCallSession) Reset() {
@@ -1931,6 +1937,13 @@ func (x *VoiceCallSession) GetEndedAt() *timestamppb.Timestamp {
 		return x.EndedAt
 	}
 	return nil
+}
+
+func (x *VoiceCallSession) GetEndedReason() string {
+	if x != nil {
+		return x.EndedReason
+	}
+	return ""
 }
 
 type VoiceCallRecord struct {
@@ -2418,7 +2431,7 @@ const file_rpc_v1_voice_proto_rawDesc = "" +
 	"\rlivekit_token\x18\x02 \x01(\tR\flivekitToken\x12\x1b\n" +
 	"\troom_name\x18\x03 \x01(\tR\broomName\x129\n" +
 	"\n" +
-	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAtJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\vice_serversR\x14ice_transport_policy\"\xbc\x03\n" +
+	"expires_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAtJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\vice_serversR\x14ice_transport_policy\"\xdf\x03\n" +
 	"\x10VoiceCallSession\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -2430,7 +2443,9 @@ const file_rpc_v1_voice_proto_rawDesc = "" +
 	"\x13recording_permitted\x18\a \x01(\bR\x12recordingPermitted\x129\n" +
 	"\n" +
 	"started_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
-	"\bended_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\"x\n" +
+	"\bended_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12!\n" +
+	"\fended_reason\x18\n" +
+	" \x01(\tR\vendedReason\"x\n" +
 	"\x0fVoiceCallRecord\x12,\n" +
 	"\x04call\x18\x01 \x01(\v2\x18.rpc.v1.VoiceCallSessionR\x04call\x127\n" +
 	"\tartifacts\x18\x02 \x03(\v2\x19.rpc.v1.VoiceCallArtifactR\tartifacts\"\xde\x01\n" +

@@ -310,6 +310,64 @@ func TestUnreachableCalleeStillGetsAMissedCall(t *testing.T) {
 			w.endVoiceCall(caller, call.Id)
 		})
 	})
+
+	t.Run("when the conversation's call history is read", func(t *testing.T) {
+		// US3, FR-009, SC-006. Two missed calls that mean different things: one rang a
+		// phone nobody picked up, one never reached a phone at all. The reader has to be
+		// able to tell them apart, which is what puts ended_reason on the wire.
+		w := newTestWorld(t)
+		caller := w.withOwner()
+		callee := w.withEmployee()
+		channelID := w.createOrGetDirectMessage(caller, callee.ID.String()).Channel.Id
+
+		// A call that rang out: the callee has a device, so the call rings, and its
+		// deadline is moved into the past rather than waiting out the real 45 seconds.
+		w.registerCallWakeDevice(callee, "device-history-052", "android", true)
+		rangOut, _ := w.startVoiceCall(caller, channelID)
+		w.expireCallRingDeadline(rangOut.Id)
+		require.Eventually(t, func() bool {
+			state, outcome, _ := w.callSessionRow(rangOut.Id)
+			return state == voice.CallStateEnded && outcome == voice.CallOutcomeMissed
+		}, 15*time.Second, 250*time.Millisecond, "the sweep should have ended the ringing call as missed")
+
+		// A call that never reached a device: the same callee, with every device gone.
+		w.removeCallWakeDevices(callee)
+		require.Error(t, w.startVoiceCallError(caller, channelID))
+		unreachableRecords := w.unreachableCallRecordRows(channelID)
+		require.Len(t, unreachableRecords, 1)
+
+		history := map[string]*rpcv1.VoiceCallSession{}
+		for _, record := range w.listCallRecords(caller, channelID) {
+			history[record.GetCall().GetId()] = record.GetCall()
+		}
+
+		t.Run("a call that rang out and one that never reached a device are both missed", func(t *testing.T) {
+			// US3.1: the outcome is deliberately the same. Both were missed.
+			require.Contains(t, history, rangOut.Id)
+			require.Contains(t, history, unreachableRecords[0].ID)
+			assert.Equal(t, rpcv1.VoiceCallOutcome_VOICE_CALL_OUTCOME_MISSED, history[rangOut.Id].GetOutcome())
+			assert.Equal(t, rpcv1.VoiceCallOutcome_VOICE_CALL_OUTCOME_MISSED, history[unreachableRecords[0].ID].GetOutcome())
+		})
+
+		t.Run("each carries a distinct recorded reason", func(t *testing.T) {
+			// FR-009, SC-006
+			require.Contains(t, history, rangOut.Id)
+			require.Contains(t, history, unreachableRecords[0].ID)
+			assert.Equal(t, voice.EndedReasonRingTimeout, history[rangOut.Id].GetEndedReason())
+			assert.Equal(t, voice.EndedReasonCalleeUnreachable, history[unreachableRecords[0].ID].GetEndedReason())
+		})
+
+		t.Run("the unreachable record shows no answer time and no duration", func(t *testing.T) {
+			// US3.2: nothing about it should read as a conversation that took place.
+			record := history[unreachableRecords[0].ID]
+			require.NotNil(t, record)
+			require.NotNil(t, record.GetStartedAt())
+			require.NotNil(t, record.GetEndedAt())
+			assert.Zero(t, record.GetEndedAt().AsTime().Sub(record.GetStartedAt().AsTime()),
+				"a call that never happened has no duration")
+			assert.Empty(t, record.GetParticipants(), "nobody was ever in it")
+		})
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -403,4 +461,14 @@ func (w *testWorld) voiceSystemMessages(actor testUser, channelID, systemEventTy
 		}
 	}
 	return matches
+}
+
+// removeCallWakeDevices takes away every device that could be woken for a call, turning a
+// reachable person into an unreachable one inside a single scenario.
+func (w *testWorld) removeCallWakeDevices(actor testUser) {
+	w.t.Helper()
+	_, err := globalDB.Exec(context.Background(),
+		`DELETE FROM notification.push_token WHERE organization_id = $1 AND employee_id = $2`,
+		w.OrgID, actor.ID)
+	require.NoError(w.t, err)
 }
