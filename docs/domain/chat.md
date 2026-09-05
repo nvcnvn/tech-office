@@ -4,7 +4,7 @@ Channels, messages, threads, reactions, presence-aware typing, and the per-user 
 Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RPCs) and
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
-**Status date: 2026-09-04.** Supersedes specs 009, 010, 027, 046.
+**Status date: 2026-09-05.** Supersedes specs 009, 010, 027, 046.
 
 ## Channels
 
@@ -242,5 +242,12 @@ None specific to chat. Two adjacent items land here:
 
 - The mobile route resolver recognises chat notification types the backend cannot emit —
   see [D7](notifications-presence.md#known-drift).
+- **There is no read-only way to ask a channel's unread count.** `MarkChannelAsRead` is
+  the only RPC that returns it and it clears the cursor as it reports it, `ListChannels`
+  leaves `ChannelMembership.unread_count` unset, and the web sidebar derives its unread
+  marks client-side from the live notification stream. Someone who was offline while a
+  conversation changed therefore returns to a channel list showing nothing unread, even
+  though `GetUnreadMessageCount`'s predicate — which counts system messages too — says
+  otherwise. The backend state is correct; only the surfaces are missing.
 - `crm_deal_notes` and `support_ticket` channel types are reserved in the CHECK constraint
   and the proto enum but nothing creates them; the `crm` and `support` schemas are empty.

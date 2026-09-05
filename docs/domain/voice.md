@@ -3,7 +3,7 @@
 Channel-scoped voice calls, voice messages, recordings and transcripts. Owned by
 `internal/voice`; contract in `rpc/v1/voice.proto` (`VoiceService`, 12 RPCs).
 
-**Status date: 2026-09-05.** Supersedes specs 032 and 037. Deeper reference:
+**Status date: 2026-09-05.** Supersedes specs 032, 037 and 052. Deeper reference:
 `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`.
 
 ## Split of responsibility
@@ -431,7 +431,7 @@ reports that call ended to the OS. Without it the system call screen survives th
 with a running timer and no audio, and the user cannot dismiss it from the app. It is
 mirrored centrally, from the one snapshot, rather than in each leave button.
 
-## Two client rules the call surfaces depend on
+## Four client rules the call surfaces depend on
 
 **A loaded call never overrides a call known to have ended.** `GetActiveVoiceCall`
 answers "was there a call when this request was issued", so a refresh started by an
@@ -449,6 +449,26 @@ title and an empty body: they exist to drive the call surfaces, not to be read. 
 clients drop them before the generic toast/banner path (`mapNotificationToPopup` on web,
 the live-banner enqueue on mobile). `voice_call_incoming` is the only voice notification
 with a real title and body, and it is handled by the call surfaces too.
+
+**Only a client that held the ending call may clear its error.** A `voice_call_ended`
+arrives on the channel, so a client can receive one for a call it never had — which is
+exactly the shape of an unreachable-call record, published while the caller is reading
+their refusal. Both clients (`useVoiceCall`'s terminal branch on web, the `callEnded`
+reducer case on mobile) clear the call error only when they were actually holding the
+ending call. Clearing it unconditionally blanked the message the caller had just been
+shown.
+
+**Terminal voice events refresh the transcript.** Terminal is precisely when the system
+message is written — missed, ended, cancelled — so a client that refreshes only on
+non-terminal events never sees the entry until a reload. Mobile refreshes on every voice
+event; web refreshes on the terminal branch whether or not it held the call.
+
+Neither client relies on the live event alone to show the caller their own refused
+attempt. `voice_call_ended` is channel-scoped, and channel-scoped delivery reaches only
+connections that have already reported that channel as the one they are viewing — which
+is reported on a presence pong, so it can lag a caller who has just opened the
+conversation by up to a ping interval. Both clients therefore refresh the transcript
+directly when `StartVoiceCall` fails as unreachable.
 
 ## Client surfaces
 

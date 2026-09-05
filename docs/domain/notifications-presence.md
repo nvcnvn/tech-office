@@ -472,6 +472,17 @@ two pure preference transforms is in `internal/notification/preference_logic_tes
 
 ## Known drift
 
+**A channel-scoped event misses someone who has just opened the channel.** Channel-scoped
+delivery (`publishToInstancesByChannel`) selects connections whose `active_channel_id`
+already names the channel, and the clients report the channel they are viewing on a
+presence **pong** — which the server drives on its ping interval. Opening a conversation
+therefore does not make you a delivery target until the next ping, up to a full interval
+later. It shows up most sharply in voice: a caller who opens a conversation and
+immediately places a call to someone unreachable misses the `voice_call_ended` event for
+their own attempt, which is why both clients refresh the transcript directly on that
+refusal rather than trusting the event. Closing it means reporting the active channel on
+navigation instead of waiting for the next pong.
+
 **The clients listen for SSE event types the backend never sends.**
 The server emits exactly three `EventType` values: `notification`, `ping` and
 `connection_established`. Mobile subscribes to and branches on `chat_message` and
