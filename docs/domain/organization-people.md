@@ -137,6 +137,10 @@ A non-empty `query` narrows any of the three through
 reached through an `EmployeeSearcher` interface `internal/iam` declares and `cmd/server.go`
 injects, because `internal/organization` already imports `internal/iam`. A narrowed
 response is one relevance-ordered page and always carries an empty `next_cursor`.
+The match is org-scoped on every leg, but *how loose* it is is currently not
+deterministic: the matcher sets the trigram threshold by mutating a session GUC that
+it never resets, so a search's result set depends on whether its pooled connection has
+already served one (drift D70).
 
 The cursor is an opaque base64 encoding of `(lower(family_name), lower(given_name), id)`,
 not a uuidv7 keyset: a directory is read in name order and creation order cannot express

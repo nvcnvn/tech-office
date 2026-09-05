@@ -318,3 +318,11 @@ existing assumption list.
   it describes has been unable to place its call since native call wakeup added the
   reachability guard — the callee had no wakeable device — and this change set fixes it,
   so leaving the entry would misdescribe the suite.]
+- [ASSUMPTION: T030's "no regression against the T002 baseline" was judged against four
+  consecutive full-suite runs rather than one. The suite failed a different unrelated test
+  on three of them (`TestFederatedSearch` + `TestNotificationLifecycle`, then
+  `TestPeopleDirectory`, then `TestDemoSeed`) and passed cleanly on the fourth; every one
+  passes in isolation, none is in the voice domain, and the same pattern reproduces on the
+  pre-052 tree (checked out at `a11ffa7` in a worktree and run against the same server).
+  The gate is therefore treated as met. `TestPeopleDirectory`'s failure was root-caused
+  rather than dismissed — see drift D70, added by this feature.]
