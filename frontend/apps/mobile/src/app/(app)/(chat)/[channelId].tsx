@@ -1431,9 +1431,13 @@ export default function ChannelScreen() {
           if (isVoiceEvent) {
             // One writer. The hook decides what the event means for the call; the screen
             // only decides what it means for the transcript.
-            if (voice.applyStreamEvent(event) === "updated") {
-              void fetchNewerIntoCache();
-            }
+            //
+            // The transcript refreshes on every voice event, terminal ones included:
+            // terminal is precisely when the system message is written — missed, ended,
+            // cancelled — so skipping it is what left missed-call entries invisible
+            // until a reload.
+            voice.applyStreamEvent(event);
+            void fetchNewerIntoCache();
           } else if (isReactionEvent) {
             queryClient.invalidateQueries({
               queryKey: ["messages", channelId],

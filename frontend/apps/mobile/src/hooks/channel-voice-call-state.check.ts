@@ -146,4 +146,34 @@ const run = (state: State, ...actions: Action[]): State =>
   assert.equal(next.call?.id, "call-b");
 }
 
+// A terminal event for a call this client never held must not wipe the error it is
+// showing. Calling someone who cannot be reached is refused and recorded as an ended
+// call, so the caller gets a callEnded for a call they never had while reading the
+// refusal — clearing the error there blanks the message they were just shown.
+{
+  const after = run(
+    initialState,
+    { type: "error", error: "They cannot be reached right now. They will see that you called." },
+    { type: "callEnded", callId: "call-never-held" },
+  );
+  assert.equal(
+    after.error,
+    "They cannot be reached right now. They will see that you called.",
+    "a terminal event for a call this client never held must leave the error in place",
+  );
+  assert.equal(after.call, null, "and must still leave no call on screen");
+}
+
+// The other half of the same rule: a client that *was* holding the ending call still
+// clears its error, so a failure from one call does not haunt the next.
+{
+  const after = run(
+    initialState,
+    { type: "callLoaded", call: ringing("call-a") },
+    { type: "error", error: "Failed to join voice call." },
+    { type: "callEnded", callId: "call-a" },
+  );
+  assert.equal(after.error, null, "ending the call this client held must clear its error");
+}
+
 console.log("channel-voice-call-state: all checks passed");

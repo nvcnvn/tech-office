@@ -27,6 +27,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   endVoiceCall,
   getActiveVoiceCall,
@@ -35,6 +36,7 @@ import {
   respondToVoiceCallInvite,
   startVoiceCall,
   voiceCallErrorMessage,
+  voiceCallFailureKind,
   voiceCallStateToString,
   type VoiceCallSession,
   type VoiceJoinCredentials,
@@ -191,6 +193,8 @@ export function useChannelVoiceCall(options: {
     refresh();
   }, [refresh, snapshot.connectionState, snapshot.error, state.call, state.joinedCallId]);
 
+  const queryClient = useQueryClient();
+
   const run = useCallback(
     async (action: VoiceCallAction, fallback: string, body: () => Promise<void>) => {
       dispatch({ type: "pending", pending: action });
@@ -227,16 +231,28 @@ export function useChannelVoiceCall(options: {
     () =>
       run("starting", "Unable to start voice call.", async () => {
         if (!channelId) return;
-        const response = await startVoiceCall({ channelId });
-        const call = toSummary(response.call);
-        if (!call) return;
-        dispatch({ type: "joined", call, callId: call.id });
-        await connect(
-          toJoinCredentials(response.joinCredentials, call.id, channelId),
-          channelId,
-        );
+        try {
+          const response = await startVoiceCall({ channelId });
+          const call = toSummary(response.call);
+          if (!call) return;
+          dispatch({ type: "joined", call, callId: call.id });
+          await connect(
+            toJoinCredentials(response.joinCredentials, call.id, channelId),
+            channelId,
+          );
+        } catch (error) {
+          if (voiceCallFailureKind(error) === "unreachable") {
+            // A call to someone who cannot be reached is refused, and recorded in this
+            // conversation as a missed call. The caller is told they will see it, so it
+            // has to be there in front of them — refreshed here rather than left to the
+            // live event, which only reaches connections that have already reported
+            // this channel as the one they are viewing.
+            void queryClient.invalidateQueries({ queryKey: ["messages", channelId] });
+          }
+          throw error;
+        }
       }),
-    [channelId, connect, run],
+    [channelId, connect, queryClient, run],
   );
 
   const join = useCallback(

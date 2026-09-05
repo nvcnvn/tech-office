@@ -158,6 +158,10 @@ test.describe('Voice Communication', () => {
       const dm = await api.createOrGetDirectMessage(alice, bob.id);
       const dmChannelId = dm.channel.id;
 
+      // A direct call to someone with no device and no open browser is refused before it
+      // can ring, so there would be nothing to decline. Give bob a device.
+      await api.registerCallWakeDevice(bob, `e2e-decline-${crypto.randomUUID().slice(0, 8)}`);
+
       await loginAs(page, alice);
       // Point the caller's media connect at a black-holed address so it is
       // still in flight when the decline lands. That is the ordinary race in a
@@ -195,6 +199,116 @@ test.describe('Voice Communication', () => {
       await stepScreenshot(page, testInfo, 'voice-call-declined');
 
       expect((await api.getActiveVoiceCall(alice, dmChannelId)).hasActiveCall).toBeFalsy();
+    });
+  });
+
+  test.describe('calling someone who cannot be reached', () => {
+    // Feature 052. A colleague with no registered device and no open browser cannot be
+    // woken, so the call is refused outright rather than left ringing. It still goes
+    // into the conversation as a missed call, which is what makes the refusal honest:
+    // the caller is told the person will see it, and they will.
+    //
+    // The callee here is created and never logged in, which is what makes them
+    // unreachable — no push token, no live connection.
+    let unreachable: TestUser;
+    let unreachableChannelId: string;
+
+    test.beforeAll(async () => {
+      unreachable = await createTestEmployee(owner);
+      const dm = await api.createOrGetDirectMessage(alice, unreachable.id);
+      unreachableChannelId = dm.channel.id;
+    });
+
+    test('the missed-call entry appears in the caller\'s open conversation without a reload', async ({ page }, testInfo) => {
+      // US2.1, FR-012. No page.reload() anywhere in this test on purpose: the entry has
+      // to arrive on the live event, because a caller who has to refresh to find out
+      // their attempt was recorded has not been told anything.
+      await loginAs(page, alice);
+      // voice_call_ended is a live-only event: it is never persisted and never replayed,
+      // so it is delivered to whoever is listening at the moment it is published and
+      // dropped for everyone else. A real caller has been sitting in the conversation
+      // long enough for the stream to be up; the test has to wait for the same thing
+      // rather than clicking into the gap.
+      const streamConnected = page.waitForResponse(
+        (response) => response.url().includes('/api/notifications/stream'),
+        { timeout: 15_000 },
+      );
+      await page.goto(`/workspace/chat?channel=${unreachableChannelId}`);
+      await expect(page.getByTestId('voice-start-call-button')).toBeVisible({ timeout: 10_000 });
+      await streamConnected;
+
+      await page.getByTestId('voice-start-call-button').click();
+
+      await expect(page.getByTestId('voice-call-record').last()).toContainText(
+        /Voice call missed/i,
+        { timeout: 15_000 },
+      );
+      await stepScreenshot(page, testInfo, 'voice-call-unreachable-recorded');
+
+      const records = await api.listCallRecords(alice, unreachableChannelId);
+      expect(records.records?.[0]?.call?.outcome).toMatch(/MISSED/);
+    });
+
+    test('the refusal says the person will see the call and does not say why they could not be reached', async ({ page }) => {
+      // US2.2, FR-013. The second half matters as much as the first: whether someone
+      // has no device, revoked notifications, or is simply switched off is not the
+      // caller's business, and the message must not leak it.
+      await loginAs(page, alice);
+      await page.goto(`/workspace/chat?channel=${unreachableChannelId}`);
+      await expect(page.getByTestId('voice-start-call-button')).toBeVisible({ timeout: 10_000 });
+
+      await page.getByTestId('voice-start-call-button').click();
+
+      const error = page.getByTestId('voice-call-error');
+      await expect(error).toContainText(/cannot be reached right now/i, { timeout: 10_000 });
+      await expect(error).toContainText(/will see that you called/i);
+      await expect(error).not.toContainText(/device|notification|offline|logged out|push|token/i);
+
+      // The refusal must survive the voice_call_ended event the record publishes. It is
+      // an event for a call this client never held, and clearing the error on it would
+      // blank the message the caller was just shown.
+      await page.waitForTimeout(2_000);
+      await expect(error).toContainText(/cannot be reached right now/i);
+    });
+
+    test('no call is in progress, no call bar is shown, and there is nothing to hang up', async ({ page }) => {
+      // US2.3, FR-005, SC-004. The record is bookkeeping, not a call: it must not put
+      // the caller into a call they are not in, and must not block the next one.
+      await loginAs(page, alice);
+      await page.goto(`/workspace/chat?channel=${unreachableChannelId}`);
+      await expect(page.getByTestId('voice-start-call-button')).toBeVisible({ timeout: 10_000 });
+
+      await page.getByTestId('voice-start-call-button').click();
+      await expect(page.getByTestId('voice-call-error')).toBeVisible({ timeout: 10_000 });
+
+      await expect(page.getByTestId('voice-call-bar')).toBeHidden();
+      await expect(page.getByTestId('voice-leave-call-button')).toBeHidden();
+      expect((await api.getActiveVoiceCall(alice, unreachableChannelId)).hasActiveCall).toBeFalsy();
+    });
+
+    test('the callee returning to the app finds the missed-call entry waiting in the conversation', async ({ page }) => {
+      // US1.2, FR-008. This is the requirement the whole feature exists for: the person
+      // who could not be reached finds out on their own, having done nothing, and
+      // without the caller chasing them another way.
+      //
+      // What this cannot assert is the unread badge. MarkChannelAsRead reports the count
+      // after clearing it, there is no read-only unread RPC, and the web channel list
+      // derives unread client-side from the live notification stream — which a callee
+      // who was offline when the call was placed never received. The durable unread
+      // state is asserted in backend/integration/voice_unreachable_missed_call_test.go,
+      // against the same predicate the badge is built from.
+      const beforeCount = (await api.listMessages(unreachable, unreachableChannelId)).messages.length;
+      await expect(api.startVoiceCall(alice, unreachableChannelId)).rejects.toThrow(/cannot be reached/i);
+
+      await loginAs(page, unreachable);
+      await page.goto(`/workspace/chat?channel=${unreachableChannelId}`);
+      await expect(page.getByTestId('voice-call-record').last()).toContainText(
+        /Voice call missed/i,
+        { timeout: 15_000 },
+      );
+
+      const after = await api.listMessages(unreachable, unreachableChannelId);
+      expect(after.messages.length).toBeGreaterThan(beforeCount);
     });
   });
 

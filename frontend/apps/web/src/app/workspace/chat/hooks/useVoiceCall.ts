@@ -18,6 +18,7 @@ import {
   respondToVoiceCallInvite,
   startVoiceCall,
   voiceCallErrorMessage,
+  voiceCallFailureKind,
   voiceCallStateToString,
   type VoiceCallSession as ApiVoiceCallSession,
   type VoiceJoinCredentials as ApiVoiceJoinCredentials,
@@ -599,13 +600,20 @@ export function useVoiceCall(
         detail.notificationType === "voice_call_ended" ||
         detail.state === "VOICE_CALL_STATE_ENDED"
       ) {
-        if (
-          detail.callId &&
-          callIdRef.current &&
-          detail.callId !== callIdRef.current
-        ) {
-          // A late "ended" for a previous call in this channel must not wipe
-          // the call that replaced it.
+        const heldEndingCall =
+          callIdRef.current !== null &&
+          (!detail.callId || detail.callId === callIdRef.current);
+        if (!heldEndingCall) {
+          // The ending call is not this client's: either a late "ended" for a
+          // previous call in this channel, which must not wipe the call that
+          // replaced it, or an "ended" for a call this client never held at all,
+          // as when a call to someone unreachable is refused and recorded. Neither
+          // may clear the error the caller is being shown.
+          //
+          // The channel state still refreshes: terminal is precisely when the
+          // missed-call entry is posted, so this is the event that has to make it
+          // appear without a reload.
+          invalidateChannelVoiceState();
           return;
         }
         endedCallIdRef.current = detail.callId ?? endedCallIdRef.current;
@@ -660,6 +668,15 @@ export function useVoiceCall(
     } catch (nextError) {
       setConnectionState("disconnected");
       setError(toVoiceCallError(nextError, "Failed to start voice call."));
+      if (voiceCallFailureKind(nextError) === "unreachable") {
+        // A call to someone who cannot be reached is refused, and recorded in this
+        // conversation as a missed call. The caller is told they will see it, so the
+        // entry has to be there in front of them — refreshing here rather than waiting
+        // for the live event, which is only delivered to connections that have already
+        // reported this channel as the one they are viewing, and so can lag a caller
+        // who has just opened the conversation by up to a presence ping.
+        invalidateChannelVoiceState();
+      }
     } finally {
       setIsLoading(false);
     }

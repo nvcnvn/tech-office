@@ -85,11 +85,18 @@ export function reducer(state: State, action: Action): State {
       if (action.callId && state.call && state.call.id !== action.callId) {
         return state;
       }
+      // Only a client that was actually holding the ending call may clear its error.
+      // A call to someone who cannot be reached is refused and recorded as an ended
+      // call, so the caller receives this event while reading the refusal, holding no
+      // call at all — clearing the error there would blank the message they were just
+      // shown. The same is true of every terminal event for a call this client never
+      // joined.
+      const heldEndingCall = state.call !== null;
       const endedId = action.callId ?? state.call?.id;
       return {
         ...state,
         call: null,
-        error: null,
+        error: heldEndingCall ? null : state.error,
         endedCallIds: endedId ? remember(state.endedCallIds, endedId) : state.endedCallIds,
         joinedCallId: state.joinedCallId === endedId ? null : state.joinedCallId,
         dismissedCallId:

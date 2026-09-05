@@ -131,10 +131,17 @@ export function voiceCallErrorMessage(error: unknown, fallback: string): string 
                         // action, because "try again shortly" is the useful next step.
                         return 'They are already on another call. Try again in a moment.';
                 case 'unreachable':
-                        // Deliberately says nothing about why. The callee may have no device
-                        // registered, may have revoked notifications, or may simply be
-                        // powered off, and none of that is the caller's business.
-                        return 'They cannot be reached right now.';
+                        // Says nothing about why. The callee may have no device registered, may
+                        // have revoked notifications, or may simply be powered off, and none of
+                        // that is the caller's business. It does say the attempt was recorded,
+                        // because it is: the call goes into the conversation as a missed call and
+                        // the callee finds it when they come back, so the caller has no reason to
+                        // re-dial or chase it another way.
+                        //
+                        // voiceCallFailureKind's text fallback matches the substring 'cannot be
+                        // reached', which this still contains, so the wording cannot reclassify
+                        // the outcome.
+                        return 'They cannot be reached right now. They will see that you called.';
                 case 'unavailable':
                         return 'Voice calling is temporarily unavailable. Please try again in a moment.';
                 default:

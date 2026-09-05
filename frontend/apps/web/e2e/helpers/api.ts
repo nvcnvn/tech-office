@@ -799,6 +799,33 @@ export async function listMessages(
   });
 }
 
+/**
+ * Gives someone a device that can be woken for a call.
+ *
+ * Direct calls are refused outright when the callee has neither a registered device nor
+ * an open browser, so a scenario that needs the call to actually ring has to arrange one.
+ */
+export async function registerCallWakeDevice(
+  user: TestUser,
+  deviceIdentifier: string,
+) {
+  return apiCall<{ tokenId: string; isValid: boolean }>(
+    user,
+    '/rpc.v1.NotificationService/RegisterPushToken',
+    {
+      fcmToken: `e2e_fcm_${crypto.randomUUID()}`,
+      deviceIdentifier,
+      permissionState: 'PERMISSION_STATE_GRANTED',
+      endpoint: 'https://fcm.googleapis.com/fcm/send/e2e',
+      keysJson: '{"p256dh":"e2e_key","auth":"e2e_auth"}',
+      userAgent: 'TechOffice-E2E/android',
+      tokenMetadata: { platform: 'android', deliveryProvider: 'fcm' },
+      tokenType: 'PUSH_TOKEN_TYPE_FCM',
+      nativeCallCapable: true,
+    },
+  );
+}
+
 export async function createOrGetDirectMessage(
   user: TestUser,
   otherEmployeeId: string,
