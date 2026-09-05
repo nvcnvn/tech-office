@@ -1,0 +1,1 @@
+Document edit conflict protection. Reject an update whose base version is stale and let the client reload and retry, instead of last-write-wins. Two people editing the same procedure silently lose one person's work; this is the smallest fix that prevents data loss without CRDT merge.
