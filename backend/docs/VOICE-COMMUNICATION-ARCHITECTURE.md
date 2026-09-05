@@ -39,6 +39,25 @@ flowchart LR
 
 Postgres remains the source of truth. LiveKit reconnects or webhook timing cannot re-open an ended call because all webhook handlers first load the call by `(organization_id, livekit_room_name)` and return early for ended sessions.
 
+### The unreachable-call record: a write on a failing request
+
+A direct call to a callee with no wakeable device is refused with `VOICE_CALLEE_UNREACHABLE` before a call session exists, so the caller learns immediately instead of listening out a 45-second ring. Since spec 052 that refusal still leaves a trail, and the way it does is worth understanding before touching `StartVoiceCall`.
+
+The refusal is an **error**, and `txn.WithTxn` rolls its transaction back. Anything written inside the request transaction would go with it. So `ServiceConnect.StartVoiceCall` checks `errors.Is(err, ErrCalleeUnreachable)` and opens a **second transaction** on the same tenant pool, calling `Logic.RecordUnreachableCallAttempt`, before returning the caller's refusal unchanged. Two rules hold this together:
+
+- **The record is written alongside the refusal, never instead of it.** The caller receives exactly the `FAILED_PRECONDITION` they received before the feature existed.
+- **A failure of the second transaction is logged at error level with org, channel and caller, and swallowed.** It is not retried: a retry loop inside a request that is already failing is a worse failure mode than one logged miss, and replacing a `FAILED_PRECONDITION` with an internal error because bookkeeping failed would be worse for the person placing the call.
+
+The row is inserted **straight to `ended`** in a single statement (`CreateEndedVoiceCallSession`), not created and then ended. Three reasons:
+
+- `voice_call_ended_requires_outcome` demands `state`, `outcome` and `ended_at` together, which a two-step create-then-end cannot satisfy in one statement.
+- `idx_voice_call_active_per_channel` is partial over `state IN ('ringing','active','ending')`. An `ended` row is outside it, so two simultaneous attempts never contend on the index and the record can never block the next real call.
+- It never enters a state from which it could be joined, rung, swept or ended a second time. `answered_at`, `ended_by_employee_id` and `ring_deadline_at` stay NULL, which is what keeps the ring-timeout sweep from ever claiming it.
+
+`RecordUnreachableCallAttempt` writes the row, announces the missed call to chat, and publishes the channel-scoped `voice_call_ended` event. It must not call `MediaClient.EnsureRoom`, `upsertParticipant`, `credentials`, `createPendingInvitation` or `emitTerminalCallWake`: nothing about the record may reach a device. Because the record has no participants, the participant fan-out inside `publishVoiceCallEvent` returns early on its own.
+
+Neither `VOICE_CALLEE_BUSY` nor `VOICE_DIRECT_CONTACT_BLOCKED` produces a record. Busy means the callee is at their device and sees the call themselves; blocked must produce nothing at all, which is satisfied structurally by the guard order — `authorize` → `ensureDirectCallAllowed` → one-live-call → `ensureDirectCalleeAvailable`. Do not reorder those.
+
 ### Direct And Group Call Behavior
 
 The integration coverage in `backend/integration/voice_communication_test.go` treats these outcomes as the behavior contract:

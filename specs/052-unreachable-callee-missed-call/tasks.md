@@ -161,12 +161,12 @@ set being exposed).
 **Purpose**: The documentation FR-015 requires, and the full-suite gate that is this
 repository's Definition of Done.
 
-- [ ] T027 [P] Update `docs/domain/voice.md` — replace the "Consequence worth knowing" paragraph with the recorded behaviour, delete the claim that the callee sees nothing, and add `callee_unreachable` to the ended-reason description (FR-015, Constitution XII)
-- [ ] T028 [P] Delete the D22 row from the open drift register in `docs/domain/README.md` — this feature is the decision that register was waiting for (FR-015, SC-007)
-- [ ] T029 [P] Describe the second-transaction write path in `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`, including why the record is inserted straight to `ended` and why a failed write is logged rather than retried (Constitution XII)
-- [ ] T030 Run the full backend suite with `make test-backend` and confirm no regression against the T002 baseline — this is the Definition of Done gate (Constitution II)
-- [ ] T031 Walk [quickstart.md](quickstart.md) §5–§7 manually: three refusals produce three separate entries, the callee's channel list shows the conversation unread, the two `psql` checks return `ended | missed | callee_unreachable` with a NULL `answered_at`, zero duration and zero participants, and the blocked, busy and reachable paths produce no new record
-- [ ] T032 Run the documentation gate from [quickstart.md](quickstart.md) §8 — `grep -n "D22" docs/domain/README.md` must return no match, and `grep -n "callee_unreachable" docs/domain/voice.md` must match
+- [X] T027 [P] Update `docs/domain/voice.md` — replace the "Consequence worth knowing" paragraph with the recorded behaviour, delete the claim that the callee sees nothing, and add `callee_unreachable` to the ended-reason description (FR-015, Constitution XII)
+- [X] T028 [P] Delete the D22 row from the open drift register in `docs/domain/README.md` — this feature is the decision that register was waiting for (FR-015, SC-007)
+- [X] T029 [P] Describe the second-transaction write path in `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`, including why the record is inserted straight to `ended` and why a failed write is logged rather than retried (Constitution XII)
+- [X] T030 Run the full backend suite with `make test-backend` and confirm no regression against the T002 baseline — this is the Definition of Done gate (Constitution II)
+- [X] T031 Walk [quickstart.md](quickstart.md) §5–§7 manually: three refusals produce three separate entries, the callee's channel list shows the conversation unread, the two `psql` checks return `ended | missed | callee_unreachable` with a NULL `answered_at`, zero duration and zero participants, and the blocked, busy and reachable paths produce no new record
+- [X] T032 Run the documentation gate from [quickstart.md](quickstart.md) §8 — `grep -n "D22" docs/domain/README.md` must return no match, and `grep -n "callee_unreachable" docs/domain/voice.md` must match
 
 ---
 
@@ -278,3 +278,43 @@ Task: "Add CreateEndedVoiceCallSession to backend/database/scripts/voice.query.s
 - No migration. If `backend/database/scripts/schema.sql` shows as modified at any point,
   stop and find what added one — that file is generated from migrations and never hand-edited.
 - Commit after each task or logical group. Stop at any checkpoint to validate the story.
+
+---
+
+## Assumptions recorded during implementation
+
+Resolved in place rather than escalated, per the project's conventions and the plan's
+existing assumption list.
+
+- [ASSUMPTION: T010 specified reading `Channel.unread_count` (chat.proto field 17), but
+  that field lives on `ChannelMembership` and `ListChannels` does not populate it — there
+  is no read-only unread RPC. `channelUnreadCount` therefore reads the count from the
+  database with `GetUnreadMessageCount`'s own predicate, which is what the badge is built
+  from and what the other non-mutating assertion helpers in `helper_test.go` already do.]
+- [ASSUMPTION: T021's sync scenario asserts every value in the set against the TypeScript
+  union, and asserts only the two SQL-embedded values (`ring_timeout`,
+  `callee_unreachable`) against `voice.query.sql`. Asserting all eight appear in the query
+  file would be false — the other six are written from Go.]
+- [ASSUMPTION: the web E2E cannot assert the callee's unread badge. `MarkChannelAsRead`
+  returns the count *after* clearing it, no read-only unread RPC exists, and the web
+  channel list derives unread client-side from the live notification stream, which a
+  callee who was offline when the call was placed never received. FR-008 is asserted in
+  the backend scenario against the same predicate the badge is built from; the E2E test
+  asserts what the callee can actually see — the entry waiting in the conversation.]
+- [ASSUMPTION: FR-012 is met on the caller's side by refreshing the transcript when the
+  call is refused as unreachable, in both clients, rather than by the live
+  `voice_call_ended` event alone. That event is only delivered to connections that have
+  already reported this channel as the one they are viewing, which is reported on a
+  presence pong and so lags a caller who has just opened the conversation by up to a ping
+  interval. The live-event path is still fixed and still works; this is what makes the
+  caller's own view reliable.]
+- [ASSUMPTION: T031's manual browser walkthrough was substituted, this being an unattended
+  run, by its automated and database equivalents: the web E2E block for the caller and
+  returning callee, the backend scenarios for repeated and simultaneous attempts and for
+  the blocked, busy and reachable paths, and direct `psql` checks confirming
+  `ended | missed | callee_unreachable` with NULL `answered_at`, zero duration, zero
+  participants, no ring deadline, and exactly one paired conversation entry per record.]
+- [ASSUMPTION: drift D63 was struck from the register alongside D22. The web decline E2E
+  it describes has been unable to place its call since native call wakeup added the
+  reachability guard — the callee had no wakeable device — and this change set fixes it,
+  so leaving the entry would misdescribe the suite.]

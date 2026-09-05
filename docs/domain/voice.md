@@ -80,6 +80,30 @@ The claim and the end are a **single UPDATE** (`ClaimExpiredRingingCalls`). That
 makes it safe on every instance: two sweepers serialise on the row and the second one's
 predicate no longer matches, so a call is ended exactly once.
 
+## Why a call ended
+
+`voice.call_session.ended_reason` is free-form text with no CHECK constraint, and since
+spec 052 it is on the wire as `VoiceCallSession.ended_reason`. It is diagnostic: clients
+branch on `outcome` and never on the reason. What it buys a reader is telling two calls
+with the same outcome apart — a missed call that rang out from one that never reached a
+device.
+
+| Value | Written by |
+|---|---|
+| `ended_by_user` | `EndVoiceCall` |
+| `direct_participant_left` | `LeaveVoiceCall` in a direct conversation |
+| `final_participant_left` | `LeaveVoiceCall`, last person out of a channel call |
+| `direct_invite_declined` | `RespondToVoiceCallInvite`, declined |
+| `direct_invite_expired` | invitation expiry |
+| `ring_timeout` | `ClaimExpiredRingingCalls` (a SQL literal) |
+| `livekit_room_finished` | the `room_finished` webhook |
+| `callee_unreachable` | the unreachable-call record (see below) |
+
+The values are named as `EndedReason*` constants in `internal/voice/constants.go` and
+mirrored as the `VoiceCallEndedReason` union in `packages/apis/src/voice.ts`. Two of them
+are written by SQL rather than Go, so `voice_constants_test.go` asserts Go, the query file
+and the TypeScript union against each other.
+
 ## Callee availability: busy and unreachable
 
 `StartVoiceCall` decides two things about the callee **before creating the call**, and
@@ -95,10 +119,30 @@ Both are evaluated *after* the channel authorisation and block guards, so a refu
 never reveals whether the other person could have been reached. The reachability check
 fails open: if it errors, the call is placed rather than refused.
 
-**Consequence worth knowing:** because the refusal happens before the call session
-exists, no call record and no missed-call system message is written for an unreachable
-callee. The caller learns immediately instead of listening to 45 seconds of ring; the
-callee sees nothing.
+**An unreachable callee still gets a missed call.** The refusal happens before a call
+session exists, and it is an error, so the request transaction rolls back with it. The
+connect layer therefore opens a *second* transaction (`Logic.RecordUnreachableCallAttempt`)
+that writes a `voice.call_session` row straight to `state = 'ended'`, `outcome = 'missed'`,
+`ended_reason = 'callee_unreachable'`, plus the same `voice_call_missed` chat system
+message the ring-timeout sweep writes. The caller still gets the immediate refusal — the
+record is written alongside it, never instead of it — and the person who could not be
+reached comes back to an unread conversation with the attempt in it.
+
+The record is bookkeeping, not a call. No LiveKit room is created, no join token is
+minted, no `call_participant` row is written, no invitation is issued and no device is
+woken; `answered_at` and `ring_deadline_at` stay NULL, so the ring-timeout sweep never
+claims it. Because an `ended` row is outside `idx_voice_call_active_per_channel`, two
+simultaneous attempts never contend and the record can never block the next real call.
+
+If that second transaction fails, it is logged at error level with the org, channel and
+caller and swallowed: the caller must receive the same refusal either way, and replacing
+a `FAILED_PRECONDITION` with an internal error because bookkeeping failed would be worse
+for the person placing the call.
+
+Busy is deliberately different: a busy callee is at their device and sees the call in
+their own UI, so no record is written for `VOICE_CALLEE_BUSY`. Neither is one written for
+a blocked pair — the block guard runs first, and a record would tell a blocked caller
+that their target exists and is reachable.
 
 ## The block guard on call initiation
 
@@ -443,7 +487,8 @@ with a real title and body, and it is handled by the call surfaces too.
 ## Tests
 
 `integration/voice_communication_test.go`, `voice_constants_test.go`,
-`voice_livekit_connectivity_test.go`, `native_call_wakeup_test.go`.
+`voice_livekit_connectivity_test.go`, `native_call_wakeup_test.go`,
+`voice_unreachable_missed_call_test.go`.
 
 **Declared coverage limit.** No automated test can demonstrate the behaviour this feature
 exists for — a locked, force-quit phone ringing on its lock screen. The integration tests
@@ -456,15 +501,6 @@ refused. The rest is the manual device matrix in
 **Spec 037's FR-021 (system recent-calls surface) is not implemented.** Jetpack Telecom's
 unified call history and `isLogExcluded` require Android 16.1 (SDK 36.1), far above the
 epic's API 26 floor. FR-021 is a MAY; revisit when the 16.1 install base justifies it.
-
-**An unreachable callee gets no missed-call trail.** A direct call to a callee with no push
-token and no live connection is refused with `VOICE_CALLEE_UNREACHABLE` *before* the call
-session is created, so no call record and no missed-call system message is written — the
-callee never learns anyone tried. This satisfies FR-006/SC-006 (an immediate verdict
-instead of a 45-second ring) at the cost of the trail an offline callee used to get.
-Whether they should still see a missed call is an open product decision, not an oversight.
-
-**The web decline test never reaches the decline (D63).** `voice-communication.spec.ts` "when the invitee declines a direct call / the caller sees the decline in the timeline and no error banner" times out ten seconds after clicking `voice-start-call-button`, waiting for `voice-call-bar` to appear. The failure is in establishing the caller's own call, before any invite or decline is sent, so the decline path itself is untested rather than broken. It reproduces when the spec is run on its own, so it is not the full-suite contention D54 describes. Found while running the web suite as feature 048's regression guard; 048 adds no voice surface and did not fix it.
 
 **`PUBLIC_LIVEKIT_URL` must not be pinned in a local `backend/.env`.** The dev targets
 (`make voice-dev-backend`, `make test-backend*`) derive it from the machine's current LAN
