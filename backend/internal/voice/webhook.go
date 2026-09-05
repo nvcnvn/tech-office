@@ -285,7 +285,7 @@ func (l *Logic) finishCallFromWebhook(ctx context.Context, tx database.DBTX, cal
 		Outcome:           pgtype.Text{String: outcome, Valid: true},
 		EndedAt:           now,
 		EndedByEmployeeID: dbuuid.NullUUID{},
-		EndedReason:       pgtype.Text{String: "livekit_room_finished", Valid: true},
+		EndedReason:       pgtype.Text{String: EndedReasonLiveKitRoomFinished, Valid: true},
 		OrganizationID:    call.OrganizationID,
 		CallSessionID:     call.ID,
 	})

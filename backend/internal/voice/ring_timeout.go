@@ -38,7 +38,7 @@ func (l *Logic) StartRingTimeoutWorker(ctx context.Context, adminPool database.A
 
 	slog.InfoContext(ctx, "starting voice ring timeout worker",
 		"interval", ringTimeoutSweepInterval.String(),
-		"ring_timeout", RingTimeout.String(),
+		EndedReasonRingTimeout, RingTimeout.String(),
 	)
 
 	for {
@@ -107,7 +107,7 @@ func (l *Logic) sweepExpiredRingingCalls(ctx context.Context, adminPool database
 				}
 				l.publishVoiceCallEvent(ctx, tx, orgID, notification.NotificationTypeVoiceCallEnded, "ended", session, map[string]string{
 					"outcome": CallOutcomeMissed,
-					"reason":  "ring_timeout",
+					"reason":  EndedReasonRingTimeout,
 				})
 			}
 			return nil

@@ -199,6 +199,47 @@ func (l *Logic) StartVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 	return session, credentials, nil
 }
 
+// RecordUnreachableCallAttempt leaves a trail for a direct call that was refused because
+// the callee had no device that could be woken.
+//
+// The refusal is an error, so the request transaction that produced it has already rolled
+// back by the time this runs — the connect layer calls it on a transaction of its own.
+// That is the whole point: the person who could not be reached must still find out that
+// someone tried, and the caller must still get the refusal they got before (FR-004).
+//
+// The record is written straight to ended/missed. It is not a call that happened and then
+// stopped: no room is created, no participant is written, no credentials are minted, no
+// invitation is issued and no device is woken. An 'ended' row also sits outside
+// idx_voice_call_active_per_channel, so two simultaneous attempts cannot contend on it and
+// the record can never block the next real call (FR-011, FR-014).
+func (l *Logic) RecordUnreachableCallAttempt(ctx context.Context, tx database.DBTX, orgID, callerID, channelID dbuuid.UUID) error {
+	call, err := l.Queries.CreateEndedVoiceCallSession(ctx, tx, &database.CreateEndedVoiceCallSessionParams{
+		OrganizationID:      orgID,
+		ChannelID:           channelID,
+		InitiatorEmployeeID: callerID,
+		LivekitRoomName:     makeLiveKitRoomName(orgID, channelID),
+	})
+	if err != nil {
+		return fmt.Errorf("create unreachable call record: %w", err)
+	}
+	if err := l.announceVoiceCallEnded(ctx, tx, orgID, callerID, channelID, call.ID, CallOutcomeMissed); err != nil {
+		return err
+	}
+	session, err := l.callToProto(ctx, tx, call)
+	if err != nil {
+		return err
+	}
+	// Channel-scoped only: the record has no participants, so publishVoiceCallEvent's
+	// participant fan-out returns early on its own and nothing is delivered to the callee
+	// (FR-007). The caller's open conversation refreshes off this event (FR-012).
+	l.publishVoiceCallEvent(ctx, tx, orgID, notification.NotificationTypeVoiceCallEnded, "ended", session, map[string]string{
+		"employeeId": callerID.String(),
+		"outcome":    CallOutcomeMissed,
+		"reason":     EndedReasonCalleeUnreachable,
+	})
+	return nil
+}
+
 func (l *Logic) GetActiveVoiceCall(ctx context.Context, tx database.DBTX, orgID, employeeID, channelID dbuuid.UUID) (*rpcv1.VoiceCallSession, bool, error) {
 	if err := l.authorize(ctx, tx, orgID, employeeID, channelID); err != nil {
 		return nil, false, err
@@ -304,7 +345,7 @@ func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 	}
 	if directMessageCall && (call.AnsweredAt.Valid || call.State == CallStateActive) {
 		endedOutcome = CallOutcomeCompleted
-		call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "direct_participant_left", actingDeviceIdentifier)
+		call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, EndedReasonDirectParticipantLeft, actingDeviceIdentifier)
 		if err != nil {
 			return nil, err
 		}
@@ -316,7 +357,7 @@ func (l *Logic) LeaveVoiceCall(ctx context.Context, tx database.DBTX, orgID, emp
 		}
 		if remaining == 0 {
 			endedOutcome = endOutcomeFor(call, employeeID)
-			call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "final_participant_left", actingDeviceIdentifier)
+			call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, EndedReasonFinalParticipantLeft, actingDeviceIdentifier)
 			if err != nil {
 				return nil, err
 			}
@@ -356,7 +397,7 @@ func (l *Logic) EndVoiceCall(ctx context.Context, tx database.DBTX, orgID, emplo
 		return nil, err
 	}
 	endedOutcome := endOutcomeFor(call, employeeID)
-	call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, "ended_by_user", actingDeviceIdentifier)
+	call, err = l.endCall(ctx, tx, orgID, call, employeeID, endedOutcome, EndedReasonEndedByUser, actingDeviceIdentifier)
 	if err != nil {
 		return nil, err
 	}
@@ -961,7 +1002,7 @@ func (l *Logic) declineVoiceInvite(ctx context.Context, tx database.DBTX, orgID,
 		return nil, nil, err
 	}
 	if directMessageCall && call.State == CallStateRinging && employeeID != call.InitiatorEmployeeID {
-		endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeDeclined, "direct_invite_declined", actingDeviceIdentifier)
+		endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeDeclined, EndedReasonDirectInviteDeclined, actingDeviceIdentifier)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -984,7 +1025,7 @@ func (l *Logic) expireDirectVoiceInvite(ctx context.Context, tx database.DBTX, o
 	if !directMessageCall || call.State != CallStateRinging || employeeID == call.InitiatorEmployeeID {
 		return nil
 	}
-	endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeMissed, "direct_invite_expired", actingDeviceIdentifier)
+	endedCall, err := l.endCall(ctx, tx, orgID, call, employeeID, CallOutcomeMissed, EndedReasonDirectInviteExpired, actingDeviceIdentifier)
 	if err != nil {
 		return err
 	}

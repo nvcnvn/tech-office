@@ -13,6 +13,24 @@ INSERT INTO voice.call_session (
 )
 RETURNING *;
 
+-- Writes a call that was never live: a direct call refused because the callee had no
+-- device that could be woken. One statement, so `state`/`outcome`/`ended_at` land together
+-- for voice_call_ended_requires_outcome, and so two simultaneous attempts never contend on
+-- idx_voice_call_active_per_channel (an 'ended' row is outside that partial index).
+-- answered_at, ended_by_employee_id and ring_deadline_at stay NULL: nobody answered,
+-- nobody ended it, and the ring-timeout sweep must never claim it.
+-- name: CreateEndedVoiceCallSession :one
+INSERT INTO voice.call_session (
+    organization_id, channel_id, initiator_employee_id, livekit_room_name,
+    state, outcome, ended_at, ended_reason,
+    recording_policy, recording_status, transcript_status
+) VALUES (
+    @organization_id, @channel_id, @initiator_employee_id, @livekit_room_name,
+    'ended', 'missed', now(), 'callee_unreachable',
+    'not_allowed', 'unavailable', 'unavailable'
+)
+RETURNING *;
+
 -- name: GetVoiceCallSession :one
 SELECT * FROM voice.call_session
 WHERE organization_id = @organization_id AND id = @call_session_id;

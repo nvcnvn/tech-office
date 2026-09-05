@@ -563,6 +563,31 @@ func (w *testWorld) markChannelAsRead(actor testUser, channelID string) int32 {
 	return resp.Msg.UnreadCount
 }
 
+// channelUnreadCount reads how many messages one channel holds that a member has not
+// seen, without touching the state it reports.
+//
+// markChannelAsRead is the only RPC that returns this number, and it clears the state as
+// it reports it; an assertion about someone returning to an unread conversation has to be
+// able to read it without consuming it. The predicate here is GetUnreadMessageCount's,
+// which is the same count the badge is built from — including system messages, which is
+// exactly why a missed-call entry makes a conversation unread.
+func (w *testWorld) channelUnreadCount(actor testUser, channelID string) int32 {
+	w.t.Helper()
+	channelUUID, err := dbuuid.Parse(channelID)
+	require.NoError(w.t, err)
+	var count int32
+	require.NoError(w.t, globalDB.QueryRow(context.Background(),
+		`SELECT count(*)::int
+		   FROM chat.message m
+		   JOIN chat.channel_membership cm
+		     ON (cm.organization_id, cm.channel_id) = (m.organization_id, m.channel_id)
+		  WHERE cm.organization_id = $1 AND cm.channel_id = $2 AND cm.employee_id = $3
+		    AND (cm.last_viewed_at IS NULL OR m.updated_at > cm.last_viewed_at)
+		    AND m.is_deleted = FALSE`,
+		w.OrgID, channelUUID, actor.ID).Scan(&count))
+	return count
+}
+
 func (w *testWorld) replyToMessage(actor testUser, parentMessageID, text string) string {
 	w.t.Helper()
 	req := connect.NewRequest(&rpcv1.ReplyToMessageRequest{

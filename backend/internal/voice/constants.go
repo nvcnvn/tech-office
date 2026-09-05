@@ -75,6 +75,45 @@ func IsValidCallOutcome(outcome string) bool {
 	return ok
 }
 
+// EndedReason* name every value written to voice.call_session.ended_reason.
+//
+// The column is free-form text with no CHECK constraint, and the reason is now on the
+// wire (VoiceCallSession.ended_reason), so the value set spans Go, the SQL query file and
+// the TypeScript union in frontend/packages/apis/src/voice.ts. voice_constants_test.go is
+// what keeps the three from drifting.
+//
+// ring_timeout stays a literal inside the SQL of ClaimExpiredRingingCalls, which ends
+// expired calls in one statement; the constant must equal it.
+const (
+	EndedReasonEndedByUser           = "ended_by_user"
+	EndedReasonDirectParticipantLeft = "direct_participant_left"
+	EndedReasonFinalParticipantLeft  = "final_participant_left"
+	EndedReasonDirectInviteDeclined  = "direct_invite_declined"
+	EndedReasonDirectInviteExpired   = "direct_invite_expired"
+	EndedReasonRingTimeout           = "ring_timeout"
+	EndedReasonLiveKitRoomFinished   = "livekit_room_finished"
+	// EndedReasonCalleeUnreachable marks a direct call refused because the callee had no
+	// device that could be woken. The record is written straight to ended/missed, so the
+	// person who could not be reached still finds the attempt when they come back.
+	EndedReasonCalleeUnreachable = "callee_unreachable"
+)
+
+var endedReasons = map[string]struct{}{
+	EndedReasonEndedByUser:           {},
+	EndedReasonDirectParticipantLeft: {},
+	EndedReasonFinalParticipantLeft:  {},
+	EndedReasonDirectInviteDeclined:  {},
+	EndedReasonDirectInviteExpired:   {},
+	EndedReasonRingTimeout:           {},
+	EndedReasonLiveKitRoomFinished:   {},
+	EndedReasonCalleeUnreachable:     {},
+}
+
+func IsValidEndedReason(reason string) bool {
+	_, ok := endedReasons[reason]
+	return ok
+}
+
 const (
 	ParticipantStateInvited      = "invited"
 	ParticipantStateRinging      = "ringing"

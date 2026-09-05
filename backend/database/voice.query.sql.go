@@ -270,6 +270,63 @@ func (q *Queries) CountOtherActiveVoiceCallsForEmployee(ctx context.Context, db 
 	return active_count, err
 }
 
+const createEndedVoiceCallSession = `-- name: CreateEndedVoiceCallSession :one
+INSERT INTO voice.call_session (
+    organization_id, channel_id, initiator_employee_id, livekit_room_name,
+    state, outcome, ended_at, ended_reason,
+    recording_policy, recording_status, transcript_status
+) VALUES (
+    $1, $2, $3, $4,
+    'ended', 'missed', now(), 'callee_unreachable',
+    'not_allowed', 'unavailable', 'unavailable'
+)
+RETURNING id, organization_id, channel_id, initiator_employee_id, livekit_room_name, state, outcome, recording_policy, recording_status, transcript_status, started_at, answered_at, ended_at, ended_by_employee_id, ended_reason, created_at, updated_at, ring_deadline_at
+`
+
+type CreateEndedVoiceCallSessionParams struct {
+	OrganizationID      dbuuid.UUID `json:"organization_id"`
+	ChannelID           dbuuid.UUID `json:"channel_id"`
+	InitiatorEmployeeID dbuuid.UUID `json:"initiator_employee_id"`
+	LivekitRoomName     string      `json:"livekit_room_name"`
+}
+
+// Writes a call that was never live: a direct call refused because the callee had no
+// device that could be woken. One statement, so `state`/`outcome`/`ended_at` land together
+// for voice_call_ended_requires_outcome, and so two simultaneous attempts never contend on
+// idx_voice_call_active_per_channel (an 'ended' row is outside that partial index).
+// answered_at, ended_by_employee_id and ring_deadline_at stay NULL: nobody answered,
+// nobody ended it, and the ring-timeout sweep must never claim it.
+func (q *Queries) CreateEndedVoiceCallSession(ctx context.Context, db DBTX, arg *CreateEndedVoiceCallSessionParams) (*VoiceCallSession, error) {
+	row := db.QueryRow(ctx, createEndedVoiceCallSession,
+		arg.OrganizationID,
+		arg.ChannelID,
+		arg.InitiatorEmployeeID,
+		arg.LivekitRoomName,
+	)
+	var i VoiceCallSession
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ChannelID,
+		&i.InitiatorEmployeeID,
+		&i.LivekitRoomName,
+		&i.State,
+		&i.Outcome,
+		&i.RecordingPolicy,
+		&i.RecordingStatus,
+		&i.TranscriptStatus,
+		&i.StartedAt,
+		&i.AnsweredAt,
+		&i.EndedAt,
+		&i.EndedByEmployeeID,
+		&i.EndedReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.RingDeadlineAt,
+	)
+	return &i, err
+}
+
 const createVoiceCallInvitation = `-- name: CreateVoiceCallInvitation :one
 INSERT INTO voice.call_invitation (
     organization_id, call_session_id, inviter_employee_id, invitee_employee_id,

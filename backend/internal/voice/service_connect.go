@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 
 	"connectrpc.com/connect"
 	"github.com/nvcnvn/tech-office/backend/database"
@@ -61,9 +62,34 @@ func (s *ServiceConnect) StartVoiceCall(
 		call, credentials, logicErr = s.Logic.StartVoiceCall(ctx, tx, orgID, employeeID, channelID, req.Msg.GetRequestRecording())
 		return logicErr
 	}); err != nil {
+		if errors.Is(err, ErrCalleeUnreachable) {
+			s.recordUnreachableCallAttempt(ctx, orgID, employeeID, channelID)
+		}
 		return nil, handleVoiceError(err, map[string]string{"channelId": req.Msg.GetChannelId()})
 	}
 	return connect.NewResponse(&rpcv1.StartVoiceCallResponse{Call: call, JoinCredentials: credentials}), nil
+}
+
+// recordUnreachableCallAttempt writes the trail for a call the caller was just refused.
+//
+// It needs a transaction of its own because the refusal is an error: WithTxn has already
+// rolled the request's transaction back, taking any write made inside it with it.
+//
+// A failure here is logged and swallowed. The caller must receive the same refusal they
+// received before this feature existed (FR-005) — replacing a FAILED_PRECONDITION with an
+// internal error because bookkeeping failed would be a worse outcome for the person
+// placing the call, and retrying inside a request that is already failing is a worse
+// failure mode than one logged miss.
+func (s *ServiceConnect) recordUnreachableCallAttempt(ctx context.Context, orgID, callerID, channelID dbuuid.UUID) {
+	if err := txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
+		return s.Logic.RecordUnreachableCallAttempt(ctx, tx, orgID, callerID, channelID)
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to record unreachable call attempt",
+			"error", err,
+			"organization_id", orgID.String(),
+			"channel_id", channelID.String(),
+			"caller_id", callerID.String())
+	}
 }
 
 func (s *ServiceConnect) GetActiveVoiceCall(
