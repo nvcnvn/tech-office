@@ -125,6 +125,9 @@ const SF_TO_IONICONS: Record<string, IoniconsName> = {
   gear: "settings-outline",
   gearshape: "settings-outline",
   "gearshape.fill": "settings",
+  // The Finance row of the notification mute list. Eight of that list's nine icons
+  // were already here; this one would have rendered as a bare "?".
+  "creditcard.fill": "card",
   // Names that were reaching the "help-outline" fallback, which renders as a bare "?"
   // next to its label — the share row on the message action sheet and the "Open task"
   // link on a task discussion header both showed one.

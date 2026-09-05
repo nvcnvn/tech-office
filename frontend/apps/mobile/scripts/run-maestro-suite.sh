@@ -82,6 +82,10 @@ flows=(
   # federated-search does: creating them through the UI would be three other flows.
   $APP_DIR/.maestro/people/directory-call.yaml
   $APP_DIR/.maestro/people/department-members.yaml
+  # Feature 051. Before dark-mode-toggle so its screenshots are still light. These
+  # preferences now follow the account rather than the handset, so the flow puts both
+  # switches back where it found them before it ends.
+  $APP_DIR/.maestro/settings/notification-preferences.yaml
   # Feature 050. Last, because it leaves the account on a manual dark preference, which
   # every flow after it would then inherit — including the screenshot sweeps, whose
   # baselines are light.

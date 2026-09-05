@@ -52,6 +52,9 @@ export * from './notification';
 // Export notification status utilities
 export * from './notification-status';
 
+// Export notification preference functions
+export * from './notification-preferences';
+
 // Export presence functions
 export * from './presence';
 

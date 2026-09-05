@@ -1,5 +1,8 @@
 /**
- * Settings screen — device-level preferences and account actions
+ * Settings screen — appearance, notification preferences, and account actions.
+ *
+ * Appearance is a device choice; notification preferences follow the person's account,
+ * so they read the same on every handset they sign in to.
  */
 
 import React from "react";
@@ -18,20 +21,19 @@ import { openBrowserAsync } from "expo-web-browser";
 import {
   ABUSE_CONTACT_EMAIL,
   PRIVACY_POLICY_PATH,
+  SOURCE_DOMAINS,
   TERMS_PATH,
   getAccountRemovalPath,
   type AccountRemovalPath,
+  type SourceDomain,
 } from "apis";
 import { Linking } from "react-native";
 import { Card } from "@/components/ui/card";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { AuthContext } from "@/hooks/use-auth";
 import { useCurrentMembership } from "@/hooks/use-current-membership";
+import { useNotificationPreferences } from "@/hooks/use-notification-preferences";
 import { useUserProfile } from "@/hooks/use-user-profile";
-import {
-  getInAppAlertsEnabled,
-  setInAppAlertsEnabled,
-} from "@/lib/app-settings";
 import { buildWebUrl } from "@/lib/constants";
 import {
   mobileLayout,
@@ -43,6 +45,26 @@ import {
   statusColors,
 } from "@tech-office/theme-tokens";
 import { makeStyles, useTheme } from "@/lib/theme";
+
+/**
+ * How each source domain is named and pictured in the mute list.
+ *
+ * The workspace's own words, not the wire values: somebody looking for calendar
+ * noise should not have to know that tasks are spelled `projects`. This map is UI
+ * copy and lives beside the screen; the domain list itself is a cross-stack
+ * constant and lives in `apis`.
+ */
+const MUTE_ROWS: Record<SourceDomain, { label: string; icon: string }> = {
+  chat: { label: "Chat", icon: "bubble.left.and.bubble.right.fill" },
+  projects: { label: "Tasks and projects", icon: "checklist" },
+  calendar: { label: "Calendar", icon: "calendar" },
+  docs: { label: "Documents", icon: "doc.text.fill" },
+  crm: { label: "Customers", icon: "person.2.fill" },
+  hr: { label: "People and HR", icon: "person.badge.shield.checkmark" },
+  support: { label: "Support", icon: "lifepreserver" },
+  finance: { label: "Finance", icon: "creditcard.fill" },
+  system: { label: "System", icon: "gearshape.fill" },
+};
 
 /**
  * The version a support conversation can act on. Read from the app manifest
@@ -132,9 +154,19 @@ export default function SettingsScreen() {
   const displayName =
     user?.displayName ||
     [user?.givenName, user?.familyName].filter(Boolean).join(" ");
-  const [notificationsEnabled, setNotificationsEnabled] = React.useState(
-    getInAppAlertsEnabled,
-  );
+  const {
+    preferences,
+    loading: preferencesLoading,
+    saving: preferencesSaving,
+    isMuted,
+    setInAppAlerts,
+    setDomainMuted,
+  } = useNotificationPreferences();
+  // While the record is loading every switch shows its default and is disabled:
+  // nobody should act on, or believe, a value the server has not confirmed. While
+  // a write is in flight the whole section is disabled so a second tap cannot
+  // race the first — the switch that was touched has already moved.
+  const notificationControlsDisabled = preferencesLoading || preferencesSaving;
   // Which of the two account-ending paths this person gets. Asked of the server
   // rather than inferred, so mobile and web cannot disagree about it (FR-007b).
   const [removalPath, setRemovalPath] = React.useState<AccountRemovalPath | null>(null);
@@ -183,10 +215,16 @@ export default function SettingsScreen() {
       .finally(() => setThemeSaving(false));
   };
 
-  const handleNotificationsToggle = (value: boolean) => {
-    setNotificationsEnabled(value);
-    setInAppAlertsEnabled(value);
+  const handleInAppAlertsToggle = (value: boolean) => {
+    if (notificationControlsDisabled) return;
     runSelectionHaptic();
+    void setInAppAlerts(value);
+  };
+
+  const handleMuteToggle = (domain: SourceDomain, muted: boolean) => {
+    if (notificationControlsDisabled) return;
+    runSelectionHaptic();
+    void setDomainMuted(domain, muted);
   };
 
   const handleSignOut = () => {
@@ -212,9 +250,10 @@ export default function SettingsScreen() {
             <SFIcon name="gearshape.fill" size={18} color={palette.primary.main} />
           </View>
           <View style={styles.summaryCopy}>
-            <Text selectable style={styles.summaryTitle}>Device Preferences</Text>
+            <Text selectable style={styles.summaryTitle}>Preferences</Text>
             <Text selectable style={styles.summarySubtitle}>
-              Keep the app readable, predictable, and easy to use on this device.
+              Keep the app readable, predictable, and easy to use. Notification settings
+              follow your account; appearance stays on this device.
             </Text>
           </View>
         </View>
@@ -259,19 +298,55 @@ export default function SettingsScreen() {
         <Card padding={0} style={styles.groupCard}>
           <SettingRow
             testID="setting-in-app-alerts"
+            accessibilityValue={{ text: preferences.inAppAlertsEnabled ? "on" : "off" }}
             icon="bell.fill"
             title="In-App Alerts"
-            subtitle="Show live notification banners while you are using the app."
+            subtitle="Show banners while you're using the app. Your alerts list, unread badges and phone notifications are not affected."
             trailing={
               <Switch
-                value={notificationsEnabled}
-                onValueChange={handleNotificationsToggle}
+                testID="setting-in-app-alerts-switch"
+                value={preferences.inAppAlertsEnabled}
+                onValueChange={handleInAppAlertsToggle}
+                disabled={notificationControlsDisabled}
                 trackColor={{ false: palette.divider, true: palette.primary.light }}
-                thumbColor={notificationsEnabled ? palette.primary.main : palette.background.paper}
+                thumbColor={
+                  preferences.inAppAlertsEnabled ? palette.primary.main : palette.background.paper
+                }
               />
             }
-            onPress={() => handleNotificationsToggle(!notificationsEnabled)}
+            onPress={() => handleInAppAlertsToggle(!preferences.inAppAlertsEnabled)}
           />
+        </Card>
+
+        <Text selectable style={styles.muteIntro} testID="setting-mute-intro">
+          Muting an area stops the phone notification for it. The alert still arrives in your list.
+          Mentions and incoming calls always come through.
+        </Text>
+        <Card padding={0} style={styles.groupCard}>
+          {SOURCE_DOMAINS.map((domain) => {
+            const { label, icon } = MUTE_ROWS[domain];
+            const muted = isMuted(domain);
+            return (
+              <SettingRow
+                key={domain}
+                testID={`setting-mute-${domain}`}
+                accessibilityValue={{ text: muted ? "muted" : "not muted" }}
+                icon={icon}
+                title={label}
+                trailing={
+                  <Switch
+                    testID={`setting-mute-${domain}-switch`}
+                    value={muted}
+                    onValueChange={(next) => handleMuteToggle(domain, next)}
+                    disabled={notificationControlsDisabled}
+                    trackColor={{ false: palette.divider, true: palette.primary.light }}
+                    thumbColor={muted ? palette.primary.main : palette.background.paper}
+                  />
+                }
+                onPress={() => handleMuteToggle(domain, !muted)}
+              />
+            );
+          })}
         </Card>
       </View>
 
@@ -356,8 +431,9 @@ export default function SettingsScreen() {
           </Text>
         </View>
         <Text selectable style={styles.infoCaption}>
-          Alert preferences are stored on this device. Tell support this version
-          number if something here misbehaves.
+          Your notification preferences follow your account, so they are the same on
+          every device you sign in to. Tell support this version number if something
+          here misbehaves.
         </Text>
       </Card>
     </ScrollView>
@@ -440,6 +516,13 @@ const useStyles = makeStyles((t) => ({
   },
   groupCard: {
     overflow: "hidden",
+  },
+  muteIntro: {
+    paddingHorizontal: 4,
+    paddingTop: spacing[1],
+    fontSize: mobileTypography.listSecondary.fontSize,
+    lineHeight: mobileTypography.listSecondary.lineHeight,
+    color: t.text.secondary,
   },
   row: {
     minHeight: mobileLayout.compactRowHeight,

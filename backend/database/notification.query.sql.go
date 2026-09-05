@@ -1089,7 +1089,7 @@ func (q *Queries) GetNotificationWithRecipientDetails(ctx context.Context, db DB
 
 const getPersonalPreference = `-- name: GetPersonalPreference :one
 
-SELECT organization_id, employee_id, dnd_enabled, dnd_start, dnd_end, muted_domains, created_at, updated_at FROM notification.personal_preference
+SELECT organization_id, employee_id, dnd_enabled, dnd_start, dnd_end, muted_domains, created_at, updated_at, in_app_alerts_enabled FROM notification.personal_preference
 WHERE organization_id = $1 AND employee_id = $2
 `
 
@@ -1113,6 +1113,7 @@ func (q *Queries) GetPersonalPreference(ctx context.Context, db DBTX, arg *GetPe
 		&i.MutedDomains,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.InAppAlertsEnabled,
 	)
 	return &i, err
 }
@@ -2577,6 +2578,73 @@ func (q *Queries) UpsertLiveReceipt(ctx context.Context, db DBTX, arg *UpsertLiv
 		arg.Metadata,
 	)
 	return err
+}
+
+const upsertPersonalPreference = `-- name: UpsertPersonalPreference :one
+INSERT INTO notification.personal_preference (
+    organization_id,
+    employee_id,
+    in_app_alerts_enabled,
+    dnd_enabled,
+    dnd_start,
+    dnd_end,
+    muted_domains
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7
+)
+ON CONFLICT (organization_id, employee_id) DO UPDATE SET
+    in_app_alerts_enabled = EXCLUDED.in_app_alerts_enabled,
+    dnd_enabled = EXCLUDED.dnd_enabled,
+    dnd_start = EXCLUDED.dnd_start,
+    dnd_end = EXCLUDED.dnd_end,
+    muted_domains = EXCLUDED.muted_domains,
+    updated_at = now()
+RETURNING organization_id, employee_id, dnd_enabled, dnd_start, dnd_end, muted_domains, created_at, updated_at, in_app_alerts_enabled
+`
+
+type UpsertPersonalPreferenceParams struct {
+	OrganizationID     dbuuid.UUID `json:"organization_id"`
+	EmployeeID         dbuuid.UUID `json:"employee_id"`
+	InAppAlertsEnabled bool        `json:"in_app_alerts_enabled"`
+	DndEnabled         bool        `json:"dnd_enabled"`
+	DndStart           pgtype.Time `json:"dnd_start"`
+	DndEnd             pgtype.Time `json:"dnd_end"`
+	MutedDomains       []string    `json:"muted_domains"`
+}
+
+// Replaces the caller's whole preference record, creating it on first change.
+// There is no partial write: every stored value is sent on every update, which is
+// what stops a do-not-disturb window and a mute list drifting apart across two
+// clients. organization_id is pinned from the auth context.
+func (q *Queries) UpsertPersonalPreference(ctx context.Context, db DBTX, arg *UpsertPersonalPreferenceParams) (*NotificationPersonalPreference, error) {
+	row := db.QueryRow(ctx, upsertPersonalPreference,
+		arg.OrganizationID,
+		arg.EmployeeID,
+		arg.InAppAlertsEnabled,
+		arg.DndEnabled,
+		arg.DndStart,
+		arg.DndEnd,
+		arg.MutedDomains,
+	)
+	var i NotificationPersonalPreference
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.EmployeeID,
+		&i.DndEnabled,
+		&i.DndStart,
+		&i.DndEnd,
+		&i.MutedDomains,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.InAppAlertsEnabled,
+	)
+	return &i, err
 }
 
 const upsertPresenceVisibility = `-- name: UpsertPresenceVisibility :one

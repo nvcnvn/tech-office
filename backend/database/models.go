@@ -5057,10 +5057,12 @@ type NotificationPersonalPreference struct {
 	DndEnabled bool        `json:"dnd_enabled"`
 	DndStart   pgtype.Time `json:"dnd_start"`
 	DndEnd     pgtype.Time `json:"dnd_end"`
-	// Domains for which the employee will not receive push notifications. SSE delivery still occurs for real-time UI updates.
+	// Domains for which the employee will not receive push notifications. SSE delivery, the notification row and the unread count are unaffected, and priority-0 notifications (mentions, incoming calls) are never suppressed. MUST hold the same nine values as notification.AllSourceDomains in Go, the notification.notification source_domain CHECK, and SOURCE_DOMAINS in frontend/packages/apis.
 	MutedDomains []string           `json:"muted_domains"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	// Draw the in-app banner while the app is in the foreground. Stored and returned by the server but never consulted by the delivery pipeline: the notification is still recorded, listed, counted as unread and pushed when this is false.
+	InAppAlertsEnabled bool `json:"in_app_alerts_enabled"`
 }
 
 func (s *NotificationPersonalPreference) TableName() string {
@@ -5077,6 +5079,7 @@ func (s *NotificationPersonalPreference) Fields() ([]string, []any) {
 			"muted_domains",
 			"created_at",
 			"updated_at",
+			"in_app_alerts_enabled",
 		}, []any{
 			&s.OrganizationID,
 			&s.EmployeeID,
@@ -5086,19 +5089,21 @@ func (s *NotificationPersonalPreference) Fields() ([]string, []any) {
 			&s.MutedDomains,
 			&s.CreatedAt,
 			&s.UpdatedAt,
+			&s.InAppAlertsEnabled,
 		}
 }
 
 func (s *NotificationPersonalPreference) FieldsMap() map[string]any {
 	return map[string]any{
-		"organization_id": &s.OrganizationID,
-		"employee_id":     &s.EmployeeID,
-		"dnd_enabled":     &s.DndEnabled,
-		"dnd_start":       &s.DndStart,
-		"dnd_end":         &s.DndEnd,
-		"muted_domains":   &s.MutedDomains,
-		"created_at":      &s.CreatedAt,
-		"updated_at":      &s.UpdatedAt,
+		"organization_id":       &s.OrganizationID,
+		"employee_id":           &s.EmployeeID,
+		"dnd_enabled":           &s.DndEnabled,
+		"dnd_start":             &s.DndStart,
+		"dnd_end":               &s.DndEnd,
+		"muted_domains":         &s.MutedDomains,
+		"created_at":            &s.CreatedAt,
+		"updated_at":            &s.UpdatedAt,
+		"in_app_alerts_enabled": &s.InAppAlertsEnabled,
 	}
 }
 

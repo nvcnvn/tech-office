@@ -1,0 +1,180 @@
+appId: com.devguards.TechOffice
+name: "Settings — notification preferences"
+# The happy path only: turn In-App Alerts off and mute Calendar in Settings, and both are
+# still where they were put after a restart.
+#
+# The relaunch, not a reinstall, is the point. These two values used to live in one MMKV
+# key on the handset; they now live on the person's account, and the only way to tell the
+# difference from outside is to relaunch and see them read back.
+#
+# Each row reports its state through its accessibility value — `setting-in-app-alerts`
+# reports "on"/"off" and `setting-mute-<domain>` reports "muted"/"not muted" — because a
+# blackbox driver cannot read a switch's position off the screen.
+#
+# The taps land on the row rather than on the switch inside it. On iOS a Pressable that
+# carries an accessibility value is an accessibility *container*: its children are folded
+# into it and the switch has no addressable identity at all, so
+# `setting-mute-<domain>-switch` does not exist in the iOS hierarchy (nor does
+# `theme-toggle-switch`). The row's own press target toggles the same value on both.
+#
+# Because these preferences now survive on the account rather than on the handset, the
+# flow both normalises them at the start and restores them at the end. Without the first,
+# a run that failed halfway would poison every run after it on the same account.
+#
+# Not covered here, deliberately: the "second device, same person" half of US1 (a driver
+# runs one device; the RPC derives the person from the session, so a second device is the
+# same read) and the rollback-on-failure path (a driver cannot cut the network mid-tap).
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible:
+      id: "setting-in-app-alerts"
+    timeout: 8000
+# The mute list exists, and Calendar is in it — the whole of drift D28 from outside.
+# scrollUntilVisible rather than assertVisible: the nine rows sit below the fold on a
+# narrow screen, and "not scrolled to yet" must not read as "not there".
+- scrollUntilVisible:
+    element:
+      id: "setting-mute-calendar"
+    direction: DOWN
+    timeout: 8000
+- assertVisible:
+    id: "setting-mute-intro"
+- takeScreenshot: "tmp/maestro-screenshots/01-notification-preferences"
+
+# ── Normalise: alerts on, calendar unmuted ──────────────────────────────────
+# Waiting on "muted|not muted" is also the wait for the record to arrive: every switch in
+# the section is disabled until it does, so a tap sent earlier would land on nothing.
+- extendedWaitUntil:
+    visible:
+      id: "setting-mute-calendar"
+      text: "muted|not muted"
+    timeout: 12000
+- runFlow:
+    when:
+      visible:
+        id: "setting-mute-calendar"
+        text: "^muted$"
+    commands:
+      - tapOn:
+          id: "setting-mute-calendar"
+      - extendedWaitUntil:
+          visible:
+            id: "setting-mute-calendar"
+            text: "not muted"
+          timeout: 8000
+- scrollUntilVisible:
+    element:
+      id: "setting-in-app-alerts"
+    direction: UP
+    timeout: 8000
+- runFlow:
+    when:
+      visible:
+        id: "setting-in-app-alerts"
+        text: "off"
+    commands:
+      - tapOn:
+          id: "setting-in-app-alerts"
+      - extendedWaitUntil:
+          visible:
+            id: "setting-in-app-alerts"
+            text: "on"
+          timeout: 8000
+
+# ── The change ──────────────────────────────────────────────────────────────
+- assertVisible:
+    id: "setting-in-app-alerts"
+    text: "on"
+- tapOn:
+    id: "setting-in-app-alerts"
+- extendedWaitUntil:
+    visible:
+      id: "setting-in-app-alerts"
+      text: "off"
+    timeout: 8000
+- scrollUntilVisible:
+    element:
+      id: "setting-mute-calendar"
+    direction: DOWN
+    timeout: 8000
+- tapOn:
+    id: "setting-mute-calendar"
+- extendedWaitUntil:
+    visible:
+      id: "setting-mute-calendar"
+      text: "^muted$"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/02-calendar-muted"
+
+# ── It was read back, not remembered ────────────────────────────────────────
+- runFlow: "../auth/dev-client-relaunch.yaml"
+# A dev-client relaunch re-downloads and re-executes the bundle before the tab bar exists.
+# On the iOS simulator that takes long enough that tapping straight away misses, and on the
+# Android emulator it routinely takes over 30s — measured at ~40s on a warm emulator, which
+# failed this step at the 30s it was first written with. The generous ceiling costs nothing
+# on a fast device: extendedWaitUntil returns as soon as the tab bar appears.
+- extendedWaitUntil:
+    visible:
+      id: "tab-more"
+    timeout: 120000
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible:
+      id: "setting-in-app-alerts"
+      text: "off"
+    timeout: 12000
+- scrollUntilVisible:
+    element:
+      id: "setting-mute-calendar"
+    direction: DOWN
+    timeout: 8000
+- extendedWaitUntil:
+    visible:
+      id: "setting-mute-calendar"
+      text: "^muted$"
+    timeout: 12000
+- takeScreenshot: "tmp/maestro-screenshots/03-preferences-after-relaunch"
+
+# ── Restore, so the next flow inherits the account it expected ──────────────
+- tapOn:
+    id: "setting-mute-calendar"
+- extendedWaitUntil:
+    visible:
+      id: "setting-mute-calendar"
+      text: "not muted"
+    timeout: 8000
+- scrollUntilVisible:
+    element:
+      id: "setting-in-app-alerts"
+    direction: UP
+    timeout: 8000
+- tapOn:
+    id: "setting-in-app-alerts"
+- extendedWaitUntil:
+    visible:
+      id: "setting-in-app-alerts"
+      text: "on"
+    timeout: 8000

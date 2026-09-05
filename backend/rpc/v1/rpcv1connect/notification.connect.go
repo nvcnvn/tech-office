@@ -81,6 +81,12 @@ const (
 	// NotificationServiceGetPresenceSettingsProcedure is the fully-qualified name of the
 	// NotificationService's GetPresenceSettings RPC.
 	NotificationServiceGetPresenceSettingsProcedure = "/rpc.v1.NotificationService/GetPresenceSettings"
+	// NotificationServiceGetNotificationPreferencesProcedure is the fully-qualified name of the
+	// NotificationService's GetNotificationPreferences RPC.
+	NotificationServiceGetNotificationPreferencesProcedure = "/rpc.v1.NotificationService/GetNotificationPreferences"
+	// NotificationServiceUpdateNotificationPreferencesProcedure is the fully-qualified name of the
+	// NotificationService's UpdateNotificationPreferences RPC.
+	NotificationServiceUpdateNotificationPreferencesProcedure = "/rpc.v1.NotificationService/UpdateNotificationPreferences"
 	// NotificationServiceAcknowledgeNotificationsProcedure is the fully-qualified name of the
 	// NotificationService's AcknowledgeNotifications RPC.
 	NotificationServiceAcknowledgeNotificationsProcedure = "/rpc.v1.NotificationService/AcknowledgeNotifications"
@@ -151,6 +157,23 @@ type NotificationServiceClient interface {
 	SetPresenceVisibility(context.Context, *connect.Request[v1.SetPresenceVisibilityRequest]) (*connect.Response[v1.SetPresenceVisibilityResponse], error)
 	// GetPresenceSettings retrieves the employee's current presence visibility preferences.
 	GetPresenceSettings(context.Context, *connect.Request[v1.GetPresenceSettingsRequest]) (*connect.Response[v1.GetPresenceSettingsResponse], error)
+	// GetNotificationPreferences returns the caller's own notification preferences.
+	// When no record has been stored, the documented defaults are returned with
+	// exists = false rather than an error.
+	//
+	// muted_domains is filtered to domains the system currently recognises, so a
+	// stored value naming a removed domain neither blocks the read nor is handed
+	// back to the client to be re-saved.
+	GetNotificationPreferences(context.Context, *connect.Request[v1.GetNotificationPreferencesRequest]) (*connect.Response[v1.GetNotificationPreferencesResponse], error)
+	// UpdateNotificationPreferences replaces the caller's own notification
+	// preferences as a whole, creating the record on first change. There is no
+	// partial update: every field the caller omits is written at its proto
+	// default, so a client must send the record it read.
+	//
+	// Fails with CodeInvalidArgument, naming the offending value and writing
+	// nothing, when muted_domains contains a domain the system does not recognise
+	// or a do-not-disturb time is not "HH:MM".
+	UpdateNotificationPreferences(context.Context, *connect.Request[v1.UpdateNotificationPreferencesRequest]) (*connect.Response[v1.UpdateNotificationPreferencesResponse], error)
 	// AcknowledgeNotifications marks one or more notifications as acknowledged.
 	// Acknowledgement occurs when the user opens the linked destination or explicitly dismisses.
 	// Popup display alone does NOT acknowledge.
@@ -273,6 +296,18 @@ func NewNotificationServiceClient(httpClient connect.HTTPClient, baseURL string,
 			connect.WithSchema(notificationServiceMethods.ByName("GetPresenceSettings")),
 			connect.WithClientOptions(opts...),
 		),
+		getNotificationPreferences: connect.NewClient[v1.GetNotificationPreferencesRequest, v1.GetNotificationPreferencesResponse](
+			httpClient,
+			baseURL+NotificationServiceGetNotificationPreferencesProcedure,
+			connect.WithSchema(notificationServiceMethods.ByName("GetNotificationPreferences")),
+			connect.WithClientOptions(opts...),
+		),
+		updateNotificationPreferences: connect.NewClient[v1.UpdateNotificationPreferencesRequest, v1.UpdateNotificationPreferencesResponse](
+			httpClient,
+			baseURL+NotificationServiceUpdateNotificationPreferencesProcedure,
+			connect.WithSchema(notificationServiceMethods.ByName("UpdateNotificationPreferences")),
+			connect.WithClientOptions(opts...),
+		),
 		acknowledgeNotifications: connect.NewClient[v1.AcknowledgeNotificationsRequest, v1.AcknowledgeNotificationsResponse](
 			httpClient,
 			baseURL+NotificationServiceAcknowledgeNotificationsProcedure,
@@ -318,6 +353,8 @@ type notificationServiceClient struct {
 	listPushTokens                    *connect.Client[v1.ListPushTokensRequest, v1.ListPushTokensResponse]
 	setPresenceVisibility             *connect.Client[v1.SetPresenceVisibilityRequest, v1.SetPresenceVisibilityResponse]
 	getPresenceSettings               *connect.Client[v1.GetPresenceSettingsRequest, v1.GetPresenceSettingsResponse]
+	getNotificationPreferences        *connect.Client[v1.GetNotificationPreferencesRequest, v1.GetNotificationPreferencesResponse]
+	updateNotificationPreferences     *connect.Client[v1.UpdateNotificationPreferencesRequest, v1.UpdateNotificationPreferencesResponse]
 	acknowledgeNotifications          *connect.Client[v1.AcknowledgeNotificationsRequest, v1.AcknowledgeNotificationsResponse]
 	acknowledgeAllBeforeTimestamp     *connect.Client[v1.AcknowledgeAllBeforeTimestampRequest, v1.AcknowledgeAllBeforeTimestampResponse]
 	getResourceSubscription           *connect.Client[v1.GetResourceSubscriptionRequest, v1.GetResourceSubscriptionResponse]
@@ -404,6 +441,16 @@ func (c *notificationServiceClient) GetPresenceSettings(ctx context.Context, req
 	return c.getPresenceSettings.CallUnary(ctx, req)
 }
 
+// GetNotificationPreferences calls rpc.v1.NotificationService.GetNotificationPreferences.
+func (c *notificationServiceClient) GetNotificationPreferences(ctx context.Context, req *connect.Request[v1.GetNotificationPreferencesRequest]) (*connect.Response[v1.GetNotificationPreferencesResponse], error) {
+	return c.getNotificationPreferences.CallUnary(ctx, req)
+}
+
+// UpdateNotificationPreferences calls rpc.v1.NotificationService.UpdateNotificationPreferences.
+func (c *notificationServiceClient) UpdateNotificationPreferences(ctx context.Context, req *connect.Request[v1.UpdateNotificationPreferencesRequest]) (*connect.Response[v1.UpdateNotificationPreferencesResponse], error) {
+	return c.updateNotificationPreferences.CallUnary(ctx, req)
+}
+
 // AcknowledgeNotifications calls rpc.v1.NotificationService.AcknowledgeNotifications.
 func (c *notificationServiceClient) AcknowledgeNotifications(ctx context.Context, req *connect.Request[v1.AcknowledgeNotificationsRequest]) (*connect.Response[v1.AcknowledgeNotificationsResponse], error) {
 	return c.acknowledgeNotifications.CallUnary(ctx, req)
@@ -481,6 +528,23 @@ type NotificationServiceHandler interface {
 	SetPresenceVisibility(context.Context, *connect.Request[v1.SetPresenceVisibilityRequest]) (*connect.Response[v1.SetPresenceVisibilityResponse], error)
 	// GetPresenceSettings retrieves the employee's current presence visibility preferences.
 	GetPresenceSettings(context.Context, *connect.Request[v1.GetPresenceSettingsRequest]) (*connect.Response[v1.GetPresenceSettingsResponse], error)
+	// GetNotificationPreferences returns the caller's own notification preferences.
+	// When no record has been stored, the documented defaults are returned with
+	// exists = false rather than an error.
+	//
+	// muted_domains is filtered to domains the system currently recognises, so a
+	// stored value naming a removed domain neither blocks the read nor is handed
+	// back to the client to be re-saved.
+	GetNotificationPreferences(context.Context, *connect.Request[v1.GetNotificationPreferencesRequest]) (*connect.Response[v1.GetNotificationPreferencesResponse], error)
+	// UpdateNotificationPreferences replaces the caller's own notification
+	// preferences as a whole, creating the record on first change. There is no
+	// partial update: every field the caller omits is written at its proto
+	// default, so a client must send the record it read.
+	//
+	// Fails with CodeInvalidArgument, naming the offending value and writing
+	// nothing, when muted_domains contains a domain the system does not recognise
+	// or a do-not-disturb time is not "HH:MM".
+	UpdateNotificationPreferences(context.Context, *connect.Request[v1.UpdateNotificationPreferencesRequest]) (*connect.Response[v1.UpdateNotificationPreferencesResponse], error)
 	// AcknowledgeNotifications marks one or more notifications as acknowledged.
 	// Acknowledgement occurs when the user opens the linked destination or explicitly dismisses.
 	// Popup display alone does NOT acknowledge.
@@ -599,6 +663,18 @@ func NewNotificationServiceHandler(svc NotificationServiceHandler, opts ...conne
 		connect.WithSchema(notificationServiceMethods.ByName("GetPresenceSettings")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notificationServiceGetNotificationPreferencesHandler := connect.NewUnaryHandler(
+		NotificationServiceGetNotificationPreferencesProcedure,
+		svc.GetNotificationPreferences,
+		connect.WithSchema(notificationServiceMethods.ByName("GetNotificationPreferences")),
+		connect.WithHandlerOptions(opts...),
+	)
+	notificationServiceUpdateNotificationPreferencesHandler := connect.NewUnaryHandler(
+		NotificationServiceUpdateNotificationPreferencesProcedure,
+		svc.UpdateNotificationPreferences,
+		connect.WithSchema(notificationServiceMethods.ByName("UpdateNotificationPreferences")),
+		connect.WithHandlerOptions(opts...),
+	)
 	notificationServiceAcknowledgeNotificationsHandler := connect.NewUnaryHandler(
 		NotificationServiceAcknowledgeNotificationsProcedure,
 		svc.AcknowledgeNotifications,
@@ -657,6 +733,10 @@ func NewNotificationServiceHandler(svc NotificationServiceHandler, opts ...conne
 			notificationServiceSetPresenceVisibilityHandler.ServeHTTP(w, r)
 		case NotificationServiceGetPresenceSettingsProcedure:
 			notificationServiceGetPresenceSettingsHandler.ServeHTTP(w, r)
+		case NotificationServiceGetNotificationPreferencesProcedure:
+			notificationServiceGetNotificationPreferencesHandler.ServeHTTP(w, r)
+		case NotificationServiceUpdateNotificationPreferencesProcedure:
+			notificationServiceUpdateNotificationPreferencesHandler.ServeHTTP(w, r)
 		case NotificationServiceAcknowledgeNotificationsProcedure:
 			notificationServiceAcknowledgeNotificationsHandler.ServeHTTP(w, r)
 		case NotificationServiceAcknowledgeAllBeforeTimestampProcedure:
@@ -736,6 +816,14 @@ func (UnimplementedNotificationServiceHandler) SetPresenceVisibility(context.Con
 
 func (UnimplementedNotificationServiceHandler) GetPresenceSettings(context.Context, *connect.Request[v1.GetPresenceSettingsRequest]) (*connect.Response[v1.GetPresenceSettingsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.NotificationService.GetPresenceSettings is not implemented"))
+}
+
+func (UnimplementedNotificationServiceHandler) GetNotificationPreferences(context.Context, *connect.Request[v1.GetNotificationPreferencesRequest]) (*connect.Response[v1.GetNotificationPreferencesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.NotificationService.GetNotificationPreferences is not implemented"))
+}
+
+func (UnimplementedNotificationServiceHandler) UpdateNotificationPreferences(context.Context, *connect.Request[v1.UpdateNotificationPreferencesRequest]) (*connect.Response[v1.UpdateNotificationPreferencesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.NotificationService.UpdateNotificationPreferences is not implemented"))
 }
 
 func (UnimplementedNotificationServiceHandler) AcknowledgeNotifications(context.Context, *connect.Request[v1.AcknowledgeNotificationsRequest]) (*connect.Response[v1.AcknowledgeNotificationsResponse], error) {

@@ -536,9 +536,13 @@ Expo Router in `apps/mobile/src/app`, five route groups:
     organization and role are shown as read-only, in words — the screen used to print the
     employee and organization UUIDs instead.
   - `(more)/settings` carries the Notifications, Safety, Legal and Account sections —
-    the in-app alert toggle, blocked people, abuse contact, the two published documents,
-    and whichever of `delete-account` or `request-removal` this person's path is, asked of
-    the server rather than inferred. See [compliance-safety.md](compliance-safety.md).
+    the in-app alert toggle and a nine-row "Mute by area" list, blocked people, abuse
+    contact, the two published documents, and whichever of `delete-account` or
+    `request-removal` this person's path is, asked of the server rather than inferred.
+    The two notification controls are server-stored and follow the person across devices;
+    they are described in
+    [notifications-presence.md](notifications-presence.md#the-personal-preference-record).
+    See [compliance-safety.md](compliance-safety.md).
     The **Appearance** section carries the theme switch (`theme-toggle-row`, on ⇒ dark).
     It records a deliberate choice — `preference_source = 'manual'` — which is the only
     place in the app that writes that value, and it is the only thing that stops the app
@@ -660,7 +664,8 @@ to that list, or the detail never reaches a component.
 `integration/canonical_links_test.go`, `context_rail_test.go`, `preference_test.go`,
 `feature_tour_test.go`, `federated_search_test.go`; `apps/web/e2e/`, including
 `federated-search.spec.ts`; Maestro flows for mobile, including `.maestro/feature-tour/`,
-`.maestro/federated-search.yaml` and `.maestro/settings/dark-mode-toggle.yaml`.
+`.maestro/federated-search.yaml`, `.maestro/settings/dark-mode-toggle.yaml` and
+`.maestro/settings/notification-preferences.yaml`.
 
 The mobile theme is guarded by two assertion scripts rather than by a flow, because neither
 thing they check is observable to a blackbox driver.

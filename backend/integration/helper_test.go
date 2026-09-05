@@ -2621,6 +2621,82 @@ func (w *testWorld) publishNotificationForChannel(recipientID dbuuid.UUID, title
 	return resp.Msg.NotificationId
 }
 
+// publishDomainNotification publishes one persistent notification from an arbitrary
+// source domain.
+//
+// The three publish helpers above all hard-code chat/message, which is fine for
+// routing scenarios but useless for domain muting: the whole question there is what
+// happens to the domains that are not chat.
+func (w *testWorld) publishDomainNotification(recipientID dbuuid.UUID, sourceDomain, notificationType, policyKey string, priority int32, title string) string {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.PublishNotificationRequest{
+		OrganizationId: w.OrgID.String(),
+		Recipients: &rpcv1.NotificationRecipients{
+			EmployeeIds: []string{recipientID.String()},
+		},
+		SourceDomain:        sourceDomain,
+		NotificationType:    notificationType,
+		Title:               title,
+		Message:             "Integration test " + sourceDomain + " notification",
+		ActionCategory:      "integration",
+		Priority:            priority,
+		PublishingServiceId: "integration-tests",
+		PolicyKey:           policyKey,
+		DeliveryClass:       "persistent",
+		SourceCategory:      "activity",
+	})
+	req.Header().Set("Authorization", "Bearer "+w.systemToken())
+	resp, err := w.notif.PublishNotification(context.Background(), req)
+	require.NoError(w.t, err)
+	require.NotEmpty(w.t, resp.Msg.NotificationId)
+	return resp.Msg.NotificationId
+}
+
+// ---------------------------------------------------------------------------
+// Act: Personal notification preferences
+// ---------------------------------------------------------------------------
+
+// getNotificationPreferences reads the actor's own preference record, or the
+// documented defaults when they have never saved one.
+func (w *testWorld) getNotificationPreferences(actor testUser) *rpcv1.GetNotificationPreferencesResponse {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.GetNotificationPreferencesRequest{})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.notif.GetNotificationPreferences(context.Background(), req)
+	require.NoError(w.t, err)
+	return resp.Msg
+}
+
+// updateNotificationPreferences replaces the actor's whole record and requires the
+// write to succeed. Use updateNotificationPreferencesErr for the refusal scenarios.
+func (w *testWorld) updateNotificationPreferences(actor testUser, req *rpcv1.UpdateNotificationPreferencesRequest) *rpcv1.NotificationPreferences {
+	w.t.Helper()
+	prefs, err := w.updateNotificationPreferencesErr(actor, req)
+	require.NoError(w.t, err)
+	return prefs
+}
+
+func (w *testWorld) updateNotificationPreferencesErr(actor testUser, msg *rpcv1.UpdateNotificationPreferencesRequest) (*rpcv1.NotificationPreferences, error) {
+	w.t.Helper()
+	req := connect.NewRequest(msg)
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.notif.UpdateNotificationPreferences(context.Background(), req)
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg.Preferences, nil
+}
+
+// muteDomains is the common case: replace the mute list, leaving every other stored
+// value at its default. Whole-record writes make that explicit rather than implied.
+func (w *testWorld) muteDomains(actor testUser, domains ...string) *rpcv1.NotificationPreferences {
+	w.t.Helper()
+	return w.updateNotificationPreferences(actor, &rpcv1.UpdateNotificationPreferencesRequest{
+		InAppAlertsEnabled: true,
+		MutedDomains:       domains,
+	})
+}
+
 // deliveryAttemptReasons lists the reasons recorded against one recipient's delivery
 // attempts, newest first. The routing decision lives here; notification_recipient's
 // fallback_reason ends up describing the delivery outcome instead.

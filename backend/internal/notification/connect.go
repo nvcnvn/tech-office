@@ -27,6 +27,7 @@ type NotificationServiceConnect struct {
 	PresenceLogic   PresenceLogic
 	PushLogic       PushLogic
 	VisibilityLogic VisibilityLogic
+	PreferenceLogic PreferenceLogic
 
 	// AdminPool: Used for backend publishing operations (system-scope)
 	// Justification: Backend services create notifications across tenants
@@ -51,6 +52,7 @@ func NewNotificationServiceConnect(
 	presenceLogic PresenceLogic,
 	pushLogic PushLogic,
 	visibilityLogic VisibilityLogic,
+	preferenceLogic PreferenceLogic,
 	adminPool database.AdminDatabaseConnector,
 	tenantPool database.TenantDatabaseConnector,
 	notificationService *NotificationService, // Original service for infra
@@ -60,6 +62,7 @@ func NewNotificationServiceConnect(
 		PresenceLogic:       presenceLogic,
 		PushLogic:           pushLogic,
 		VisibilityLogic:     visibilityLogic,
+		PreferenceLogic:     preferenceLogic,
 		AdminPool:           adminPool,
 		TenantPool:          tenantPool,
 		NotificationService: notificationService,

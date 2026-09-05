@@ -41,6 +41,7 @@ flowchart TB
 | `active_connection` | UNLOGGED table. Registry of live SSE connections per instance, with presence_status, active_channel_id, and `last_pong_at`. Liveness is derived from `last_pong_at`; there is no stored status column. See [Presence: the ping-pong protocol](#presence-the-ping-pong-protocol). |
 | `active_listener` | Reference table. Registry of backend LISTEN topic ownership per instance, including heartbeat for listener health debugging. |
 | `active_context` | UNLOGGED table. Tracks active realtime context (channel, document, task) per SSE connection. Generalizes active_channel_id for multi-domain context awareness. |
+| `personal_preference` | One row per employee per organization, absent for most people. Holds `in_app_alerts_enabled`, the do-not-disturb window (`dnd_enabled`, `dnd_start`, `dnd_end`) and `muted_domains` — all nine source domains, `calendar` included. Read on the delivery path by `ShouldSuppressPush()`, except `in_app_alerts_enabled`, which the server stores and returns but never reads: it gates the mobile foreground banner only. Written by `UpdateNotificationPreferences` as a whole-record upsert. |
 
 ## Presence: the ping-pong protocol
 
@@ -643,6 +644,7 @@ deleted in feature 034 rather than scheduled.
 | PG listener | `internal/notification/listener.go` | `initListener()`, LISTEN channel setup |
 | Routing | `internal/notification/routing_logic.go` | `ShouldSuppressPush()`, presence-aware decisions |
 | RPC layer | `internal/notification/connect.go` | `ListNotifications`, `MarkAsRead`, `StreamNotifications` |
+| Personal preferences | `internal/notification/preference_logic.go`, `preference_connect.go` | `GetNotificationPreferences` (`pref.view`), `UpdateNotificationPreferences` (`pref.update`), `normalizeMutedDomains()`, `filterKnownDomains()` |
 | Presence | `internal/notification/presence_logic.go` | `RecordPongs()`, `RemoveDepartedConnections()`, `DeleteExpiredConnections()`, `GetEmployeePresence()`, `GetBatchEmployeePresence()` |
 | Pong batcher | `internal/notification/pong_batcher.go` | `Submit()`, per-organization flush |
 | Push | `internal/notification/push_logic.go` | FCM push fallback, token registration |

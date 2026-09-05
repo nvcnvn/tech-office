@@ -221,6 +221,7 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 
 	// Initialize Presence, Push, and Visibility logic layers (before service creation)
 	visibilityLogic := notification.NewVisibilityLogic(queries)
+	notifPreferenceLogic := notification.NewPreferenceLogic(queries)
 	presenceLogic := notification.NewPresenceLogic(queries, visibilityLogic)
 	pushLogic := notification.NewPushLogic(queries, adminPool, fcmClient)
 
@@ -252,6 +253,7 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 		presenceLogic,
 		pushLogic,
 		visibilityLogic,
+		notifPreferenceLogic,
 		adminPool,
 		tenantPool,
 		notificationService, // Pass original service for SSE/registry/publisher

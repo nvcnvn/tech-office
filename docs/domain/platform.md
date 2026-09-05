@@ -48,7 +48,7 @@ The shape holds everywhere else.
 
 Tenant isolation is **application-enforced, not RLS-enforced**.
 
-- 85 of the 101 tables carry `organization_id` and a composite primary key
+- 87 of the 103 tables carry `organization_id` and a composite primary key
   `(organization_id, id)`. Every unique constraint on them leads with `organization_id`,
   and every join between two of them carries it in the join condition.
 - The remaining 16 are global, with no `organization_id`: `public.permission`,

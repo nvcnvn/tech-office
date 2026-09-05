@@ -3274,7 +3274,8 @@ CREATE TABLE notification.personal_preference (
     muted_domains text[] DEFAULT '{}'::text[] NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT muted_domains_valid CHECK ((muted_domains <@ ARRAY['chat'::text, 'projects'::text, 'docs'::text, 'crm'::text, 'hr'::text, 'support'::text, 'finance'::text, 'system'::text]))
+    in_app_alerts_enabled boolean DEFAULT true NOT NULL,
+    CONSTRAINT muted_domains_valid CHECK ((muted_domains <@ ARRAY['chat'::text, 'projects'::text, 'docs'::text, 'crm'::text, 'hr'::text, 'support'::text, 'finance'::text, 'system'::text, 'calendar'::text]))
 );
 
 
@@ -3296,7 +3297,14 @@ COMMENT ON COLUMN notification.personal_preference.dnd_enabled IS 'When true, pu
 -- Name: COLUMN personal_preference.muted_domains; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.personal_preference.muted_domains IS 'Domains for which the employee will not receive push notifications. SSE delivery still occurs for real-time UI updates.';
+COMMENT ON COLUMN notification.personal_preference.muted_domains IS 'Domains for which the employee will not receive push notifications. SSE delivery, the notification row and the unread count are unaffected, and priority-0 notifications (mentions, incoming calls) are never suppressed. MUST hold the same nine values as notification.AllSourceDomains in Go, the notification.notification source_domain CHECK, and SOURCE_DOMAINS in frontend/packages/apis.';
+
+
+--
+-- Name: COLUMN personal_preference.in_app_alerts_enabled; Type: COMMENT; Schema: notification; Owner: -
+--
+
+COMMENT ON COLUMN notification.personal_preference.in_app_alerts_enabled IS 'Draw the in-app banner while the app is in the foreground. Stored and returned by the server but never consulted by the delivery pipeline: the notification is still recorded, listed, counted as unread and pushed when this is false.';
 
 
 --

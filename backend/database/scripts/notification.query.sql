@@ -887,6 +887,37 @@ WHERE n.id = $1
 SELECT * FROM notification.personal_preference
 WHERE organization_id = @organization_id AND employee_id = @employee_id;
 
+-- name: UpsertPersonalPreference :one
+-- Replaces the caller's whole preference record, creating it on first change.
+-- There is no partial write: every stored value is sent on every update, which is
+-- what stops a do-not-disturb window and a mute list drifting apart across two
+-- clients. organization_id is pinned from the auth context.
+INSERT INTO notification.personal_preference (
+    organization_id,
+    employee_id,
+    in_app_alerts_enabled,
+    dnd_enabled,
+    dnd_start,
+    dnd_end,
+    muted_domains
+) VALUES (
+    @organization_id,
+    @employee_id,
+    @in_app_alerts_enabled,
+    @dnd_enabled,
+    @dnd_start,
+    @dnd_end,
+    @muted_domains
+)
+ON CONFLICT (organization_id, employee_id) DO UPDATE SET
+    in_app_alerts_enabled = EXCLUDED.in_app_alerts_enabled,
+    dnd_enabled = EXCLUDED.dnd_enabled,
+    dnd_start = EXCLUDED.dnd_start,
+    dnd_end = EXCLUDED.dnd_end,
+    muted_domains = EXCLUDED.muted_domains,
+    updated_at = now()
+RETURNING *;
+
 -- name: ListFollowedDocumentsBySubscription :many
 SELECT d.*
 FROM docs.document d

@@ -34,7 +34,7 @@ import { TourProvider } from "@/providers/tour-provider";
 import { useAppStatePresence } from "@/hooks/use-app-state-presence";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
-import { useInAppAlertsEnabled } from "@/lib/app-settings";
+import { useNotificationPreferences } from "@/hooks/use-notification-preferences";
 import { NOTIFICATIONS_HOME_HREF } from "@/lib/linking";
 import {
   getTabLabel,
@@ -101,7 +101,11 @@ export default function AppLayout() {
     incomingVoiceCall,
     clearIncomingVoiceCall,
   } = useNotificationStream();
-  const inAppAlertsEnabled = useInAppAlertsEnabled();
+  // Reads true while the preference is still loading. One banner drawn before the
+  // record arrives is a smaller failure than an app that silently draws none, and
+  // after the first launch the value comes straight from the persisted query cache.
+  const { preferences: notificationPreferences } = useNotificationPreferences();
+  const inAppAlertsEnabled = notificationPreferences.inAppAlertsEnabled;
   const [voicePromptAction, setVoicePromptAction] = React.useState<"accept" | "decline" | null>(null);
   const [voicePromptError, setVoicePromptError] = React.useState<string | null>(null);
   const [activeVoiceLeaving, setActiveVoiceLeaving] = React.useState(false);

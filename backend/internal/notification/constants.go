@@ -12,6 +12,8 @@
 package notification
 
 import (
+	"slices"
+
 	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 )
 
@@ -274,38 +276,45 @@ const (
 	SourceDomainCalendar = "calendar"
 )
 
+// allSourceDomains is the single Go list of source domains. Everything else in
+// this package that asks "is this a domain?" is defined over it, so the list
+// cannot fall out of step with itself.
+//
+// Four locations hold this list and MUST agree. Drift D28 happened because they
+// did not: calendar was a valid source_domain for six months while the mute-list
+// CHECK still had eight values, so calendar notifications could be published and
+// never silenced.
+//
+//  1. this slice
+//  2. the notification.notification.source_domain CHECK
+//  3. the notification.personal_preference.muted_domains CHECK
+//  4. SourceDomain / SOURCE_DOMAINS in frontend/packages/apis/src/notification.ts
+//
+// Locations 1 and 3 are checked against each other by the "every source domain
+// the system publishes from can be muted" scenario in
+// backend/integration/notification_personal_preference_test.go. Adding a domain
+// without widening that CHECK fails that test on the first run.
+var allSourceDomains = []string{
+	SourceDomainChat,
+	SourceDomainCRM,
+	SourceDomainProjects,
+	SourceDomainHR,
+	SourceDomainSupport,
+	SourceDomainFinance,
+	SourceDomainDocs,
+	SourceDomainSystem,
+	SourceDomainCalendar,
+}
+
 // IsValidSourceDomain checks if a source domain string is valid.
 // Used for runtime validation to catch alignment issues and prevent typos.
 func IsValidSourceDomain(domain string) bool {
-	switch domain {
-	case SourceDomainChat,
-		SourceDomainCRM,
-		SourceDomainProjects,
-		SourceDomainHR,
-		SourceDomainSupport,
-		SourceDomainFinance,
-		SourceDomainDocs,
-		SourceDomainSystem,
-		SourceDomainCalendar:
-		return true
-	default:
-		return false
-	}
+	return slices.Contains(allSourceDomains, domain)
 }
 
 // AllSourceDomains returns all valid source domains for validation and testing.
 func AllSourceDomains() []string {
-	return []string{
-		SourceDomainChat,
-		SourceDomainCRM,
-		SourceDomainProjects,
-		SourceDomainHR,
-		SourceDomainSupport,
-		SourceDomainFinance,
-		SourceDomainDocs,
-		SourceDomainSystem,
-		SourceDomainCalendar,
-	}
+	return slices.Clone(allSourceDomains)
 }
 
 // NotificationPriority defines allowed notification priority levels.

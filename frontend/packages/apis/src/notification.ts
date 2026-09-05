@@ -81,12 +81,13 @@ export type NotificationType =
  * 
  * MUST align with:
  * - Database CHECK constraint: notification.notification.source_domain
- * - Backend Go constants: internal/notification/constants.go
+ * - Database CHECK constraint: notification.personal_preference.muted_domains
+ * - Backend Go constants: allSourceDomains in internal/notification/constants.go
  * 
  * When adding/removing values:
- * 1. Update database CHECK constraint in backend/database/scripts/schema.sql
+ * 1. Update both database CHECK constraints with a migration in backend/database/migrations/
  * 2. Update backend Go constants
- * 3. Update this TypeScript type
+ * 3. Update this TypeScript type and SOURCE_DOMAINS below
  * 4. Submit all changes in single PR with alignment verification
  */
 export type SourceDomain =
@@ -97,7 +98,31 @@ export type SourceDomain =
 	| 'hr'
 	| 'support'
 	| 'finance'
-	| 'system';
+	| 'system'
+	| 'calendar';
+
+/**
+ * Every source domain, in the order the mute list shows them.
+ *
+ * Ordered for a reader rather than alphabetically: chat first because it is the
+ * noisiest, calendar third because it is the one people most often want quiet,
+ * system last because nobody mutes it.
+ *
+ * A value missing here is a domain nobody can mute, which is exactly the gap
+ * feature 051 closed — calendar was a valid source domain for six months while
+ * this list and the muted_domains CHECK still had eight values.
+ */
+export const SOURCE_DOMAINS: readonly SourceDomain[] = [
+	'chat',
+	'projects',
+	'calendar',
+	'docs',
+	'crm',
+	'hr',
+	'support',
+	'finance',
+	'system',
+] as const;
 
 export type NotificationPolicyKey =
 	| 'persistent_default'

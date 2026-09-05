@@ -2,9 +2,9 @@
 
 The delivery backbone every other domain publishes into, plus the presence signal that
 decides how something gets delivered. Owned by `internal/notification`; contract in
-`rpc/v1/notification.proto` (`NotificationService`, 19 RPCs + one server-streaming RPC).
+`rpc/v1/notification.proto` (`NotificationService`, 21 RPCs + one server-streaming RPC).
 
-**Status date: 2026-09-04.** Supersedes specs 007, 008, 012, 019, 021, 033, 037, 040, 042. Deeper
+**Status date: 2026-09-05.** Supersedes specs 007, 008, 012, 019, 021, 033, 037, 040, 042, 051. Deeper
 references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 `NOTIFICATION-RESCUE-PUSH-DESIGN.md`, `NOTIFICATION-RULES.md`, `FCM-SETUP.md`.
 
@@ -23,7 +23,7 @@ references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 | `notification.delivery_attempt` | per-channel audit: `sse | push | replay | call_wake` × `queued | sent | skipped | failed` + reason |
 | `notification.push_token` | provider tokens, one row per `token_type` per device |
 | `notification.presence_visibility` | privacy: `everyone | departments | offline` + custom status |
-| `notification.personal_preference` | DND window + muted domains |
+| `notification.personal_preference` | per-person: `in_app_alerts_enabled`, DND window, muted domains |
 | `notification.ephemeral_signal`, `notification_batch`, `notification_delivery_log` | supporting |
 
 ### Read vs acknowledged
@@ -215,6 +215,41 @@ reason:
 Call wakes never reach this code at all: the dispatcher is their sender and it does not
 consult routing. That structural exemption, rather than a flag, is what makes a call ring
 through do-not-disturb.
+
+#### The personal preference record
+
+`notification.personal_preference` holds one row per person per organization, absent for
+most people, in which case the documented defaults apply: in-app alerts on, nothing muted,
+do-not-disturb off.
+
+| Column | Meaning |
+|---|---|
+| `in_app_alerts_enabled` | draw the mobile foreground banner. **Stored and returned by the server, never read by the delivery pipeline** — with it false the notification is still recorded, listed, counted as unread and pushed |
+| `muted_domains` | `text[]`, `CHECK (muted_domains <@ ARRAY['chat','projects','docs','crm','hr','support','finance','system','calendar'])` — all nine source domains, `calendar` included |
+| `dnd_enabled`, `dnd_start`, `dnd_end` | `time without time zone`, read against `LOCALTIME`; windows may wrap midnight |
+
+Two RPCs own it, guarded by the pre-existing `pref.view` and `pref.update` permissions
+(the same pair that guards the theme preference — the ids already mean "view/update user
+preferences", and a new `notif.*` id would have cost a per-organization permission
+back-fill):
+
+- `GetNotificationPreferences` (`pref.view`) — empty request; the person comes from the
+  session, never the caller. Returns the defaults with `exists = false` when no row is
+  stored, and filters `muted_domains` to domains the system still recognises, so a stored
+  value naming a removed domain neither blocks the read nor is handed back to be re-saved.
+- `UpdateNotificationPreferences` (`pref.update`) — a whole-record upsert. There is no
+  partial update: every omitted field is written at its proto default, so a client must
+  send the record it read. That is what stops a do-not-disturb window and a mute list
+  drifting apart across two devices. An unrecognised domain fails the request with
+  `InvalidArgument` naming the value and writes nothing; the mute list is stored
+  deduplicated and sorted.
+
+The nine source domains live in four places that must agree — `allSourceDomains` in
+`internal/notification/constants.go`, the `notification.notification.source_domain` CHECK,
+the `muted_domains` CHECK, and `SourceDomain`/`SOURCE_DOMAINS` in
+`packages/apis/src/notification.ts`. The "every source domain the system publishes from
+can be muted" scenario in `notification_personal_preference_test.go` is what keeps them
+aligned; they had drifted for six months before it existed.
 
 ### Ephemeral signals
 
@@ -409,25 +444,31 @@ while the union stopped at `doc_mentioned`.
 - Mobile: `app/(app)/(notifications)/`, `hooks/use-sse.ts`, `use-presence.ts`,
   `use-app-state-presence.ts`, `use-push-notifications.ts`,
   `use-stream-recovery-refresh.ts`.
-- **In-App Alerts** is a device-local preference, not a server one: `lib/app-settings.ts`
-  owns the MMKV key and `(app)/_layout.tsx` gates the foreground `LiveNotificationBanner`
-  on it. It suppresses only the in-app banner — the SSE stream, unread counts and push
-  notifications are unaffected, and turning it off is not a do-not-disturb setting. It is
-  toggled from `(more)/settings`. Anything added to `app-settings.ts` must have a reader:
-  this key was written and read by nothing for as long as the toggle existed.
+- **In-App Alerts and the mute list** are server-stored preferences that follow the person
+  across devices, read and written by `hooks/use-notification-preferences.ts` over React
+  Query key `["notification-preferences"]` (optimistic with rollback, persisted to MMKV by
+  `setupQueryPersistence`, cleared on sign-out by `resetAuthenticatedAppState`). Both are
+  edited in the Notifications section of `(more)/settings`, which renders one mute row per
+  entry of `SOURCE_DOMAINS`. `(app)/_layout.tsx` gates the foreground
+  `LiveNotificationBanner` on `inAppAlertsEnabled`, reading `true` while the record is
+  still loading. In-App Alerts suppresses only that banner — the SSE stream, unread counts
+  and push notifications are unaffected, and it is not a do-not-disturb setting. There is
+  no web UI for either; the web settings area manages push tokens and presence visibility
+  only.
 - Shared: `packages/notifications/` (`useSSEConnection`, `useNotifications`,
-  `presenceState`), `packages/apis/src/notification.ts`, `presence.ts`, `push-tokens.ts`,
-  `visibility.ts`, `notification-status.ts`.
+  `presenceState`), `packages/apis/src/notification.ts`, `notification-preferences.ts`,
+  `presence.ts`, `push-tokens.ts`, `visibility.ts`, `notification-status.ts`.
 
 ## Tests
 
-Sixteen files, the largest cluster in the suite: `notification_baseline_test.go`,
+Seventeen files, the largest cluster in the suite: `notification_baseline_test.go`,
 `notification_v2_*` (contract, delivery routing, direct target, document/task subscription,
 subscription sync), `notification_delivery_consistency_test.go`,
 `notification_routing_test.go`, `notification_stream_rules_test.go`,
 `notification_frontend_parity_test.go`, `presence_ping_pong_test.go`,
 `presence_pong_batching_test.go`, `presence_status_test.go`, `push_token_test.go`,
-`stale_cleanup_test.go`.
+`notification_personal_preference_test.go`, `stale_cleanup_test.go`. Unit coverage for the
+two pure preference transforms is in `internal/notification/preference_logic_test.go`.
 
 ## Known drift
 
@@ -439,7 +480,3 @@ real event arrives as `notification` and the reaction branch has an
 `event.notificationType === "reaction"` fallback beside the dead `type === "chat_reaction"`
 check — but the vocabulary is fiction and reads as though a second event family exists.
 
-**`muted_domains` omits `calendar`.** `notification.personal_preference.muted_domains` has
-`CHECK (muted_domains <@ ARRAY['chat','projects','docs','crm','hr','support','finance','system'])`
-— no `calendar`, although `calendar` is a valid `source_domain` and calendar publishes six
-notification types. Calendar notifications cannot currently be domain-muted.

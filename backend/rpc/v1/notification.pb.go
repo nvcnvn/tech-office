@@ -2866,6 +2866,324 @@ func (x *PresenceVisibility) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// A person's notification preferences, as stored.
+//
+// Note that in_app_alerts_enabled is stored and returned by the server but is
+// never consulted by the delivery pipeline. It gates one client-drawn banner and
+// nothing else: the notification is still recorded, still listed, still counted
+// as unread, and still pushed.
+type NotificationPreferences struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Draw the foreground banner while the app is open. Defaults to true.
+	InAppAlertsEnabled bool `protobuf:"varint,1,opt,name=in_app_alerts_enabled,json=inAppAlertsEnabled,proto3" json:"in_app_alerts_enabled,omitempty"`
+	// Source domains whose push notifications are suppressed for this person.
+	//
+	// Values are from the same set the publisher accepts as source_domain:
+	// chat, crm, projects, docs, hr, support, finance, system, calendar.
+	// Muting suppresses push only — SSE delivery, the notification list and the
+	// unread count are unaffected — and never applies to priority 0
+	// notifications, which is how mentions and incoming calls always come through.
+	//
+	// Stored deduplicated and sorted.
+	MutedDomains []string `protobuf:"bytes,2,rep,name=muted_domains,json=mutedDomains,proto3" json:"muted_domains,omitempty"`
+	// Do-not-disturb window. Carried by this contract so that a change cannot
+	// silently erase a window the person did not edit.
+	DndEnabled bool `protobuf:"varint,3,opt,name=dnd_enabled,json=dndEnabled,proto3" json:"dnd_enabled,omitempty"`
+	// "HH:MM" in the server's local time, or empty when unset. Windows that wrap
+	// midnight (dnd_start > dnd_end) are supported by the existing reader.
+	DndStart string `protobuf:"bytes,4,opt,name=dnd_start,json=dndStart,proto3" json:"dnd_start,omitempty"`
+	DndEnd   string `protobuf:"bytes,5,opt,name=dnd_end,json=dndEnd,proto3" json:"dnd_end,omitempty"`
+	// When the record was last written. Unset when no record exists.
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NotificationPreferences) Reset() {
+	*x = NotificationPreferences{}
+	mi := &file_rpc_v1_notification_proto_msgTypes[39]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NotificationPreferences) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NotificationPreferences) ProtoMessage() {}
+
+func (x *NotificationPreferences) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_notification_proto_msgTypes[39]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NotificationPreferences.ProtoReflect.Descriptor instead.
+func (*NotificationPreferences) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{39}
+}
+
+func (x *NotificationPreferences) GetInAppAlertsEnabled() bool {
+	if x != nil {
+		return x.InAppAlertsEnabled
+	}
+	return false
+}
+
+func (x *NotificationPreferences) GetMutedDomains() []string {
+	if x != nil {
+		return x.MutedDomains
+	}
+	return nil
+}
+
+func (x *NotificationPreferences) GetDndEnabled() bool {
+	if x != nil {
+		return x.DndEnabled
+	}
+	return false
+}
+
+func (x *NotificationPreferences) GetDndStart() string {
+	if x != nil {
+		return x.DndStart
+	}
+	return ""
+}
+
+func (x *NotificationPreferences) GetDndEnd() string {
+	if x != nil {
+		return x.DndEnd
+	}
+	return ""
+}
+
+func (x *NotificationPreferences) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+// No fields — the person is taken from the auth context, never from the caller.
+type GetNotificationPreferencesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetNotificationPreferencesRequest) Reset() {
+	*x = GetNotificationPreferencesRequest{}
+	mi := &file_rpc_v1_notification_proto_msgTypes[40]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetNotificationPreferencesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNotificationPreferencesRequest) ProtoMessage() {}
+
+func (x *GetNotificationPreferencesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_notification_proto_msgTypes[40]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNotificationPreferencesRequest.ProtoReflect.Descriptor instead.
+func (*GetNotificationPreferencesRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{40}
+}
+
+type GetNotificationPreferencesResponse struct {
+	state       protoimpl.MessageState   `protogen:"open.v1"`
+	Preferences *NotificationPreferences `protobuf:"bytes,1,opt,name=preferences,proto3" json:"preferences,omitempty"`
+	// False when no record is stored and preferences holds the defaults.
+	Exists        bool `protobuf:"varint,2,opt,name=exists,proto3" json:"exists,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetNotificationPreferencesResponse) Reset() {
+	*x = GetNotificationPreferencesResponse{}
+	mi := &file_rpc_v1_notification_proto_msgTypes[41]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetNotificationPreferencesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetNotificationPreferencesResponse) ProtoMessage() {}
+
+func (x *GetNotificationPreferencesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_notification_proto_msgTypes[41]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetNotificationPreferencesResponse.ProtoReflect.Descriptor instead.
+func (*GetNotificationPreferencesResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{41}
+}
+
+func (x *GetNotificationPreferencesResponse) GetPreferences() *NotificationPreferences {
+	if x != nil {
+		return x.Preferences
+	}
+	return nil
+}
+
+func (x *GetNotificationPreferencesResponse) GetExists() bool {
+	if x != nil {
+		return x.Exists
+	}
+	return false
+}
+
+// The whole record. Inline scalars rather than a NotificationPreferences
+// message, because updated_at is server-owned and would have to be ignored.
+type UpdateNotificationPreferencesRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	InAppAlertsEnabled bool                   `protobuf:"varint,1,opt,name=in_app_alerts_enabled,json=inAppAlertsEnabled,proto3" json:"in_app_alerts_enabled,omitempty"`
+	MutedDomains       []string               `protobuf:"bytes,2,rep,name=muted_domains,json=mutedDomains,proto3" json:"muted_domains,omitempty"`
+	DndEnabled         bool                   `protobuf:"varint,3,opt,name=dnd_enabled,json=dndEnabled,proto3" json:"dnd_enabled,omitempty"`
+	DndStart           string                 `protobuf:"bytes,4,opt,name=dnd_start,json=dndStart,proto3" json:"dnd_start,omitempty"`
+	DndEnd             string                 `protobuf:"bytes,5,opt,name=dnd_end,json=dndEnd,proto3" json:"dnd_end,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *UpdateNotificationPreferencesRequest) Reset() {
+	*x = UpdateNotificationPreferencesRequest{}
+	mi := &file_rpc_v1_notification_proto_msgTypes[42]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateNotificationPreferencesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateNotificationPreferencesRequest) ProtoMessage() {}
+
+func (x *UpdateNotificationPreferencesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_notification_proto_msgTypes[42]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateNotificationPreferencesRequest.ProtoReflect.Descriptor instead.
+func (*UpdateNotificationPreferencesRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{42}
+}
+
+func (x *UpdateNotificationPreferencesRequest) GetInAppAlertsEnabled() bool {
+	if x != nil {
+		return x.InAppAlertsEnabled
+	}
+	return false
+}
+
+func (x *UpdateNotificationPreferencesRequest) GetMutedDomains() []string {
+	if x != nil {
+		return x.MutedDomains
+	}
+	return nil
+}
+
+func (x *UpdateNotificationPreferencesRequest) GetDndEnabled() bool {
+	if x != nil {
+		return x.DndEnabled
+	}
+	return false
+}
+
+func (x *UpdateNotificationPreferencesRequest) GetDndStart() string {
+	if x != nil {
+		return x.DndStart
+	}
+	return ""
+}
+
+func (x *UpdateNotificationPreferencesRequest) GetDndEnd() string {
+	if x != nil {
+		return x.DndEnd
+	}
+	return ""
+}
+
+type UpdateNotificationPreferencesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The record as stored, after deduplication and sorting.
+	Preferences   *NotificationPreferences `protobuf:"bytes,1,opt,name=preferences,proto3" json:"preferences,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateNotificationPreferencesResponse) Reset() {
+	*x = UpdateNotificationPreferencesResponse{}
+	mi := &file_rpc_v1_notification_proto_msgTypes[43]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateNotificationPreferencesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateNotificationPreferencesResponse) ProtoMessage() {}
+
+func (x *UpdateNotificationPreferencesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_v1_notification_proto_msgTypes[43]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateNotificationPreferencesResponse.ProtoReflect.Descriptor instead.
+func (*UpdateNotificationPreferencesResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{43}
+}
+
+func (x *UpdateNotificationPreferencesResponse) GetPreferences() *NotificationPreferences {
+	if x != nil {
+		return x.Preferences
+	}
+	return nil
+}
+
 // AcknowledgeNotificationsRequest marks one or more notifications as acknowledged.
 // Acknowledgement occurs when the user opens the linked destination (destination_open)
 // or explicitly dismisses via an action (explicit_ack).
@@ -2883,7 +3201,7 @@ type AcknowledgeNotificationsRequest struct {
 
 func (x *AcknowledgeNotificationsRequest) Reset() {
 	*x = AcknowledgeNotificationsRequest{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[39]
+	mi := &file_rpc_v1_notification_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2895,7 +3213,7 @@ func (x *AcknowledgeNotificationsRequest) String() string {
 func (*AcknowledgeNotificationsRequest) ProtoMessage() {}
 
 func (x *AcknowledgeNotificationsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[39]
+	mi := &file_rpc_v1_notification_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2908,7 +3226,7 @@ func (x *AcknowledgeNotificationsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeNotificationsRequest.ProtoReflect.Descriptor instead.
 func (*AcknowledgeNotificationsRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{39}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *AcknowledgeNotificationsRequest) GetNotificationRecipientIds() []string {
@@ -2934,7 +3252,7 @@ type AcknowledgeNotificationsResponse struct {
 
 func (x *AcknowledgeNotificationsResponse) Reset() {
 	*x = AcknowledgeNotificationsResponse{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[40]
+	mi := &file_rpc_v1_notification_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2946,7 +3264,7 @@ func (x *AcknowledgeNotificationsResponse) String() string {
 func (*AcknowledgeNotificationsResponse) ProtoMessage() {}
 
 func (x *AcknowledgeNotificationsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[40]
+	mi := &file_rpc_v1_notification_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2959,7 +3277,7 @@ func (x *AcknowledgeNotificationsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AcknowledgeNotificationsResponse.ProtoReflect.Descriptor instead.
 func (*AcknowledgeNotificationsResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{40}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *AcknowledgeNotificationsResponse) GetAcknowledgedCount() int32 {
@@ -2979,7 +3297,7 @@ type AcknowledgeAllBeforeTimestampRequest struct {
 
 func (x *AcknowledgeAllBeforeTimestampRequest) Reset() {
 	*x = AcknowledgeAllBeforeTimestampRequest{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[41]
+	mi := &file_rpc_v1_notification_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2991,7 +3309,7 @@ func (x *AcknowledgeAllBeforeTimestampRequest) String() string {
 func (*AcknowledgeAllBeforeTimestampRequest) ProtoMessage() {}
 
 func (x *AcknowledgeAllBeforeTimestampRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[41]
+	mi := &file_rpc_v1_notification_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3004,7 +3322,7 @@ func (x *AcknowledgeAllBeforeTimestampRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use AcknowledgeAllBeforeTimestampRequest.ProtoReflect.Descriptor instead.
 func (*AcknowledgeAllBeforeTimestampRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{41}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *AcknowledgeAllBeforeTimestampRequest) GetBeforeTimestamp() *timestamppb.Timestamp {
@@ -3030,7 +3348,7 @@ type AcknowledgeAllBeforeTimestampResponse struct {
 
 func (x *AcknowledgeAllBeforeTimestampResponse) Reset() {
 	*x = AcknowledgeAllBeforeTimestampResponse{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[42]
+	mi := &file_rpc_v1_notification_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3042,7 +3360,7 @@ func (x *AcknowledgeAllBeforeTimestampResponse) String() string {
 func (*AcknowledgeAllBeforeTimestampResponse) ProtoMessage() {}
 
 func (x *AcknowledgeAllBeforeTimestampResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[42]
+	mi := &file_rpc_v1_notification_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3055,7 +3373,7 @@ func (x *AcknowledgeAllBeforeTimestampResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use AcknowledgeAllBeforeTimestampResponse.ProtoReflect.Descriptor instead.
 func (*AcknowledgeAllBeforeTimestampResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{42}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *AcknowledgeAllBeforeTimestampResponse) GetAcknowledgedCount() int32 {
@@ -3075,7 +3393,7 @@ type GetResourceSubscriptionRequest struct {
 
 func (x *GetResourceSubscriptionRequest) Reset() {
 	*x = GetResourceSubscriptionRequest{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[43]
+	mi := &file_rpc_v1_notification_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3087,7 +3405,7 @@ func (x *GetResourceSubscriptionRequest) String() string {
 func (*GetResourceSubscriptionRequest) ProtoMessage() {}
 
 func (x *GetResourceSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[43]
+	mi := &file_rpc_v1_notification_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3100,7 +3418,7 @@ func (x *GetResourceSubscriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourceSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*GetResourceSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{43}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *GetResourceSubscriptionRequest) GetResourceDomain() string {
@@ -3129,7 +3447,7 @@ type GetResourceSubscriptionResponse struct {
 
 func (x *GetResourceSubscriptionResponse) Reset() {
 	*x = GetResourceSubscriptionResponse{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[44]
+	mi := &file_rpc_v1_notification_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3141,7 +3459,7 @@ func (x *GetResourceSubscriptionResponse) String() string {
 func (*GetResourceSubscriptionResponse) ProtoMessage() {}
 
 func (x *GetResourceSubscriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[44]
+	mi := &file_rpc_v1_notification_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3154,7 +3472,7 @@ func (x *GetResourceSubscriptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetResourceSubscriptionResponse.ProtoReflect.Descriptor instead.
 func (*GetResourceSubscriptionResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{44}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GetResourceSubscriptionResponse) GetSubscribed() bool {
@@ -3196,7 +3514,7 @@ type SetResourceSubscriptionPreferenceRequest struct {
 
 func (x *SetResourceSubscriptionPreferenceRequest) Reset() {
 	*x = SetResourceSubscriptionPreferenceRequest{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[45]
+	mi := &file_rpc_v1_notification_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3208,7 +3526,7 @@ func (x *SetResourceSubscriptionPreferenceRequest) String() string {
 func (*SetResourceSubscriptionPreferenceRequest) ProtoMessage() {}
 
 func (x *SetResourceSubscriptionPreferenceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[45]
+	mi := &file_rpc_v1_notification_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3221,7 +3539,7 @@ func (x *SetResourceSubscriptionPreferenceRequest) ProtoReflect() protoreflect.M
 
 // Deprecated: Use SetResourceSubscriptionPreferenceRequest.ProtoReflect.Descriptor instead.
 func (*SetResourceSubscriptionPreferenceRequest) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{45}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *SetResourceSubscriptionPreferenceRequest) GetResourceDomain() string {
@@ -3255,7 +3573,7 @@ type SetResourceSubscriptionPreferenceResponse struct {
 
 func (x *SetResourceSubscriptionPreferenceResponse) Reset() {
 	*x = SetResourceSubscriptionPreferenceResponse{}
-	mi := &file_rpc_v1_notification_proto_msgTypes[46]
+	mi := &file_rpc_v1_notification_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3267,7 +3585,7 @@ func (x *SetResourceSubscriptionPreferenceResponse) String() string {
 func (*SetResourceSubscriptionPreferenceResponse) ProtoMessage() {}
 
 func (x *SetResourceSubscriptionPreferenceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_rpc_v1_notification_proto_msgTypes[46]
+	mi := &file_rpc_v1_notification_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3280,7 +3598,7 @@ func (x *SetResourceSubscriptionPreferenceResponse) ProtoReflect() protoreflect.
 
 // Deprecated: Use SetResourceSubscriptionPreferenceResponse.ProtoReflect.Descriptor instead.
 func (*SetResourceSubscriptionPreferenceResponse) Descriptor() ([]byte, []int) {
-	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{46}
+	return file_rpc_v1_notification_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SetResourceSubscriptionPreferenceResponse) GetSuccess() bool {
@@ -3515,7 +3833,29 @@ const file_rpc_v1_notification_proto_rawDesc = "" +
 	"\x12custom_status_text\x18\x02 \x01(\tR\x10customStatusText\x12.\n" +
 	"\x13custom_status_emoji\x18\x03 \x01(\tR\x11customStatusEmoji\x129\n" +
 	"\n" +
-	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x96\x01\n" +
+	"updated_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x83\x02\n" +
+	"\x17NotificationPreferences\x121\n" +
+	"\x15in_app_alerts_enabled\x18\x01 \x01(\bR\x12inAppAlertsEnabled\x12#\n" +
+	"\rmuted_domains\x18\x02 \x03(\tR\fmutedDomains\x12\x1f\n" +
+	"\vdnd_enabled\x18\x03 \x01(\bR\n" +
+	"dndEnabled\x12\x1b\n" +
+	"\tdnd_start\x18\x04 \x01(\tR\bdndStart\x12\x17\n" +
+	"\adnd_end\x18\x05 \x01(\tR\x06dndEnd\x129\n" +
+	"\n" +
+	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"#\n" +
+	"!GetNotificationPreferencesRequest\"\x7f\n" +
+	"\"GetNotificationPreferencesResponse\x12A\n" +
+	"\vpreferences\x18\x01 \x01(\v2\x1f.rpc.v1.NotificationPreferencesR\vpreferences\x12\x16\n" +
+	"\x06exists\x18\x02 \x01(\bR\x06exists\"\xd5\x01\n" +
+	"$UpdateNotificationPreferencesRequest\x121\n" +
+	"\x15in_app_alerts_enabled\x18\x01 \x01(\bR\x12inAppAlertsEnabled\x12#\n" +
+	"\rmuted_domains\x18\x02 \x03(\tR\fmutedDomains\x12\x1f\n" +
+	"\vdnd_enabled\x18\x03 \x01(\bR\n" +
+	"dndEnabled\x12\x1b\n" +
+	"\tdnd_start\x18\x04 \x01(\tR\bdndStart\x12\x17\n" +
+	"\adnd_end\x18\x05 \x01(\tR\x06dndEnd\"j\n" +
+	"%UpdateNotificationPreferencesResponse\x12A\n" +
+	"\vpreferences\x18\x01 \x01(\v2\x1f.rpc.v1.NotificationPreferencesR\vpreferences\"\x96\x01\n" +
 	"\x1fAcknowledgeNotificationsRequest\x12<\n" +
 	"\x1anotification_recipient_ids\x18\x01 \x03(\tR\x18notificationRecipientIds\x125\n" +
 	"\x16acknowledgement_action\x18\x02 \x01(\tR\x15acknowledgementAction\"Q\n" +
@@ -3575,7 +3915,7 @@ const file_rpc_v1_notification_proto_rawDesc = "" +
 	")SUBSCRIPTION_PREFERENCE_LEVEL_UNSPECIFIED\x10\x00\x12%\n" +
 	"!SUBSCRIPTION_PREFERENCE_LEVEL_ALL\x10\x01\x12*\n" +
 	"&SUBSCRIPTION_PREFERENCE_LEVEL_MENTIONS\x10\x02\x12'\n" +
-	"#SUBSCRIPTION_PREFERENCE_LEVEL_MUTED\x10\x032\xa7\x13\n" +
+	"#SUBSCRIPTION_PREFERENCE_LEVEL_MUTED\x10\x032\xc0\x15\n" +
 	"\x13NotificationService\x12s\n" +
 	"\x13PublishNotification\x12\".rpc.v1.PublishNotificationRequest\x1a#.rpc.v1.PublishNotificationResponse\"\x13\x82\xf9+\x0f\n" +
 	"\rnotif.publish\x12j\n" +
@@ -3611,7 +3951,11 @@ const file_rpc_v1_notification_proto_rawDesc = "" +
 	"\x15SetPresenceVisibility\x12$.rpc.v1.SetPresenceVisibilityRequest\x1a%.rpc.v1.SetPresenceVisibilityResponse\"\x1c\x82\xf9+\x18\n" +
 	"\x16notif.presenceSettings\x12|\n" +
 	"\x13GetPresenceSettings\x12\".rpc.v1.GetPresenceSettingsRequest\x1a#.rpc.v1.GetPresenceSettingsResponse\"\x1c\x82\xf9+\x18\n" +
-	"\x16notif.presenceSettings\x12\x83\x01\n" +
+	"\x16notif.presenceSettings\x12\x84\x01\n" +
+	"\x1aGetNotificationPreferences\x12).rpc.v1.GetNotificationPreferencesRequest\x1a*.rpc.v1.GetNotificationPreferencesResponse\"\x0f\x82\xf9+\v\n" +
+	"\tpref.view\x12\x8f\x01\n" +
+	"\x1dUpdateNotificationPreferences\x12,.rpc.v1.UpdateNotificationPreferencesRequest\x1a-.rpc.v1.UpdateNotificationPreferencesResponse\"\x11\x82\xf9+\r\n" +
+	"\vpref.update\x12\x83\x01\n" +
 	"\x18AcknowledgeNotifications\x12'.rpc.v1.AcknowledgeNotificationsRequest\x1a(.rpc.v1.AcknowledgeNotificationsResponse\"\x14\x82\xf9+\x10\n" +
 	"\x0enotif.markRead\x12\x92\x01\n" +
 	"\x1dAcknowledgeAllBeforeTimestamp\x12,.rpc.v1.AcknowledgeAllBeforeTimestampRequest\x1a-.rpc.v1.AcknowledgeAllBeforeTimestampResponse\"\x14\x82\xf9+\x10\n" +
@@ -3638,7 +3982,7 @@ func file_rpc_v1_notification_proto_rawDescGZIP() []byte {
 }
 
 var file_rpc_v1_notification_proto_enumTypes = make([]protoimpl.EnumInfo, 6)
-var file_rpc_v1_notification_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_rpc_v1_notification_proto_msgTypes = make([]protoimpl.MessageInfo, 57)
 var file_rpc_v1_notification_proto_goTypes = []any{
 	(PresenceStatus)(0),                               // 0: rpc.v1.PresenceStatus
 	(PermissionState)(0),                              // 1: rpc.v1.PermissionState
@@ -3685,111 +4029,123 @@ var file_rpc_v1_notification_proto_goTypes = []any{
 	(*GetPresenceSettingsRequest)(nil),                // 42: rpc.v1.GetPresenceSettingsRequest
 	(*GetPresenceSettingsResponse)(nil),               // 43: rpc.v1.GetPresenceSettingsResponse
 	(*PresenceVisibility)(nil),                        // 44: rpc.v1.PresenceVisibility
-	(*AcknowledgeNotificationsRequest)(nil),           // 45: rpc.v1.AcknowledgeNotificationsRequest
-	(*AcknowledgeNotificationsResponse)(nil),          // 46: rpc.v1.AcknowledgeNotificationsResponse
-	(*AcknowledgeAllBeforeTimestampRequest)(nil),      // 47: rpc.v1.AcknowledgeAllBeforeTimestampRequest
-	(*AcknowledgeAllBeforeTimestampResponse)(nil),     // 48: rpc.v1.AcknowledgeAllBeforeTimestampResponse
-	(*GetResourceSubscriptionRequest)(nil),            // 49: rpc.v1.GetResourceSubscriptionRequest
-	(*GetResourceSubscriptionResponse)(nil),           // 50: rpc.v1.GetResourceSubscriptionResponse
-	(*SetResourceSubscriptionPreferenceRequest)(nil),  // 51: rpc.v1.SetResourceSubscriptionPreferenceRequest
-	(*SetResourceSubscriptionPreferenceResponse)(nil), // 52: rpc.v1.SetResourceSubscriptionPreferenceResponse
-	nil,                           // 53: rpc.v1.PublishNotificationRequest.ActionDataEntry
-	nil,                           // 54: rpc.v1.NotificationSummary.ActionDataEntry
-	nil,                           // 55: rpc.v1.GetUnreadCountResponse.UnreadBySourceDomainEntry
-	nil,                           // 56: rpc.v1.RegisterPushTokenRequest.TokenMetadataEntry
-	nil,                           // 57: rpc.v1.PushTokenInfo.TokenMetadataEntry
-	(*timestamppb.Timestamp)(nil), // 58: google.protobuf.Timestamp
+	(*NotificationPreferences)(nil),                   // 45: rpc.v1.NotificationPreferences
+	(*GetNotificationPreferencesRequest)(nil),         // 46: rpc.v1.GetNotificationPreferencesRequest
+	(*GetNotificationPreferencesResponse)(nil),        // 47: rpc.v1.GetNotificationPreferencesResponse
+	(*UpdateNotificationPreferencesRequest)(nil),      // 48: rpc.v1.UpdateNotificationPreferencesRequest
+	(*UpdateNotificationPreferencesResponse)(nil),     // 49: rpc.v1.UpdateNotificationPreferencesResponse
+	(*AcknowledgeNotificationsRequest)(nil),           // 50: rpc.v1.AcknowledgeNotificationsRequest
+	(*AcknowledgeNotificationsResponse)(nil),          // 51: rpc.v1.AcknowledgeNotificationsResponse
+	(*AcknowledgeAllBeforeTimestampRequest)(nil),      // 52: rpc.v1.AcknowledgeAllBeforeTimestampRequest
+	(*AcknowledgeAllBeforeTimestampResponse)(nil),     // 53: rpc.v1.AcknowledgeAllBeforeTimestampResponse
+	(*GetResourceSubscriptionRequest)(nil),            // 54: rpc.v1.GetResourceSubscriptionRequest
+	(*GetResourceSubscriptionResponse)(nil),           // 55: rpc.v1.GetResourceSubscriptionResponse
+	(*SetResourceSubscriptionPreferenceRequest)(nil),  // 56: rpc.v1.SetResourceSubscriptionPreferenceRequest
+	(*SetResourceSubscriptionPreferenceResponse)(nil), // 57: rpc.v1.SetResourceSubscriptionPreferenceResponse
+	nil,                           // 58: rpc.v1.PublishNotificationRequest.ActionDataEntry
+	nil,                           // 59: rpc.v1.NotificationSummary.ActionDataEntry
+	nil,                           // 60: rpc.v1.GetUnreadCountResponse.UnreadBySourceDomainEntry
+	nil,                           // 61: rpc.v1.RegisterPushTokenRequest.TokenMetadataEntry
+	nil,                           // 62: rpc.v1.PushTokenInfo.TokenMetadataEntry
+	(*timestamppb.Timestamp)(nil), // 63: google.protobuf.Timestamp
 }
 var file_rpc_v1_notification_proto_depIdxs = []int32{
 	7,  // 0: rpc.v1.PublishNotificationRequest.recipients:type_name -> rpc.v1.NotificationRecipients
-	53, // 1: rpc.v1.PublishNotificationRequest.action_data:type_name -> rpc.v1.PublishNotificationRequest.ActionDataEntry
+	58, // 1: rpc.v1.PublishNotificationRequest.action_data:type_name -> rpc.v1.PublishNotificationRequest.ActionDataEntry
 	8,  // 2: rpc.v1.PublishNotificationRequest.navigation_target:type_name -> rpc.v1.NavigationTarget
 	9,  // 3: rpc.v1.PublishNotificationRequest.audience_context:type_name -> rpc.v1.AudienceContext
 	13, // 4: rpc.v1.ListNotificationsResponse.notifications:type_name -> rpc.v1.NotificationSummary
-	54, // 5: rpc.v1.NotificationSummary.action_data:type_name -> rpc.v1.NotificationSummary.ActionDataEntry
-	58, // 6: rpc.v1.NotificationSummary.read_at:type_name -> google.protobuf.Timestamp
-	58, // 7: rpc.v1.NotificationSummary.delivered_at:type_name -> google.protobuf.Timestamp
-	58, // 8: rpc.v1.NotificationSummary.created_at:type_name -> google.protobuf.Timestamp
-	58, // 9: rpc.v1.NotificationSummary.acknowledged_at:type_name -> google.protobuf.Timestamp
+	59, // 5: rpc.v1.NotificationSummary.action_data:type_name -> rpc.v1.NotificationSummary.ActionDataEntry
+	63, // 6: rpc.v1.NotificationSummary.read_at:type_name -> google.protobuf.Timestamp
+	63, // 7: rpc.v1.NotificationSummary.delivered_at:type_name -> google.protobuf.Timestamp
+	63, // 8: rpc.v1.NotificationSummary.created_at:type_name -> google.protobuf.Timestamp
+	63, // 9: rpc.v1.NotificationSummary.acknowledged_at:type_name -> google.protobuf.Timestamp
 	8,  // 10: rpc.v1.NotificationSummary.navigation_target:type_name -> rpc.v1.NavigationTarget
-	58, // 11: rpc.v1.MarkAllBeforeTimestampAsReadRequest.before_timestamp:type_name -> google.protobuf.Timestamp
+	63, // 11: rpc.v1.MarkAllBeforeTimestampAsReadRequest.before_timestamp:type_name -> google.protobuf.Timestamp
 	13, // 12: rpc.v1.NotificationEvent.notification:type_name -> rpc.v1.NotificationSummary
-	58, // 13: rpc.v1.NotificationEvent.timestamp:type_name -> google.protobuf.Timestamp
-	58, // 14: rpc.v1.ConfirmNotificationReceiptRequest.received_at:type_name -> google.protobuf.Timestamp
-	55, // 15: rpc.v1.GetUnreadCountResponse.unread_by_source_domain:type_name -> rpc.v1.GetUnreadCountResponse.UnreadBySourceDomainEntry
+	63, // 13: rpc.v1.NotificationEvent.timestamp:type_name -> google.protobuf.Timestamp
+	63, // 14: rpc.v1.ConfirmNotificationReceiptRequest.received_at:type_name -> google.protobuf.Timestamp
+	60, // 15: rpc.v1.GetUnreadCountResponse.unread_by_source_domain:type_name -> rpc.v1.GetUnreadCountResponse.UnreadBySourceDomainEntry
 	0,  // 16: rpc.v1.PresencePongRequest.status:type_name -> rpc.v1.PresenceStatus
-	58, // 17: rpc.v1.PresencePongRequest.last_interaction_at:type_name -> google.protobuf.Timestamp
+	63, // 17: rpc.v1.PresencePongRequest.last_interaction_at:type_name -> google.protobuf.Timestamp
 	3,  // 18: rpc.v1.PresencePongResponse.directive:type_name -> rpc.v1.PongDirective
 	32, // 19: rpc.v1.GetEmployeePresenceResponse.presence:type_name -> rpc.v1.EmployeePresence
 	32, // 20: rpc.v1.GetBatchEmployeePresenceResponse.presences:type_name -> rpc.v1.EmployeePresence
 	0,  // 21: rpc.v1.EmployeePresence.status:type_name -> rpc.v1.PresenceStatus
-	58, // 22: rpc.v1.EmployeePresence.last_interaction_at:type_name -> google.protobuf.Timestamp
-	58, // 23: rpc.v1.EmployeePresence.last_heartbeat:type_name -> google.protobuf.Timestamp
+	63, // 22: rpc.v1.EmployeePresence.last_interaction_at:type_name -> google.protobuf.Timestamp
+	63, // 23: rpc.v1.EmployeePresence.last_heartbeat:type_name -> google.protobuf.Timestamp
 	44, // 24: rpc.v1.EmployeePresence.visibility:type_name -> rpc.v1.PresenceVisibility
 	1,  // 25: rpc.v1.RegisterPushTokenRequest.permission_state:type_name -> rpc.v1.PermissionState
-	56, // 26: rpc.v1.RegisterPushTokenRequest.token_metadata:type_name -> rpc.v1.RegisterPushTokenRequest.TokenMetadataEntry
+	61, // 26: rpc.v1.RegisterPushTokenRequest.token_metadata:type_name -> rpc.v1.RegisterPushTokenRequest.TokenMetadataEntry
 	4,  // 27: rpc.v1.RegisterPushTokenRequest.token_type:type_name -> rpc.v1.PushTokenType
-	58, // 28: rpc.v1.RegisterPushTokenResponse.registered_at:type_name -> google.protobuf.Timestamp
+	63, // 28: rpc.v1.RegisterPushTokenResponse.registered_at:type_name -> google.protobuf.Timestamp
 	1,  // 29: rpc.v1.PushTokenInfo.permission_state:type_name -> rpc.v1.PermissionState
-	58, // 30: rpc.v1.PushTokenInfo.registered_at:type_name -> google.protobuf.Timestamp
-	58, // 31: rpc.v1.PushTokenInfo.last_used_at:type_name -> google.protobuf.Timestamp
-	57, // 32: rpc.v1.PushTokenInfo.token_metadata:type_name -> rpc.v1.PushTokenInfo.TokenMetadataEntry
+	63, // 30: rpc.v1.PushTokenInfo.registered_at:type_name -> google.protobuf.Timestamp
+	63, // 31: rpc.v1.PushTokenInfo.last_used_at:type_name -> google.protobuf.Timestamp
+	62, // 32: rpc.v1.PushTokenInfo.token_metadata:type_name -> rpc.v1.PushTokenInfo.TokenMetadataEntry
 	4,  // 33: rpc.v1.PushTokenInfo.token_type:type_name -> rpc.v1.PushTokenType
 	38, // 34: rpc.v1.ListPushTokensResponse.tokens:type_name -> rpc.v1.PushTokenInfo
 	2,  // 35: rpc.v1.SetPresenceVisibilityRequest.visibility_mode:type_name -> rpc.v1.VisibilityMode
 	44, // 36: rpc.v1.SetPresenceVisibilityResponse.visibility:type_name -> rpc.v1.PresenceVisibility
 	44, // 37: rpc.v1.GetPresenceSettingsResponse.visibility:type_name -> rpc.v1.PresenceVisibility
 	2,  // 38: rpc.v1.PresenceVisibility.visibility_mode:type_name -> rpc.v1.VisibilityMode
-	58, // 39: rpc.v1.PresenceVisibility.updated_at:type_name -> google.protobuf.Timestamp
-	58, // 40: rpc.v1.AcknowledgeAllBeforeTimestampRequest.before_timestamp:type_name -> google.protobuf.Timestamp
-	5,  // 41: rpc.v1.GetResourceSubscriptionResponse.preference_level:type_name -> rpc.v1.SubscriptionPreferenceLevel
-	5,  // 42: rpc.v1.SetResourceSubscriptionPreferenceRequest.preference_level:type_name -> rpc.v1.SubscriptionPreferenceLevel
-	5,  // 43: rpc.v1.SetResourceSubscriptionPreferenceResponse.preference_level:type_name -> rpc.v1.SubscriptionPreferenceLevel
-	6,  // 44: rpc.v1.NotificationService.PublishNotification:input_type -> rpc.v1.PublishNotificationRequest
-	11, // 45: rpc.v1.NotificationService.ListNotifications:input_type -> rpc.v1.ListNotificationsRequest
-	14, // 46: rpc.v1.NotificationService.MarkAsRead:input_type -> rpc.v1.MarkAsReadRequest
-	16, // 47: rpc.v1.NotificationService.MarkAllBeforeTimestampAsRead:input_type -> rpc.v1.MarkAllBeforeTimestampAsReadRequest
-	18, // 48: rpc.v1.NotificationService.DeleteNotification:input_type -> rpc.v1.DeleteNotificationRequest
-	20, // 49: rpc.v1.NotificationService.StreamNotifications:input_type -> rpc.v1.StreamNotificationsRequest
-	22, // 50: rpc.v1.NotificationService.ConfirmNotificationReceipt:input_type -> rpc.v1.ConfirmNotificationReceiptRequest
-	24, // 51: rpc.v1.NotificationService.GetUnreadCount:input_type -> rpc.v1.GetUnreadCountRequest
-	26, // 52: rpc.v1.NotificationService.PresencePong:input_type -> rpc.v1.PresencePongRequest
-	28, // 53: rpc.v1.NotificationService.GetEmployeePresence:input_type -> rpc.v1.GetEmployeePresenceRequest
-	30, // 54: rpc.v1.NotificationService.GetBatchEmployeePresence:input_type -> rpc.v1.GetBatchEmployeePresenceRequest
-	33, // 55: rpc.v1.NotificationService.RegisterPushToken:input_type -> rpc.v1.RegisterPushTokenRequest
-	35, // 56: rpc.v1.NotificationService.RevokePushToken:input_type -> rpc.v1.RevokePushTokenRequest
-	37, // 57: rpc.v1.NotificationService.ListPushTokens:input_type -> rpc.v1.ListPushTokensRequest
-	40, // 58: rpc.v1.NotificationService.SetPresenceVisibility:input_type -> rpc.v1.SetPresenceVisibilityRequest
-	42, // 59: rpc.v1.NotificationService.GetPresenceSettings:input_type -> rpc.v1.GetPresenceSettingsRequest
-	45, // 60: rpc.v1.NotificationService.AcknowledgeNotifications:input_type -> rpc.v1.AcknowledgeNotificationsRequest
-	47, // 61: rpc.v1.NotificationService.AcknowledgeAllBeforeTimestamp:input_type -> rpc.v1.AcknowledgeAllBeforeTimestampRequest
-	49, // 62: rpc.v1.NotificationService.GetResourceSubscription:input_type -> rpc.v1.GetResourceSubscriptionRequest
-	51, // 63: rpc.v1.NotificationService.SetResourceSubscriptionPreference:input_type -> rpc.v1.SetResourceSubscriptionPreferenceRequest
-	10, // 64: rpc.v1.NotificationService.PublishNotification:output_type -> rpc.v1.PublishNotificationResponse
-	12, // 65: rpc.v1.NotificationService.ListNotifications:output_type -> rpc.v1.ListNotificationsResponse
-	15, // 66: rpc.v1.NotificationService.MarkAsRead:output_type -> rpc.v1.MarkAsReadResponse
-	17, // 67: rpc.v1.NotificationService.MarkAllBeforeTimestampAsRead:output_type -> rpc.v1.MarkAllBeforeTimestampAsReadResponse
-	19, // 68: rpc.v1.NotificationService.DeleteNotification:output_type -> rpc.v1.DeleteNotificationResponse
-	21, // 69: rpc.v1.NotificationService.StreamNotifications:output_type -> rpc.v1.NotificationEvent
-	23, // 70: rpc.v1.NotificationService.ConfirmNotificationReceipt:output_type -> rpc.v1.ConfirmNotificationReceiptResponse
-	25, // 71: rpc.v1.NotificationService.GetUnreadCount:output_type -> rpc.v1.GetUnreadCountResponse
-	27, // 72: rpc.v1.NotificationService.PresencePong:output_type -> rpc.v1.PresencePongResponse
-	29, // 73: rpc.v1.NotificationService.GetEmployeePresence:output_type -> rpc.v1.GetEmployeePresenceResponse
-	31, // 74: rpc.v1.NotificationService.GetBatchEmployeePresence:output_type -> rpc.v1.GetBatchEmployeePresenceResponse
-	34, // 75: rpc.v1.NotificationService.RegisterPushToken:output_type -> rpc.v1.RegisterPushTokenResponse
-	36, // 76: rpc.v1.NotificationService.RevokePushToken:output_type -> rpc.v1.RevokePushTokenResponse
-	39, // 77: rpc.v1.NotificationService.ListPushTokens:output_type -> rpc.v1.ListPushTokensResponse
-	41, // 78: rpc.v1.NotificationService.SetPresenceVisibility:output_type -> rpc.v1.SetPresenceVisibilityResponse
-	43, // 79: rpc.v1.NotificationService.GetPresenceSettings:output_type -> rpc.v1.GetPresenceSettingsResponse
-	46, // 80: rpc.v1.NotificationService.AcknowledgeNotifications:output_type -> rpc.v1.AcknowledgeNotificationsResponse
-	48, // 81: rpc.v1.NotificationService.AcknowledgeAllBeforeTimestamp:output_type -> rpc.v1.AcknowledgeAllBeforeTimestampResponse
-	50, // 82: rpc.v1.NotificationService.GetResourceSubscription:output_type -> rpc.v1.GetResourceSubscriptionResponse
-	52, // 83: rpc.v1.NotificationService.SetResourceSubscriptionPreference:output_type -> rpc.v1.SetResourceSubscriptionPreferenceResponse
-	64, // [64:84] is the sub-list for method output_type
-	44, // [44:64] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	63, // 39: rpc.v1.PresenceVisibility.updated_at:type_name -> google.protobuf.Timestamp
+	63, // 40: rpc.v1.NotificationPreferences.updated_at:type_name -> google.protobuf.Timestamp
+	45, // 41: rpc.v1.GetNotificationPreferencesResponse.preferences:type_name -> rpc.v1.NotificationPreferences
+	45, // 42: rpc.v1.UpdateNotificationPreferencesResponse.preferences:type_name -> rpc.v1.NotificationPreferences
+	63, // 43: rpc.v1.AcknowledgeAllBeforeTimestampRequest.before_timestamp:type_name -> google.protobuf.Timestamp
+	5,  // 44: rpc.v1.GetResourceSubscriptionResponse.preference_level:type_name -> rpc.v1.SubscriptionPreferenceLevel
+	5,  // 45: rpc.v1.SetResourceSubscriptionPreferenceRequest.preference_level:type_name -> rpc.v1.SubscriptionPreferenceLevel
+	5,  // 46: rpc.v1.SetResourceSubscriptionPreferenceResponse.preference_level:type_name -> rpc.v1.SubscriptionPreferenceLevel
+	6,  // 47: rpc.v1.NotificationService.PublishNotification:input_type -> rpc.v1.PublishNotificationRequest
+	11, // 48: rpc.v1.NotificationService.ListNotifications:input_type -> rpc.v1.ListNotificationsRequest
+	14, // 49: rpc.v1.NotificationService.MarkAsRead:input_type -> rpc.v1.MarkAsReadRequest
+	16, // 50: rpc.v1.NotificationService.MarkAllBeforeTimestampAsRead:input_type -> rpc.v1.MarkAllBeforeTimestampAsReadRequest
+	18, // 51: rpc.v1.NotificationService.DeleteNotification:input_type -> rpc.v1.DeleteNotificationRequest
+	20, // 52: rpc.v1.NotificationService.StreamNotifications:input_type -> rpc.v1.StreamNotificationsRequest
+	22, // 53: rpc.v1.NotificationService.ConfirmNotificationReceipt:input_type -> rpc.v1.ConfirmNotificationReceiptRequest
+	24, // 54: rpc.v1.NotificationService.GetUnreadCount:input_type -> rpc.v1.GetUnreadCountRequest
+	26, // 55: rpc.v1.NotificationService.PresencePong:input_type -> rpc.v1.PresencePongRequest
+	28, // 56: rpc.v1.NotificationService.GetEmployeePresence:input_type -> rpc.v1.GetEmployeePresenceRequest
+	30, // 57: rpc.v1.NotificationService.GetBatchEmployeePresence:input_type -> rpc.v1.GetBatchEmployeePresenceRequest
+	33, // 58: rpc.v1.NotificationService.RegisterPushToken:input_type -> rpc.v1.RegisterPushTokenRequest
+	35, // 59: rpc.v1.NotificationService.RevokePushToken:input_type -> rpc.v1.RevokePushTokenRequest
+	37, // 60: rpc.v1.NotificationService.ListPushTokens:input_type -> rpc.v1.ListPushTokensRequest
+	40, // 61: rpc.v1.NotificationService.SetPresenceVisibility:input_type -> rpc.v1.SetPresenceVisibilityRequest
+	42, // 62: rpc.v1.NotificationService.GetPresenceSettings:input_type -> rpc.v1.GetPresenceSettingsRequest
+	46, // 63: rpc.v1.NotificationService.GetNotificationPreferences:input_type -> rpc.v1.GetNotificationPreferencesRequest
+	48, // 64: rpc.v1.NotificationService.UpdateNotificationPreferences:input_type -> rpc.v1.UpdateNotificationPreferencesRequest
+	50, // 65: rpc.v1.NotificationService.AcknowledgeNotifications:input_type -> rpc.v1.AcknowledgeNotificationsRequest
+	52, // 66: rpc.v1.NotificationService.AcknowledgeAllBeforeTimestamp:input_type -> rpc.v1.AcknowledgeAllBeforeTimestampRequest
+	54, // 67: rpc.v1.NotificationService.GetResourceSubscription:input_type -> rpc.v1.GetResourceSubscriptionRequest
+	56, // 68: rpc.v1.NotificationService.SetResourceSubscriptionPreference:input_type -> rpc.v1.SetResourceSubscriptionPreferenceRequest
+	10, // 69: rpc.v1.NotificationService.PublishNotification:output_type -> rpc.v1.PublishNotificationResponse
+	12, // 70: rpc.v1.NotificationService.ListNotifications:output_type -> rpc.v1.ListNotificationsResponse
+	15, // 71: rpc.v1.NotificationService.MarkAsRead:output_type -> rpc.v1.MarkAsReadResponse
+	17, // 72: rpc.v1.NotificationService.MarkAllBeforeTimestampAsRead:output_type -> rpc.v1.MarkAllBeforeTimestampAsReadResponse
+	19, // 73: rpc.v1.NotificationService.DeleteNotification:output_type -> rpc.v1.DeleteNotificationResponse
+	21, // 74: rpc.v1.NotificationService.StreamNotifications:output_type -> rpc.v1.NotificationEvent
+	23, // 75: rpc.v1.NotificationService.ConfirmNotificationReceipt:output_type -> rpc.v1.ConfirmNotificationReceiptResponse
+	25, // 76: rpc.v1.NotificationService.GetUnreadCount:output_type -> rpc.v1.GetUnreadCountResponse
+	27, // 77: rpc.v1.NotificationService.PresencePong:output_type -> rpc.v1.PresencePongResponse
+	29, // 78: rpc.v1.NotificationService.GetEmployeePresence:output_type -> rpc.v1.GetEmployeePresenceResponse
+	31, // 79: rpc.v1.NotificationService.GetBatchEmployeePresence:output_type -> rpc.v1.GetBatchEmployeePresenceResponse
+	34, // 80: rpc.v1.NotificationService.RegisterPushToken:output_type -> rpc.v1.RegisterPushTokenResponse
+	36, // 81: rpc.v1.NotificationService.RevokePushToken:output_type -> rpc.v1.RevokePushTokenResponse
+	39, // 82: rpc.v1.NotificationService.ListPushTokens:output_type -> rpc.v1.ListPushTokensResponse
+	41, // 83: rpc.v1.NotificationService.SetPresenceVisibility:output_type -> rpc.v1.SetPresenceVisibilityResponse
+	43, // 84: rpc.v1.NotificationService.GetPresenceSettings:output_type -> rpc.v1.GetPresenceSettingsResponse
+	47, // 85: rpc.v1.NotificationService.GetNotificationPreferences:output_type -> rpc.v1.GetNotificationPreferencesResponse
+	49, // 86: rpc.v1.NotificationService.UpdateNotificationPreferences:output_type -> rpc.v1.UpdateNotificationPreferencesResponse
+	51, // 87: rpc.v1.NotificationService.AcknowledgeNotifications:output_type -> rpc.v1.AcknowledgeNotificationsResponse
+	53, // 88: rpc.v1.NotificationService.AcknowledgeAllBeforeTimestamp:output_type -> rpc.v1.AcknowledgeAllBeforeTimestampResponse
+	55, // 89: rpc.v1.NotificationService.GetResourceSubscription:output_type -> rpc.v1.GetResourceSubscriptionResponse
+	57, // 90: rpc.v1.NotificationService.SetResourceSubscriptionPreference:output_type -> rpc.v1.SetResourceSubscriptionPreferenceResponse
+	69, // [69:91] is the sub-list for method output_type
+	47, // [47:69] is the sub-list for method input_type
+	47, // [47:47] is the sub-list for extension type_name
+	47, // [47:47] is the sub-list for extension extendee
+	0,  // [0:47] is the sub-list for field type_name
 }
 
 func init() { file_rpc_v1_notification_proto_init() }
@@ -3808,7 +4164,7 @@ func file_rpc_v1_notification_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_rpc_v1_notification_proto_rawDesc), len(file_rpc_v1_notification_proto_rawDesc)),
 			NumEnums:      6,
-			NumMessages:   52,
+			NumMessages:   57,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

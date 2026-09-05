@@ -4,7 +4,7 @@ Events, recurrence, RSVP, room/equipment resources, free-busy and slot suggestio
 booking links, delegation, and attendance check-in with evidence. Owned by
 `internal/calendar`; contract in `rpc/v1/calendar.proto` (`CalendarService`, 26 RPCs).
 
-**Status date: 2026-09-04.** Supersedes specs 026, 045 and 046; shift coverage added by spec 042.
+**Status date: 2026-09-05.** Supersedes specs 026, 045 and 046; shift coverage added by spec 042.
 
 ## Events
 
@@ -221,6 +221,4 @@ domain `calendar`.
 
 ## Known drift
 
-**Calendar cannot be domain-muted.** `notification.personal_preference.muted_domains` omits
-`calendar` from its CHECK — see
-[notifications-presence.md](notifications-presence.md#known-drift).
+None recorded.
