@@ -1,0 +1,1 @@
+Unreachable callee still gets a missed call. Decide drift D22: write the call record and the missed-call system message even when a direct call is refused immediately as unreachable, so an offline worker returning to the app sees that the manager tried to reach them.
