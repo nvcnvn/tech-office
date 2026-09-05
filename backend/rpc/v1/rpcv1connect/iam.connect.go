@@ -89,6 +89,9 @@ const (
 	// IAMServiceGetEmployeeCardsProcedure is the fully-qualified name of the IAMService's
 	// GetEmployeeCards RPC.
 	IAMServiceGetEmployeeCardsProcedure = "/rpc.v1.IAMService/GetEmployeeCards"
+	// IAMServiceListDirectoryProcedure is the fully-qualified name of the IAMService's ListDirectory
+	// RPC.
+	IAMServiceListDirectoryProcedure = "/rpc.v1.IAMService/ListDirectory"
 	// IAMServicePreviewEmployeeImportProcedure is the fully-qualified name of the IAMService's
 	// PreviewEmployeeImport RPC.
 	IAMServicePreviewEmployeeImportProcedure = "/rpc.v1.IAMService/PreviewEmployeeImport"
@@ -254,6 +257,24 @@ type IAMServiceClient interface {
 	// Accepts up to 100 employee IDs per request.
 	// Requires: any authenticated organization member
 	GetEmployeeCards(context.Context, *connect.Request[v1.GetEmployeeCardsRequest]) (*connect.Response[v1.GetEmployeeCardsResponse], error)
+	// ListDirectory: the read-only people directory for the caller's workspace.
+	//
+	// Deliberately narrower than ListEmployees: no date of birth, no home address, no
+	// hire date. Date of birth and phone number both constrain PIN validity, so the
+	// directory payload is the smallest set of fields that lets a member reach a
+	// colleague. See feature 048 FR-008.
+	//
+	// Three shapes, selected by which filters are set:
+	//   - no filter        -> the whole active roster, alphabetical, cursor-paginated
+	//   - department_id    -> the active members of that department, alphabetical
+	//   - employee_ids     -> exactly those people (used for the person entry screen)
+	//
+	// A non-empty `query` narrows any of the three by fuzzy multilingual name matching
+	// and returns a single relevance-ordered page with an empty next_cursor.
+	//
+	// Requires: iam.listEmployees — the same permission ListEmployees and
+	// GetEmployeeCards declare, held by the seeded `employee` role.
+	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
 	// PreviewEmployeeImport: Validate and preview a list of employees before import.
 	// Returns each employee with a willBeImported flag (false if duplicate email detected).
 	// Requires: ADMIN or OWNER
@@ -472,6 +493,12 @@ func NewIAMServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(iAMServiceMethods.ByName("GetEmployeeCards")),
 			connect.WithClientOptions(opts...),
 		),
+		listDirectory: connect.NewClient[v1.ListDirectoryRequest, v1.ListDirectoryResponse](
+			httpClient,
+			baseURL+IAMServiceListDirectoryProcedure,
+			connect.WithSchema(iAMServiceMethods.ByName("ListDirectory")),
+			connect.WithClientOptions(opts...),
+		),
 		previewEmployeeImport: connect.NewClient[v1.PreviewEmployeeImportRequest, v1.PreviewEmployeeImportResponse](
 			httpClient,
 			baseURL+IAMServicePreviewEmployeeImportProcedure,
@@ -641,6 +668,7 @@ type iAMServiceClient struct {
 	acceptInvitation          *connect.Client[v1.AcceptInvitationRequest, v1.AcceptInvitationResponse]
 	listEmployees             *connect.Client[v1.ListEmployeesRequest, v1.ListEmployeesResponse]
 	getEmployeeCards          *connect.Client[v1.GetEmployeeCardsRequest, v1.GetEmployeeCardsResponse]
+	listDirectory             *connect.Client[v1.ListDirectoryRequest, v1.ListDirectoryResponse]
 	previewEmployeeImport     *connect.Client[v1.PreviewEmployeeImportRequest, v1.PreviewEmployeeImportResponse]
 	executeEmployeeImport     *connect.Client[v1.ExecuteEmployeeImportRequest, v1.ExecuteEmployeeImportResponse]
 	listPermissions           *connect.Client[v1.ListPermissionsRequest, v1.ListPermissionsResponse]
@@ -765,6 +793,11 @@ func (c *iAMServiceClient) ListEmployees(ctx context.Context, req *connect.Reque
 // GetEmployeeCards calls rpc.v1.IAMService.GetEmployeeCards.
 func (c *iAMServiceClient) GetEmployeeCards(ctx context.Context, req *connect.Request[v1.GetEmployeeCardsRequest]) (*connect.Response[v1.GetEmployeeCardsResponse], error) {
 	return c.getEmployeeCards.CallUnary(ctx, req)
+}
+
+// ListDirectory calls rpc.v1.IAMService.ListDirectory.
+func (c *iAMServiceClient) ListDirectory(ctx context.Context, req *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error) {
+	return c.listDirectory.CallUnary(ctx, req)
 }
 
 // PreviewEmployeeImport calls rpc.v1.IAMService.PreviewEmployeeImport.
@@ -988,6 +1021,24 @@ type IAMServiceHandler interface {
 	// Accepts up to 100 employee IDs per request.
 	// Requires: any authenticated organization member
 	GetEmployeeCards(context.Context, *connect.Request[v1.GetEmployeeCardsRequest]) (*connect.Response[v1.GetEmployeeCardsResponse], error)
+	// ListDirectory: the read-only people directory for the caller's workspace.
+	//
+	// Deliberately narrower than ListEmployees: no date of birth, no home address, no
+	// hire date. Date of birth and phone number both constrain PIN validity, so the
+	// directory payload is the smallest set of fields that lets a member reach a
+	// colleague. See feature 048 FR-008.
+	//
+	// Three shapes, selected by which filters are set:
+	//   - no filter        -> the whole active roster, alphabetical, cursor-paginated
+	//   - department_id    -> the active members of that department, alphabetical
+	//   - employee_ids     -> exactly those people (used for the person entry screen)
+	//
+	// A non-empty `query` narrows any of the three by fuzzy multilingual name matching
+	// and returns a single relevance-ordered page with an empty next_cursor.
+	//
+	// Requires: iam.listEmployees — the same permission ListEmployees and
+	// GetEmployeeCards declare, held by the seeded `employee` role.
+	ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error)
 	// PreviewEmployeeImport: Validate and preview a list of employees before import.
 	// Returns each employee with a willBeImported flag (false if duplicate email detected).
 	// Requires: ADMIN or OWNER
@@ -1202,6 +1253,12 @@ func NewIAMServiceHandler(svc IAMServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(iAMServiceMethods.ByName("GetEmployeeCards")),
 		connect.WithHandlerOptions(opts...),
 	)
+	iAMServiceListDirectoryHandler := connect.NewUnaryHandler(
+		IAMServiceListDirectoryProcedure,
+		svc.ListDirectory,
+		connect.WithSchema(iAMServiceMethods.ByName("ListDirectory")),
+		connect.WithHandlerOptions(opts...),
+	)
 	iAMServicePreviewEmployeeImportHandler := connect.NewUnaryHandler(
 		IAMServicePreviewEmployeeImportProcedure,
 		svc.PreviewEmployeeImport,
@@ -1388,6 +1445,8 @@ func NewIAMServiceHandler(svc IAMServiceHandler, opts ...connect.HandlerOption) 
 			iAMServiceListEmployeesHandler.ServeHTTP(w, r)
 		case IAMServiceGetEmployeeCardsProcedure:
 			iAMServiceGetEmployeeCardsHandler.ServeHTTP(w, r)
+		case IAMServiceListDirectoryProcedure:
+			iAMServiceListDirectoryHandler.ServeHTTP(w, r)
 		case IAMServicePreviewEmployeeImportProcedure:
 			iAMServicePreviewEmployeeImportHandler.ServeHTTP(w, r)
 		case IAMServiceExecuteEmployeeImportProcedure:
@@ -1523,6 +1582,10 @@ func (UnimplementedIAMServiceHandler) ListEmployees(context.Context, *connect.Re
 
 func (UnimplementedIAMServiceHandler) GetEmployeeCards(context.Context, *connect.Request[v1.GetEmployeeCardsRequest]) (*connect.Response[v1.GetEmployeeCardsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.IAMService.GetEmployeeCards is not implemented"))
+}
+
+func (UnimplementedIAMServiceHandler) ListDirectory(context.Context, *connect.Request[v1.ListDirectoryRequest]) (*connect.Response[v1.ListDirectoryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("rpc.v1.IAMService.ListDirectory is not implemented"))
 }
 
 func (UnimplementedIAMServiceHandler) PreviewEmployeeImport(context.Context, *connect.Request[v1.PreviewEmployeeImportRequest]) (*connect.Response[v1.PreviewEmployeeImportResponse], error) {

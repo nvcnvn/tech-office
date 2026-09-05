@@ -3,7 +3,7 @@
 Channel-scoped voice calls, voice messages, recordings and transcripts. Owned by
 `internal/voice`; contract in `rpc/v1/voice.proto` (`VoiceService`, 12 RPCs).
 
-**Status date: 2026-08-29.** Supersedes specs 032 and 037. Deeper reference:
+**Status date: 2026-09-05.** Supersedes specs 032 and 037. Deeper reference:
 `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`.
 
 ## Split of responsibility
@@ -456,6 +456,8 @@ session is created, so no call record and no missed-call system message is writt
 callee never learns anyone tried. This satisfies FR-006/SC-006 (an immediate verdict
 instead of a 45-second ring) at the cost of the trail an offline callee used to get.
 Whether they should still see a missed call is an open product decision, not an oversight.
+
+**The web decline test never reaches the decline (D63).** `voice-communication.spec.ts` "when the invitee declines a direct call / the caller sees the decline in the timeline and no error banner" times out ten seconds after clicking `voice-start-call-button`, waiting for `voice-call-bar` to appear. The failure is in establishing the caller's own call, before any invite or decline is sent, so the decline path itself is untested rather than broken. It reproduces when the spec is run on its own, so it is not the full-suite contention D54 describes. Found while running the web suite as feature 048's regression guard; 048 adds no voice surface and did not fix it.
 
 **`PUBLIC_LIVEKIT_URL` must not be pinned in a local `backend/.env`.** The dev targets
 (`make voice-dev-backend`, `make test-backend*`) derive it from the machine's current LAN

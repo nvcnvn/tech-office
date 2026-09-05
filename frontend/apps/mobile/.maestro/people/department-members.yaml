@@ -1,0 +1,60 @@
+appId: com.devguards.TechOffice
+name: "People — a department opens its members"
+tags:
+  - people
+env:
+  # A department in the test workspace that has at least one member. Before feature 048
+  # this row rendered like a door and behaved like a wall: tapping it did nothing.
+  DEPARTMENT: ${MAESTRO_DIRECTORY_DEPARTMENT}
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+- tapOn:
+    id: "tab-today"
+- extendedWaitUntil:
+    visible:
+      id: "global-search-pill"
+    timeout: 8000
+- tapOn:
+    id: "global-search-pill"
+- extendedWaitUntil:
+    visible:
+      id: "global-search-input"
+    timeout: 8000
+- tapOn:
+    id: "global-search-input"
+- inputText: ${DEPARTMENT}
+
+- extendedWaitUntil:
+    visible:
+      id: "search-result-department"
+    timeout: 15000
+- takeScreenshot: "tmp/maestro-screenshots/01-department-search-result"
+- tapOn:
+    id: "search-result-department"
+
+# The screen names the department and lists the people in it.
+- extendedWaitUntil:
+    visible:
+      id: "department-members-list"
+    timeout: 15000
+- assertVisible: ${DEPARTMENT}
+- assertVisible:
+    id: "person-row-.*"
+- takeScreenshot: "tmp/maestro-screenshots/02-department-members"
+
+# A member row behaves exactly like a directory row.
+- tapOn:
+    id: "person-row-.*"
+- extendedWaitUntil:
+    visible:
+      id: "person-message-button"
+    timeout: 15000
+- takeScreenshot: "tmp/maestro-screenshots/03-department-member-entry"

@@ -11,14 +11,32 @@ name: "Screen — More"
                     id: "xmark"
 - tapOn:
     id: "tab-more"
+# Gate on Settings, not on Sign Out. Sign Out is the last row of the menu, so using it
+# as the ready signal asserted that the whole menu fits above the fold — an invariant
+# that breaks the next time a row is added, as feature 048's People row did on a 360 dp
+# Android screen. Sign Out is still guarded, after the swipe that reaches it.
 - extendedWaitUntil:
-    visible: "Sign Out"
+    visible:
+      id: "menu-settings"
     timeout: 8000
 - takeScreenshot: "tmp/maestro-screenshots/01-more-overview"
 - swipe:
     direction: UP
     duration: 700
+- extendedWaitUntil:
+    visible: "Sign Out"
+    timeout: 8000
 - takeScreenshot: "tmp/maestro-screenshots/02-more-overview-scrolled"
+# Back to the top before tapping a WORKSPACE row: the swipe above now clears Documents
+# off the screen, because the People row made the menu a row taller than the blind
+# 700 ms swipe was tuned against. Same scroll-back the Files step below already uses.
+- swipe:
+    direction: DOWN
+    duration: 700
+- extendedWaitUntil:
+    visible:
+      id: "menu-documents"
+    timeout: 8000
 - tapOn:
     id: "menu-documents"
 - extendedWaitUntil:

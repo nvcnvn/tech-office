@@ -510,6 +510,63 @@ WHERE ac.organization_id = @organization_id
   AND ac.last_pong_at >= NOW() - make_interval(secs => @responsive_window_seconds::int)
 ORDER BY ac.employee_id, ac.last_pong_at DESC;
 
+-- name: ListDirectoryEntries :many
+-- The people directory read (feature 048). One statement serves all three shapes the
+-- directory has — the whole roster, one department's members, and a named set of people
+-- — because they differ only in which of the three independently nullable filters is set.
+--
+-- e.is_active = true is the single most important predicate in the feature: account
+-- deletion anonymises the row rather than removing it, so the same flag keeps both a
+-- deactivated colleague and a de-identified tombstone out of a list of people you can
+-- ring.
+--
+-- The department filter is an EXISTS rather than a predicate on the display join, so
+-- narrowing to a department never changes which department a row *shows*.
+--
+-- The join cannot fan out: idx_one_department_per_employee is UNIQUE on
+-- (organization_id, employee_id), so a person holds at most one membership row.
+--
+-- Ordering is (lower(family_name), lower(given_name), id): lower() so "de Souza" and
+-- "De Souza" sort together, id last so the keyset is total and the cursor can neither
+-- skip nor repeat a row. A uuidv7 cursor cannot express an alphabetical boundary, which
+-- is why the cursor is three parameters rather than one (plan.md, Complexity Tracking).
+SELECT
+    e.id,
+    e.given_name,
+    e.family_name,
+    e.email,
+    e.phone_number,
+    d.id AS department_id,
+    d.name AS department_name
+FROM organization.employee e
+LEFT JOIN organization.department_member dm
+  ON (dm.organization_id, dm.employee_id) = (e.organization_id, e.id)
+LEFT JOIN organization.department d
+  ON (d.organization_id, d.id) = (dm.organization_id, dm.department_id)
+WHERE e.organization_id = @organization_id
+  AND e.is_active = true
+  AND (
+    sqlc.narg('employee_ids')::uuid[] IS NULL
+    OR e.id = ANY(sqlc.narg('employee_ids')::uuid[])
+  )
+  AND (
+    sqlc.narg('department_id')::uuid IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM organization.department_member fdm
+      WHERE fdm.organization_id = e.organization_id
+        AND fdm.employee_id = e.id
+        AND fdm.department_id = sqlc.narg('department_id')::uuid
+    )
+  )
+  AND (
+    sqlc.narg('cursor_id')::uuid IS NULL
+    OR (lower(e.family_name), lower(e.given_name), e.id) >
+       (sqlc.narg('cursor_family')::text, sqlc.narg('cursor_given')::text, sqlc.narg('cursor_id')::uuid)
+  )
+ORDER BY lower(e.family_name), lower(e.given_name), e.id
+LIMIT @page_size;
+
 -- =============================================================================
 -- Org-Managed Accounts: Identity Lookup for PIN Login
 -- =============================================================================

@@ -157,6 +157,7 @@ export const profileIcons = {
 
 export const moreMenuIcons = {
     search: icon('magnifyingglass', 'Search', 'menu-search'),
+    people: icon('person.2', 'People', 'menu-people', 'person.2.fill'),
     documents: icon('doc.text', 'Documents', 'menu-documents', 'doc.text.fill'),
     files: icon('folder', 'Files', 'menu-files', 'folder.fill'),
     profile: icon('person.crop.circle', 'Profile', 'menu-profile', 'person.crop.circle.fill'),

@@ -2124,6 +2124,120 @@ func (q *Queries) IsUserOrgManaged(ctx context.Context, db DBTX, id dbuuid.UUID)
 	return is_org_managed, err
 }
 
+const listDirectoryEntries = `-- name: ListDirectoryEntries :many
+SELECT
+    e.id,
+    e.given_name,
+    e.family_name,
+    e.email,
+    e.phone_number,
+    d.id AS department_id,
+    d.name AS department_name
+FROM organization.employee e
+LEFT JOIN organization.department_member dm
+  ON (dm.organization_id, dm.employee_id) = (e.organization_id, e.id)
+LEFT JOIN organization.department d
+  ON (d.organization_id, d.id) = (dm.organization_id, dm.department_id)
+WHERE e.organization_id = $1
+  AND e.is_active = true
+  AND (
+    $2::uuid[] IS NULL
+    OR e.id = ANY($2::uuid[])
+  )
+  AND (
+    $3::uuid IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM organization.department_member fdm
+      WHERE fdm.organization_id = e.organization_id
+        AND fdm.employee_id = e.id
+        AND fdm.department_id = $3::uuid
+    )
+  )
+  AND (
+    $4::uuid IS NULL
+    OR (lower(e.family_name), lower(e.given_name), e.id) >
+       ($5::text, $6::text, $4::uuid)
+  )
+ORDER BY lower(e.family_name), lower(e.given_name), e.id
+LIMIT $7
+`
+
+type ListDirectoryEntriesParams struct {
+	OrganizationID dbuuid.UUID     `json:"organization_id"`
+	EmployeeIds    []dbuuid.UUID   `json:"employee_ids"`
+	DepartmentID   dbuuid.NullUUID `json:"department_id"`
+	CursorID       dbuuid.NullUUID `json:"cursor_id"`
+	CursorFamily   pgtype.Text     `json:"cursor_family"`
+	CursorGiven    pgtype.Text     `json:"cursor_given"`
+	PageSize       int32           `json:"page_size"`
+}
+
+type ListDirectoryEntriesRow struct {
+	ID             dbuuid.UUID     `json:"id"`
+	GivenName      string          `json:"given_name"`
+	FamilyName     string          `json:"family_name"`
+	Email          string          `json:"email"`
+	PhoneNumber    pgtype.Text     `json:"phone_number"`
+	DepartmentID   dbuuid.NullUUID `json:"department_id"`
+	DepartmentName pgtype.Text     `json:"department_name"`
+}
+
+// The people directory read (feature 048). One statement serves all three shapes the
+// directory has — the whole roster, one department's members, and a named set of people
+// — because they differ only in which of the three independently nullable filters is set.
+//
+// e.is_active = true is the single most important predicate in the feature: account
+// deletion anonymises the row rather than removing it, so the same flag keeps both a
+// deactivated colleague and a de-identified tombstone out of a list of people you can
+// ring.
+//
+// The department filter is an EXISTS rather than a predicate on the display join, so
+// narrowing to a department never changes which department a row *shows*.
+//
+// The join cannot fan out: idx_one_department_per_employee is UNIQUE on
+// (organization_id, employee_id), so a person holds at most one membership row.
+//
+// Ordering is (lower(family_name), lower(given_name), id): lower() so "de Souza" and
+// "De Souza" sort together, id last so the keyset is total and the cursor can neither
+// skip nor repeat a row. A uuidv7 cursor cannot express an alphabetical boundary, which
+// is why the cursor is three parameters rather than one (plan.md, Complexity Tracking).
+func (q *Queries) ListDirectoryEntries(ctx context.Context, db DBTX, arg *ListDirectoryEntriesParams) ([]*ListDirectoryEntriesRow, error) {
+	rows, err := db.Query(ctx, listDirectoryEntries,
+		arg.OrganizationID,
+		arg.EmployeeIds,
+		arg.DepartmentID,
+		arg.CursorID,
+		arg.CursorFamily,
+		arg.CursorGiven,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ListDirectoryEntriesRow
+	for rows.Next() {
+		var i ListDirectoryEntriesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.GivenName,
+			&i.FamilyName,
+			&i.Email,
+			&i.PhoneNumber,
+			&i.DepartmentID,
+			&i.DepartmentName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listEmployeeRoles = `-- name: ListEmployeeRoles :many
 SELECT r.id, r.organization_id, r.name, r.description, r.is_system, r.source_default_role_id FROM iam.role r
 JOIN iam.employee_role er ON (r.organization_id, r.id) = (er.organization_id, er.role_id)

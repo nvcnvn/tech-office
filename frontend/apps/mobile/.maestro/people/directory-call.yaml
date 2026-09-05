@@ -1,0 +1,108 @@
+appId: com.devguards.TechOffice
+name: "People — find a colleague and call them"
+tags:
+  - people
+env:
+  # A colleague in the test workspace who HAS a phone number recorded. The flow types
+  # this into the directory search box, so a family name or a distinctive fragment of one
+  # is enough.
+  PERSON_WITH_PHONE: ${MAESTRO_DIRECTORY_PERSON_WITH_PHONE}
+  # A colleague who has NO phone number recorded. The absence is the assertion: there must
+  # be no phone row at all, not a greyed one.
+  PERSON_NO_PHONE: ${MAESTRO_DIRECTORY_PERSON_NO_PHONE}
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+# Three taps from app open to a colleague's number: More → People → the person.
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-people"
+    timeout: 8000
+- tapOn:
+    id: "menu-people"
+- extendedWaitUntil:
+    visible:
+      id: "people-search-input"
+    timeout: 10000
+- takeScreenshot: "tmp/maestro-screenshots/01-people-directory"
+
+- tapOn:
+    id: "people-search-input"
+- inputText: ${PERSON_WITH_PHONE}
+# Wait for the *other* colleague to leave, not for a row to appear: the unnarrowed list is
+# already full of rows, so "a person row is visible" is true before the search has landed
+# and the tap lands on whoever sorts first.
+- extendedWaitUntil:
+    notVisible: ${PERSON_NO_PHONE}
+    timeout: 15000
+- assertVisible:
+    id: "person-row-.*"
+- takeScreenshot: "tmp/maestro-screenshots/02-people-narrowed"
+- tapOn:
+    id: "person-row-.*"
+
+- extendedWaitUntil:
+    visible:
+      id: "person-phone-row"
+    timeout: 15000
+- takeScreenshot: "tmp/maestro-screenshots/03-person-with-phone"
+
+# Tapping hands the number to the device. Either branch is a pass: on hardware the app
+# leaves the foreground for the dialer, and on a simulator with no telephony the
+# FR-014 alert says so in plain language and leaves the number on screen.
+- tapOn:
+    id: "person-phone-row"
+- runFlow:
+    when:
+      visible: "Couldn't start the call"
+    commands:
+      - takeScreenshot: "tmp/maestro-screenshots/04-dialer-unavailable"
+      - tapOn: "OK"
+
+# Nothing to call is an absence, not a disabled control.
+- launchApp
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-people"
+    timeout: 8000
+- tapOn:
+    id: "menu-people"
+- extendedWaitUntil:
+    visible:
+      id: "people-search-input"
+    timeout: 10000
+- tapOn:
+    id: "people-search-input"
+- inputText: ${PERSON_NO_PHONE}
+- extendedWaitUntil:
+    notVisible: ${PERSON_WITH_PHONE}
+    timeout: 15000
+- assertVisible:
+    id: "person-row-.*"
+- tapOn:
+    id: "person-row-.*"
+- extendedWaitUntil:
+    visible:
+      id: "person-message-button"
+    timeout: 15000
+- assertNotVisible:
+    id: "person-phone-row"
+- takeScreenshot: "tmp/maestro-screenshots/05-person-without-phone"

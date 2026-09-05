@@ -20,6 +20,8 @@ import {
 } from "react-native";
 import { openBrowserAsync } from "expo-web-browser";
 import { useRouter } from "expo-router";
+import { useQuery } from "@tanstack/react-query";
+import { getEmployeePermissions } from "apis";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { AuthContext } from "@/hooks/use-auth";
 import { UserCard } from "@/components/common/user-card";
@@ -62,6 +64,16 @@ function isExternal(item: MenuItem): boolean {
 // Search is deliberately absent: it is a top-level verb, reachable from the
 // SearchPill at the top of Chat, Today, My Work and Schedule. Listing it here
 // as well made it look like a setting.
+// People is gated on iam.listEmployees, so it is not in this list: a member without the
+// permission must not see the row at all, rather than see it and be refused on tap.
+const peopleItem: MenuItem = {
+  href: "/(app)/(more)/people",
+  sfIcon: moreMenuIcons.people.name,
+  label: moreMenuIcons.people.label,
+  hint: "Find a colleague and call or message them",
+  testID: moreMenuIcons.people.testID,
+};
+
 const featureItems: MenuItem[] = [
   {
     href: "/(app)/(more)/docs",
@@ -180,6 +192,23 @@ export default function MoreScreen() {
   const employeeId = auth?.employeeId ?? "";
   const tour = useTourController();
 
+  // Shares its key with every other permission read on this platform, so the directory
+  // gate costs no request of its own once anything else has read the set.
+  const { data: permissionIds } = useQuery({
+    queryKey: ["employee-permissions", employeeId],
+    queryFn: () => getEmployeePermissions(employeeId),
+    enabled: !!employeeId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const workspaceItems = React.useMemo(
+    () =>
+      (permissionIds ?? []).includes("iam.listEmployees")
+        ? [peopleItem, ...featureItems]
+        : featureItems,
+    [permissionIds],
+  );
+
   /*
    * "Take the tour" sits next to Help because they answer the same question. It is a row
    * rather than a link: restarting reopens the tour over the screen the person is on, and
@@ -263,7 +292,7 @@ export default function MoreScreen() {
 
       <MenuSection
         label="Workspace"
-        items={featureItems}
+        items={workspaceItems}
         openMenuItem={openMenuItem}
       />
 

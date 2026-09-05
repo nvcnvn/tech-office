@@ -2,6 +2,7 @@ package iam
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -1070,6 +1071,55 @@ func (s *IAMServiceConnect) GetEmployeeCards(
 
 	slog.InfoContext(ctx, "GetEmployeeCards success", "org_id", orgIDStr, "requested", len(req.Msg.EmployeeIds), "found", len(cards))
 	return connect.NewResponse(&v1.GetEmployeeCardsResponse{Cards: cards}), nil
+}
+
+// === People Directory (Feature 048) ===
+
+// ListDirectory answers the read-only colleague lookup. It is thin on purpose: auth
+// extraction, a transaction, and the delegation. The bounds, the merge and the proto
+// mapping live in directory_logic.go.
+func (s *IAMServiceConnect) ListDirectory(
+	ctx context.Context,
+	req *connect.Request[v1.ListDirectoryRequest],
+) (*connect.Response[v1.ListDirectoryResponse], error) {
+	orgIDStr, ok := interceptor.UserOrgIDFromContext(ctx)
+	if !ok || orgIDStr == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("missing organization context"))
+	}
+	orgID, err := dbuuid.Parse(orgIDStr)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("invalid org ID in token: %w", err))
+	}
+	// The caller's own id comes from the JWT and nowhere else: is_self decides whether a
+	// row offers Message and Call, so a request-supplied id would let anyone claim a row.
+	callerID, err := userIDFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	slog.InfoContext(ctx, "ListDirectory called",
+		"org_id", orgIDStr,
+		"narrowed", req.Msg.GetQuery() != "",
+		"department_filtered", req.Msg.GetDepartmentId() != "",
+		"employee_ids", len(req.Msg.GetEmployeeIds()),
+		"page_size", req.Msg.GetPageSize(),
+	)
+
+	var resp *v1.ListDirectoryResponse
+	err = txn.WithTxn(ctx, s.adminPool, func(ctx context.Context, tx database.DBTX) error {
+		var listErr error
+		resp, listErr = s.logic.ListDirectory(ctx, tx, orgID, callerID, req.Msg)
+		return listErr
+	})
+	if err != nil {
+		if errors.Is(err, ErrDirectoryBadRequest) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		slog.WarnContext(ctx, "ListDirectory failed", "org_id", orgIDStr, "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list directory: %w", err))
+	}
+
+	return connect.NewResponse(resp), nil
 }
 
 // === Employee Import ===

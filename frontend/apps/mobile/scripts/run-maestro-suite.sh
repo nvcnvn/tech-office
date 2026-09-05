@@ -78,6 +78,10 @@ flows=(
   # Feature 045. Reads a seeded search word from .env rather than creating its own
   # fixtures, so it runs after the flows that populate the workspace.
   $APP_DIR/.maestro/federated-search.yaml
+  # Feature 048. Reads seeded colleagues and a department from .env for the same reason
+  # federated-search does: creating them through the UI would be three other flows.
+  $APP_DIR/.maestro/people/directory-call.yaml
+  $APP_DIR/.maestro/people/department-members.yaml
 )
 failures=0
 

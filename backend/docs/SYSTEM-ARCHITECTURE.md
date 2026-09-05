@@ -142,6 +142,7 @@ graph TD
 
     %% Post-init injection (dashed = injected after construction)
     ORG -.->|"SetCollaborationLogic()<br/><i>post-init injection</i>"| COLLAB
+    IAM -.->|"EmployeeSearcher<br/>SearchEmployees()<br/><i>post-init injection</i>"| ORG
 
     %% Foundation references (simplified)
     IAM --> PUBLIC
@@ -169,6 +170,7 @@ graph TD
 4. **Calendar is the first T4 Aggregation domain** — it depends on Collaboration and Docs via thin read-only overlay reader interfaces (`CollaborationOverlayReader`, `DocsOverlayReader`) to render cross-domain items (task due dates, ritual instances, doc deadlines) on the calendar. It also depends on Notification for invite/cancel/change/reminder publishing.
 5. **Voice is a T3 Orchestrator domain** — it composes Chat authorization/announcements, Files-backed voice messages and call artifacts, Notification SSE/push fanout, and the external LiveKit media plane without adding reverse imports.
 6. **Organization → Collaboration** is a controlled post-init injection (`SetCollaborationLogic()`) used solely for creating a default project during org signup. This is **not** a constructor dependency and uses interface indirection to avoid an import cycle.
+7. **IAM → Organization** is the mirror of that edge, added by feature 048 for the people directory's name narrowing. `internal/iam` declares `EmployeeSearcher` and `cmd/server.go` calls `iamLogic.SetEmployeeSearcher(orgLogic)`; it is a setter, not a constructor argument, precisely because observation 6 already points `organization` at `iam`'s neighbours and a direct import would close a cycle. See §7, "The iam → organization employee searcher".
 
 ---
 
@@ -602,6 +604,36 @@ an id that does not resolve, costs the assignee line rather than the page: for t
 summary that distinction is load-bearing, because a departed assignee is exactly what the
 supervisor needs to see, and `assignee_count` is what separates "nobody is on this" from
 "somebody is and we could not name them".
+
+#### The iam → organization employee searcher
+
+The mobile people directory (`IAMService.ListDirectory`, feature 048) narrows by name using
+the *same* fuzzy multilingual matcher federated search and @-mention autocomplete use, rather
+than keeping a second copy of a non-trivial trigram `UNION ALL` in `iam.query.sql` for the
+two to drift apart. That matcher lives in `internal/organization`, which already imports
+`internal/iam`, so a direct import would be a cycle.
+
+Same shape as every other cycle here: the consumer declares the interface.
+
+```go
+// Declared in internal/iam/directory_logic.go
+type EmployeeSearcher interface {
+    SearchEmployees(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID,
+        queryText string, limit int32, cursor *dbuuid.UUID) ([]*database.SearchEmployeesRow, error)
+}
+
+// Satisfied by organization.OrganizationLogic. Wired in cmd/server.go:
+iamLogic.SetEmployeeSearcher(orgLogic)
+```
+
+The caller's `tx` travels with the call, so the narrowing and the enrichment that follows it
+read inside one transaction and one round trip — putting the search on a separate client
+request would place a sequential hop in the path of every keystroke pause.
+
+**A nil searcher is a supported state**, as with the two interfaces above: `cmd/seed_demo.go`
+and the integration harness build IAM logic without organization logic. Nil costs narrowing
+only — a browse request is unaffected, and a narrowed request returns an empty page with a
+warning rather than failing.
 
 #### Preview providers: the domain owns the read (feature 046)
 

@@ -218,6 +218,28 @@ service IAMService {
     };
   }
 
+  // ListDirectory: the read-only people directory for the caller's workspace.
+  //
+  // Deliberately narrower than ListEmployees: no date of birth, no home address, no
+  // hire date. Date of birth and phone number both constrain PIN validity, so the
+  // directory payload is the smallest set of fields that lets a member reach a
+  // colleague. See feature 048 FR-008.
+  //
+  // Three shapes, selected by which filters are set:
+  //   - no filter        -> the whole active roster, alphabetical, cursor-paginated
+  //   - department_id    -> the active members of that department, alphabetical
+  //   - employee_ids     -> exactly those people (used for the person entry screen)
+  // A non-empty `query` narrows any of the three by fuzzy multilingual name matching
+  // and returns a single relevance-ordered page with an empty next_cursor.
+  //
+  // Requires: iam.listEmployees — the same permission ListEmployees and
+  // GetEmployeeCards declare, held by the seeded `employee` role.
+  rpc ListDirectory(ListDirectoryRequest) returns (ListDirectoryResponse) {
+    option (rpc.v1.access_control) = {
+      required_permissions: ["iam.listEmployees"]
+    };
+  }
+
   // PreviewEmployeeImport: Validate and preview a list of employees before import.
   // Returns each employee with a willBeImported flag (false if duplicate email detected).
   // Requires: ADMIN or OWNER
@@ -1205,6 +1227,81 @@ message EmployeeCard {
 
 message GetEmployeeCardsResponse {
   repeated EmployeeCard cards = 1;
+}
+
+// =============================================================================
+// People Directory (feature 048) — read-only, mobile-first colleague lookup
+// =============================================================================
+
+message ListDirectoryRequest {
+  // Fuzzy name filter. Empty means browse. When set, the response is one
+  // relevance-ordered page and next_cursor is always empty.
+  string query = 1;
+
+  // Restrict to one department's active members. Absent means the whole roster.
+  // An unknown or deleted department id yields an empty page, not an error — the
+  // client learns a department is gone from DepartmentService.GetDepartment, which
+  // is what names the screen.
+  optional string department_id = 2;
+
+  // Restrict to specific people. Used by the person entry screen, which asks for one.
+  // Capped at 100 ids per request, matching GetEmployeeCards.
+  repeated string employee_ids = 3;
+
+  // Opaque cursor from a previous response's next_cursor. Empty means the first page.
+  // Encodes an alphabetical position, not a creation time — the directory is read in
+  // name order, which a uuidv7 cursor cannot express.
+  string cursor = 4;
+
+  // 1..100. Values outside the range are clamped, 0 means the default of 50.
+  int32 page_size = 5;
+}
+
+// One colleague, as the directory presents them.
+//
+// Absent optional fields mean "not recorded", and the client MUST render nothing at
+// all for them — no placeholder and no disabled affordance (FR-012).
+message DirectoryEntry {
+  string employee_id = 1;
+  string given_name = 2;
+  string family_name = 3;
+
+  // Absent for an org-managed worker with no email. A directory entry needs a name,
+  // not an email.
+  optional string email = 4;
+
+  // As recorded, with the original formatting. The client sanitises to `+` and digits
+  // when building the tel: URI, and displays this string unchanged.
+  optional string phone_number = 5;
+
+  // At most one: organization.department_member carries a unique index on
+  // (organization_id, employee_id), so a person cannot be in two departments.
+  // Both set or both absent.
+  optional string department_id = 6;
+  optional string department_name = 7;
+
+  // IAM role names — "Owner", "Employee", or an organization's custom role. Ordered
+  // system-roles-first then alphabetically, the same order GetRoleNamesForEmployeeBatch
+  // already returns. Empty for an employee with no role assignment.
+  repeated string role_names = 8;
+
+  // "online" | "idle" | "offline". online_hidden is normalised to "offline", the same
+  // peer-visibility rule EmployeeCard applies. Never absent; unknown reads "offline".
+  string presence_status = 9;
+
+  // True for the caller's own row. The client leads this row to the existing profile
+  // screen and offers neither Message nor Call (FR-010).
+  bool is_self = 10;
+}
+
+message ListDirectoryResponse {
+  // Alphabetical by (family name, given name, id) when browsing; relevance-ordered
+  // when `query` was set. Never contains a deactivated employee or a de-identified
+  // deletion tombstone.
+  repeated DirectoryEntry entries = 1;
+
+  // Empty when this is the last page, and always empty for a narrowed request.
+  string next_cursor = 2;
 }
 
 // =============================================================================

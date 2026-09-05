@@ -152,6 +152,11 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	// Initialize Logic Layers (NO pools in constructors)
 	orgLogic := organization.NewOrganizationLogic(queries, cfg.WebappURL)
 	iamLogic := iam.NewIAMLogic(queries, jwtSigner)
+	// Feature 048: the people directory narrows by the same fuzzy multilingual matcher the
+	// workspace already uses, which lives in the organization domain. The edge points
+	// iam -> organization, and organization already imports iam, so it is expressed as an
+	// interface iam declares and orgLogic satisfies (Constitution IV).
+	iamLogic.SetEmployeeSearcher(orgLogic)
 	iamEmailSender, err := iam.NewEmailSender(ctx, iam.EmailConfig{
 		AWSRegion:           cfg.AWSRegion,
 		WebappURL:           cfg.WebappURL,

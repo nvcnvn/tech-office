@@ -17,6 +17,7 @@ import (
 	"github.com/nvcnvn/tech-office/backend/database"
 	"github.com/nvcnvn/tech-office/backend/database/dbcrud"
 	"github.com/nvcnvn/tech-office/backend/database/dbuuid"
+	v1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 )
 
 // IAMLogic defines the business logic interface for IAM operations.
@@ -89,11 +90,32 @@ type IAMLogic interface {
 	UnlockOrgAccount(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID, resetPIN bool) (*string, error)
 	ResetOrgAccountCredential(ctx context.Context, tx database.DBTX, orgID, identityID dbuuid.UUID) (string, error)
 	ListOrgAccounts(ctx context.Context, tx database.DBTX, orgID dbuuid.UUID, cursor *dbuuid.UUID, limit int, statusFilter *string) ([]*OrgAccountRow, int32, error)
+
+	// People directory (Feature 048)
+	// ListDirectory answers the read-only colleague lookup. callerEmployeeID comes from
+	// the JWT and is what marks exactly one row is_self; it is never read from the request.
+	ListDirectory(ctx context.Context, tx database.DBTX, orgID, callerEmployeeID dbuuid.UUID, req *v1.ListDirectoryRequest) (*v1.ListDirectoryResponse, error)
+
+	// SetEmployeeSearcher injects the organization domain's fuzzy multilingual employee
+	// matcher, which the directory's `query` filter delegates to rather than keeping a
+	// second copy of. A setter rather than a NewIAMLogic argument because
+	// internal/organization imports internal/iam, so a constructor argument would be a
+	// cycle. A nil searcher is supported and means a narrowed request returns nothing —
+	// the seeder and the tests that never narrow do not have to wire it.
+	SetEmployeeSearcher(searcher EmployeeSearcher)
 }
 
 type iamLogicImpl struct {
 	queries   *database.Queries
 	jwtSigner *InternalJWTSigner
+
+	// employeeSearcher is injected after construction; see SetEmployeeSearcher.
+	employeeSearcher EmployeeSearcher
+}
+
+// SetEmployeeSearcher implements IAMLogic.
+func (l *iamLogicImpl) SetEmployeeSearcher(searcher EmployeeSearcher) {
+	l.employeeSearcher = searcher
 }
 
 // NewIAMLogic creates a new IAM logic implementation.

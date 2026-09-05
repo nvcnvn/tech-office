@@ -34,6 +34,7 @@ import { useQuery } from "@tanstack/react-query";
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import {
   createOrGetDirectMessage,
+  getDepartment,
   search,
   searchKindLabel,
   type SearchHit,
@@ -273,10 +274,19 @@ export default function SearchScreen() {
           if (!t.eventId) return false;
           pushWithBack(`/(app)/(calendar)/${t.eventId}`);
           return true;
-        case "department":
-          // No department screen exists on mobile yet, so these rows stay informational
-          // rather than pretending to navigate.
+        case "department": {
+          if (!t.departmentId) return false;
+          // Checked here rather than after navigating, so a department that has been
+          // deleted since it was saved as a recent gets the same eviction every other
+          // kind already gets, instead of opening an unnamed empty screen.
+          try {
+            await getDepartment(t.departmentId);
+          } catch {
+            return false;
+          }
+          pushWithBack(`/(app)/(more)/people/department/${t.departmentId}`);
           return true;
+        }
       }
     },
     [openChat, openingDMFor, pushWithBack],

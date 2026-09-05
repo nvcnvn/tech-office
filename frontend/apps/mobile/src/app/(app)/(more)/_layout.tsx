@@ -50,6 +50,15 @@ export default function MoreLayout() {
         <Stack.Screen name="search" options={{ headerShown: false }} />
         <Stack.Screen name="profile" options={{ title: "Profile", ...childBackOptions }} />
         <Stack.Screen name="settings" options={{ title: "Settings", ...childBackOptions }} />
+        <Stack.Screen name="people/index" options={{ title: "People", ...childBackOptions }} />
+        {/* Not childBackOptions: a person is opened from the directory, a department
+            member list or a search result, so the back button belongs to whichever
+            brought you here. */}
+        <Stack.Screen name="people/[employeeId]" options={{ title: "Person" }} />
+        {/* Not childBackOptions, same reasoning: a department is opened from a search
+            result or from a person's entry, so back belongs to whichever brought you
+            here. */}
+        <Stack.Screen name="people/department/[departmentId]" options={{ title: "Department" }} />
         <Stack.Screen name="docs/index" options={{ title: "Documents", ...childBackOptions }} />
         {/* Not childBackOptions: a doc is opened from the Docs list, so its back
             button belongs to that list. Sending it to More instead skipped the

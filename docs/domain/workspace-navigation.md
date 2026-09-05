@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-05.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047.
+**Status date: 2026-09-05.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048.
 
 ## Canonical resource links
 
@@ -224,10 +224,13 @@ read.
 - Mobile `(more)/search.tsx` — the same eight kinds with badges and `testID`s, routing:
   Person → DM via `CreateOrGetDirectMessage`, Channel/Message → `(chat)/{channelId}`,
   Document → `(more)/docs/{slug}`, File → `(more)/files/{fileId}`, Work item →
-  `(tasks)/{projectId}/task/{taskId}`, Event → `(calendar)/{eventId}`, Department
-  informational (mobile has no department screen). Recent items stay in device MMKV, never
-  on the server, and a recent whose target will not open says "this item is no longer
-  available" and removes itself.
+  `(tasks)/{projectId}/task/{taskId}`, Event → `(calendar)/{eventId}`, Department →
+  `(more)/people/department/{departmentId}`, the member list added by feature 048. Every
+  kind now opens something; no mobile result row is informational. The department arm
+  calls `GetDepartment` before navigating, so a department deleted since it was saved
+  routes through the same stale-recent path every other kind uses. Recent items stay in
+  device MMKV, never on the server, and a recent whose target will not open says "this
+  item is no longer available" and removes itself.
 
 Web routes events to `/workspace/calendar` rather than a per-event page, because the web
 app has no event detail route; mobile opens the event itself.
@@ -459,8 +462,14 @@ Expo Router in `apps/mobile/src/app`, five route groups:
     being served. It fails open on a network error, so a blip does not lock somebody out
     of their work.
   - `(more)` is the menu tab. Its index lists two labelled groups — **Workspace**
-    (Documents, Files) and **App** (Settings, and a Help row that opens the web guide
-    site in the system browser) — plus a Sign Out row. Search is deliberately not listed;
+    (People, Documents, Files) and **App** (Settings, and a Help row that opens the web
+    guide site in the system browser) — plus a Sign Out row. People is the only row that
+    is conditional: it is rendered only when `iam.listEmployees` is in the permission set
+    cached under `["employee-permissions", employeeId]`, so a member without it does not
+    see the row rather than seeing it and being refused on tap. The menu is long enough
+    that Sign Out now sits below the fold on a 360 dp screen; it is reached by scrolling,
+    and `screens/more.yaml` gates on `menu-settings` rather than on Sign Out for that
+    reason. Search is deliberately not listed;
     it is reached from the `SearchPill` at the top of the other tabs. A **Developer**
     group holding `navigation-debug` appears only under `__DEV__`, and the screen itself
     returns a `Redirect` outside development, so the harness cannot surface in a shipped

@@ -4,7 +4,7 @@ Tenant creation, the employee roster, and the department hierarchy. Owned by
 `internal/organization` (`OrganizationService`) and `internal/department`
 (`DepartmentService`).
 
-**Status date: 2026-09-04.** Supersedes specs 001, 003, 004, 005, 006, 025, 035, 046.
+**Status date: 2026-09-05.** Supersedes specs 001, 003, 004, 005, 006, 025, 035, 046, 048.
 
 ## Organization
 
@@ -114,9 +114,43 @@ sprawling and fragile cascade, so this is the shape erasure takes here. See
 
 ### Listing and cards
 
-`ListEmployees` (paginated) and `GetEmployeeCards` (batch profile lookup for avatars and
-hovercards) live on `IAMService`, not `OrganizationService` — a historical split worth
-knowing when searching for the handler.
+`ListEmployees` (paginated), `GetEmployeeCards` (batch profile lookup for avatars and
+hovercards) and `ListDirectory` (the mobile people directory) live on `IAMService`, not
+`OrganizationService` — a historical split worth knowing when searching for the handler.
+All three declare `iam.listEmployees`, which the seeded `employee` role holds.
+
+`ListDirectory` is deliberately the narrowest of the three. It returns name, email, phone
+number, department id and name, IAM role names, presence and an `is_self` flag, and
+**date of birth, home address and hire date are not fields of the response at all** — a
+field the client declines to render has still reached the device and its cache, and both
+date of birth and phone number constrain PIN validity. It answers three shapes from one
+query, selected by which of its independently nullable filters is set:
+
+| Filter | Shape |
+|---|---|
+| none | the whole active roster, alphabetical by `(lower(family_name), lower(given_name), id)`, cursor-paginated |
+| `department_id` | that department's active members, same order |
+| `employee_ids` | exactly those people, capped at 100 as `GetEmployeeCards` is |
+
+A non-empty `query` narrows any of the three through
+`OrganizationLogic.SearchEmployees` — the same trigram matcher federated search uses,
+reached through an `EmployeeSearcher` interface `internal/iam` declares and `cmd/server.go`
+injects, because `internal/organization` already imports `internal/iam`. A narrowed
+response is one relevance-ordered page and always carries an empty `next_cursor`.
+
+The cursor is an opaque base64 encoding of `(lower(family_name), lower(given_name), id)`,
+not a uuidv7 keyset: a directory is read in name order and creation order cannot express
+an alphabetical page boundary. Page size defaults to 50 and clamps to 1..100.
+
+`e.is_active = true` is the load-bearing predicate: it keeps both deactivated colleagues
+and de-identified deletion tombstones out, so the directory never offers "Deleted user" as
+somebody to ring. Absent `email` and `phone_number` are absent fields rather than empty
+strings, and department id and name are both present or both absent.
+
+Role names and presence come from `GetRoleNamesForEmployeeBatch` and
+`GetLatestEmployeePresenceByIDs` — the same two batch queries `ListEmployees` and
+`GetEmployeeCards` use — merged in Go, so no statement crosses a schema. `online_hidden`
+reads as `offline`, the peer-visibility rule `EmployeeCard` already applies.
 
 ### Import
 
@@ -194,8 +228,17 @@ layer rather than its RPCs, and neither query changed. See
 - Web: `/signup` (registration), `/workspace/organization` with tabs — Overview,
   Employees, Departments, Permissions — plus `DepartmentOrgChart.tsx` /
   `DepartmentTreeView.tsx` for the org chart, and the assign/move/manager dialogs.
-- Mobile: no ongoing org-admin surface — people appear through chat member lists, task
-  assignees and presence. **First-run onboarding is the one exception**: `app/(auth)/signup`
+- Mobile: a **read-only people directory** under More → People
+  (`app/(app)/(more)/people/index.tsx`), gated on `iam.listEmployees` — a member without
+  the permission does not see the row at all. A person's entry
+  (`people/[employeeId].tsx`) shows name, department, role, presence, email and, when one
+  is recorded, a phone row that hands a `tel:` URI to the device dialer; when no number is
+  recorded it renders nothing rather than a disabled control. Message opens or creates the
+  direct-message conversation; your own row leads to the profile screen and offers neither
+  Message nor Call. `people/department/[departmentId].tsx` lists one department's members.
+  The directory creates, edits and deletes nothing — every administrative act on a person
+  stays web-only. People also appear through chat member lists, task assignees and
+  presence. **First-run onboarding is the other exception**: `app/(auth)/signup`
   creates the organization and `app/(onboarding)/add-teammate` creates the first
   org-managed accounts. Constitution Principle XIII permits exactly these two otherwise-web-only
   capabilities, and only during first run; role editing, department management, bulk import,
@@ -203,24 +246,26 @@ layer rather than its RPCs, and neither query changed. See
   [auth-identity.md](auth-identity.md#client-surfaces).
 - Clients: `packages/apis/src/organization.ts` (`registerOrganization`,
   `checkSubdomainAvailable`, `deriveSubdomain`), `department.ts`, `iam-employee-list.ts`,
-  `iam-employee-import.ts`.
+  `iam-employee-import.ts`, `iam-directory.ts` (`listDirectory`, `getDirectoryEntry`).
 
 ## Tests
 
 `integration/organization_onboarding_test.go`, `mobile_owner_onboarding_test.go`
 (address derivation, collision, typed conflicts, owner-to-teammate flow),
-`department_test.go`, `iam_employee_cards_test.go`, `multi_tenancy_test.go`.
+`department_test.go`, `iam_employee_cards_test.go`, `people_directory_test.go`,
+`multi_tenancy_test.go`.
 `internal/organization/subdomain_test.go` is the derivation/validation reference table.
 
-Mobile: `.maestro/onboarding/owner-signup.yaml`.
+Mobile: `.maestro/onboarding/owner-signup.yaml`, `.maestro/people/directory-call.yaml`,
+`.maestro/people/department-members.yaml`.
 
 ## Known drift
 
 Nothing domain-specific beyond the platform-wide items. Two things that read as drift but
 are not:
 
-- `ListEmployees` / `GetEmployeeCards` / employee import living on `IAMService` rather than
-  `OrganizationService` is intentional, not a mistake.
+- `ListEmployees` / `GetEmployeeCards` / `ListDirectory` / employee import living on
+  `IAMService` rather than `OrganizationService` is intentional, not a mistake.
 - `iam.identity` looks vestigial for email-based users since the email moved to
   `organization.employee`. It is still load-bearing: it is the FK target for
   `organization.employee`, `iam.credential` and `iam.account_lockout`, and it is where

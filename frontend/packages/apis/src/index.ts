@@ -139,6 +139,7 @@ export * from './iam-employee-import';
 
 // Export IAM employee listing functions
 export * from './iam-employee-list';
+export * from './iam-directory';
 
 // Export RPC clients and transport
 export * from './rpc';

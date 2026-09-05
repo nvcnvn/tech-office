@@ -6,7 +6,7 @@ because they act on the global `iam.user` record); contracts in
 `rpc/v1/compliance.proto` (`ComplianceService`, 11 RPCs) and the deletion and terms
 additions to `rpc/v1/iam.proto`.
 
-**Status date: 2026-09-02.** Introduced by spec 036.
+**Status date: 2026-09-05.** Introduced by spec 036.
 
 ## Why this domain exists separately
 
@@ -252,3 +252,5 @@ and fails the build on an unexpected permission, a background-location key, a
 missing `POST_NOTIFICATIONS`, a development-only permission string, or a
 disagreement between the manifest and
 `docs/compliance/permission-justifications.md`.
+
+It does **not** pass at HEAD (D64), so `make test-mobile` aborts on the gate before running any Maestro flow and the suite has to be reached through `frontend/apps/mobile/scripts/run-maestro-suite.sh` directly. Four of the five complaints are keys in the committed `ios/` prebuild that the Expo dev client and LiveKit need in order to reach Metro over the LAN, which is why removing them by hand is the wrong fix.
