@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-09-05.**
+**Status date: 2026-09-06.**
 
 ## Shape
 
@@ -343,6 +343,13 @@ one that fails in practice, and it passes in isolation. `make test-backend` and
 `make test-frontend` are therefore both not reliably green on a clean tree; the open rows in
 the drift register say which failures are expected, and a failure outside that list is the
 one worth chasing.
+
+Both frontend targets also gate on `check-frontend`, which requires `curl -sf` to succeed
+against `http://localhost:13000`. The dev server answers `/` with a 404 carrying Next's
+`missing required error components` placeholder, so that guard fails and the target aborts
+before Playwright runs, even when the app is serving every real route normally. Invoking
+`pnpm --filter web exec playwright test --config=e2e/playwright.config.ts <spec>` from
+`frontend/` bypasses the guard and works. See D71.
 
 ## Known drift
 
