@@ -4,7 +4,7 @@ Tenant creation, the employee roster, and the department hierarchy. Owned by
 `internal/organization` (`OrganizationService`) and `internal/department`
 (`DepartmentService`).
 
-**Status date: 2026-09-05.** Supersedes specs 001, 003, 004, 005, 006, 025, 035, 046, 048.
+**Status date: 2026-09-06.** Supersedes specs 001, 003, 004, 005, 006, 025, 035, 046, 048.
 
 ## Organization
 
