@@ -3,22 +3,22 @@ import {
   ActivityIndicator,
   Animated,
   Pressable,
-  StyleSheet,
   Text,
   Vibration,
   View,
-  useColorScheme,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  getPalette,
   mobileTypography,
   opacity,
   radius,
+  shadows,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface IncomingVoiceCallPromptProps {
   title: string;
@@ -39,13 +39,13 @@ export function IncomingVoiceCallPrompt({
   onAccept,
   onDecline,
 }: IncomingVoiceCallPromptProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
   const translateY = useRef(new Animated.Value(-160)).current;
   const opacityValue = useRef(new Animated.Value(0)).current;
   const pulse = useRef(new Animated.Value(0)).current;
-  const palette = getPalette(colorScheme === "dark" ? "dark" : "light");
-  const isDark = palette.mode === "dark";
   const isBusy = Boolean(loadingAction);
   const acceptLabel = alreadyInAnotherCall ? "Switch" : "Answer";
   const declineLabel = alreadyInAnotherCall ? "Stay" : "Decline";
@@ -123,10 +123,9 @@ export function IncomingVoiceCallPrompt({
           styles.card,
           {
             backgroundColor: palette.background.paper,
-            borderColor: isDark ? "rgba(96, 165, 250, 0.36)" : "#bfdbfe",
-            boxShadow: isDark
-              ? "0 14px 32px rgba(0, 0, 0, 0.42)"
-              : "0 14px 32px rgba(15, 23, 42, 0.14)",
+            // Both halves of what this used to branch on by hand are the info
+            // border; the palette has already chosen by the time this runs.
+            borderColor: statusColors.info[palette.mode].border,
           },
         ]}
       >
@@ -142,7 +141,7 @@ export function IncomingVoiceCallPrompt({
               ]}
             />
             <View style={styles.iconWrap}>
-              <SFIcon name="phone.fill" size={21} color="#ffffff" />
+              <SFIcon name="phone.fill" size={21} color={palette.success.contrastText} />
             </View>
           </View>
 
@@ -196,10 +195,10 @@ export function IncomingVoiceCallPrompt({
             ]}
           >
             {loadingAction === "accept" ? (
-              <ActivityIndicator size="small" color="#ffffff" />
+              <ActivityIndicator size="small" color={palette.success.contrastText} />
             ) : (
               <>
-                <SFIcon name="phone.fill" size={16} color="#ffffff" />
+                <SFIcon name="phone.fill" size={16} color={palette.success.contrastText} />
                 <Text style={styles.acceptText}>{acceptLabel}</Text>
               </>
             )}
@@ -210,7 +209,7 @@ export function IncomingVoiceCallPrompt({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   wrap: {
     left: 0,
     position: "absolute",
@@ -225,6 +224,10 @@ const styles = StyleSheet.create({
     borderWidth: border.thin,
     padding: spacing[3],
     gap: spacing[3],
+    // `24` is the alpha byte of an eight-digit hex — 0.14, the value this card
+    // has always used. Mode-independent by design: on a dark surface the shadow
+    // is invisible and the border carries the elevation instead (R5).
+    boxShadow: `0 14px 32px ${shadows.lg.shadowColor}24`,
   },
   headerRow: {
     flexDirection: "row",
@@ -242,7 +245,7 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: radius.full,
-    backgroundColor: "#16a34a",
+    backgroundColor: t.success.main,
   },
   iconWrap: {
     width: 44,
@@ -250,7 +253,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#16a34a",
+    backgroundColor: t.success.main,
   },
   textWrap: {
     flex: 1,
@@ -272,7 +275,7 @@ const styles = StyleSheet.create({
   },
   error: {
     marginTop: spacing[1],
-    color: "#dc2626",
+    color: t.error.main,
     fontSize: mobileTypography.caption.fontSize,
     fontWeight: "600",
   },
@@ -299,14 +302,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing[2],
     paddingHorizontal: spacing[3],
-    backgroundColor: "#16a34a",
+    backgroundColor: t.success.main,
   },
   declineText: {
     fontSize: mobileTypography.button.fontSize,
     fontWeight: mobileTypography.button.fontWeight,
   },
   acceptText: {
-    color: "#ffffff",
+    color: t.success.contrastText,
     fontSize: mobileTypography.button.fontSize,
     fontWeight: mobileTypography.button.fontWeight,
   },
@@ -316,4 +319,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

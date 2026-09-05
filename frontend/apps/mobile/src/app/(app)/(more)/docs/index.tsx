@@ -35,18 +35,21 @@ import {
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   opacity,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const MIN_QUERY_LENGTH = 2;
 const SEARCH_DEBOUNCE_MS = 250;
 
 export default function DocsListScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const [query, setQuery] = React.useState("");
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
@@ -92,12 +95,12 @@ export default function DocsListScreen() {
           by a full-screen spinner, which dismissed the keyboard mid-word. */}
       <View style={styles.searchWrap}>
         <View style={styles.searchRow}>
-          <SFIcon name="magnifyingglass" size={16} color={lightPalette.text.secondary} />
+          <SFIcon name="magnifyingglass" size={16} color={palette.text.secondary} />
           <TextInput
             testID="docs-search-input"
             style={styles.searchInput}
             placeholder="Search documents…"
-            placeholderTextColor={lightPalette.text.disabled}
+            placeholderTextColor={palette.text.disabled}
             value={query}
             onChangeText={setQuery}
             autoCapitalize="none"
@@ -124,7 +127,7 @@ export default function DocsListScreen() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={onRefresh}
-              tintColor={lightPalette.primary.main}
+              tintColor={palette.primary.main}
             />
           }
           ItemSeparatorComponent={() => <View style={styles.cardSeparator} />}
@@ -159,7 +162,7 @@ export default function DocsListScreen() {
               style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
             >
               <View style={styles.iconWrap}>
-                <SFIcon name="doc.text.fill" size={18} color={lightPalette.primary.main} />
+                <SFIcon name="doc.text.fill" size={18} color={palette.primary.main} />
               </View>
               <View style={styles.rowContent}>
                 <Text style={styles.title} numberOfLines={1}>
@@ -176,7 +179,7 @@ export default function DocsListScreen() {
                   {formatDistanceToNow(item.document.updatedAt, { addSuffix: true })}
                 </Text>
               </View>
-              <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+              <SFIcon name="chevron.right" size={14} color={palette.text.disabled} />
             </Pressable>
           )}
         />
@@ -185,10 +188,10 @@ export default function DocsListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   searchWrap: {
     padding: mobileLayout.screenPadding,
@@ -196,11 +199,11 @@ const styles = StyleSheet.create({
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     paddingHorizontal: 12,
     gap: 8,
     height: 40,
@@ -208,7 +211,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     padding: 0,
   },
   listContent: {
@@ -220,14 +223,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     overflow: "hidden",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     flexGrow: 0,
   },
   cardSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginHorizontal: mobileLayout.cardPadding,
   },
   row: {
@@ -235,7 +238,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: mobileLayout.cardPadding,
     paddingVertical: 14,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: mobileLayout.iconTextGap,
   },
   rowPressed: {
@@ -250,22 +253,22 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 10,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main + "12",
+    backgroundColor: t.primary.main + "12",
     justifyContent: "center",
     alignItems: "center",
   },
   title: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   snippet: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: mobileTypography.listSecondary.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   subtitle: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.disabled,
+    color: t.text.disabled,
   },
-});
+}));

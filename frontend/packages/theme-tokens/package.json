@@ -6,6 +6,7 @@
     "types": "dst/index.d.ts",
     "scripts": {
         "build": "tsc",
+        "check:contrast": "node --experimental-strip-types src/contrast.check.ts",
         "dev": "tsc --watch"
     },
     "devDependencies": {

@@ -26,7 +26,6 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
-  StyleSheet,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
@@ -49,14 +48,15 @@ import {
   SearchResultRow,
   SearchResultsCard,
   SearchSectionHeader,
-  searchLayout,
+  useSearchLayout,
 } from "@/components/ui/search-bar";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
+  type MobilePalette,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 // ── Recent items storage ────────────────────────────────────────────────────
 
@@ -79,21 +79,33 @@ interface SearchRow {
 }
 
 /**
- * Every kind, mapped to its badge, icon and tint.
+ * Every kind, mapped to its badge and icon.
  *
  * A `Record` rather than a `switch`: adding a kind to the wire contract without adding it
  * here fails `tsc`, so a new kind cannot reach the screen as an unlabelled row.
  */
-const KIND_CONFIG: Record<SearchKind, { domain: string; sfIcon: string; tint: string }> = {
-  person: { domain: "Person", sfIcon: "person.fill", tint: "#7b1fa2" },
-  channel: { domain: "Channel", sfIcon: "bubble.left.fill", tint: "#2563eb" },
-  document: { domain: "Document", sfIcon: "doc.text.fill", tint: "#0f766e" },
-  work_item: { domain: "Work item", sfIcon: "checkmark.circle.fill", tint: "#b45309" },
-  event: { domain: "Event", sfIcon: "calendar", tint: "#be123c" },
-  file: { domain: "File", sfIcon: "paperclip", tint: "#475569" },
-  department: { domain: "Department", sfIcon: "building.2.fill", tint: "#2563eb" },
-  message: { domain: "Message", sfIcon: "text.bubble.fill", tint: "#64748b" },
+const KIND_CONFIG: Record<SearchKind, { domain: string; sfIcon: string }> = {
+  person: { domain: "Person", sfIcon: "person.fill" },
+  channel: { domain: "Channel", sfIcon: "bubble.left.fill" },
+  document: { domain: "Document", sfIcon: "doc.text.fill" },
+  work_item: { domain: "Work item", sfIcon: "checkmark.circle.fill" },
+  event: { domain: "Event", sfIcon: "calendar" },
+  file: { domain: "File", sfIcon: "paperclip" },
+  department: { domain: "Department", sfIcon: "building.2.fill" },
+  message: { domain: "Message", sfIcon: "text.bubble.fill" },
 };
+
+/** The tint each kind is drawn in, resolved against the active palette. */
+const kindTints = (t: MobilePalette): Record<SearchKind, string> => ({
+  person: t.eventCategory.personal,
+  channel: t.info.main,
+  document: t.success.dark,
+  work_item: t.warning.dark,
+  event: t.error.main,
+  file: t.text.secondary,
+  department: t.info.main,
+  message: t.text.secondary,
+});
 
 /** The identifier a hit's own kind is opened by. */
 function rowIdFor(hit: SearchHit): string {
@@ -170,6 +182,11 @@ function useRecentItems() {
 // ── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function SearchScreen() {
+  const searchLayout = useSearchLayout();
+  const { palette } = useTheme();
+  const styles = useStyles();
+  const tints = kindTints(palette);
+
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [openingDMFor, setOpeningDMFor] = useState<string | null>(null);
@@ -337,7 +354,7 @@ export default function SearchScreen() {
           holds nothing, and showing the last list would say it still holds that. */}
       {isError && query.length >= 2 && !isFetching && (
         <View style={searchLayout.emptyContainer} testID="search-request-failed">
-          <SFIcon name="exclamationmark.triangle" size={40} color={lightPalette.text.disabled} />
+          <SFIcon name="exclamationmark.triangle" size={40} color={palette.text.disabled} />
           <Text style={searchLayout.emptyText}>
             The search could not run. Check your connection and try again.
           </Text>
@@ -347,7 +364,7 @@ export default function SearchScreen() {
       {/* Empty search result */}
       {isEmpty && (
         <View style={searchLayout.emptyContainer}>
-          <SFIcon name="magnifyingglass" size={40} color={lightPalette.text.disabled} />
+          <SFIcon name="magnifyingglass" size={40} color={palette.text.disabled} />
           <Text style={searchLayout.emptyText}>No results for "{query}"</Text>
         </View>
       )}
@@ -360,7 +377,7 @@ export default function SearchScreen() {
         >
           {!showRecents && unavailableKinds.length > 0 && (
             <View style={styles.unavailableNote} testID="search-unavailable-note">
-              <SFIcon name="exclamationmark.triangle" size={14} color={lightPalette.warning.main} />
+              <SFIcon name="exclamationmark.triangle" size={14} color={palette.warning.main} />
               <Text style={styles.unavailableText}>
                 {unavailableKinds.map(searchKindLabel).join(", ")} could not be searched.
               </Text>
@@ -373,20 +390,21 @@ export default function SearchScreen() {
               <SearchResultsCard>
                 {displayItems.map((item, index) => {
                   const config = KIND_CONFIG[item.kind];
+                  const tint = tints[item.kind];
                   return (
                     <SearchResultRow
                       key={`${item.kind}-${item.id}-${index}`}
                       testID={`search-result-${item.kind}`}
                       leading={
                         item.kind === "person" ? (
-                          <UserAvatar name={item.title} size={36} color={config.tint} />
+                          <UserAvatar name={item.title} size={36} color={tint} />
                         ) : (
-                          <SearchIconCircle sfSymbol={config.sfIcon} tint={config.tint} />
+                          <SearchIconCircle sfSymbol={config.sfIcon} tint={tint} />
                         )
                       }
                       title={item.title}
                       subtitle={item.subtitle}
-                      badge={{ label: config.domain, tint: config.tint }}
+                      badge={{ label: config.domain, tint }}
                       trailing={
                         openingDMFor === item.id ? <ActivityIndicator size="small" /> : undefined
                       }
@@ -416,7 +434,7 @@ export default function SearchScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   scrollContent: {
     flexGrow: 1,
     paddingBottom: mobileLayout.screenPadding,
@@ -432,7 +450,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   clearBtn: {
     alignItems: "center",
@@ -440,7 +458,7 @@ const styles = StyleSheet.create({
   },
   clearBtnText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.error.main,
+    color: t.error.main,
     fontWeight: "500" as const,
   },
-});
+}));

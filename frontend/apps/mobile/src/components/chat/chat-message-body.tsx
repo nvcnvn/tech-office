@@ -11,6 +11,9 @@ import {
 } from "@tech-office/links";
 
 import { SYSTEM_EVENT_TASK_CREATED_FROM_MESSAGE, type MessageTaskLink } from "apis";
+import { statusColors, type MobilePalette } from "@tech-office/theme-tokens";
+
+import { useTheme } from "@/lib/theme";
 
 import { getCanonicalInAppRoute } from "@/lib/canonical-links";
 import {
@@ -22,18 +25,20 @@ import {
 import { VoiceMessagePlayer } from "./voice-message-player";
 import { VoiceCallRecord, voiceCallEventFromText } from "./voice-call-record";
 
-const defaultHtmlBaseStyle = {
-  fontSize: 16,
-  color: "#111",
-  lineHeight: 22,
-} as const;
+const defaultHtmlBaseStyle = (t: MobilePalette) =>
+  ({
+    fontSize: 16,
+    color: t.text.primary,
+    lineHeight: 22,
+  }) as const;
 
-const defaultHtmlTagsStyles = {
-  p: { marginTop: 0, marginBottom: 4 },
-  a: { color: "#2563eb" },
-  strong: { fontWeight: "700" as const },
-  em: { fontStyle: "italic" as const },
-} as const;
+const defaultHtmlTagsStyles = (t: MobilePalette) =>
+  ({
+    p: { marginTop: 0, marginBottom: 4 },
+    a: { color: t.info.main },
+    strong: { fontWeight: "700" as const },
+    em: { fontStyle: "italic" as const },
+  }) as const;
 
 interface ChatMessageBodyProps {
   messageText: string;
@@ -88,14 +93,6 @@ function parseTimelineMetadata(metadataJson?: string): VoiceTimelineMetadata | n
   }
 }
 
-function metadataWaveformPeaks(metadata: VoiceTimelineMetadata | null): number[] | null {
-  const peaks = metadata?.waveformPeaks;
-  if (!Array.isArray(peaks)) {
-    return null;
-  }
-  return peaks.filter((peak) => Number.isFinite(peak));
-}
-
 export function ChatMessageBody({
   messageText,
   fileIds = [],
@@ -111,6 +108,7 @@ export function ChatMessageBody({
 }: ChatMessageBodyProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const { palette } = useTheme();
   const hasHtml = /<[a-z][\s\S]*>/i.test(messageText);
   const previewCards = useMemo(
     () =>
@@ -161,20 +159,20 @@ export function ChatMessageBody({
           paddingVertical: 12,
           borderRadius: 14,
           borderWidth: 1,
-          borderColor: pressed ? "#1d4ed8" : "#bfdbfe",
-          backgroundColor: pressed ? "#dbeafe" : "#eff6ff",
+          borderColor: pressed ? palette.info.dark : statusColors.info[palette.mode].border,
+          backgroundColor: pressed ? palette.info.light : statusColors.info[palette.mode].bg,
         })}
       >
-        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: "#1d4ed8" }}>
+        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: palette.info.dark }}>
           {card.display.badge}
         </Text>
         {/* Resource-supplied text, rendered as text. numberOfLines keeps a long title
             from pushing the card wide at 360 dp. */}
-        <Text numberOfLines={2} style={{ marginTop: 4, fontSize: 15, fontWeight: "700", color: "#0f172a" }}>
+        <Text numberOfLines={2} style={{ marginTop: 4, fontSize: 15, fontWeight: "700", color: palette.text.primary }}>
           {card.display.title}
         </Text>
         {card.display.lines.map((line, lineIndex) => (
-          <Text key={lineIndex} numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: "#475569" }}>
+          <Text key={lineIndex} numberOfLines={1} style={{ marginTop: 2, fontSize: 13, color: palette.text.secondary }}>
             {line}
           </Text>
         ))}
@@ -200,19 +198,19 @@ export function ChatMessageBody({
           paddingVertical: 10,
           borderRadius: 12,
           borderWidth: 1,
-          borderColor: "#e2e8f0",
-          backgroundColor: "#f8fafc",
+          borderColor: palette.divider,
+          backgroundColor: palette.background.default,
           maxWidth: Math.min(contentWidth, 320),
         }}
       >
-        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: "#64748b" }}>
+        <Text style={{ fontSize: 11, fontWeight: "700", letterSpacing: 0.8, textTransform: "uppercase", color: palette.text.secondary }}>
           Created task
         </Text>
-        <Text style={{ marginTop: 2, fontSize: 15, fontWeight: "700", color: "#0f172a" }}>
+        <Text style={{ marginTop: 2, fontSize: 15, fontWeight: "700", color: palette.text.primary }}>
           {timelineMetadata.identifier}
         </Text>
         {timelineMetadata.title ? (
-          <Text style={{ marginTop: 2, fontSize: 13, color: "#475569" }} numberOfLines={2}>
+          <Text style={{ marginTop: 2, fontSize: 13, color: palette.text.secondary }} numberOfLines={2}>
             {timelineMetadata.title}
           </Text>
         ) : null}
@@ -237,8 +235,6 @@ export function ChatMessageBody({
     return (
       <VoiceMessagePlayer
         fileId={fileIds[0]}
-        durationMs={timelineMetadata?.durationMs}
-        waveformPeaks={metadataWaveformPeaks(timelineMetadata)}
         maxWidth={Math.min(contentWidth, 320)}
       />
     );
@@ -251,8 +247,8 @@ export function ChatMessageBody({
           <RenderHtml
             contentWidth={contentWidth}
             source={{ html: displayMessageText }}
-            baseStyle={defaultHtmlBaseStyle}
-            tagsStyles={defaultHtmlTagsStyles}
+            baseStyle={defaultHtmlBaseStyle(palette)}
+            tagsStyles={defaultHtmlTagsStyles(palette)}
             defaultTextProps={{ selectable: true }}
           />
         ) : null}
@@ -264,12 +260,12 @@ export function ChatMessageBody({
   return (
     <View>
       {hasDisplayMessageText ? (
-        <Text selectable style={textStyle ?? defaultHtmlBaseStyle}>
+        <Text selectable style={textStyle ?? defaultHtmlBaseStyle(palette)}>
           {textSegments.map((segment, index) =>
             segment.kind === "link" ? (
               <Text
                 key={`canonical-link-${index}`}
-                style={{ color: "#2563eb", textDecorationLine: "underline" }}
+                style={{ color: palette.info.main, textDecorationLine: "underline" }}
                 onPress={() => void openCanonicalLink(segment.value)}
               >
                 {segment.value}

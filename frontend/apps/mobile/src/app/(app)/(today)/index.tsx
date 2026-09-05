@@ -27,7 +27,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -55,7 +54,6 @@ import { notificationStreamBehavior } from "@/lib/notification-stream-behavior";
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
@@ -63,6 +61,7 @@ import {
   spacing,
   tabIcons,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const TODAY_HREF = "/(app)/(today)";
 
@@ -103,6 +102,9 @@ function WorkRow({
   overdue: boolean;
   onPress: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Pressable
       testID={`today-work-${item.taskId}`}
@@ -116,15 +118,15 @@ function WorkRow({
           styles.rowIcon,
           {
             backgroundColor: overdue
-              ? `${lightPalette.error.main}14`
-              : `${lightPalette.primary.main}14`,
+              ? `${palette.error.main}14`
+              : `${palette.primary.main}14`,
           },
         ]}
       >
         <SFIcon
           name={overdue ? "exclamationmark.triangle.fill" : "checkmark.square"}
           size={18}
-          color={overdue ? lightPalette.error.main : lightPalette.primary.main}
+          color={overdue ? palette.error.main : palette.primary.main}
         />
       </View>
       <View style={styles.rowBody}>
@@ -137,12 +139,15 @@ function WorkRow({
             .join(" · ")}
         </Text>
       </View>
-      <SFIcon name="chevron.right" size={14} color={lightPalette.text.secondary} />
+      <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
     </Pressable>
   );
 }
 
 function EventRow({ event, onPress }: { event: CalendarEvent; onPress: () => void }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const time = formatEventTime(event);
   return (
     <Pressable
@@ -165,7 +170,7 @@ function EventRow({ event, onPress }: { event: CalendarEvent; onPress: () => voi
           </Text>
         ) : null}
       </View>
-      <SFIcon name="chevron.right" size={14} color={lightPalette.text.secondary} />
+      <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
     </Pressable>
   );
 }
@@ -193,6 +198,9 @@ function teamResponsibility(item: TeamAttentionItem): string {
 }
 
 function TeamRow({ item, onPress }: { item: TeamAttentionItem; onPress: () => void }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const responsibility = teamResponsibility(item);
   const unassigned = item.category === "unassigned";
   return (
@@ -208,8 +216,8 @@ function TeamRow({ item, onPress }: { item: TeamAttentionItem; onPress: () => vo
           styles.rowIcon,
           {
             backgroundColor: unassigned
-              ? `${lightPalette.warning.main}14`
-              : `${lightPalette.error.main}14`,
+              ? `${palette.warning.main}14`
+              : `${palette.error.main}14`,
           },
         ]}
       >
@@ -221,7 +229,7 @@ function TeamRow({ item, onPress }: { item: TeamAttentionItem; onPress: () => vo
         <SFIcon
           name={unassigned ? "person.crop.circle.badge.minus" : "clock.badge.exclamationmark.fill"}
           size={18}
-          color={unassigned ? lightPalette.warning.main : lightPalette.error.main}
+          color={unassigned ? palette.warning.main : palette.error.main}
         />
       </View>
       <View style={styles.rowBody}>
@@ -234,7 +242,7 @@ function TeamRow({ item, onPress }: { item: TeamAttentionItem; onPress: () => vo
           <Text style={unassigned ? styles.teamUnassigned : undefined}>{responsibility}</Text>
         </Text>
       </View>
-      <SFIcon name="chevron.right" size={14} color={lightPalette.text.secondary} />
+      <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
     </Pressable>
   );
 }
@@ -279,6 +287,9 @@ function TeamSection({
   onRetry: () => void;
   onOpenItem: (item: TeamAttentionItem) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   // A previous successful response already told us the caller supervises nothing, so a
   // later failure or refetch must not suddenly show them a Team heading.
   if (summary?.canSupervise === false) return null;
@@ -366,7 +377,7 @@ function TeamSection({
             accessible
             accessibilityLabel={`Team: ${allClear}. Nothing overdue and nothing unassigned.`}
           >
-            <SFIcon name="checkmark.circle" size={18} color={lightPalette.success.main} />
+            <SFIcon name="checkmark.circle" size={18} color={palette.success.main} />
             <Text style={styles.teamAllClear}>{allClear}</Text>
           </View>
         </View>
@@ -423,6 +434,8 @@ function Section({
   testID: string;
   children: React.ReactNode;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.sectionBlock}>
       <View style={styles.sectionHeader} testID={testID}>
@@ -447,6 +460,9 @@ function Section({
 // gating it on `work?.…` — would break this, and no test can catch it: it is a property of
 // the render path, checked by reading it.
 export default function TodayScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const dayKey = format(new Date(), "yyyy-MM-dd");
 
@@ -534,7 +550,7 @@ export default function TodayScreen() {
         <SFIcon
           name={tabIcons.calendar.name}
           size={22}
-          color={lightPalette.primary.main}
+          color={palette.primary.main}
         />
       ),
     },
@@ -704,17 +720,17 @@ export default function TodayScreen() {
           style={({ pressed }) => [styles.footerLink, pressed && styles.rowPressed]}
         >
           <Text style={styles.footerLinkText}>See all my work</Text>
-          <SFIcon name="chevron.right" size={14} color={lightPalette.primary.main} />
+          <SFIcon name="chevron.right" size={14} color={palette.primary.main} />
         </Pressable>
       </ScrollView>
     </>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     paddingBottom: mobileLayout.cardPadding * 2,
@@ -728,7 +744,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   dateCard: {
     marginHorizontal: mobileLayout.screenPadding,
@@ -739,11 +755,11 @@ const styles = StyleSheet.create({
     ...mobileTypography.caption,
     textTransform: "uppercase",
     letterSpacing: 0.6,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   dateTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   sectionBlock: {
     marginTop: mobileLayout.cardGap,
@@ -760,27 +776,27 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   sectionSubtitle: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   sectionCount: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   sectionCard: {
     marginHorizontal: mobileLayout.screenPadding,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.md,
     borderWidth: border.hairline,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     overflow: "hidden",
   },
   cardSeparator: {
     height: border.hairline,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginLeft: mobileLayout.cardPadding,
   },
   row: {
@@ -807,11 +823,11 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   rowMeta: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   teamStateRow: {
     flexDirection: "row",
@@ -829,7 +845,7 @@ const styles = StyleSheet.create({
   },
   teamCountLine: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   teamExpand: {
     alignItems: "center",
@@ -839,20 +855,20 @@ const styles = StyleSheet.create({
   },
   teamExpandText: {
     ...mobileTypography.button,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   teamErrorText: {
     ...mobileTypography.caption,
     flexShrink: 1,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   teamAllClear: {
     ...mobileTypography.listPrimary,
     flex: 1,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   teamUnassigned: {
-    color: lightPalette.warning.dark,
+    color: t.warning.dark,
     fontWeight: "600",
   },
   eventTimeWrap: {
@@ -861,7 +877,7 @@ const styles = StyleSheet.create({
   eventTime: {
     ...mobileTypography.caption,
     fontWeight: "600",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   pastEvent: {
     opacity: 0.5,
@@ -876,6 +892,6 @@ const styles = StyleSheet.create({
   },
   footerLinkText: {
     ...mobileTypography.button,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
-});
+}));

@@ -1,15 +1,9 @@
 import React, { useEffect, useMemo, useRef } from "react";
-import {
-  Animated,
-  Pressable,
-  StyleSheet,
-  Text,
-  useColorScheme,
-  View,
-} from "react-native";
+import { Animated, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SFIcon } from "@/components/ui/sf-icon";
-import { getPalette, mobileTypography } from "@tech-office/theme-tokens";
+import { mobileTypography, shadows, type MobilePalette } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface LiveNotificationBannerProps {
   title: string;
@@ -35,11 +29,17 @@ function buildInitials(name: string): string {
   return parts.map((part) => part[0]?.toUpperCase() ?? "").join("");
 }
 
-function getBannerAccent(kind: LiveNotificationBannerProps["kind"], isDark: boolean) {
+/**
+ * The banner already varied by colour scheme before this feature, by branching on
+ * `useColorScheme()` and spelling both halves of every colour by hand. Both halves
+ * are exactly the notification-domain tokens, so the branch is gone: the palette
+ * has already made the choice by the time this runs.
+ */
+function getBannerAccent(t: MobilePalette, kind: LiveNotificationBannerProps["kind"]) {
   if (kind === "chat-dm") {
     return {
-      tint: isDark ? "rgba(96, 165, 250, 0.15)" : "#eff6ff",
-      accent: isDark ? "#60a5fa" : "#2563eb",
+      tint: t.notificationDomain.chat.bg,
+      accent: t.notificationDomain.chat.icon,
       icon: "person.crop.circle.fill",
       label: "Direct message",
     } as const;
@@ -47,8 +47,8 @@ function getBannerAccent(kind: LiveNotificationBannerProps["kind"], isDark: bool
 
   if (kind === "chat-thread") {
     return {
-      tint: isDark ? "rgba(251, 191, 36, 0.15)" : "#fffbeb",
-      accent: isDark ? "#fbbf24" : "#d97706",
+      tint: t.notificationDomain.calendar.bg,
+      accent: t.notificationDomain.calendar.icon,
       icon: "text.bubble.fill",
       label: "Thread reply",
     } as const;
@@ -56,16 +56,16 @@ function getBannerAccent(kind: LiveNotificationBannerProps["kind"], isDark: bool
 
   if (kind === "chat-channel") {
     return {
-      tint: isDark ? "rgba(74, 222, 128, 0.15)" : "#f0fdf4",
-      accent: isDark ? "#4ade80" : "#16a34a",
+      tint: t.notificationDomain.tasks.bg,
+      accent: t.notificationDomain.tasks.icon,
       icon: "bubble.left.and.bubble.right.fill",
       label: "Channel update",
     } as const;
   }
 
   return {
-    tint: isDark ? "rgba(96, 165, 250, 0.15)" : "#eff6ff",
-    accent: isDark ? "#60a5fa" : "#2563eb",
+    tint: t.notificationDomain.chat.bg,
+    accent: t.notificationDomain.chat.icon,
     icon: "bell.fill",
     label: "Live update",
   } as const;
@@ -80,13 +80,13 @@ export function LiveNotificationBanner({
   onPress,
   onDismiss,
 }: LiveNotificationBannerProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
   const translateY = useRef(new Animated.Value(-120)).current;
   const opacity = useRef(new Animated.Value(0)).current;
-  const palette = getPalette(colorScheme === "dark" ? "dark" : "light");
-  const isDark = palette.mode === "dark";
-  const accent = useMemo(() => getBannerAccent(kind, isDark), [isDark, kind]);
+  const accent = useMemo(() => getBannerAccent(palette, kind), [palette, kind]);
   const senderChipNames = senderNames.filter(Boolean).slice(0, 2);
   const extraSenderCount = Math.max(senderNames.length - senderChipNames.length, 0);
 
@@ -130,7 +130,6 @@ export function LiveNotificationBanner({
           {
             backgroundColor: palette.background.paper,
             borderColor: palette.divider,
-            shadowColor: isDark ? "#000000" : "#0f172a",
           },
           pressed && styles.cardPressed,
         ]}
@@ -156,12 +155,10 @@ export function LiveNotificationBanner({
                     style={[
                       styles.avatarChipText,
                       {
+                        // The first chip is filled with the accent; the rest sit
+                        // on the card.
                         color:
-                          index === 0
-                            ? isDark && kind !== "default"
-                              ? "rgba(0, 0, 0, 0.87)"
-                              : "#ffffff"
-                            : palette.text.primary,
+                          index === 0 ? palette.primary.contrastText : palette.text.primary,
                       },
                     ]}
                   >
@@ -230,11 +227,7 @@ export function LiveNotificationBanner({
             style={({ pressed }) => [
               styles.dismissButton,
               {
-                backgroundColor: pressed
-                  ? accent.tint
-                  : isDark
-                    ? "rgba(255,255,255,0.06)"
-                    : "rgba(17, 24, 39, 0.04)",
+                backgroundColor: pressed ? accent.tint : palette.background.default,
               },
             ]}
           >
@@ -253,7 +246,7 @@ export function LiveNotificationBanner({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   wrap: {
     left: 0,
     position: "absolute",
@@ -269,6 +262,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     minHeight: 82,
     overflow: "hidden",
+    // The shadow tokens are mode-independent by design: on a dark surface this
+    // one is invisible, and elevation is carried by the border instead (R5).
+    shadowColor: shadows.lg.shadowColor,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.14,
     shadowRadius: 18,
@@ -378,4 +374,4 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600",
   },
-});
+}));

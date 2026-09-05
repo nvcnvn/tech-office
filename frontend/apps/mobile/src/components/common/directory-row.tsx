@@ -13,17 +13,17 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { directoryDisplayName, type DirectoryEntry } from "apis";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { PresenceIndicator } from "@/components/common/presence-indicator";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles } from "@/lib/theme";
 
 const AVATAR_SIZE = 40;
 
@@ -44,6 +44,8 @@ interface DirectoryRowProps {
 }
 
 export function DirectoryRow({ entry, onPress }: DirectoryRowProps) {
+  const styles = useStyles();
+
   const name = directoryDisplayName(entry);
   const secondary = secondaryLine(entry);
 
@@ -71,7 +73,7 @@ export function DirectoryRow({ entry, onPress }: DirectoryRowProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -80,7 +82,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1.5],
     // The whole row is the target, and it clears 44 pt on the narrowest phone.
     minHeight: mobileLayout.compactRowHeight,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   rowPressed: {
     opacity: opacity.pressed,
@@ -96,11 +98,11 @@ const styles = StyleSheet.create({
   name: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   secondary: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: mobileTypography.listSecondary.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

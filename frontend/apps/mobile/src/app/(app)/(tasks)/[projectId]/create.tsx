@@ -14,7 +14,6 @@ import {
   Pressable,
   ActivityIndicator,
   Platform,
-  StyleSheet,
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -26,8 +25,12 @@ import {
 import * as Haptics from "expo-haptics";
 import { useResolvedProjectId } from "@/hooks/use-resolved-project-id";
 import { invalidateTaskQueries } from "@/lib/task-query-invalidation";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export default function CreateTaskScreen() {
+  const styles = useStyles();
+  const { palette } = useTheme();
+
   const { projectId: rawProjectId } = useLocalSearchParams<{ projectId?: string | string[] }>();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -112,6 +115,7 @@ export default function CreateTaskScreen() {
         <TextInput
           style={[styles.input, titleError && styles.inputError]}
           placeholder="Task title"
+          placeholderTextColor={palette.text.disabled}
           value={title}
           onChangeText={(t) => {
             setTitle(t);
@@ -198,6 +202,7 @@ export default function CreateTaskScreen() {
         <TextInput
           style={styles.input}
           placeholder="YYYY-MM-DD"
+          placeholderTextColor={palette.text.disabled}
           value={dueDate}
           onChangeText={setDueDate}
           keyboardType="numbers-and-punctuation"
@@ -223,7 +228,7 @@ export default function CreateTaskScreen() {
         ]}
       >
         {createMutation.isPending ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={palette.primary.contrastText} />
         ) : (
           <Text style={styles.submitText}>Create Task</Text>
         )}
@@ -232,46 +237,49 @@ export default function CreateTaskScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   container: { padding: 16, gap: 20 },
   field: { gap: 6 },
-  label: { fontSize: 13, fontWeight: "600", color: "#555" },
+  label: { fontSize: 13, fontWeight: "600", color: t.text.secondary },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: t.divider,
     borderRadius: 10,
     borderCurve: "continuous",
     padding: 14,
     fontSize: 16,
-    backgroundColor: "#fafafa",
+    backgroundColor: t.background.default,
+    // React Native's default text colour is black, so an input without this one
+    // takes typed text to black on a dark field.
+    color: t.text.primary,
   },
-  inputError: { borderColor: "#dc2626" },
-  errorText: { fontSize: 13, color: "#dc2626" },
+  inputError: { borderColor: t.error.main },
+  errorText: { fontSize: 13, color: t.error.main },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: "#f0f0f0",
+    backgroundColor: t.background.default,
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: t.divider,
   },
   chipSelected: {
-    backgroundColor: "#0f172a",
-    borderColor: "#0f172a",
+    backgroundColor: t.primary.main,
+    borderColor: t.primary.main,
   },
-  chipText: { fontSize: 14, color: "#333" },
-  chipTextSelected: { color: "#fff", fontWeight: "600" },
+  chipText: { fontSize: 14, color: t.text.primary },
+  chipTextSelected: { color: t.primary.contrastText, fontWeight: "600" },
   submitBtn: {
-    backgroundColor: "#0f172a",
+    backgroundColor: t.primary.main,
     borderRadius: 12,
     borderCurve: "continuous",
     padding: 16,
     alignItems: "center",
     marginTop: 8,
   },
-  submitBtnDisabled: { backgroundColor: "#94a3b8" },
-  submitBtnPressed: { backgroundColor: "#020617" },
-  submitText: { color: "#fff", fontSize: 16, fontWeight: "600" },
-});
+  submitBtnDisabled: { backgroundColor: t.text.disabled },
+  submitBtnPressed: { backgroundColor: t.primary.dark },
+  submitText: { color: t.primary.contrastText, fontSize: 16, fontWeight: "600" },
+}));

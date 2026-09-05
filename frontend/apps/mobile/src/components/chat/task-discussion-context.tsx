@@ -1,23 +1,26 @@
 import React from "react";
 import { Link } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import type { LinkedResource } from "apis";
 
 import { SFIcon } from "@/components/ui/sf-icon";
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import {
   border,
-  lightPalette,
   mobileTypography,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface TaskDiscussionContextProps {
   linkedResource: LinkedResource;
 }
 
 export function TaskDiscussionContext({ linkedResource }: TaskDiscussionContextProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   if (linkedResource.resourceType !== "task" || !linkedResource.resourceId || !linkedResource.parentId) {
     return null;
   }
@@ -34,7 +37,7 @@ export function TaskDiscussionContext({ linkedResource }: TaskDiscussionContextP
   return (
     <View style={styles.container} testID="task-discussion-context">
       <View style={styles.iconWrap}>
-        <SFIcon name="checkmark.square.fill" size={18} color={lightPalette.success.main} />
+        <SFIcon name="checkmark.square.fill" size={18} color={palette.success.main} />
       </View>
       <View style={styles.body}>
         <Text selectable style={styles.eyebrow}>
@@ -54,7 +57,7 @@ export function TaskDiscussionContext({ linkedResource }: TaskDiscussionContextP
           accessibilityLabel="Open task"
           style={({ pressed }) => [styles.openButton, pressed && styles.openButtonPressed]}
         >
-          <SFIcon name="arrow.up.right" size={14} color={lightPalette.primary.main} />
+          <SFIcon name="arrow.up.right" size={14} color={palette.primary.main} />
           <Text style={styles.openText}>Open task</Text>
         </Pressable>
       </Link>
@@ -62,7 +65,7 @@ export function TaskDiscussionContext({ linkedResource }: TaskDiscussionContextP
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flexDirection: "row",
     alignItems: "center",
@@ -70,8 +73,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     paddingVertical: spacing[1],
     borderBottomWidth: border.hairline,
-    borderBottomColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderBottomColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   iconWrap: {
     width: 34,
@@ -80,9 +83,9 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.success.light + "22",
+    backgroundColor: t.success.light + "22",
     borderWidth: border.thin,
-    borderColor: lightPalette.success.light,
+    borderColor: t.success.light,
   },
   body: {
     flex: 1,
@@ -92,12 +95,12 @@ const styles = StyleSheet.create({
   eyebrow: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.success.dark,
+    color: t.success.dark,
   },
   title: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   openButton: {
     minHeight: 36,
@@ -109,15 +112,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing[0.5],
     borderWidth: border.thin,
-    borderColor: lightPalette.primary.light,
-    backgroundColor: lightPalette.primary.light + "14",
+    borderColor: t.primary.light,
+    backgroundColor: t.primary.light + "14",
   },
   openButtonPressed: {
-    backgroundColor: lightPalette.primary.light + "28",
+    backgroundColor: t.primary.light + "28",
   },
   openText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
-});
+}));

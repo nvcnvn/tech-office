@@ -12,7 +12,6 @@ import {
   ActivityIndicator,
   Keyboard,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -27,16 +26,18 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const MAX_DISPLAY_NAME = 64;
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.infoRow}>
       <Text style={styles.infoLabel}>{label}</Text>
@@ -48,6 +49,9 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function ProfileScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const auth = React.use(AuthContext);
   const queryClient = useQueryClient();
   const employeeId = auth?.employeeId ?? "";
@@ -135,7 +139,7 @@ export default function ProfileScreen() {
           returnKeyType="done"
           onSubmitEditing={() => void save()}
           placeholder="How your name appears to colleagues"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           style={styles.input}
         />
         <Text style={styles.hint}>
@@ -168,7 +172,7 @@ export default function ProfileScreen() {
           <InfoRow label="Department" value={user.departmentName} />
         ) : null}
         {membershipLoading && !membership ? (
-          <ActivityIndicator color={lightPalette.text.secondary} />
+          <ActivityIndicator color={palette.text.secondary} />
         ) : (
           <>
             <InfoRow
@@ -190,10 +194,10 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     padding: mobileLayout.screenPadding,
@@ -201,11 +205,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[6],
   },
   identityCard: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.lg,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: 20,
     alignItems: "center",
   },
@@ -218,27 +222,27 @@ const styles = StyleSheet.create({
   input: {
     minHeight: 48,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     borderRadius: radius.md,
     borderCurve: "continuous",
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
-    backgroundColor: lightPalette.background.default,
-    color: lightPalette.text.primary,
+    backgroundColor: t.background.default,
+    color: t.text.primary,
     fontSize: mobileTypography.listPrimary.fontSize as number,
   },
   hint: {
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: mobileTypography.caption.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   error: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   saved: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.success.main,
+    color: t.success.main,
   },
   infoRow: {
     gap: 2,
@@ -246,18 +250,18 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   infoValue: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   caption: {
     paddingHorizontal: 4,
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: mobileTypography.caption.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

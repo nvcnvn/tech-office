@@ -10,15 +10,15 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { Pressable, Text, TextInput, View } from "react-native";
 import type { EvidenceType } from "apis";
 import {
-  lightPalette,
   mobileTypography,
   radius,
   spacing,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export type EvidenceRequirementDraft = {
   /** Client-only, for list keys. Never sent. */
@@ -60,6 +60,9 @@ export function EvidenceRequirementEditor({
   errors?: Record<string, string>;
   sectionError?: string;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const update = (index: number, patch: Partial<EvidenceRequirementDraft>) => {
     onChange(requirements.map((row, i) => (i === index ? { ...row, ...patch } : row)));
   };
@@ -84,7 +87,7 @@ export function EvidenceRequirementEditor({
               testID={`ritual-requirement-name-${index}`}
               style={styles.input}
               placeholder="Shutters up"
-              placeholderTextColor={lightPalette.text.disabled}
+              placeholderTextColor={palette.text.disabled}
               value={row.name}
               onChangeText={(text) => update(index, { name: text })}
             />
@@ -160,29 +163,29 @@ export function EvidenceRequirementEditor({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   block: {
     gap: spacing[1.5],
   },
   label: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   row: {
     gap: spacing[1],
     padding: spacing[1.5],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   input: {
     minHeight: touch.comfortable,
     paddingHorizontal: spacing[1.5],
     borderRadius: radius.base,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    color: lightPalette.text.primary,
+    borderColor: t.divider,
+    color: t.text.primary,
     fontSize: 16,
   },
   chipRow: {
@@ -197,18 +200,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   chipSelected: {
-    backgroundColor: lightPalette.primary.main,
-    borderColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
+    borderColor: t.primary.main,
   },
   chipLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   chipLabelSelected: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   rowActions: {
     flexDirection: "row",
@@ -222,7 +225,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   remove: {
     minHeight: touch.minTarget,
@@ -231,10 +234,10 @@ const styles = StyleSheet.create({
   },
   removeLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   removeLabelDisabled: {
-    color: lightPalette.text.disabled,
+    color: t.text.disabled,
   },
   addButton: {
     minHeight: touch.comfortable,
@@ -243,14 +246,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   addLabel: {
     ...mobileTypography.button,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   error: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
-});
+}));

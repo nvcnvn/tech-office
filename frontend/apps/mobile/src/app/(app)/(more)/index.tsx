@@ -29,7 +29,6 @@ import { buildWebUrl } from "@/lib/constants";
 import { useTourController } from "@/providers/tour-provider";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
@@ -38,6 +37,7 @@ import {
   moreMenuIcons,
   profileIcons,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 // ── Menu definitions ────────────────────────────────────────────────────────
 
@@ -125,6 +125,9 @@ const devItems: MenuItem[] = __DEV__
 // ── Menu Row ────────────────────────────────────────────────────────────────
 
 function MenuRow({ item, onPress }: { item: MenuItem; onPress: () => void }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const external = isExternal(item);
 
   return (
@@ -142,7 +145,7 @@ function MenuRow({ item, onPress }: { item: MenuItem; onPress: () => void }) {
       accessibilityHint={item.hint}
     >
       <View style={styles.menuIconWrap}>
-        <SFIcon name={item.sfIcon} size={20} color={lightPalette.primary.main} />
+        <SFIcon name={item.sfIcon} size={20} color={palette.primary.main} />
       </View>
       <View style={styles.menuCopy}>
         <Text style={styles.menuLabel}>{item.label}</Text>
@@ -151,7 +154,7 @@ function MenuRow({ item, onPress }: { item: MenuItem; onPress: () => void }) {
       <SFIcon
         name={external ? "arrow.up.right.square" : "chevron.right"}
         size={14}
-        color={lightPalette.text.disabled}
+        color={palette.text.disabled}
       />
     </Pressable>
   );
@@ -166,6 +169,8 @@ function MenuSection({
   label?: string;
   openMenuItem: (item: MenuItem) => void;
 }) {
+  const styles = useStyles();
+
   if (items.length === 0) return null;
 
   return (
@@ -186,6 +191,9 @@ function MenuSection({
 // ── Main Screen ─────────────────────────────────────────────────────────────
 
 export default function MoreScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const auth = React.use(AuthContext);
   const router = useRouter();
 
@@ -287,7 +295,7 @@ export default function MoreScreen() {
           />
         </View>
         <Text style={styles.editProfileText}>{profileIcons.editProfile.label}</Text>
-        <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+        <SFIcon name="chevron.right" size={14} color={palette.text.disabled} />
       </Pressable>
 
       <MenuSection
@@ -322,8 +330,8 @@ export default function MoreScreen() {
           accessibilityRole="button"
           accessibilityLabel="Sign Out"
         >
-          <View style={[styles.menuIconWrap, { backgroundColor: lightPalette.error.main + "12" }]}>
-            <SFIcon name={profileIcons.signOut.name} size={20} color={lightPalette.error.main} />
+          <View style={[styles.menuIconWrap, { backgroundColor: palette.error.main + "12" }]}>
+            <SFIcon name={profileIcons.signOut.name} size={20} color={palette.error.main} />
           </View>
           <Text style={styles.signOutLabel}>Sign Out</Text>
         </Pressable>
@@ -332,10 +340,10 @@ export default function MoreScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   scrollView: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     padding: mobileLayout.screenPadding,
@@ -343,11 +351,11 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[6],
   },
   profileCard: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.lg,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: mobileLayout.cardPadding,
     minHeight: mobileLayout.compactRowHeight,
     flexDirection: "row",
@@ -356,7 +364,7 @@ const styles = StyleSheet.create({
   },
   editProfileText: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontWeight: "500" as const,
   },
   sectionBlock: {
@@ -366,7 +374,7 @@ const styles = StyleSheet.create({
     paddingLeft: 4,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -377,15 +385,15 @@ const styles = StyleSheet.create({
   menuHint: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: mobileTypography.listSecondary.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   section: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.md,
     borderCurve: "continuous",
     overflow: "hidden",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   menuRow: {
     flexDirection: "row" as const,
@@ -403,27 +411,27 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 8,
     borderCurve: "continuous" as const,
-    backgroundColor: lightPalette.primary.main + "12",
+    backgroundColor: t.primary.main + "12",
     justifyContent: "center" as const,
     alignItems: "center" as const,
   },
   menuLabel: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginLeft: 32 + mobileLayout.iconTextGap + mobileLayout.cardPadding,
   },
   signOutLabel: {
     flex: 1,
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   signOutPressed: {
-    backgroundColor: lightPalette.error.light + "15",
+    backgroundColor: t.error.light + "15",
   },
-});
+}));

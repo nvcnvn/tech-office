@@ -13,14 +13,14 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import {
-  lightPalette,
   mobileTypography,
   radius,
   spacing,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles } from "@/lib/theme";
 
 export type RecurrenceKind = "daily" | "weekly" | "monthly";
 
@@ -63,6 +63,8 @@ export function RecurrencePicker({
   onChange: (next: RecurrenceDraft) => void;
   error?: string;
 }) {
+  const styles = useStyles();
+
   const toggleWeekday = (day: number) => {
     const next = value.daysOfWeek.includes(day)
       ? value.daysOfWeek.filter((existing) => existing !== day)
@@ -148,13 +150,13 @@ export function RecurrencePicker({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   block: {
     gap: spacing[1],
   },
   label: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   kindRow: {
     flexDirection: "row",
@@ -172,12 +174,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   kindLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
     // Stretch, so the label is measured against the segment's width and wraps inside it
     // rather than overflowing and being clipped mid-word.
@@ -198,12 +200,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.base,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   weekdayLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   dayGrid: {
     flexDirection: "row",
@@ -219,22 +221,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[0.5],
     borderRadius: radius.base,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   dayLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   segmentSelected: {
-    backgroundColor: lightPalette.primary.main,
-    borderColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
+    borderColor: t.primary.main,
   },
   segmentLabelSelected: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   error: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
-});
+}));

@@ -7,15 +7,16 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { useNavigation, useRouter } from "expo-router";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
 import {
-  lightPalette,
   mobileTypography,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const headerActionGap = 4;
 const headerActionSize = 44;
@@ -29,31 +30,34 @@ export function HeaderTitleWithStreamStatus({
 }: {
   title: string;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { isConnected, shouldUseFallbackPolling, showReconnectingIndicator } =
     useNotificationStream();
 
   const status = shouldUseFallbackPolling
     ? {
         label: "Polling",
-        dotColor: lightPalette.info.main,
-        textColor: lightPalette.info.dark,
-        backgroundColor: "#eff6ff",
-        borderColor: "#bfdbfe",
+        dotColor: palette.info.main,
+        textColor: palette.info.dark,
+        backgroundColor: statusColors.info[palette.mode].bg,
+        borderColor: statusColors.info[palette.mode].border,
       }
     : isConnected || !showReconnectingIndicator
       ? {
           label: "Live",
-          dotColor: lightPalette.success.main,
-          textColor: lightPalette.success.dark,
-          backgroundColor: "#f0fdf4",
-          borderColor: "#bbf7d0",
+          dotColor: palette.success.main,
+          textColor: palette.success.dark,
+          backgroundColor: statusColors.success[palette.mode].bg,
+          borderColor: statusColors.success[palette.mode].border,
         }
       : {
           label: "Reconnecting",
-          dotColor: lightPalette.warning.main,
-          textColor: "#92400e",
-          backgroundColor: "#fffbeb",
-          borderColor: "#fde68a",
+          dotColor: palette.warning.main,
+          textColor: palette.warning.dark,
+          backgroundColor: statusColors.warning[palette.mode].bg,
+          borderColor: statusColors.warning[palette.mode].border,
         };
 
   return (
@@ -95,6 +99,8 @@ function HeaderActionRow({
 }: {
   actions: TopLevelHeaderAction[];
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.actionRow}>
       {actions.map((action) => (
@@ -122,6 +128,9 @@ function HeaderActionRow({
  * back to replacing with the tab that owns the entry point.
  */
 function TopLevelBackButton({ label, href }: { label: string; href: string }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const navigation = useNavigation();
 
@@ -141,7 +150,7 @@ function TopLevelBackButton({ label, href }: { label: string; href: string }) {
       }}
       style={styles.backButton}
     >
-      <SFIcon name="chevron.left" size={16} color={lightPalette.info.main} />
+      <SFIcon name="chevron.left" size={16} color={palette.info.main} />
       <Text style={styles.backLabel}>{label}</Text>
     </Pressable>
   );
@@ -168,7 +177,7 @@ export function createTopLevelTabHeader(
   };
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -199,7 +208,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     lineHeight: 24,
     flexShrink: 1,
   },
@@ -223,8 +232,8 @@ const styles = StyleSheet.create({
     minHeight: headerActionSize,
   },
   backLabel: {
-    color: lightPalette.info.main,
+    color: t.info.main,
     fontSize: mobileTypography.listPrimary.fontSize,
     fontWeight: "600",
   },
-});
+}));

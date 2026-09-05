@@ -17,9 +17,9 @@ import { usePresence } from "@/hooks/use-presence";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { PresenceIndicator } from "@/components/common/presence-indicator";
 import {
-  lightPalette,
   mobileTypography,
 } from "@tech-office/theme-tokens";
+import { useTheme } from "@/lib/theme";
 
 type UserCardVariant = "compact" | "standard" | "full";
 
@@ -68,9 +68,12 @@ export function UserCard({
   variant = "standard",
   showPresence = false,
   avatarSize,
-  avatarColor = "#0f172a",
+  avatarColor,
   testID,
 }: UserCardProps) {
+  const { palette } = useTheme();
+  const resolvedAvatarColor = avatarColor ?? palette.primary.main;
+
   const user = useUserProfile(employeeId, userInfo);
   const presenceStatus = usePresence(showPresence ? employeeId : undefined);
   const indicatorStatus = mapPresence(presenceStatus);
@@ -94,7 +97,7 @@ export function UserCard({
             name={name || employeeId}
             avatarUrl={user?.avatarUrl}
             size={size}
-            color={avatarColor}
+            color={resolvedAvatarColor}
           />
           {showPresence && indicatorStatus ? (
             <PresenceIndicator status={indicatorStatus} size={8} />
@@ -107,7 +110,7 @@ export function UserCard({
               flex: 1,
               fontSize: 15,
               fontWeight: "500",
-              color: lightPalette.text.primary,
+              color: palette.text.primary,
             }}
           >
             {name}
@@ -118,7 +121,7 @@ export function UserCard({
               width: 80,
               height: 14,
               borderRadius: 4,
-              backgroundColor: lightPalette.divider,
+              backgroundColor: palette.divider,
             }}
           />
         )}
@@ -145,7 +148,7 @@ export function UserCard({
             name={name || employeeId}
             avatarUrl={user?.avatarUrl}
             size={size}
-            color={avatarColor}
+            color={resolvedAvatarColor}
           />
           {showPresence && indicatorStatus ? (
             <PresenceIndicator status={indicatorStatus} />
@@ -158,7 +161,7 @@ export function UserCard({
               style={{
                 fontSize: 16,
                 fontWeight: "600",
-                color: lightPalette.text.primary,
+                color: palette.text.primary,
               }}
             >
               {name}
@@ -169,7 +172,7 @@ export function UserCard({
                 width: 120,
                 height: 16,
                 borderRadius: 4,
-                backgroundColor: lightPalette.divider,
+                backgroundColor: palette.divider,
               }}
             />
           )}
@@ -178,7 +181,7 @@ export function UserCard({
               numberOfLines={1}
               style={{
                 fontSize: 13,
-                color: lightPalette.text.secondary,
+                color: palette.text.secondary,
               }}
             >
               {secondary}
@@ -189,7 +192,7 @@ export function UserCard({
                 width: 80,
                 height: 12,
                 borderRadius: 4,
-                backgroundColor: lightPalette.divider,
+                backgroundColor: palette.divider,
               }}
             />
           ) : null}
@@ -217,7 +220,7 @@ export function UserCard({
           name={fullName || employeeId}
           avatarUrl={user?.avatarUrl}
           size={size}
-          color={avatarColor}
+          color={resolvedAvatarColor}
         />
         {showPresence && indicatorStatus ? (
           <PresenceIndicator status={indicatorStatus} size={12} />
@@ -231,7 +234,7 @@ export function UserCard({
             style={{
               fontSize: 20,
               fontWeight: "700",
-              color: lightPalette.text.primary,
+              color: palette.text.primary,
             }}
           >
             {fullName}
@@ -242,7 +245,7 @@ export function UserCard({
               width: 140,
               height: 20,
               borderRadius: 4,
-              backgroundColor: lightPalette.divider,
+              backgroundColor: palette.divider,
             }}
           />
         )}
@@ -252,7 +255,7 @@ export function UserCard({
             numberOfLines={1}
             style={{
               fontSize: 14,
-              color: lightPalette.text.secondary,
+              color: palette.text.secondary,
             }}
           >
             {user.departmentName}
@@ -265,7 +268,7 @@ export function UserCard({
             numberOfLines={1}
             style={{
               fontSize: 14,
-              color: lightPalette.text.secondary,
+              color: palette.text.secondary,
             }}
           >
             {user.email}
@@ -278,14 +281,14 @@ export function UserCard({
               paddingHorizontal: 8,
               paddingVertical: 2,
               borderRadius: 4,
-              backgroundColor: lightPalette.text.disabled + "20",
+              backgroundColor: palette.text.disabled + "20",
             }}
           >
             <Text
               style={{
                 fontSize: 11,
                 fontWeight: "600",
-                color: lightPalette.text.disabled,
+                color: palette.text.disabled,
                 textTransform: "uppercase",
                 letterSpacing: 0.5,
               }}

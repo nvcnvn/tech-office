@@ -15,7 +15,10 @@ import {
 } from "react-native";
 import { Stack } from "expo-router";
 
+import { useTheme } from "@/lib/theme";
+
 export default function ForgotPasswordScreen() {
+  const { palette } = useTheme();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -51,30 +54,41 @@ export default function ForgotPasswordScreen() {
 
         {sent ? (
           <View style={{ alignItems: "center", gap: 12 }}>
-            <Text style={{ fontSize: 20, fontWeight: "600" }}>Check your email</Text>
-            <Text style={{ fontSize: 15, color: "#666", textAlign: "center" }}>
+            <Text style={{ fontSize: 20, fontWeight: "600", color: palette.text.primary }}>
+              Check your email
+            </Text>
+            <Text style={{ fontSize: 15, color: palette.text.secondary, textAlign: "center" }}>
               We've sent a password reset link to {email}
             </Text>
           </View>
         ) : (
           <>
-            <Text style={{ fontSize: 20, fontWeight: "600", textAlign: "center" }}>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "600",
+                textAlign: "center",
+                color: palette.text.primary,
+              }}
+            >
               Forgot your password?
             </Text>
-            <Text style={{ fontSize: 15, color: "#666", textAlign: "center" }}>
+            <Text style={{ fontSize: 15, color: palette.text.secondary, textAlign: "center" }}>
               Enter your email and we'll send you a reset link
             </Text>
             <TextInput
               style={{
                 borderWidth: 1,
-                borderColor: "#ddd",
+                borderColor: palette.divider,
                 borderRadius: 10,
                 borderCurve: "continuous",
                 padding: 14,
                 fontSize: 16,
-                backgroundColor: "#fafafa",
+                color: palette.text.primary,
+                backgroundColor: palette.background.default,
               }}
               placeholder="you@company.com"
+              placeholderTextColor={palette.text.disabled}
               keyboardType="email-address"
               autoCapitalize="none"
               textContentType="emailAddress"
@@ -87,7 +101,7 @@ export default function ForgotPasswordScreen() {
               onPress={handleSubmit}
               disabled={loading}
               style={({ pressed }) => ({
-                backgroundColor: pressed ? "#020617" : "#0f172a",
+                backgroundColor: pressed ? palette.primary.dark : palette.primary.main,
                 borderRadius: 12,
                 borderCurve: "continuous",
                 padding: 16,
@@ -98,9 +112,9 @@ export default function ForgotPasswordScreen() {
               testID="forgot-password-submit"
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={palette.primary.contrastText} />
               ) : (
-                <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
+                <Text style={{ color: palette.primary.contrastText, fontWeight: "600", fontSize: 16 }}>
                   Send Reset Link
                 </Text>
               )}

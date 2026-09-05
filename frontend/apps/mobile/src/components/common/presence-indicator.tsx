@@ -4,15 +4,9 @@
 
 import React from "react";
 import { View } from "react-native";
+import { useTheme } from "@/lib/theme";
 
 type PresenceStatus = "online" | "away" | "busy" | "offline";
-
-const statusColors: Record<PresenceStatus, string> = {
-  online: "#16a34a",
-  away: "#d97706",
-  busy: "#dc2626",
-  offline: "#94a3b8",
-};
 
 interface PresenceIndicatorProps {
   status: PresenceStatus;
@@ -26,6 +20,8 @@ export function PresenceIndicator({
   size = 10,
   absolute = true,
 }: PresenceIndicatorProps) {
+  const { palette } = useTheme();
+
   return (
     <View
       // The status is in the testID because a colored dot has no other readable
@@ -37,9 +33,9 @@ export function PresenceIndicator({
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: statusColors[status] ?? statusColors.offline,
+          backgroundColor: palette.presence[status] ?? palette.presence.offline,
           borderWidth: 1.5,
-          borderColor: "#fff",
+          borderColor: palette.presence.ring,
         },
         absolute && {
           position: "absolute",

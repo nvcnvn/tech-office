@@ -45,15 +45,17 @@ import { useStreamRecoveryRefresh } from "@/hooks/use-stream-recovery-refresh";
 import { notificationStreamBehavior } from "@/lib/notification-stream-behavior";
 import { stripHtml } from "@tech-office/notifications";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   border,
   spacing,
-  notificationDomain,
+  shadows,
+  statusColors,
+  type MobilePalette,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 // ── Filter ────────────────────────────────────────────────────────────────────
 
@@ -70,18 +72,27 @@ function sleep(ms: number) {
 
 // ── Domain SF Symbols ─────────────────────────────────────────────────────────
 
-const DOMAIN_SF: Record<string, { icon: string; tint: string }> = {
-  chat: { icon: "bubble.left.fill", tint: notificationDomain.chat.icon },
-  projects: { icon: "checkmark.square.fill", tint: notificationDomain.tasks.icon },
-  calendar: { icon: "calendar", tint: notificationDomain.calendar.icon },
-  docs: { icon: "doc.text.fill", tint: "#7b1fa2" },
-  system: { icon: "gear", tint: notificationDomain.system.icon },
-  hr: { icon: "person.2.fill", tint: lightPalette.primary.main },
-};
+/**
+ * Symbol and tint per source domain. A function of the palette rather than a
+ * module-level record, because a record built at import time can only hold one
+ * theme's colours.
+ */
+function domainSymbols(t: MobilePalette): Record<string, { icon: string; tint: string }> {
+  return {
+    chat: { icon: "bubble.left.fill", tint: t.notificationDomain.chat.icon },
+    projects: { icon: "checkmark.square.fill", tint: t.notificationDomain.tasks.icon },
+    calendar: { icon: "calendar", tint: t.notificationDomain.calendar.icon },
+    docs: { icon: "doc.text.fill", tint: t.eventCategory.personal },
+    system: { icon: "gear", tint: t.notificationDomain.system.icon },
+    hr: { icon: "person.2.fill", tint: t.primary.main },
+  };
+}
 
-const TYPE_SF: Record<string, { icon: string; tint: string }> = {
-  voice_call_incoming: { icon: "phone.fill", tint: lightPalette.success.main },
-};
+function typeSymbols(t: MobilePalette): Record<string, { icon: string; tint: string }> {
+  return {
+    voice_call_incoming: { icon: "phone.fill", tint: t.success.main },
+  };
+}
 
 interface NotificationNavigationTarget {
   deepLink?: string;
@@ -193,14 +204,19 @@ function notificationDisplayText(notification: AlertNotification): {
   };
 }
 
-function notificationIcon(notification: AlertNotification): { icon: string; tint: string } {
-  if (notification.notificationType && TYPE_SF[notification.notificationType]) {
-    return TYPE_SF[notification.notificationType];
+function notificationIcon(
+  t: MobilePalette,
+  notification: AlertNotification
+): { icon: string; tint: string } {
+  const byType = typeSymbols(t);
+  if (notification.notificationType && byType[notification.notificationType]) {
+    return byType[notification.notificationType];
   }
 
+  const byDomain = domainSymbols(t);
   return notification.sourceDomain
-    ? (DOMAIN_SF[notification.sourceDomain] ?? DOMAIN_SF.system)
-    : DOMAIN_SF.system;
+    ? (byDomain[notification.sourceDomain] ?? byDomain.system)
+    : byDomain.system;
 }
 
 // ── Group notifications by day ────────────────────────────────────────────────
@@ -289,6 +305,9 @@ function AlertsControls({
   onMarkAllRead: () => void;
   disabled: boolean;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.controlsWrap}>
       <View style={styles.controlsRow}>
@@ -330,7 +349,7 @@ function AlertsControls({
           <SFIcon
             name="checkmark.circle"
             size={16}
-            color={disabled ? lightPalette.text.disabled : lightPalette.primary.main}
+            color={disabled ? palette.text.disabled : palette.primary.main}
           />
           <Text
             style={[
@@ -347,6 +366,9 @@ function AlertsControls({
 }
 
 export default function AlertsScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState<Filter>("all");
@@ -606,7 +628,7 @@ export default function AlertsScreen() {
               </View>
               <View style={styles.sectionCard}>
                 {section.data.map((item, index) => {
-                  const icon = notificationIcon(item);
+                  const icon = notificationIcon(palette, item);
                   const displayText = notificationDisplayText(item);
                   return (
                     <React.Fragment key={buildNotificationRowKey(item, index)}>
@@ -663,10 +685,10 @@ export default function AlertsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   controlsWrap: {
     paddingHorizontal: mobileLayout.screenPadding,
@@ -686,27 +708,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#dbe7f6",
-    backgroundColor: lightPalette.background.paper,
+    borderColor: statusColors.info[t.mode].border,
+    backgroundColor: t.background.paper,
   },
   readAllButtonPressed: {
     opacity: opacity.pressed,
   },
   readAllButtonDisabled: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   readAllText: {
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: "600" as const,
   },
   readAllTextDisabled: {
-    color: lightPalette.text.disabled,
+    color: t.text.disabled,
   },
   segmentRow: {
     flexDirection: "row",
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderRadius: 12,
     padding: 3,
   },
@@ -718,8 +740,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   segmentActive: {
-    backgroundColor: lightPalette.background.paper,
-    shadowColor: "#000",
+    backgroundColor: t.background.paper,
+    shadowColor: shadows.lg.shadowColor,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
@@ -728,7 +750,7 @@ const styles = StyleSheet.create({
   segmentText: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: "500" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   emptyScrollContent: {
     flexGrow: 1,
@@ -738,18 +760,18 @@ const styles = StyleSheet.create({
     paddingBottom: mobileLayout.itemGap,
   },
   segmentTextActive: {
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600" as const,
   },
   sectionHeader: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     paddingHorizontal: mobileLayout.screenPadding,
     paddingVertical: mobileLayout.itemGap,
   },
   sectionHeaderText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -764,13 +786,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     overflow: "hidden",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   cardSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginHorizontal: mobileLayout.cardPadding,
   },
   notifRow: {
@@ -779,11 +801,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: mobileLayout.cardPadding,
     paddingVertical: 14,
     minHeight: mobileLayout.listRowHeight,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: mobileLayout.iconTextGap,
   },
   notifRowUnread: {
-    backgroundColor: "#f0f7ff",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   notifRowPressed: {
     opacity: opacity.pressed,
@@ -802,26 +824,26 @@ const styles = StyleSheet.create({
   notifTitle: {
     fontSize: 15,
     fontWeight: "400" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   notifTitleUnread: {
     fontWeight: "600" as const,
   },
   notifMessage: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     lineHeight: 20,
   },
   notifTime: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginTop: 2,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     marginTop: 6,
   },
-});
+}));

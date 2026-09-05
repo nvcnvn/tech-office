@@ -1,15 +1,15 @@
 import React from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SFIcon } from "@/components/ui/sf-icon";
 import type { VoiceCallAction } from "@/hooks/channel-voice-call-state";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface IncomingCallBannerProps {
   alreadyInAnotherCall?: boolean;
@@ -37,6 +37,9 @@ export function IncomingCallBanner({
   onAccept,
   onDecline,
 }: IncomingCallBannerProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const busy = pending !== null;
   const resolvedTitle = title ?? "Incoming voice call";
 
@@ -54,7 +57,7 @@ export function IncomingCallBanner({
   return (
     <View testID="incoming-voice-call-banner" style={styles.banner}>
       <View style={styles.iconWrap}>
-        <SFIcon name="phone.fill" size={18} color={lightPalette.primary.main} />
+        <SFIcon name="phone.fill" size={18} color={palette.primary.main} />
       </View>
       <View style={styles.body}>
         <Text style={styles.title} numberOfLines={1}>
@@ -74,7 +77,7 @@ export function IncomingCallBanner({
           style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed, busy && styles.disabled]}
         >
           {pending === "declining" ? (
-            <ActivityIndicator size="small" color={lightPalette.text.secondary} />
+            <ActivityIndicator size="small" color={palette.text.secondary} />
           ) : (
             <Text style={styles.secondaryText}>{resolvedDeclineLabel}</Text>
           )}
@@ -88,7 +91,7 @@ export function IncomingCallBanner({
           style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed, busy && styles.disabled]}
         >
           {pending === "answering" || pending === "joining" ? (
-            <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+            <ActivityIndicator size="small" color={palette.primary.contrastText} />
           ) : (
             <Text style={styles.primaryText}>{resolvedAcceptLabel}</Text>
           )}
@@ -98,14 +101,14 @@ export function IncomingCallBanner({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   banner: {
     minHeight: 56,
     paddingHorizontal: spacing[3],
     paddingVertical: 8,
     borderTopWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
@@ -116,19 +119,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   body: {
     flex: 1,
     minWidth: 0,
   },
   title: {
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontSize: mobileTypography.listSecondary.fontSize,
     fontWeight: "700",
   },
   subtitle: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize,
   },
   actions: {
@@ -143,10 +146,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   primaryText: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontSize: mobileTypography.buttonSm.fontSize,
     fontWeight: mobileTypography.button.fontWeight,
   },
@@ -156,13 +159,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     borderRadius: radius.full,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   secondaryText: {
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontSize: mobileTypography.buttonSm.fontSize,
     fontWeight: mobileTypography.button.fontWeight,
   },
@@ -172,4 +175,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

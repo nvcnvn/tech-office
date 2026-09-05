@@ -13,11 +13,10 @@
  */
 
 import React from "react";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
@@ -25,6 +24,7 @@ import {
   touch,
 } from "@tech-office/theme-tokens";
 import { useFeatureTour, type UseFeatureTourResult } from "@/hooks/use-feature-tour";
+import { makeStyles } from "@/lib/theme";
 
 export interface FeatureTourProps {
   /**
@@ -35,6 +35,8 @@ export interface FeatureTourProps {
 }
 
 export function FeatureTour({ controller }: FeatureTourProps) {
+  const styles = useStyles();
+
   const own = useFeatureTour();
   const insets = useSafeAreaInsets();
   const {
@@ -210,14 +212,14 @@ export function FeatureTour({ controller }: FeatureTourProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   scrim: {
     flex: 1,
     justifyContent: "flex-end",
     backgroundColor: `rgba(0, 0, 0, ${opacity.scrim})`,
   },
   sheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     paddingHorizontal: spacing[2.5],
@@ -226,12 +228,12 @@ const styles = StyleSheet.create({
   },
   position: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginBottom: spacing[0.5],
   },
   title: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   bodyScroll: {
     // Roughly half a small phone's height: enough for the longest body, capped so the
@@ -241,38 +243,38 @@ const styles = StyleSheet.create({
   },
   body: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   fallbackNote: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginTop: spacing[1.5],
   },
   primaryButton: {
     minHeight: touch.large,
     borderRadius: radius.md,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing[2],
   },
   primaryButtonLabel: {
     ...mobileTypography.button,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     textAlign: "center",
   },
   secondaryButton: {
     minHeight: touch.comfortable,
     borderRadius: radius.md,
     borderWidth: border.thin,
-    borderColor: lightPalette.primary.main,
+    borderColor: t.primary.main,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: spacing[2],
   },
   secondaryButtonLabel: {
     ...mobileTypography.button,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     textAlign: "center",
   },
   footerRow: {
@@ -287,7 +289,7 @@ const styles = StyleSheet.create({
   },
   textButtonLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   disabled: {
     opacity: opacity.disabled,
@@ -295,6 +297,6 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));
 
 export default FeatureTour;

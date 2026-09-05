@@ -15,23 +15,29 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 
 import type { MessageTaskLink, StateCategory } from "apis";
+import { statusColors, type MobilePalette } from "@tech-office/theme-tokens";
+
+import { useTheme } from "@/lib/theme";
 
 /** How many chips one message shows before the rest collapse into a count. */
 export const MAX_VISIBLE_TASK_CHIPS = 3;
 
-function chipColors(category: StateCategory): { background: string; border: string; text: string } {
+function chipColors(
+  t: MobilePalette,
+  category: StateCategory,
+): { background: string; border: string; text: string } {
   switch (category) {
     case "done":
     case "verified":
-      return { background: "#ecfdf5", border: "#a7f3d0", text: "#047857" };
+      return { background: statusColors.success[t.mode].bg, border: statusColors.success[t.mode].border, text: statusColors.success[t.mode].text };
     case "in_progress":
     case "submitted":
-      return { background: "#eff6ff", border: "#bfdbfe", text: "#1d4ed8" };
+      return { background: statusColors.info[t.mode].bg, border: statusColors.info[t.mode].border, text: statusColors.info[t.mode].text };
     case "overdue":
     case "missed":
-      return { background: "#fffbeb", border: "#fde68a", text: "#b45309" };
+      return { background: statusColors.warning[t.mode].bg, border: statusColors.warning[t.mode].border, text: statusColors.warning[t.mode].text };
     default:
-      return { background: "#f8fafc", border: "#e2e8f0", text: "#475569" };
+      return { background: t.background.default, border: t.divider, text: t.text.secondary };
   }
 }
 
@@ -41,6 +47,8 @@ interface MessageTaskChipsProps {
 }
 
 export function MessageTaskChips({ links, onOpen }: MessageTaskChipsProps) {
+  const { palette } = useTheme();
+
   if (links.length === 0) {
     return null;
   }
@@ -54,7 +62,7 @@ export function MessageTaskChips({ links, onOpen }: MessageTaskChipsProps) {
       style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 6 }}
     >
       {visible.map((link) => {
-        const colors = chipColors(link.stateCategory);
+        const colors = chipColors(palette, link.stateCategory);
         return (
           <Pressable
             key={link.taskId}
@@ -85,11 +93,11 @@ export function MessageTaskChips({ links, onOpen }: MessageTaskChipsProps) {
             paddingVertical: 4,
             borderRadius: 999,
             borderWidth: 1,
-            borderColor: "#e2e8f0",
-            backgroundColor: "#f8fafc",
+            borderColor: palette.divider,
+            backgroundColor: palette.background.default,
           }}
         >
-          <Text style={{ fontSize: 12, fontWeight: "600", color: "#475569" }}>+{hidden} more</Text>
+          <Text style={{ fontSize: 12, fontWeight: "600", color: palette.text.secondary }}>+{hidden} more</Text>
         </View>
       ) : null}
     </View>

@@ -15,7 +15,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -30,13 +29,14 @@ import {
   PROJECT_KEY_RULE_TEXT,
 } from "@tech-office/validations";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
+  statusColors,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const VISIBILITIES: Array<{ value: ProjectVisibility; label: string; explanation: string }> = [
   { value: "private", label: "Private", explanation: "Only people you add can see it." },
@@ -50,6 +50,9 @@ const MODES: Array<{ value: CollaborationMode; label: string; explanation: strin
 ];
 
 export default function CreateProjectScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const queryClient = useQueryClient();
 
@@ -144,7 +147,7 @@ export default function CreateProjectScreen() {
           style={styles.input}
           autoFocus
           placeholder="Store operations"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           value={name}
           onChangeText={setName}
         />
@@ -158,7 +161,7 @@ export default function CreateProjectScreen() {
           autoCapitalize="characters"
           autoCorrect={false}
           placeholder="STORE"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           value={key}
           onChangeText={(text) => {
             setKeyTouched(true);
@@ -180,7 +183,7 @@ export default function CreateProjectScreen() {
           testID="project-description-input"
           style={[styles.input, styles.multiline]}
           placeholder="What this project is for"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           multiline
           numberOfLines={3}
           value={description}
@@ -254,7 +257,7 @@ export default function CreateProjectScreen() {
         style={[styles.submit, !canSubmit && styles.submitDisabled]}
       >
         {mutation.isPending ? (
-          <ActivityIndicator color={lightPalette.primary.contrastText} />
+          <ActivityIndicator color={palette.primary.contrastText} />
         ) : (
           <Text style={styles.submitLabel}>Create project</Text>
         )}
@@ -263,7 +266,7 @@ export default function CreateProjectScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   content: {
     padding: mobileLayout.screenPadding,
     gap: spacing[2.5],
@@ -273,7 +276,7 @@ const styles = StyleSheet.create({
   },
   cancel: {
     ...mobileTypography.button,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     // Android's native header packs headerLeft flush against the title; without this the
     // two run together as "CancelNew Project" at 360dp.
     paddingRight: spacing[1.5],
@@ -283,15 +286,15 @@ const styles = StyleSheet.create({
   },
   label: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   input: {
     minHeight: touch.comfortable,
     paddingHorizontal: spacing[1.5],
     borderRadius: radius.base,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    color: lightPalette.text.primary,
+    borderColor: t.divider,
+    color: t.text.primary,
     fontSize: 16,
   },
   multiline: {
@@ -312,52 +315,52 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[0.5],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   segmentSelected: {
-    backgroundColor: lightPalette.primary.main,
-    borderColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
+    borderColor: t.primary.main,
   },
   segmentLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
   },
   segmentLabelSelected: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   helper: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   error: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   banner: {
     padding: spacing[1.5],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.error.light,
-    backgroundColor: "#fef2f2",
+    borderColor: t.error.light,
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   bannerText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.dark,
+    color: t.error.dark,
   },
   submit: {
     minHeight: touch.large,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   submitDisabled: {
-    backgroundColor: lightPalette.text.disabled,
+    backgroundColor: t.text.disabled,
   },
   submitLabel: {
     ...mobileTypography.button,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
-});
+}));

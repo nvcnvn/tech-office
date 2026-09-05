@@ -22,13 +22,16 @@
         "outDir": "./dst",
         "rootDir": "./src",
         "skipLibCheck": true,
-        "esModuleInterop": true
+        "esModuleInterop": true,
+        "allowImportingTsExtensions": true,
+        "rewriteRelativeImportExtensions": true
     },
     "include": [
         "src/**/*"
     ],
     "exclude": [
         "node_modules",
-        "dst"
+        "dst",
+        "src/**/*.check.ts"
     ]
 }

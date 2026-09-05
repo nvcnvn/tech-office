@@ -13,7 +13,6 @@ import {
   Pressable,
   ScrollView,
   Share,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -41,13 +40,13 @@ import {
 import { useCanonicalLinkPreviews } from "@/lib/canonical-link-previews";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /** Small preview card for a canonical resource link in the document */
 function CanonicalLinkPreviewCard({
@@ -57,6 +56,8 @@ function CanonicalLinkPreviewCard({
   url: string;
   preview: CanonicalLinkPreview;
 }) {
+  const styles = useStyles();
+
   const router = useRouter();
   const display: CanonicalLinkPreviewDisplay = buildCanonicalLinkPreviewDisplay(preview);
 
@@ -92,6 +93,9 @@ function CanonicalLinkPreviewCard({
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function DocViewerScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { slug } = useLocalSearchParams<{ slug: string }>();
   const { membership } = useCurrentMembership();
 
@@ -141,7 +145,7 @@ export default function DocViewerScreen() {
     return (
       <View style={styles.centered}>
         <Stack.Screen options={{ title: "Document" }} />
-        <ActivityIndicator size="large" color={lightPalette.primary.main} />
+        <ActivityIndicator size="large" color={palette.primary.main} />
       </View>
     );
   }
@@ -224,10 +228,10 @@ export default function DocViewerScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     padding: mobileLayout.screenPadding,
@@ -239,16 +243,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: mobileLayout.screenPadding,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   shareLabel: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: "600",
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   meta: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   linksSection: {
     gap: spacing[1],
@@ -259,15 +263,15 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   linkCard: {
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     borderRadius: radius.md,
     borderCurve: "continuous",
     padding: mobileLayout.cardPadding,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: 4,
   },
   pressed: {
@@ -275,17 +279,17 @@ const styles = StyleSheet.create({
   },
   linkBadge: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
   linkTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   linkSubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

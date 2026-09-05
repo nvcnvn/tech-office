@@ -11,7 +11,7 @@
  */
 
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, Text, View } from "react-native";
 import { Stack } from "expo-router";
 import { useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -37,7 +37,6 @@ import { RejectReasonSheet } from "@/components/review/reject-reason-sheet";
 import { useManualRefresh } from "@/hooks/use-manual-refresh";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
@@ -45,8 +44,12 @@ import {
   spacing,
   statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export default function ReviewQueueScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const queryClient = useQueryClient();
 
   const {
@@ -183,9 +186,9 @@ export default function ReviewQueueScreen() {
             style={({ pressed }) => [styles.messageBar, pressed && styles.pressed]}
             testID="review-queue-decision-error"
           >
-            <SFIcon name="exclamationmark.triangle.fill" size={14} color={statusColors.warning.light.text} />
+            <SFIcon name="exclamationmark.triangle.fill" size={14} color={palette.warning.main} />
             <Text style={styles.messageText}>{message}</Text>
-            <SFIcon name="xmark" size={12} color={statusColors.warning.light.text} />
+            <SFIcon name="xmark" size={12} color={palette.warning.main} />
           </Pressable>
         ) : null}
 
@@ -213,7 +216,7 @@ export default function ReviewQueueScreen() {
           ListFooterComponent={
             isFetchingNextPage ? (
               <View style={styles.footer}>
-                <ActivityIndicator size="small" color={lightPalette.text.secondary} />
+                <ActivityIndicator size="small" color={palette.text.secondary} />
               </View>
             ) : null
           }
@@ -238,10 +241,10 @@ export default function ReviewQueueScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   center: {
     flex: 1,
@@ -249,11 +252,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: spacing[1.5],
     padding: mobileLayout.screenPadding,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   errorText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
   },
   listContent: {
@@ -281,16 +284,16 @@ const styles = StyleSheet.create({
     padding: spacing[1.5],
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: statusColors.warning.light.bg,
+    backgroundColor: statusColors.warning[t.mode].bg,
     borderWidth: border.thin,
-    borderColor: statusColors.warning.light.border,
+    borderColor: statusColors.warning[t.mode].border,
   },
   messageText: {
     flex: 1,
     ...mobileTypography.listSecondary,
-    color: statusColors.warning.light.text,
+    color: statusColors.warning[t.mode].text,
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

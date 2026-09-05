@@ -14,7 +14,8 @@
  */
 
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable } from "react-native";
+import { makeStyles } from "@/lib/theme";
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -55,22 +56,33 @@ export class ErrorBoundary extends React.Component<
         return this.props.fallback(this.state.error, this.reset);
       }
 
-      return (
-        <View style={styles.container}>
-          <Text style={styles.emoji}>⚠️</Text>
-          <Text style={styles.title}>Something went wrong</Text>
-          <Text style={styles.message} numberOfLines={3}>
-            {this.state.error?.message ?? "An unexpected error occurred."}
-          </Text>
-          <Pressable onPress={this.reset} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Try Again</Text>
-          </Pressable>
-        </View>
-      );
+      return <ErrorFallback error={this.state.error} reset={this.reset} />;
     }
 
     return this.props.children;
   }
+}
+
+/**
+ * The default fallback, split out of `render()` because the boundary has to be a
+ * class — only a class can implement `getDerivedStateFromError` — and a class
+ * cannot read the theme, which is a hook.
+ */
+function ErrorFallback({ error, reset }: { error: Error | null; reset: () => void }) {
+  const styles = useStyles();
+
+  return (
+    <View style={styles.container}>
+      <Text style={styles.emoji}>⚠️</Text>
+      <Text style={styles.title}>Something went wrong</Text>
+      <Text style={styles.message} numberOfLines={3}>
+        {error?.message ?? "An unexpected error occurred."}
+      </Text>
+      <Pressable onPress={reset} style={styles.retryBtn}>
+        <Text style={styles.retryText}>Try Again</Text>
+      </Pressable>
+    </View>
+  );
 }
 
 /**
@@ -91,7 +103,7 @@ export function withErrorBoundary<P extends object>(
   return Wrapped;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
     alignItems: "center",
@@ -100,14 +112,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   emoji: { fontSize: 48 },
-  title: { fontSize: 20, fontWeight: "700", color: "#333" },
-  message: { fontSize: 14, color: "#666", textAlign: "center", lineHeight: 20 },
+  title: { fontSize: 20, fontWeight: "700", color: t.text.primary },
+  message: { fontSize: 14, color: t.text.secondary, textAlign: "center", lineHeight: 20 },
   retryBtn: {
     marginTop: 8,
     paddingHorizontal: 24,
     paddingVertical: 12,
-    backgroundColor: "#0f172a",
+    backgroundColor: t.primary.main,
     borderRadius: 10,
   },
-  retryText: { color: "#fff", fontWeight: "600", fontSize: 15 },
-});
+  retryText: { color: t.primary.contrastText, fontWeight: "600", fontSize: 15 },
+}));

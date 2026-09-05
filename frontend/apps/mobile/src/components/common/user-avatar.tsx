@@ -5,6 +5,7 @@
 import React from "react";
 import { View, Text } from "react-native";
 import { Image } from "expo-image";
+import { useTheme } from "@/lib/theme";
 
 interface UserAvatarProps {
   name?: string;
@@ -17,8 +18,11 @@ export function UserAvatar({
   name = "?",
   avatarUrl,
   size = 40,
-  color = "#334155",
+  color,
 }: UserAvatarProps) {
+  const { palette } = useTheme();
+  const fill = color ?? palette.primary.light;
+
   const initials = name
     .split(" ")
     .map((w) => w[0])
@@ -42,14 +46,14 @@ export function UserAvatar({
         width: size,
         height: size,
         borderRadius: size / 2,
-        backgroundColor: color,
+        backgroundColor: fill,
         justifyContent: "center",
         alignItems: "center",
       }}
     >
       <Text
         style={{
-          color: "#fff",
+          color: palette.primary.contrastText,
           fontSize: size * 0.38,
           fontWeight: "700",
         }}

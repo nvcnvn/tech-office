@@ -18,7 +18,6 @@ import {
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -37,7 +36,6 @@ import {
 } from "apis";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
@@ -60,6 +58,7 @@ import {
   rememberAuthLoginIdentifier,
   rememberAuthSubdomain,
 } from "@/lib/auth-subdomain-storage";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /** The fresh-device sequence, in the order it is revealed. */
 type Step = "workspace" | "identifier" | "pin";
@@ -98,6 +97,9 @@ function formatCountdown(totalSeconds: number): string {
 }
 
 export default function SignInScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const auth = React.use(AuthContext);
   const params = useLocalSearchParams<{
@@ -361,7 +363,7 @@ export default function SignInScreen() {
             />
 
             {loading ? (
-              <ActivityIndicator size="small" color={lightPalette.primary.main} />
+              <ActivityIndicator size="small" color={palette.primary.main} />
             ) : null}
 
             {bannerMessage ? <InlineError message={bannerMessage} /> : null}
@@ -382,12 +384,12 @@ export default function SignInScreen() {
                 <Text style={styles.stepTitle}>Where do you work?</Text>
                 <View style={styles.inputShell}>
                   <View style={styles.inputPrefix}>
-                    <SFIcon name="building.2" size={16} color={lightPalette.text.secondary} />
+                    <SFIcon name="building.2" size={16} color={palette.text.secondary} />
                   </View>
                   <TextInput
                     style={styles.input}
                     placeholder="your-company"
-                    placeholderTextColor={lightPalette.text.disabled}
+                    placeholderTextColor={palette.text.disabled}
                     autoCapitalize="none"
                     autoCorrect={false}
                     autoFocus
@@ -426,13 +428,13 @@ export default function SignInScreen() {
                     <SFIcon
                       name="person.crop.rectangle"
                       size={16}
-                      color={lightPalette.text.secondary}
+                      color={palette.text.secondary}
                     />
                   </View>
                   <TextInput
                     style={styles.input}
                     placeholder="Your ID or work email"
-                    placeholderTextColor={lightPalette.text.disabled}
+                    placeholderTextColor={palette.text.disabled}
                     autoCapitalize="none"
                     autoCorrect={false}
                     autoFocus
@@ -476,7 +478,7 @@ export default function SignInScreen() {
                   label="Enter your PIN"
                 />
                 {loading ? (
-                  <ActivityIndicator size="small" color={lightPalette.primary.main} />
+                  <ActivityIndicator size="small" color={palette.primary.main} />
                 ) : null}
               </View>
             ) : null}
@@ -524,6 +526,8 @@ function PinBoxes({
   onChange: (value: string) => void;
   label: string;
 }) {
+  const styles = useStyles();
+
   const [focused, setFocused] = useState(false);
 
   return (
@@ -591,9 +595,12 @@ function AnsweredStep({
   onEdit: () => void;
   testID: string;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.answeredRow} testID={testID}>
-      <SFIcon name="checkmark.circle.fill" size={16} color={lightPalette.success.main} />
+      <SFIcon name="checkmark.circle.fill" size={16} color={palette.success.main} />
       <Text style={styles.answeredValue} numberOfLines={1} selectable>
         {value}
       </Text>
@@ -614,9 +621,12 @@ function AnsweredStep({
  * an extra tap to get back to the state they were already in.
  */
 function InlineError({ message }: { message: string }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.errorBanner} testID="signin-error">
-      <SFIcon name="exclamationmark.circle.fill" size={16} color={lightPalette.error.main} />
+      <SFIcon name="exclamationmark.circle.fill" size={16} color={palette.error.main} />
       <Text style={styles.errorText} selectable>
         {message}
       </Text>
@@ -635,6 +645,9 @@ function PrimaryButton({
   onPress: () => void;
   testID: string;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Pressable
       onPress={onPress}
@@ -647,7 +660,7 @@ function PrimaryButton({
       testID={testID}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+        <ActivityIndicator size="small" color={palette.primary.contrastText} />
       ) : (
         <Text style={styles.primaryButtonText}>{label}</Text>
       )}
@@ -671,13 +684,13 @@ function normalizeCanonicalOpenUrl(raw: string): string {
   }
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   flex: {
     flex: 1,
   },
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     flexGrow: 1,
@@ -688,9 +701,9 @@ const styles = StyleSheet.create({
     marginHorizontal: mobileLayout.screenPadding,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: mobileLayout.cardPadding,
     gap: 20,
   },
@@ -704,21 +717,21 @@ const styles = StyleSheet.create({
     borderRadius: 32,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   avatarText: {
     fontSize: 24,
     fontWeight: "700",
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   personName: {
     ...mobileTypography.screenTitle,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
   },
   personWorkspace: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
   },
   fieldGroup: {
@@ -726,7 +739,7 @@ const styles = StyleSheet.create({
   },
   stepTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   inputShell: {
     minHeight: 48,
@@ -735,8 +748,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     overflow: "hidden",
   },
   inputPrefix: {
@@ -748,7 +761,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     fontSize: 16,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     paddingVertical: 12,
     paddingRight: 12,
   },
@@ -760,12 +773,12 @@ const styles = StyleSheet.create({
   },
   answeredValue: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     flex: 1,
   },
   answeredEdit: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.info.main,
+    color: t.info.main,
     fontWeight: "600",
   },
   pinRow: {
@@ -781,23 +794,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     alignItems: "center",
     justifyContent: "center",
   },
   pinBoxActive: {
-    borderColor: lightPalette.primary.main,
+    borderColor: t.primary.main,
     borderWidth: border.medium,
   },
   pinBoxFilled: {
-    borderColor: lightPalette.primary.main,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.primary.main,
+    backgroundColor: t.background.paper,
   },
   pinDigit: {
     fontSize: 26,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   pinHiddenInput: {
     position: "absolute",
@@ -811,34 +824,34 @@ const styles = StyleSheet.create({
     gap: mobileLayout.itemGap,
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.error.light,
+    borderColor: t.error.light,
     padding: 12,
   },
   errorText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.dark,
+    color: t.error.dark,
     flex: 1,
   },
   primaryButton: {
     minHeight: 48,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   primaryButtonPressed: {
-    backgroundColor: lightPalette.primary.dark,
+    backgroundColor: t.primary.dark,
   },
   primaryButtonDisabled: {
     opacity: 0.7,
   },
   primaryButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   footerActions: {
     paddingHorizontal: mobileLayout.screenPadding,
@@ -855,7 +868,7 @@ const styles = StyleSheet.create({
   },
   quietActionText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.info.main,
+    color: t.info.main,
     fontWeight: "600",
   },
-});
+}));

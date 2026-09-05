@@ -10,7 +10,6 @@
  */
 
 import React, { useEffect } from "react";
-import { Appearance } from "react-native";
 import { Stack } from "expo-router/stack";
 import { usePathname, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
@@ -19,6 +18,7 @@ import * as Linking from "expo-linking";
 import { parseCanonicalResourceLink } from "@tech-office/links";
 import { queryClient, setupQueryPersistence } from "@/lib/query-client";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
+import { ThemeProvider, useTheme } from "@/lib/theme";
 import { setPendingPostSignInRedirect } from "@/lib/auth-redirect-handoff";
 import { getCanonicalInAppRoute } from "@/lib/canonical-links";
 import { startNativeCallIntegration } from "@/lib/voice/native-call";
@@ -31,12 +31,6 @@ import { getUnreadCount } from "apis";
 
 // Keep the splash screen visible until we explicitly hide it (T11.5)
 SplashScreen.preventAutoHideAsync();
-
-// Every screen is painted from lightPalette, so the app is a light-mode app.
-// Pinning the color scheme is what keeps the pieces we do not paint — Switch,
-// TextInput carets, the keyboard, native pickers — from turning dark against it
-// on a phone whose OS is in dark mode.
-Appearance.setColorScheme("light");
 
 function QueryPersistenceSetup({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -214,31 +208,55 @@ export default function RootLayout() {
     <QueryClientProvider client={queryClient}>
       <QueryPersistenceSetup>
         <AuthProvider>
-          <NotificationStreamProvider>
-            <BadgeSync />
-            <NativeCallIntegration />
-            <CanonicalUrlListener />
-            <DevRouteLogger />
-            {/* Every screen is hardcoded to lightPalette, so "auto" paints white
-                status bar icons onto a white header whenever the OS is in dark
-                mode — the clock and battery vanish. */}
-            <StatusBar style="dark" />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="index" />
-              <Stack.Screen name="canonical-signin" />
-              <Stack.Screen name="canonical-link/[encoded]" />
-              <Stack.Screen name="link-status" />
-              <Stack.Screen name="link-handoff" />
-              <Stack.Screen name="o/[tenantKey]/r/[resourceType]/[resourceId]" />
-              <Stack.Screen name="[...path]" />
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(app)" />
-              <Stack.Screen name="(shared)" />
-            </Stack>
-          </NotificationStreamProvider>
+          {/* Inside AuthProvider because the resolved theme depends on who is
+              signed in, and above every route group so the signed-out screens are
+              themed too (FR-014). */}
+          <ThemeProvider>
+            <NotificationStreamProvider>
+              <BadgeSync />
+              <NativeCallIntegration />
+              <CanonicalUrlListener />
+              <DevRouteLogger />
+              <RootNavigator />
+            </NotificationStreamProvider>
+          </ThemeProvider>
         </AuthProvider>
       </QueryPersistenceSetup>
     </QueryClientProvider>
+  );
+}
+
+function RootNavigator() {
+  const { mode, palette } = useTheme();
+
+  return (
+    <>
+      {/* Not "auto": the app's theme is the person's stored preference, which may
+          deliberately differ from the phone's setting, and "auto" follows the
+          phone. Painting the clock and battery from the phone instead of from the
+          app is how they vanish into a header of the opposite colour (FR-004). */}
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          // Without this the navigator paints its own default background — white
+          // in both themes — for the frame between one screen and the next
+          // (FR-006, SC-001).
+          contentStyle: { backgroundColor: palette.background.default },
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="canonical-signin" />
+        <Stack.Screen name="canonical-link/[encoded]" />
+        <Stack.Screen name="link-status" />
+        <Stack.Screen name="link-handoff" />
+        <Stack.Screen name="o/[tenantKey]/r/[resourceType]/[resourceId]" />
+        <Stack.Screen name="[...path]" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(app)" />
+        <Stack.Screen name="(shared)" />
+      </Stack>
+    </>
   );
 }
 

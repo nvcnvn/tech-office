@@ -156,6 +156,13 @@ Asynchronous voice notes, separate from calls: `RequestVoiceMessageUpload`,
 `requested → uploading → posted | failed | cancelled` and FKs to `files.file_metadata`.
 Posting produces a `chat.message` with `message_kind = 'voice'`.
 
+On mobile the player derives a voice note's length from the audio file itself and
+draws no waveform, so it shows `--:--` until enough of the file has loaded to report
+a duration. The timeline metadata that rides with the message carries `durationMs`
+and `waveformPeaks`, and `chat-message-body.tsx` used to pass both to a component
+that declared neither prop — so they were dropped silently. The props were removed
+rather than wired up; see D60.
+
 ## Recordings and transcripts
 
 `voice.call_artifact` holds one row per artefact, typed `recording | transcript`, status

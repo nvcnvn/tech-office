@@ -18,10 +18,14 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { acceptInvitation, AuthError, TERMS_VERSION } from "apis";
+import { statusColors } from "@tech-office/theme-tokens";
+
+import { useTheme } from "@/lib/theme";
 
 import { TermsAcceptance } from "@/components/compliance/terms-acceptance";
 
 export default function AcceptInvitationScreen() {
+  const { palette } = useTheme();
   const { token } = useLocalSearchParams<{ token?: string }>();
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -34,11 +38,14 @@ export default function AcceptInvitationScreen() {
 
   const inputStyle = {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: palette.divider,
     borderRadius: 10,
     padding: 14,
     fontSize: 16,
-    backgroundColor: "#fafafa",
+    backgroundColor: palette.background.default,
+    // React Native's default text colour is black, so an input without this one
+    // takes typed text to black on a dark field.
+    color: palette.text.primary,
   } as const;
 
   const handleAccept = async () => {
@@ -93,12 +100,14 @@ export default function AcceptInvitationScreen() {
 
         <View style={{ alignItems: "center", gap: 8, marginBottom: 8 }}>
           <Text style={{ fontSize: 64 }}>🎉</Text>
-          <Text style={{ fontSize: 24, fontWeight: "700" }}>You're invited!</Text>
-          <Text style={{ fontSize: 15, color: "#666", textAlign: "center" }}>
+          <Text style={{ fontSize: 24, fontWeight: "700", color: palette.text.primary }}>
+            You're invited!
+          </Text>
+          <Text style={{ fontSize: 15, color: palette.text.secondary, textAlign: "center" }}>
             Set a password to activate your account.
           </Text>
           <Text
-            style={{ fontSize: 14, color: "#6a5542", textAlign: "center", lineHeight: 20 }}
+            style={{ fontSize: 14, color: palette.warning.dark, textAlign: "center", lineHeight: 20 }}
           >
             Use the same email address from your invitation. If you later use Google or Apple with that same email, it should connect to this account instead of creating another one.
           </Text>
@@ -107,26 +116,27 @@ export default function AcceptInvitationScreen() {
         {showMismatchFallback ? (
           <View
             style={{
-              backgroundColor: "#fff3e0",
+              backgroundColor: statusColors.warning[palette.mode].bg,
               padding: 12,
               borderRadius: 10,
               borderWidth: 1,
-              borderColor: "#ffb74d",
+              borderColor: palette.warning.light,
             }}
           >
-            <Text style={{ color: "#8a4b08", fontSize: 13, lineHeight: 18 }}>
+            <Text style={{ color: palette.warning.dark, fontSize: 13, lineHeight: 18 }}>
               Your social sign-in used a different email than the invitation. Finish setup with your invited email and password here, then link Apple or Google later from Security.
             </Text>
           </View>
         ) : null}
 
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
             Password
           </Text>
           <TextInput
             style={inputStyle}
             placeholder="At least 8 characters"
+            placeholderTextColor={palette.text.disabled}
             secureTextEntry
             textContentType="newPassword"
             value={password}
@@ -137,12 +147,13 @@ export default function AcceptInvitationScreen() {
         </View>
 
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
             Confirm Password
           </Text>
           <TextInput
             style={inputStyle}
             placeholder="Repeat your password"
+            placeholderTextColor={palette.text.disabled}
             secureTextEntry
             textContentType="newPassword"
             value={confirm}
@@ -163,7 +174,11 @@ export default function AcceptInvitationScreen() {
           disabled={loading || !password || !confirm || !acceptedTerms}
           style={({ pressed }) => ({
             backgroundColor:
-              !password || !confirm || !acceptedTerms ? "#ccc" : pressed ? "#020617" : "#0f172a",
+              !password || !confirm || !acceptedTerms
+                ? palette.divider
+                : pressed
+                  ? palette.primary.dark
+                  : palette.primary.main,
             paddingVertical: 16,
             borderRadius: 12,
             alignItems: "center",
@@ -173,9 +188,9 @@ export default function AcceptInvitationScreen() {
               testID="accept-invitation-submit"
             >
           {loading ? (
-            <ActivityIndicator color="#fff" />
+            <ActivityIndicator color={palette.primary.contrastText} />
           ) : (
-            <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
+            <Text style={{ color: palette.primary.contrastText, fontSize: 16, fontWeight: "600" }}>
               {showMismatchFallback ? "Continue With Invited Email" : "Activate Account"}
             </Text>
           )}
@@ -183,14 +198,14 @@ export default function AcceptInvitationScreen() {
 
         <View
           style={{
-            backgroundColor: "#fffaf2",
+            backgroundColor: statusColors.warning[palette.mode].bg,
             padding: 12,
             borderRadius: 10,
             borderWidth: 1,
-            borderColor: "#eadfcf",
+            borderColor: statusColors.warning[palette.mode].border,
           }}
         >
-          <Text style={{ color: "#6a5542", fontSize: 13, lineHeight: 18 }}>
+          <Text style={{ color: palette.warning.dark, fontSize: 13, lineHeight: 18 }}>
             Finish activation with your invited email and password here. After
             that, the main sign-in screen can use Google or Apple with the
             same email to attach to this account.
@@ -200,14 +215,14 @@ export default function AcceptInvitationScreen() {
         {!token && (
           <View
             style={{
-              backgroundColor: "#fff3e0",
+              backgroundColor: statusColors.warning[palette.mode].bg,
               padding: 12,
               borderRadius: 10,
               borderWidth: 1,
-              borderColor: "#ffb74d",
+              borderColor: palette.warning.light,
             }}
           >
-            <Text style={{ color: "#e65100", fontSize: 13 }}>
+            <Text style={{ color: palette.warning.main, fontSize: 13 }}>
               No invitation token found. Please open this link from your invitation email.
             </Text>
           </View>

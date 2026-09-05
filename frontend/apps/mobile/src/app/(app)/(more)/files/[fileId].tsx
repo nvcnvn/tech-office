@@ -11,7 +11,7 @@
  */
 
 import React, { useState } from "react";
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { getDownloadUrl, getFileMetadata, type FileMetadata } from "apis";
@@ -25,13 +25,13 @@ import { SFIcon } from "@/components/ui/sf-icon";
 import { StateChip } from "@/components/ui/state-chip";
 import {
   actionIcons,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
   statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 function formatBytes(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
@@ -55,6 +55,9 @@ function formatContextLabel(file: FileMetadata) {
 }
 
 export default function FileDetailScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { fileId } = useLocalSearchParams<{ fileId: string }>();
   const [downloading, setDownloading] = useState(false);
 
@@ -96,7 +99,7 @@ export default function FileDetailScreen() {
     return (
       <View style={styles.centered}>
         <Stack.Screen options={{ title: "File" }} />
-        <ActivityIndicator size="large" color={lightPalette.primary.main} />
+        <ActivityIndicator size="large" color={palette.primary.main} />
       </View>
     );
   }
@@ -130,7 +133,7 @@ export default function FileDetailScreen() {
       <Card style={styles.card}>
         <View style={styles.header}>
           <View style={styles.iconWrap}>
-            <SFIcon name="doc.text" size={20} color={lightPalette.primary.main} />
+            <SFIcon name="doc.text" size={20} color={palette.primary.main} />
           </View>
           <View style={styles.copy}>
             <View style={styles.titleRow}>
@@ -139,8 +142,8 @@ export default function FileDetailScreen() {
               </Text>
               <StateChip
                 label={formatContextLabel(file)}
-                color={statusColors.info.light.bg}
-                textColor={statusColors.info.light.text}
+                color={statusColors.info[palette.mode].bg}
+                textColor={statusColors.info[palette.mode].text}
               />
             </View>
 
@@ -170,7 +173,7 @@ export default function FileDetailScreen() {
             <SFIcon
               name={actionIcons.download.name}
               size={14}
-              color={lightPalette.text.secondary}
+              color={palette.text.secondary}
             />
             <Text style={styles.actionHintText}>Saves, then opens share options</Text>
           </View>
@@ -180,12 +183,12 @@ export default function FileDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     padding: mobileLayout.screenPadding,
   },
   content: {
@@ -205,7 +208,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   copy: {
     flex: 1,
@@ -223,17 +226,17 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.listPrimary.fontSize,
     lineHeight: mobileTypography.listPrimary.lineHeight,
     fontWeight: mobileTypography.listPrimary.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   meta: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   subtle: {
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
-    color: lightPalette.text.disabled,
+    color: t.text.disabled,
   },
   actions: {
     gap: spacing[1],
@@ -246,6 +249,6 @@ const styles = StyleSheet.create({
   actionHintText: {
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

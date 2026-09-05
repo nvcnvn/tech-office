@@ -3,8 +3,8 @@ import { useRouter } from "expo-router";
 import { Pressable } from "react-native";
 import { ErrorBoundary } from "@/components/ui/error-boundary";
 import { tabRootStackScreenOptions } from "@/lib/stack-screen-options";
+import { useTheme } from "@/lib/theme";
 import { SFIcon } from "@/components/ui/sf-icon";
-import { lightPalette } from "@tech-office/theme-tokens";
 
 export const unstable_settings = {
   initialRouteName: "index",
@@ -12,6 +12,7 @@ export const unstable_settings = {
 
 function MoreBackButton() {
   const router = useRouter();
+  const { palette } = useTheme();
 
   return (
     <Pressable
@@ -27,7 +28,7 @@ function MoreBackButton() {
         justifyContent: "center",
       }}
     >
-      <SFIcon name="chevron.left" size={22} color={lightPalette.primary.main} />
+      <SFIcon name="chevron.left" size={22} color={palette.primary.main} />
     </Pressable>
   );
 }
@@ -38,10 +39,12 @@ const childBackOptions = {
 };
 
 export default function MoreLayout() {
+  const { palette } = useTheme();
+
   return (
     <ErrorBoundary>
       <Stack
-        screenOptions={tabRootStackScreenOptions}
+        screenOptions={tabRootStackScreenOptions(palette)}
       >
         <Stack.Screen
           name="index"

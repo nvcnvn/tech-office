@@ -16,6 +16,7 @@
 
 import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, View, ViewStyle } from "react-native";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface SkeletonProps {
   width?: number | `${number}%`;
@@ -30,6 +31,7 @@ export function Skeleton({
   borderRadius = 6,
   style,
 }: SkeletonProps) {
+  const { palette } = useTheme();
   const shimmer = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function Skeleton({
           width,
           height,
           borderRadius,
-          backgroundColor: "#e2e8f0",
+          backgroundColor: palette.divider,
           opacity,
         },
         style,
@@ -78,6 +80,8 @@ export function Skeleton({
 
 /** Two-line list row with a left avatar */
 export function SkeletonListRow() {
+  const styles = useStyles();
+
   return (
     <View style={styles.rowContainer}>
       <Skeleton width={44} height={44} borderRadius={22} />
@@ -91,6 +95,8 @@ export function SkeletonListRow() {
 
 /** Single-line list row (e.g. project name) */
 export function SkeletonSingleRow() {
+  const styles = useStyles();
+
   return (
     <View style={styles.singleRowContainer}>
       <Skeleton width="70%" height={16} />
@@ -107,6 +113,8 @@ export function SkeletonList({
   count?: number;
   variant?: "single" | "double";
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.listContainer}>
       {Array.from({ length: count }).map((_, i) =>
@@ -120,14 +128,14 @@ export function SkeletonList({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   rowContainer: {
     flexDirection: "row",
     alignItems: "center",
     padding: 14,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: t.divider,
   },
   rowLines: { flex: 1 },
   singleRowContainer: {
@@ -136,10 +144,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     padding: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: t.divider,
   },
   listContainer: { flex: 1 },
-});
+}));
 
 // ---------------------------------------------------------------------------
 // Domain-specific skeleton shapes
@@ -147,6 +155,8 @@ const styles = StyleSheet.create({
 
 /** Project row skeleton — 72dp row: icon box + name line + subtitle line + chevron */
 export function SkeletonProjectRow() {
+  const projectSkelStyles = useProjectSkelStyles();
+
   return (
     <View style={projectSkelStyles.row}>
       <Skeleton width={46} height={46} borderRadius={12} />
@@ -169,6 +179,8 @@ export function SkeletonProjectList({
   count?: number;
   showSearchPlaceholder?: boolean;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.listContainer}>
       {showSearchPlaceholder ? (
@@ -183,7 +195,7 @@ export function SkeletonProjectList({
   );
 }
 
-const projectSkelStyles = StyleSheet.create({
+const useProjectSkelStyles = makeStyles((t) => ({
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -192,11 +204,13 @@ const projectSkelStyles = StyleSheet.create({
     minHeight: 72,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: t.divider,
   },
-});
+}));
 
 export function SkeletonChatRow() {
+  const chatSkelStyles = useChatSkelStyles();
+
   return (
     <View style={chatSkelStyles.row}>
       <Skeleton width={46} height={46} borderRadius={23} />
@@ -213,6 +227,9 @@ export function SkeletonChatRow() {
 }
 
 export function SkeletonChatList({ count = 8, sectionCount = 2 }: { count?: number; sectionCount?: number }) {
+  const chatSkelStyles = useChatSkelStyles();
+  const styles = useStyles();
+
   const safeSectionCount = Math.max(1, sectionCount);
   const rowsPerSection = Math.max(1, Math.ceil(count / safeSectionCount));
   let renderedRows = 0;
@@ -242,12 +259,12 @@ export function SkeletonChatList({ count = 8, sectionCount = 2 }: { count?: numb
   );
 }
 
-const chatSkelStyles = StyleSheet.create({
+const useChatSkelStyles = makeStyles((t) => ({
   sectionHeader: {
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 8,
-    backgroundColor: "#f2f2f7",
+    backgroundColor: t.background.default,
   },
   row: {
     flexDirection: "row",
@@ -256,9 +273,9 @@ const chatSkelStyles = StyleSheet.create({
     paddingVertical: 14,
     minHeight: 72,
     gap: 12,
-    backgroundColor: "#fff",
+    backgroundColor: t.background.paper,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: t.divider,
   },
   rowContent: {
     flex: 1,
@@ -270,9 +287,12 @@ const chatSkelStyles = StyleSheet.create({
     justifyContent: "space-between",
     gap: 12,
   },
-});
+}));
 
 export function SkeletonTaskList({ count = 8, sectionCount = 3 }: { count?: number; sectionCount?: number }) {
+  const styles = useStyles();
+  const taskSkelStyles = useTaskSkelStyles();
+
   const safeSectionCount = Math.max(1, sectionCount);
   const rowsPerSection = Math.max(1, Math.ceil(count / safeSectionCount));
   let renderedRows = 0;
@@ -316,7 +336,7 @@ export function SkeletonTaskList({ count = 8, sectionCount = 3 }: { count?: numb
   );
 }
 
-const taskSkelStyles = StyleSheet.create({
+const useTaskSkelStyles = makeStyles((t) => ({
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -324,7 +344,7 @@ const taskSkelStyles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 8,
     gap: 8,
-    backgroundColor: "#f2f2f7",
+    backgroundColor: t.background.default,
   },
   rowWrap: {
     marginHorizontal: 16,
@@ -337,7 +357,7 @@ const taskSkelStyles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     gap: 12,
-    backgroundColor: "#fff",
+    backgroundColor: t.background.paper,
   },
   rowContent: {
     flex: 1,
@@ -349,10 +369,13 @@ const taskSkelStyles = StyleSheet.create({
     gap: 8,
     flexWrap: "wrap",
   },
-});
+}));
 
 /** Calendar skeleton — month grid area + 3 event card placeholders */
 export function SkeletonCalendar() {
+  const calSkelStyles = useCalSkelStyles();
+  const styles = useStyles();
+
   return (
     <View style={styles.listContainer}>
       {/* Month header */}
@@ -399,6 +422,8 @@ export function SkeletonEventList({ count = 3 }: { count?: number }) {
 }
 
 export function SkeletonEventCard() {
+  const calSkelStyles = useCalSkelStyles();
+
   return (
     <View style={calSkelStyles.card}>
       <View style={calSkelStyles.colorBar} />
@@ -414,41 +439,41 @@ export function SkeletonEventCard() {
   );
 }
 
-const calSkelStyles = StyleSheet.create({
+const useCalSkelStyles = makeStyles((t) => ({
   header: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 24,
     paddingVertical: 14,
-    backgroundColor: "#fff",
+    backgroundColor: t.background.paper,
   },
   weekRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     paddingHorizontal: 16,
     paddingBottom: 8,
-    backgroundColor: "#fff",
+    backgroundColor: t.background.paper,
   },
   dayRow: {
     flexDirection: "row",
     justifyContent: "space-around",
     paddingHorizontal: 16,
     paddingVertical: 6,
-    backgroundColor: "#fff",
+    backgroundColor: t.background.paper,
   },
   card: {
     flexDirection: "row",
     marginHorizontal: 16,
     marginVertical: 4,
-    backgroundColor: "#fff",
+    backgroundColor: t.background.paper,
     borderRadius: 12,
     overflow: "hidden",
     minHeight: 72,
   },
   colorBar: {
     width: 4,
-    backgroundColor: "#c0c0c0",
+    backgroundColor: t.divider,
     opacity: 0.4,
   },
   cardContent: {
@@ -457,10 +482,12 @@ const calSkelStyles = StyleSheet.create({
     paddingLeft: 16,
     gap: 6,
   },
-});
+}));
 
 /** Notification row skeleton — icon circle + title + message + time */
 export function SkeletonNotifRow() {
+  const notifSkelStyles = useNotifSkelStyles();
+
   return (
     <View style={notifSkelStyles.row}>
       <Skeleton width={40} height={40} borderRadius={20} />
@@ -474,6 +501,8 @@ export function SkeletonNotifRow() {
 }
 
 function SkeletonNotifSectionHeader({ width = 56 }: { width?: number }) {
+  const notifSkelStyles = useNotifSkelStyles();
+
   return (
     <View style={notifSkelStyles.sectionHeader}>
       <Skeleton width={width} height={11} borderRadius={5} />
@@ -490,6 +519,8 @@ export function SkeletonNotifList({
   sectionCount?: number;
   showControlsPlaceholder?: boolean;
 }) {
+  const styles = useStyles();
+
   const safeSectionCount = Math.max(1, sectionCount);
   const rowsPerSection = Math.max(1, Math.ceil(count / safeSectionCount));
   let renderedRows = 0;
@@ -523,12 +554,12 @@ export function SkeletonNotifList({
   );
 }
 
-const notifSkelStyles = StyleSheet.create({
+const useNotifSkelStyles = makeStyles((t) => ({
   sectionHeader: {
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 8,
-    backgroundColor: "#f2f2f7",
+    backgroundColor: t.background.default,
   },
   row: {
     flexDirection: "row",
@@ -538,6 +569,6 @@ const notifSkelStyles = StyleSheet.create({
     minHeight: 72,
     gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e2e8f0",
+    borderBottomColor: t.divider,
   },
-});
+}));

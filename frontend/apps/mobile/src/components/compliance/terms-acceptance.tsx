@@ -8,7 +8,7 @@
  */
 
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { openBrowserAsync } from "expo-web-browser";
 import { PRIVACY_POLICY_PATH, TERMS_PATH } from "apis";
 
@@ -16,12 +16,12 @@ import { SFIcon } from "@/components/ui/sf-icon";
 import { buildWebUrl } from "@/lib/constants";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export function TermsAcceptance({
   accepted,
@@ -34,6 +34,9 @@ export function TermsAcceptance({
   disabled?: boolean;
   error?: string;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.wrap}>
       <Pressable
@@ -49,7 +52,7 @@ export function TermsAcceptance({
       >
         <View style={[styles.box, accepted && styles.boxChecked]}>
           {accepted ? (
-            <SFIcon name="checkmark" size={13} color={lightPalette.primary.contrastText} />
+            <SFIcon name="checkmark" size={13} color={palette.primary.contrastText} />
           ) : null}
         </View>
         <Text style={styles.label}>
@@ -82,7 +85,7 @@ export function TermsAcceptance({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   wrap: {
     gap: spacing[1],
   },
@@ -103,26 +106,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
     alignItems: "center",
     justifyContent: "center",
   },
   boxChecked: {
-    backgroundColor: lightPalette.primary.main,
-    borderColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
+    borderColor: t.primary.main,
   },
   label: {
     flex: 1,
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   link: {
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontWeight: "600",
   },
   error: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
-});
+}));

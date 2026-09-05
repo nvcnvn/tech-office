@@ -23,6 +23,8 @@ import { PresenceIndicator } from "@/components/common/presence-indicator";
 import { usePresence } from "@/hooks/use-presence";
 import { groupChannelsByTime } from "@/utils/group-channels";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
+import { makeStyles, useTheme } from "@/lib/theme";
+import { shadows, statusColors } from "@tech-office/theme-tokens";
 
 const SIDEBAR_WIDTH = Dimensions.get("window").width * 0.82;
 
@@ -39,6 +41,9 @@ function SidebarRow({
   hasUnread: boolean;
   onPress: () => void;
 }) {
+  const styles = useStyles();
+  const { palette } = useTheme();
+
   const isDM = item.channel.channelType === "direct_message";
   const otherPerson = item.dmParticipants?.[0];
   const displayName = isDM
@@ -73,7 +78,7 @@ function SidebarRow({
     >
       {isDM ? (
         <View style={styles.avatarWrap}>
-          <UserAvatar name={displayName} size={32} color="#7c3aed" />
+          <UserAvatar name={displayName} size={32} color={palette.eventCategory.personal} />
           {indicatorStatus && <PresenceIndicator status={indicatorStatus} />}
         </View>
       ) : (
@@ -105,6 +110,8 @@ export function ChannelSidebar({
   onClose: () => void;
   onSelectChannel: (channelId: string) => void;
 }) {
+  const styles = useStyles();
+
   const translateX = useRef(new Animated.Value(-SIDEBAR_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
   const isVisible = useRef(false);
@@ -200,20 +207,20 @@ export function ChannelSidebar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: t.overlay.scrim,
   },
   sidebar: {
     position: "absolute",
     top: 0,
     left: 0,
     bottom: 0,
-    backgroundColor: "#f8f8fa",
+    backgroundColor: t.background.default,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: "#d1d1d6",
-    shadowColor: "#000",
+    borderRightColor: t.divider,
+    shadowColor: shadows.lg.shadowColor,
     shadowOffset: { width: 2, height: 0 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
@@ -227,28 +234,28 @@ const styles = StyleSheet.create({
     paddingTop: 60,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#e5e5ea",
-    backgroundColor: "#f8f8fa",
+    borderBottomColor: t.divider,
+    backgroundColor: t.background.default,
   },
   sidebarTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#111",
+    color: t.text.primary,
   },
   closeBtn: {
     fontSize: 18,
-    color: "#8e8e93",
+    color: t.text.secondary,
     fontWeight: "600",
   },
   sectionHeader: {
-    backgroundColor: "#f2f2f7",
+    backgroundColor: t.background.default,
     paddingHorizontal: 16,
     paddingVertical: 6,
   },
   sectionHeaderText: {
     fontSize: 12,
     fontWeight: "600",
-    color: "#636366",
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -258,13 +265,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     gap: 10,
-    backgroundColor: "#f8f8fa",
+    backgroundColor: t.background.default,
   },
   rowActive: {
-    backgroundColor: "#dbeafe",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   rowPressed: {
-    backgroundColor: "#e8e8ed",
+    backgroundColor: t.divider,
   },
   avatarWrap: {
     width: 32,
@@ -272,24 +279,24 @@ const styles = StyleSheet.create({
   },
   channelIcon: {
     borderRadius: 16,
-    backgroundColor: "#dbeafe",
+    backgroundColor: t.notificationDomain.chat.bg,
     justifyContent: "center",
     alignItems: "center",
   },
   channelIconText: {
     fontSize: 15,
-    color: "#2563eb",
+    color: t.notificationDomain.chat.icon,
     fontWeight: "700",
   },
   rowTitle: {
     flex: 1,
     fontSize: 15,
     fontWeight: "500",
-    color: "#111",
+    color: t.text.primary,
   },
   rowTitleActive: {
     fontWeight: "700",
-    color: "#2563eb",
+    color: t.info.main,
   },
   rowTitleUnread: {
     fontWeight: "700",
@@ -298,7 +305,7 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: "#0f172a",
+    backgroundColor: t.text.primary,
     marginLeft: 4,
   },
-});
+}));

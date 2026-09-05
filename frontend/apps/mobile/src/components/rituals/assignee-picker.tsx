@@ -8,16 +8,16 @@
  */
 
 import React, { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, TextInput, View } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { getEmployeeCards, listProjectMembers } from "apis";
 import {
-  lightPalette,
   mobileTypography,
   radius,
   spacing,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export function AssigneePicker({
   projectId,
@@ -28,6 +28,9 @@ export function AssigneePicker({
   selectedIds: string[];
   onChange: (next: string[]) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const [search, setSearch] = useState("");
 
   const membersQuery = useQuery({
@@ -94,7 +97,7 @@ export function AssigneePicker({
         testID="ritual-assignee-search"
         style={styles.input}
         placeholder="Search people in this project"
-        placeholderTextColor={lightPalette.text.disabled}
+        placeholderTextColor={palette.text.disabled}
         autoCapitalize="none"
         autoCorrect={false}
         value={search}
@@ -120,25 +123,25 @@ export function AssigneePicker({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   block: {
     gap: spacing[1],
   },
   label: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   helper: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   input: {
     minHeight: touch.comfortable,
     paddingHorizontal: spacing[1.5],
     borderRadius: radius.base,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    color: lightPalette.text.primary,
+    borderColor: t.divider,
+    color: t.text.primary,
     fontSize: 16,
   },
   chipRow: {
@@ -151,11 +154,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing[1.5],
     borderRadius: radius.xl,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   chipLabel: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   option: {
     minHeight: touch.comfortable,
@@ -163,11 +166,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     borderRadius: radius.base,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   optionLabel: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
-});
+}));

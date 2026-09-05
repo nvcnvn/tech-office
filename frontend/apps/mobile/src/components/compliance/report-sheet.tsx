@@ -32,13 +32,13 @@ import {
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export function ReportSheet({
   visible,
@@ -54,6 +54,9 @@ export function ReportSheet({
   subjectLabel: string;
   onClose: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const [reason, setReason] = React.useState<ReportReason | null>(null);
   const [note, setNote] = React.useState("");
   const [submitting, setSubmitting] = React.useState(false);
@@ -99,7 +102,7 @@ export function ReportSheet({
           {confirmed ? (
             <View style={styles.confirmation} testID="report-sheet-confirmation">
               <View style={styles.confirmIconWrap}>
-                <SFIcon name="checkmark" size={20} color={lightPalette.primary.contrastText} />
+                <SFIcon name="checkmark" size={20} color={palette.primary.contrastText} />
               </View>
               <Text style={styles.title}>Thanks — that's been reported</Text>
               <Text style={styles.subtitle}>
@@ -144,9 +147,9 @@ export function ReportSheet({
                   >
                     <Text style={styles.reasonLabel}>{option.label}</Text>
                     {submitting && selected ? (
-                      <ActivityIndicator size="small" color={lightPalette.text.secondary} />
+                      <ActivityIndicator size="small" color={palette.text.secondary} />
                     ) : (
-                      <SFIcon name="chevron.right" size={14} color={lightPalette.text.secondary} />
+                      <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
                     )}
                   </Pressable>
                 );
@@ -156,7 +159,7 @@ export function ReportSheet({
               <TextInput
                 style={styles.noteInput}
                 placeholder="What happened, in your own words"
-                placeholderTextColor={lightPalette.text.disabled}
+                placeholderTextColor={palette.text.disabled}
                 value={note}
                 onChangeText={setNote}
                 multiline
@@ -186,14 +189,14 @@ export function ReportSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(15,23,42,0.35)",
+    backgroundColor: t.overlay.scrim,
   },
   sheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     borderCurve: "continuous",
@@ -207,7 +210,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: radius.sm,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginBottom: spacing[2],
   },
   body: {
@@ -216,11 +219,11 @@ const styles = StyleSheet.create({
   },
   title: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   subtitle: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginBottom: spacing[1],
   },
   reasonRow: {
@@ -233,20 +236,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
   },
   reasonRowSelected: {
-    borderColor: lightPalette.primary.main,
+    borderColor: t.primary.main,
   },
   reasonLabel: {
     flex: 1,
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   noteLabel: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginTop: spacing[1],
   },
   noteInput: {
@@ -254,16 +257,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     padding: spacing[1.5],
     textAlignVertical: "top",
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   error: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   cancelButton: {
     minHeight: 48,
@@ -273,7 +276,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   confirmation: {
     alignItems: "center",
@@ -286,7 +289,7 @@ const styles = StyleSheet.create({
     borderRadius: 22,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   doneButton: {
     minHeight: 48,
@@ -295,15 +298,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     marginTop: spacing[1],
   },
   doneButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: "600",
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

@@ -14,8 +14,10 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { AuthContext } from "@/hooks/use-auth";
+import { useTheme } from "@/lib/theme";
 
 export default function SsoCallbackScreen() {
+  const { palette } = useTheme();
   const params = useLocalSearchParams<{
     access_token?: string;
     expires_at?: string;
@@ -75,8 +77,8 @@ export default function SsoCallbackScreen() {
       <Stack.Screen options={{ title: "Signing in…", headerShown: false }} />
       {processing ? (
         <>
-          <ActivityIndicator size="large" color="#64748b" />
-          <Text style={{ fontSize: 16, color: "#666" }}>Completing sign in…</Text>
+          <ActivityIndicator size="large" color={palette.text.secondary} />
+          <Text style={{ fontSize: 16, color: palette.text.secondary }}>Completing sign in…</Text>
         </>
       ) : null}
     </View>

@@ -6,7 +6,6 @@ import React from "react";
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   Text,
   type PressableProps,
   type StyleProp,
@@ -14,12 +13,13 @@ import {
 } from "react-native";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   touch,
+  type MobilePalette,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
 export type ButtonSize = "sm" | "md" | "lg";
@@ -32,24 +32,44 @@ interface ButtonProps extends Omit<PressableProps, "style"> {
   style?: StyleProp<ViewStyle>;
 }
 
-const BG: Record<ButtonVariant, string> = {
-  primary: lightPalette.primary.main,
-  secondary: lightPalette.background.paper,
-  ghost: "transparent",
-  destructive: lightPalette.error.main,
-};
-const BG_PRESSED: Record<ButtonVariant, string> = {
-  primary: lightPalette.primary.dark,
-  secondary: lightPalette.background.default,
-  ghost: lightPalette.background.default,
-  destructive: lightPalette.error.dark,
-};
-const TEXT_COLOR: Record<ButtonVariant, string> = {
-  primary: lightPalette.primary.contrastText,
-  secondary: lightPalette.text.primary,
-  ghost: lightPalette.primary.main,
-  destructive: lightPalette.error.contrastText,
-};
+/**
+ * The four colours a variant carries, as a function of the palette rather than
+ * four module-level records: a record built at import time can only hold one
+ * theme's values, which is the shape this whole sweep exists to remove.
+ */
+function variantColors(t: MobilePalette, variant: ButtonVariant) {
+  const byVariant: Record<
+    ButtonVariant,
+    { bg: string; bgPressed: string; text: string; border: string }
+  > = {
+    primary: {
+      bg: t.primary.main,
+      bgPressed: t.primary.dark,
+      text: t.primary.contrastText,
+      border: t.primary.main,
+    },
+    secondary: {
+      bg: t.background.paper,
+      bgPressed: t.background.default,
+      text: t.text.primary,
+      border: t.divider,
+    },
+    ghost: {
+      bg: "transparent",
+      bgPressed: t.background.default,
+      text: t.primary.main,
+      border: "transparent",
+    },
+    destructive: {
+      bg: t.error.main,
+      bgPressed: t.error.dark,
+      text: t.error.contrastText,
+      border: t.error.main,
+    },
+  };
+  return byVariant[variant];
+}
+
 const HEIGHT: Record<ButtonSize, number> = { sm: 40, md: touch.comfortable, lg: touch.large };
 const FONT_SIZE: Record<ButtonSize, number> = {
   sm: mobileTypography.buttonSm.fontSize,
@@ -57,13 +77,6 @@ const FONT_SIZE: Record<ButtonSize, number> = {
   lg: mobileTypography.button.fontSize,
 };
 const PADDING_H: Record<ButtonSize, number> = { sm: 14, md: 18, lg: 22 };
-const BORDER_COLOR: Record<ButtonVariant, string> = {
-  primary: lightPalette.primary.main,
-  secondary: lightPalette.divider,
-  ghost: "transparent",
-  destructive: lightPalette.error.main,
-};
-
 export function Button({
   label,
   variant = "primary",
@@ -73,6 +86,10 @@ export function Button({
   style,
   ...rest
 }: ButtonProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
+  const colors = variantColors(palette, variant);
   const isDisabled = disabled || loading;
 
   return (
@@ -84,12 +101,10 @@ export function Button({
         {
           minHeight: HEIGHT[size],
           paddingHorizontal: PADDING_H[size],
-          backgroundColor: pressed
-            ? BG_PRESSED[variant]
-            : BG[variant],
+          backgroundColor: pressed ? colors.bgPressed : colors.bg,
           opacity: isDisabled ? opacity.disabled : 1,
           borderWidth: variant === "ghost" ? 0 : border.thin,
-          borderColor: BORDER_COLOR[variant],
+          borderColor: colors.border,
         },
         style,
       ]}
@@ -97,13 +112,13 @@ export function Button({
       {loading ? (
         <ActivityIndicator
           size="small"
-          color={TEXT_COLOR[variant]}
+          color={colors.text}
         />
       ) : (
         <Text
           style={[
             styles.label,
-            { fontSize: FONT_SIZE[size], color: TEXT_COLOR[variant] },
+            { fontSize: FONT_SIZE[size], color: colors.text },
           ]}
         >
           {label}
@@ -113,7 +128,7 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   base: {
     borderRadius: radius.md,
     flexDirection: "row",
@@ -126,4 +141,4 @@ const styles = StyleSheet.create({
     fontWeight: mobileTypography.button.fontWeight,
     lineHeight: mobileTypography.button.lineHeight,
   },
-});
+}));

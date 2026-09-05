@@ -12,8 +12,10 @@ import { generateCanonicalUrl } from "@/lib/canonical-links";
 import { format } from "date-fns";
 import * as Haptics from "expo-haptics";
 import * as Location from "expo-location";
+import { useTheme } from "@/lib/theme";
 
 export default function EventDetailScreen() {
+  const { palette } = useTheme();
   const { eventId } = useLocalSearchParams<{ eventId: string }>();
   const queryClient = useQueryClient();
   const auth = useAuth();
@@ -108,10 +110,10 @@ export default function EventDetailScreen() {
 
       {/* Time */}
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#666" }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.secondary }}>
           When
         </Text>
-        <Text style={{ fontSize: 15 }}>
+        <Text style={{ fontSize: 15, color: palette.text.primary }}>
           {ev?.startTime
             ? format(new Date(ev.startTime), "EEEE, MMM d · h:mm a")
             : "—"}
@@ -124,10 +126,10 @@ export default function EventDetailScreen() {
       {/* Location */}
       {ev?.location && (
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#666" }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.secondary }}>
             Location
           </Text>
-          <Text selectable style={{ fontSize: 15 }}>
+          <Text selectable style={{ fontSize: 15, color: palette.text.primary }}>
             {ev.location}
           </Text>
         </View>
@@ -136,10 +138,10 @@ export default function EventDetailScreen() {
       {/* Description */}
       {ev?.description && (
         <View style={{ gap: 4 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#666" }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.secondary }}>
             Description
           </Text>
-          <Text selectable style={{ fontSize: 15, lineHeight: 22 }}>
+          <Text selectable style={{ fontSize: 15, lineHeight: 22, color: palette.text.primary }}>
             {ev.description}
           </Text>
         </View>
@@ -147,7 +149,7 @@ export default function EventDetailScreen() {
 
       {/* RSVP */}
       <View style={{ gap: 8, marginTop: 8 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#666" }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.secondary }}>
           RSVP
         </Text>
         <View style={{ flexDirection: "row", gap: 8 }}>
@@ -160,17 +162,19 @@ export default function EventDetailScreen() {
                 flex: 1,
                 backgroundColor:
                   response === "accepted"
-                    ? pressed ? "#388e3c" : "#16a34a"
+                    ? pressed ? palette.success.dark : palette.success.main
                     : response === "declined"
-                    ? pressed ? "#991b1b" : "#f87171"
-                    : pressed ? "#f57c00" : "#d97706",
+                    ? pressed ? palette.error.dark : palette.error.light
+                    : pressed ? palette.warning.dark : palette.warning.main,
                 paddingVertical: 12,
                 borderRadius: 10,
                 borderCurve: "continuous",
                 alignItems: "center",
               })}
             >
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>
+              <Text
+                style={{ color: palette.primary.contrastText, fontWeight: "600", fontSize: 14 }}
+              >
                 {response === "accepted"
                   ? "Accept"
                   : response === "declined"
@@ -185,7 +189,7 @@ export default function EventDetailScreen() {
       {/* GPS Check-In (T7.6) — shown when event requires check-in */}
       {ev?.requiresCheckIn && (
         <View style={{ gap: 8, marginTop: 8 }}>
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#666" }}>
+          <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.secondary }}>
             Check-In
           </Text>
           <Pressable
@@ -193,10 +197,10 @@ export default function EventDetailScreen() {
             disabled={checkInMutation.isPending}
             style={({ pressed }) => ({
               backgroundColor: checkInMutation.isPending
-                ? "#94a3b8"
+                ? palette.text.disabled
                 : pressed
-                ? "#020617"
-                : "#0f172a",
+                ? palette.primary.dark
+                : palette.primary.main,
               paddingVertical: 14,
               borderRadius: 12,
               borderCurve: "continuous",
@@ -207,11 +211,13 @@ export default function EventDetailScreen() {
             } as any)}
           >
             {checkInMutation.isPending ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={palette.primary.contrastText} />
             ) : (
               <>
                 <Text style={{ fontSize: 18 }}>📍</Text>
-                <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+                <Text
+                  style={{ color: palette.primary.contrastText, fontWeight: "600", fontSize: 15 }}
+                >
                   Check In at Location
                 </Text>
               </>

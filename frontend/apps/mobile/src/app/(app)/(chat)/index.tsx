@@ -47,7 +47,6 @@ import { withNavigationContext } from "@/lib/mobile-navigation";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
@@ -55,7 +54,9 @@ import {
   spacing,
   chatIcons,
   tabIcons,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 // ── Time formatting ────────────────────────────────────────────────────────
 
@@ -114,6 +115,9 @@ function ChannelRow({
   hasUnread: boolean;
   onPress: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const isDM = item.channel.channelType === "direct_message";
   const isTask = item.channel.channelType === "project_ticket_thread";
   const otherPerson = item.dmParticipants?.[0];
@@ -159,19 +163,19 @@ function ChannelRow({
       {/* Avatar / icon */}
       {isDM ? (
         <View style={styles.avatarWrap}>
-          <UserAvatar name={displayName} size={46} color="#7c3aed" />
+          <UserAvatar name={displayName} size={46} color={palette.eventCategory.personal} />
           {indicatorStatus && <PresenceIndicator status={indicatorStatus} />}
         </View>
       ) : isTask ? (
         <View style={[styles.avatarWrap, styles.taskIcon]}>
-          <SFIcon name="checkmark.square.fill" size={20} color={lightPalette.success.dark} />
+          <SFIcon name="checkmark.square.fill" size={20} color={palette.success.dark} />
         </View>
       ) : (
         <View style={[styles.avatarWrap, styles.channelIcon]}>
           <SFIcon
             name={item.channel.isPrivate ? chatIcons.privateLock.name : chatIcons.channel.name}
             size={18}
-            color={lightPalette.primary.main}
+            color={palette.primary.main}
           />
         </View>
       )}
@@ -202,7 +206,7 @@ function ChannelRow({
       {hasUnread && <View style={styles.unreadDot} />}
 
       {/* Chevron */}
-      <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} style={{ marginLeft: 4 }} />
+      <SFIcon name="chevron.right" size={14} color={palette.text.disabled} style={{ marginLeft: 4 }} />
     </Pressable>
   );
 }
@@ -214,11 +218,14 @@ function ChatOverviewCard({
   totalCount: number;
   unreadCount: number;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Card style={styles.summaryCard}>
       <View style={styles.summaryRow}>
         <View style={styles.summaryIconWrap}>
-          <SFIcon name="bubble.left.fill" size={18} color={lightPalette.primary.main} />
+          <SFIcon name="bubble.left.fill" size={18} color={palette.primary.main} />
         </View>
         <View style={styles.summaryCopy}>
           <Text selectable style={styles.summaryTitle}>Recent Conversations</Text>
@@ -251,12 +258,15 @@ function ChatOverviewCard({
  * conversations it is usually about.
  */
 function AlertsBell({ unreadCount }: { unreadCount: number }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View>
       <SFIcon
         name={tabIcons.alerts.name}
         size={22}
-        color={lightPalette.primary.main}
+        color={palette.primary.main}
       />
       {unreadCount > 0 ? (
         <View style={styles.alertsBadge}>
@@ -272,6 +282,9 @@ function AlertsBell({ unreadCount }: { unreadCount: number }) {
 // ── Main screen ─────────────────────────────────────────────────────────────
 
 export default function ChatIndexScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const navigation = useNavigation();
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -322,7 +335,7 @@ export default function ChatIndexScreen() {
         <SFIcon
           name={chatIcons.newChannel.name}
           size={22}
-          color={lightPalette.primary.main}
+          color={palette.primary.main}
         />
       ),
     },
@@ -335,7 +348,7 @@ export default function ChatIndexScreen() {
         <SFIcon
           name={chatIcons.newDM.name}
           size={22}
-          color={lightPalette.primary.main}
+          color={palette.primary.main}
         />
       ),
     },
@@ -353,7 +366,15 @@ export default function ChatIndexScreen() {
       return;
     }
 
-    const unsubscribe = parentNavigation.addListener("tabPress", () => {
+    // `getParent()` is typed against the generic navigation core, whose event map
+    // has no `tabPress` — that event belongs to the bottom-tab navigator this
+    // screen is actually mounted under. The cast names the type gap rather than
+    // widening the whole navigation object.
+    const unsubscribe = (
+      parentNavigation as unknown as {
+        addListener(event: "tabPress", callback: () => void): () => void;
+      }
+    ).addListener("tabPress", () => {
       if (!hasLoadedRef.current) {
         return;
       }
@@ -505,7 +526,7 @@ export default function ChatIndexScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   alertsBadge: {
     position: "absolute",
     top: -4,
@@ -514,17 +535,17 @@ const styles = StyleSheet.create({
     height: 18,
     paddingHorizontal: 4,
     borderRadius: radius.full,
-    backgroundColor: lightPalette.error.main,
+    backgroundColor: t.error.main,
     alignItems: "center",
     justifyContent: "center",
   },
   alertsBadgeText: {
     ...mobileTypography.badge,
-    color: lightPalette.error.contrastText,
+    color: t.error.contrastText,
   },
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   loadingScrollContent: {
     flexGrow: 1,
@@ -540,7 +561,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: mobileLayout.cardPadding,
     paddingVertical: 14,
     minHeight: mobileLayout.listRowHeight,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: mobileLayout.iconTextGap,
   },
   rowPressed: {
@@ -554,10 +575,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   channelIcon: {
-    backgroundColor: "#dbeafe",
+    backgroundColor: t.notificationDomain.chat.bg,
   },
   taskIcon: {
-    backgroundColor: "#e8f5e9",
+    backgroundColor: t.notificationDomain.tasks.bg,
   },
   summaryCard: {
     marginHorizontal: mobileLayout.screenPadding,
@@ -574,7 +595,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef5fc",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   summaryCopy: {
     flex: 1,
@@ -584,12 +605,12 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     lineHeight: mobileTypography.sectionHeader.lineHeight as number,
     fontWeight: mobileTypography.sectionHeader.fontWeight as "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   summarySubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: mobileTypography.listSecondary.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   summaryStatsRow: {
     flexDirection: "row",
@@ -598,7 +619,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[1.5],
     paddingTop: spacing[1.5],
     borderTopWidth: border.hairline,
-    borderTopColor: lightPalette.divider,
+    borderTopColor: t.divider,
   },
   summaryStatBlock: {
     flex: 1,
@@ -607,17 +628,17 @@ const styles = StyleSheet.create({
   summaryStatValue: {
     fontSize: 20,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontVariant: ["tabular-nums"],
   },
   summaryStatLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   summaryStatDivider: {
     width: border.hairline,
     alignSelf: "stretch",
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
   },
   rowContent: {
     flex: 1,
@@ -632,7 +653,7 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     flex: 1,
   },
   rowTitleUnread: {
@@ -640,22 +661,22 @@ const styles = StyleSheet.create({
   },
   rowTime: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontVariant: ["tabular-nums"],
   },
   rowSubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   unreadDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     marginRight: 4,
   },
   sectionHeader: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     paddingHorizontal: mobileLayout.screenPadding,
     paddingTop: spacing[1.5],
     paddingBottom: mobileLayout.itemGap,
@@ -666,7 +687,7 @@ const styles = StyleSheet.create({
   sectionHeaderText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -681,13 +702,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     overflow: "hidden",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   cardSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginHorizontal: mobileLayout.cardPadding,
   },
   center: {
@@ -699,7 +720,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.error.main,
+    color: t.error.main,
     textAlign: "center",
   },
-});
+}));

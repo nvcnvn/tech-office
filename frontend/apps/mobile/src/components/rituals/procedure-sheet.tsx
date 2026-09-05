@@ -29,7 +29,6 @@ import { getRitualProcedure } from "apis";
 
 import { DocumentContent, documentContentToText } from "@/components/docs/document-content";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
@@ -37,6 +36,7 @@ import {
   spacing,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export function ProcedureSheet({
   ritualDefinitionId,
@@ -53,6 +53,9 @@ export function ProcedureSheet({
   visible: boolean;
   onClose: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
 
   // Fetched only while the sheet is open. An instance screen nobody opens the procedure on
@@ -98,7 +101,7 @@ export function ProcedureSheet({
 
           <ScrollView contentContainerStyle={styles.body}>
             {isLoading ? (
-              <ActivityIndicator size="small" color={lightPalette.primary.main} />
+              <ActivityIndicator size="small" color={palette.primary.main} />
             ) : unavailable ? (
               <Text style={styles.notice} testID="ritual-procedure-sheet-unavailable">
                 This ritual has a procedure attached, but the document is no longer available.
@@ -126,14 +129,14 @@ export function ProcedureSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(15,23,42,0.35)",
+    backgroundColor: t.overlay.scrim,
   },
   sheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     borderCurve: "continuous",
@@ -146,7 +149,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: radius.sm,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginBottom: spacing[2],
   },
   header: {
@@ -158,12 +161,12 @@ const styles = StyleSheet.create({
   },
   title: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     flexShrink: 1,
   },
   badge: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
@@ -173,7 +176,7 @@ const styles = StyleSheet.create({
   },
   notice: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   closeButton: {
     minHeight: touch.comfortable,
@@ -184,9 +187,9 @@ const styles = StyleSheet.create({
   },
   closeButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

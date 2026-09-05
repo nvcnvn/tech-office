@@ -17,13 +17,14 @@ import { blockPerson, unblockPerson } from "apis";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export function BlockConfirm({
   visible,
@@ -40,6 +41,9 @@ export function BlockConfirm({
   onClose: () => void;
   onDone?: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState("");
 
@@ -82,7 +86,7 @@ export function BlockConfirm({
             <SFIcon
               name={blocking ? "hand.raised.fill" : "hand.raised.slash"}
               size={20}
-              color={blocking ? lightPalette.error.main : lightPalette.primary.main}
+              color={blocking ? palette.error.main : palette.primary.main}
             />
           </View>
 
@@ -126,7 +130,7 @@ export function BlockConfirm({
             testID="block-confirm-submit"
           >
             {submitting ? (
-              <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+              <ActivityIndicator size="small" color={palette.primary.contrastText} />
             ) : (
               <Text style={styles.primaryButtonText}>{blocking ? "Block" : "Unblock"}</Text>
             )}
@@ -146,13 +150,13 @@ export function BlockConfirm({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   overlay: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     padding: mobileLayout.screenPadding,
-    backgroundColor: "rgba(15,23,42,0.35)",
+    backgroundColor: t.overlay.scrim,
   },
   card: {
     alignSelf: "stretch",
@@ -161,8 +165,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   iconWrap: {
     width: 40,
@@ -170,26 +174,26 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   iconWrapDanger: {
-    backgroundColor: "#fceceb",
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   title: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   body: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   quiet: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   error: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   primaryButton: {
     minHeight: 48,
@@ -197,15 +201,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     marginTop: spacing[1],
   },
   primaryButtonDanger: {
-    backgroundColor: lightPalette.error.main,
+    backgroundColor: t.error.main,
   },
   primaryButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: "600",
   },
   cancelButton: {
@@ -215,9 +219,9 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

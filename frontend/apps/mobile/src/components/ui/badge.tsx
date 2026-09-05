@@ -3,12 +3,12 @@
  */
 
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
-  lightPalette,
   mobileTypography,
   radius,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface BadgeProps {
   count?: number;
@@ -16,13 +16,16 @@ interface BadgeProps {
   color?: string;
 }
 
-export function Badge({
-  count,
-  dot = false,
-  color = lightPalette.error.main,
-}: BadgeProps) {
+export function Badge({ count, dot = false, color }: BadgeProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
+  // Resolved here rather than as a default parameter: a default is evaluated
+  // where the function is declared, which has no theme.
+  const fill = color ?? palette.error.main;
+
   if (dot) {
-    return <View style={[styles.dot, { backgroundColor: color }]} />;
+    return <View style={[styles.dot, { backgroundColor: fill }]} />;
   }
 
   if (!count || count <= 0) return null;
@@ -30,13 +33,13 @@ export function Badge({
   const label = count > 99 ? "99+" : String(count);
 
   return (
-    <View style={[styles.badge, { backgroundColor: color }]}>
+    <View style={[styles.badge, { backgroundColor: fill }]}>
       <Text style={styles.label}>{label}</Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   dot: {
     width: 8,
     height: 8,
@@ -51,9 +54,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   label: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontSize: mobileTypography.badge.fontSize,
     fontWeight: mobileTypography.badge.fontWeight,
     lineHeight: mobileTypography.badge.lineHeight,
   },
-});
+}));

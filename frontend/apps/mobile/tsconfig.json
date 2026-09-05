@@ -3,6 +3,7 @@
   "skipLibCheck": true,
   "compilerOptions": {
     "strict": true,
+    "allowImportingTsExtensions": true,
     "paths": {
       "@/*": [
         "./src/*"

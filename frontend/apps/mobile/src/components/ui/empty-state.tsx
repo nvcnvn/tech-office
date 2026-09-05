@@ -5,16 +5,16 @@
  */
 
 import React from "react";
-import { View, Text, Pressable, StyleSheet } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface EmptyStateProps {
   /** SF Symbol name (without "sf:" prefix). Falls back to emoji if not provided. */
@@ -36,10 +36,13 @@ export function EmptyState({
   subtitle,
   action,
 }: EmptyStateProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.container}>
       {sfSymbol ? (
-        <SFIcon name={sfSymbol} size={48} color={lightPalette.text.disabled} />
+        <SFIcon name={sfSymbol} size={48} color={palette.text.disabled} />
       ) : (
         <Text style={styles.emoji}>{emoji}</Text>
       )}
@@ -60,7 +63,7 @@ export function EmptyState({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
     justifyContent: "center",
@@ -80,30 +83,30 @@ const styles = StyleSheet.create({
     fontWeight: mobileTypography.sectionHeader.fontWeight,
     lineHeight: mobileTypography.sectionHeader.lineHeight,
     textAlign: "center",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   subtitle: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
   },
   actionBtn: {
     marginTop: 8,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: radius.md,
     borderWidth: border.thin,
-    borderColor: lightPalette.primary.main,
+    borderColor: t.primary.main,
   },
   actionBtnPressed: {
     opacity: opacity.pressed,
   },
   actionBtnText: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: mobileTypography.button.fontWeight,
     fontSize: mobileTypography.button.fontSize,
     lineHeight: mobileTypography.button.lineHeight,
   },
-});
+}));

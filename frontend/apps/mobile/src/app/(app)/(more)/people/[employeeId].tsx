@@ -38,13 +38,13 @@ import { SFIcon } from "@/components/ui/sf-icon";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /**
  * A dialer accepts `+` and digits. Everything else in a recorded number is formatting
@@ -79,10 +79,13 @@ function ContactRow({
   value: string;
   onPress?: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const content = (
     <>
       <View style={styles.contactIcon}>
-        <SFIcon name={sfIcon} size={18} color={lightPalette.primary.main} />
+        <SFIcon name={sfIcon} size={18} color={palette.primary.main} />
       </View>
       <View style={styles.contactCopy}>
         <Text style={styles.contactLabel}>{label}</Text>
@@ -91,7 +94,7 @@ function ContactRow({
         </Text>
       </View>
       {onPress ? (
-        <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+        <SFIcon name="chevron.right" size={14} color={palette.text.disabled} />
       ) : null}
     </>
   );
@@ -118,6 +121,9 @@ function ContactRow({
 }
 
 export default function PersonEntryScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { employeeId } = useLocalSearchParams<{ employeeId: string }>();
   const router = useRouter();
   const [openingConversation, setOpeningConversation] = React.useState(false);
@@ -245,7 +251,7 @@ export default function PersonEntryScreen() {
             style={({ pressed }) => [styles.departmentPill, pressed && styles.rowPressed]}
           >
             <Text style={styles.departmentText}>{entry.departmentName}</Text>
-            <SFIcon name="chevron.right" size={12} color={lightPalette.primary.main} />
+            <SFIcon name="chevron.right" size={12} color={palette.primary.main} />
           </Pressable>
         ) : null}
         {role ? <Text style={styles.subtitle}>{role}</Text> : null}
@@ -299,10 +305,10 @@ export default function PersonEntryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     padding: mobileLayout.screenPadding,
@@ -322,17 +328,17 @@ const styles = StyleSheet.create({
   name: {
     fontSize: mobileTypography.screenTitle.fontSize as number,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
   },
   subtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
   },
   presence: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.disabled,
+    color: t.text.disabled,
   },
   departmentPill: {
     flexDirection: "row",
@@ -344,11 +350,11 @@ const styles = StyleSheet.create({
   },
   departmentText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontWeight: "500",
   },
   card: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.md,
     borderCurve: "continuous",
     overflow: "hidden",
@@ -370,7 +376,7 @@ const styles = StyleSheet.create({
     height: 32,
     borderRadius: 8,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main + "12",
+    backgroundColor: t.primary.main + "12",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -380,15 +386,15 @@ const styles = StyleSheet.create({
   },
   contactLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   contactValue: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginLeft: mobileLayout.cardPadding,
   },
-});
+}));

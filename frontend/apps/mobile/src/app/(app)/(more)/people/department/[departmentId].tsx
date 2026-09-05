@@ -19,13 +19,15 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { SkeletonList } from "@/components/ui/skeleton";
 import { useDirectoryList, useOpenPerson } from "@/hooks/use-directory";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles } from "@/lib/theme";
 
 export default function DepartmentMembersScreen() {
+  const styles = useStyles();
+
   const { departmentId } = useLocalSearchParams<{ departmentId: string }>();
   const id = String(departmentId);
   const openPerson = useOpenPerson();
@@ -130,7 +132,7 @@ export default function DepartmentMembersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   listContent: {
     flexGrow: 1,
     paddingBottom: spacing[6],
@@ -141,11 +143,11 @@ const styles = StyleSheet.create({
   },
   description: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginLeft: mobileLayout.cardPadding,
   },
-});
+}));

@@ -7,7 +7,6 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Switch,
   Text,
   View,
@@ -35,19 +34,15 @@ import {
 } from "@/lib/app-settings";
 import { buildWebUrl } from "@/lib/constants";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   profileIcons,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
-
-// There is deliberately no Dark Mode switch. Every screen in this app is
-// painted from lightPalette, so the old toggle only darkened the native
-// controls sitting on top of a light UI. It will come back with the theme, not
-// before it.
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /**
  * The version a support conversation can act on. Read from the app manifest
@@ -61,6 +56,8 @@ function appVersionLabel(): string {
 }
 
 function SettingSectionLabel({ label }: { label: string }) {
+  const styles = useStyles();
+
   return <Text style={styles.sectionLabel}>{label}</Text>;
 }
 
@@ -72,6 +69,7 @@ function SettingRow({
   onPress,
   destructive = false,
   testID,
+  accessibilityValue,
 }: {
   icon: string;
   title: string;
@@ -80,11 +78,17 @@ function SettingRow({
   onPress?: () => void;
   destructive?: boolean;
   testID?: string;
+  /** Lets a row report its state to a blackbox driver, which cannot sample a colour. */
+  accessibilityValue?: { text: string };
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Pressable
       accessibilityRole={onPress ? "button" : undefined}
       testID={testID}
+      accessibilityValue={accessibilityValue}
       onPress={onPress}
       disabled={!onPress}
       style={({ pressed }) => [styles.row, pressed && onPress ? styles.rowPressed : null]}
@@ -93,7 +97,7 @@ function SettingRow({
         <SFIcon
           name={icon}
           size={18}
-          color={destructive ? lightPalette.error.main : lightPalette.text.secondary}
+          color={destructive ? palette.error.main : palette.text.secondary}
         />
       </View>
 
@@ -111,13 +115,16 @@ function SettingRow({
       {trailing ? (
         <View style={styles.rowTrailing}>{trailing}</View>
       ) : onPress ? (
-        <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+        <SFIcon name="chevron.right" size={14} color={palette.text.disabled} />
       ) : null}
     </Pressable>
   );
 }
 
 export default function SettingsScreen() {
+  const { palette, mode, setMode, settling } = useTheme();
+  const styles = useStyles();
+
   const auth = React.use(AuthContext);
   const router = useRouter();
   const { membership } = useCurrentMembership();
@@ -154,6 +161,28 @@ export default function SettingsScreen() {
     }
   };
 
+  const [themeSaving, setThemeSaving] = React.useState(false);
+
+  /**
+   * The app repaints on the press, before the write settles — the theme provider
+   * updates optimistically and rolls back if the write fails. So the only thing
+   * left to do here is say so when it does: an app showing one theme while the
+   * server stores the other is worse than a change that was refused out loud.
+   */
+  const handleThemeToggle = (wantsDark: boolean) => {
+    if (themeSaving) return;
+    setThemeSaving(true);
+    runSelectionHaptic();
+    void setMode(wantsDark ? "dark" : "light")
+      .catch(() => {
+        Alert.alert(
+          "Couldn't change the theme",
+          "We couldn't save that just now, so it has been put back. Check your connection and try again.",
+        );
+      })
+      .finally(() => setThemeSaving(false));
+  };
+
   const handleNotificationsToggle = (value: boolean) => {
     setNotificationsEnabled(value);
     setInAppAlertsEnabled(value);
@@ -180,7 +209,7 @@ export default function SettingsScreen() {
       <Card style={styles.summaryCard}>
         <View style={styles.summaryHeader}>
           <View style={styles.summaryIconWrap}>
-            <SFIcon name="gearshape.fill" size={18} color={lightPalette.primary.main} />
+            <SFIcon name="gearshape.fill" size={18} color={palette.primary.main} />
           </View>
           <View style={styles.summaryCopy}>
             <Text selectable style={styles.summaryTitle}>Device Preferences</Text>
@@ -202,6 +231,30 @@ export default function SettingsScreen() {
       </Card>
 
       <View style={styles.section}>
+        <SettingSectionLabel label="Appearance" />
+        <Card padding={0} style={styles.groupCard}>
+          <SettingRow
+            testID="theme-toggle-row"
+            accessibilityValue={{ text: mode }}
+            icon="moon.fill"
+            title="Dark Mode"
+            subtitle="Until you choose, the app follows this phone. Once you choose, it stays where you put it."
+            trailing={
+              <Switch
+                testID="theme-toggle-switch"
+                value={mode === "dark"}
+                onValueChange={handleThemeToggle}
+                disabled={themeSaving || settling}
+                trackColor={{ false: palette.divider, true: palette.primary.light }}
+                thumbColor={mode === "dark" ? palette.primary.main : palette.background.paper}
+              />
+            }
+            onPress={() => handleThemeToggle(mode !== "dark")}
+          />
+        </Card>
+      </View>
+
+      <View style={styles.section}>
         <SettingSectionLabel label="Notifications" />
         <Card padding={0} style={styles.groupCard}>
           <SettingRow
@@ -213,8 +266,8 @@ export default function SettingsScreen() {
               <Switch
                 value={notificationsEnabled}
                 onValueChange={handleNotificationsToggle}
-                trackColor={{ false: "#d5dbe3", true: lightPalette.primary.light }}
-                thumbColor={notificationsEnabled ? lightPalette.primary.main : "#ffffff"}
+                trackColor={{ false: palette.divider, true: palette.primary.light }}
+                thumbColor={notificationsEnabled ? palette.primary.main : palette.background.paper}
               />
             }
             onPress={() => handleNotificationsToggle(!notificationsEnabled)}
@@ -297,7 +350,7 @@ export default function SettingsScreen() {
 
       <Card style={styles.infoCard}>
         <View style={styles.infoRow}>
-          <SFIcon name="info.circle" size={16} color={lightPalette.text.secondary} />
+          <SFIcon name="info.circle" size={16} color={palette.text.secondary} />
           <Text selectable style={styles.infoText} testID="settings-app-version">
             Tech Office {appVersionLabel()}
           </Text>
@@ -311,10 +364,10 @@ export default function SettingsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     padding: mobileLayout.screenPadding,
@@ -335,7 +388,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef5fc",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   summaryCopy: {
     flex: 1,
@@ -345,12 +398,12 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.sectionHeader.fontSize,
     lineHeight: mobileTypography.sectionHeader.lineHeight,
     fontWeight: mobileTypography.sectionHeader.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   summarySubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   identityBlock: {
     gap: 2,
@@ -358,7 +411,7 @@ const styles = StyleSheet.create({
   identityLabel: {
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -366,12 +419,12 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.listPrimary.fontSize,
     lineHeight: mobileTypography.listPrimary.lineHeight,
     fontWeight: mobileTypography.listPrimary.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   identityMeta: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   section: {
     gap: spacing[1],
@@ -381,7 +434,7 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
     fontWeight: mobileTypography.buttonSm.fontWeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -403,12 +456,12 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: radius.base,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     alignItems: "center",
     justifyContent: "center",
   },
   iconWrapDanger: {
-    backgroundColor: "#fceceb",
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   rowCopy: {
     flex: 1,
@@ -418,15 +471,15 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.listPrimary.fontSize,
     lineHeight: mobileTypography.listPrimary.lineHeight,
     fontWeight: mobileTypography.listPrimary.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   rowTitleDanger: {
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   rowSubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   rowTrailing: {
     marginLeft: spacing[1],
@@ -442,11 +495,11 @@ const styles = StyleSheet.create({
   infoText: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   infoCaption: {
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

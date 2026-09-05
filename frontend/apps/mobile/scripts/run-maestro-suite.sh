@@ -82,6 +82,10 @@ flows=(
   # federated-search does: creating them through the UI would be three other flows.
   $APP_DIR/.maestro/people/directory-call.yaml
   $APP_DIR/.maestro/people/department-members.yaml
+  # Feature 050. Last, because it leaves the account on a manual dark preference, which
+  # every flow after it would then inherit — including the screenshot sweeps, whose
+  # baselines are light.
+  $APP_DIR/.maestro/settings/dark-mode-toggle.yaml
 )
 failures=0
 

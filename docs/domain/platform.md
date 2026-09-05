@@ -323,7 +323,7 @@ Schemas reserved but unused so far: `timekeeping`, `learning`, `compliance`, `pa
 | Command | What it runs |
 |---|---|
 | `make test-backend` | Go integration tests in `backend/integration` (89 files) against a live Postgres |
-| `make test-frontend` | Playwright E2E against web |
+| `make test-frontend` | two static assertion checks — the mobile palette's WCAG contrast sweep and the mobile theme resolution table — then Playwright E2E against web |
 | `make test-frontend-one F=<spec>` | one Playwright spec |
 | `make test-mobile` | Maestro flows against the Expo app |
 | `make test-mobile-one F=<flow> [MAESTRO_DEVICE=<udid>]` | one Maestro flow; `MAESTRO_DEVICE` names the simulator or emulator, and with it the same command covers both platforms |

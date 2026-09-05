@@ -33,6 +33,16 @@ const storage: StorageAdapter = {
   removeItem: (key) => mmkv.delete(key),
 };
 
+/**
+ * The same device-scoped store, exported directly.
+ *
+ * The theme needs one value — the last mode this phone painted — during its very
+ * first render, which happens before `configurePlatform` has run, so it cannot go
+ * through `getPlatform()`. Reading it from here keeps the two on one MMKV
+ * instance rather than opening a second one behind the adapter's back.
+ */
+export const deviceStorage: StorageAdapter = storage;
+
 // ── Secure Storage (Keychain / Keystore) ──
 const secureStorage: SecureStorageAdapter = {
   getItemAsync: (key) => getSecureItem(key),

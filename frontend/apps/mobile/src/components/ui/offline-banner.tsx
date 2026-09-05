@@ -9,8 +9,9 @@
  */
 
 import React, { useEffect, useRef, useState } from "react";
-import { Animated, StyleSheet, Text, AppState } from "react-native";
+import { Animated, Text, AppState } from "react-native";
 import { API_BASE_URL } from "@/lib/constants";
+import { makeStyles } from "@/lib/theme";
 
 const PING_INTERVAL_MS = 10_000; // 10 seconds
 const PING_TIMEOUT_MS = 5_000;
@@ -138,6 +139,8 @@ function getBannerText(lastCheck: ConnectivityCheckResult | null): string {
 }
 
 export function OfflineBanner() {
+  const styles = useStyles();
+
   const [isOffline, setIsOffline] = useState(false);
   const [lastCheck, setLastCheck] = useState<ConnectivityCheckResult | null>(null);
   const slideAnim = useRef(new Animated.Value(-48)).current;
@@ -222,22 +225,22 @@ export function OfflineBanner() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   banner: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
     height: 44,
-    backgroundColor: "#991b1b",
+    backgroundColor: t.error.dark,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 999,
   },
   text: {
-    color: "#fff",
+    color: t.error.contrastText,
     fontSize: 13,
     fontWeight: "600",
     letterSpacing: 0.2,
   },
-});
+}));

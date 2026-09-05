@@ -1,23 +1,17 @@
 import React from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  useColorScheme,
-} from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  getPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
 import type { VoiceClientConnectionState } from "@/lib/voice/voice-client";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface ActiveVoiceCallBarProps {
   connectionState: VoiceClientConnectionState;
@@ -57,9 +51,10 @@ export function ActiveVoiceCallBar({
   onLeave,
   onToggleMute,
 }: ActiveVoiceCallBarProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
-  const colorScheme = useColorScheme();
-  const palette = getPalette(colorScheme === "dark" ? "dark" : "light");
   const isBusy =
     leaving ||
     connectionState === "connecting" ||
@@ -84,14 +79,16 @@ export function ActiveVoiceCallBar({
         style={({ pressed }) => [
           styles.bar,
           {
-            backgroundColor: palette.mode === "dark" ? "rgba(34, 197, 94, 0.14)" : "#f0fdf4",
-            borderColor: palette.mode === "dark" ? "rgba(74, 222, 128, 0.34)" : "#bbf7d0",
+            // Both halves of what this used to branch on by hand are exactly
+            // `statusColors.success`; the palette has already chosen by now.
+            backgroundColor: statusColors.success[palette.mode].bg,
+            borderColor: statusColors.success[palette.mode].border,
           },
           pressed && styles.pressed,
         ]}
       >
         <View style={styles.leadingIcon}>
-          <SFIcon name="phone.fill" size={17} color="#16a34a" />
+          <SFIcon name="phone.fill" size={17} color={palette.success.main} />
         </View>
         <View style={styles.textWrap}>
           <Text style={[styles.title, { color: palette.text.primary }]} numberOfLines={1}>
@@ -104,7 +101,7 @@ export function ActiveVoiceCallBar({
           </Text>
         </View>
         {isBusy && !leaving ? (
-          <ActivityIndicator size="small" color="#16a34a" />
+          <ActivityIndicator size="small" color={palette.success.main} />
         ) : null}
         {/*
           Mute has to be reachable here, not only from the system call screen. On a
@@ -158,7 +155,7 @@ export function ActiveVoiceCallBar({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   safeWrap: {
     borderBottomWidth: border.thin,
     paddingHorizontal: spacing[3],
@@ -181,7 +178,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#dcfce7",
+    backgroundColor: t.notificationDomain.tasks.bg,
   },
   textWrap: {
     flex: 1,
@@ -201,7 +198,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.78)",
+    backgroundColor: t.overlay.barSurface,
   },
   pressed: {
     opacity: opacity.pressed,
@@ -209,4 +206,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

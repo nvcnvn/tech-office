@@ -5,7 +5,6 @@
 import React from "react";
 import {
   Pressable,
-  StyleSheet,
   View,
   type PressableProps,
   type StyleProp,
@@ -13,10 +12,10 @@ import {
 } from "react-native";
 import {
   border,
-  lightPalette,
   mobileLayout,
   radius,
 } from "@tech-office/theme-tokens";
+import { makeStyles } from "@/lib/theme";
 
 interface CardProps {
   children: React.ReactNode;
@@ -31,6 +30,8 @@ export function Card({
   onPress,
   padding = mobileLayout.cardPadding,
 }: CardProps) {
+  const styles = useStyles();
+
   if (onPress) {
     return (
       <Pressable
@@ -53,14 +54,14 @@ export function Card({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   card: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.md,
     // @ts-ignore
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     boxShadow: "0 1px 2px rgba(15, 23, 42, 0.04)",
   },
-});
+}));

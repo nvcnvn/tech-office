@@ -1,16 +1,17 @@
 import React, { useEffect } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, Text, View } from "react-native";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { useMobileVoiceMessageRecorder } from "@/lib/voice/voice-message-recorder";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface VoiceMessageRecorderProps {
   channelId?: string;
@@ -28,6 +29,8 @@ function formatDuration(durationMs: number): string {
 }
 
 function RecorderWaveform({ peaks, active }: { peaks: number[]; active: boolean }) {
+  const styles = useStyles();
+
   const bars = peaks.length ? peaks.slice(-32) : Array.from({ length: 32 }, () => 0.12);
 
   return (
@@ -61,6 +64,9 @@ export function VoiceMessageRecorder({
   onActiveChange,
   idleAccessory,
 }: VoiceMessageRecorderProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const voiceMessage = useMobileVoiceMessageRecorder(channelId, onSent);
   const actionDisabled = disabled || !channelId || voiceMessage.isBusy;
   const isActive = voiceMessage.state !== "idle";
@@ -88,7 +94,7 @@ export function VoiceMessageRecorder({
           accessibilityRole="button"
           accessibilityLabel="Record voice message"
         >
-          <SFIcon name="mic.fill" size={18} color={lightPalette.primary.main} />
+          <SFIcon name="mic.fill" size={18} color={palette.primary.main} />
         </Pressable>
         {idleAccessory}
       </View>
@@ -146,7 +152,7 @@ export function VoiceMessageRecorder({
           accessibilityRole="button"
           accessibilityLabel="Stop recording"
         >
-          <SFIcon name="stop.fill" size={15} color={lightPalette.primary.contrastText} />
+          <SFIcon name="stop.fill" size={15} color={palette.primary.contrastText} />
         </Pressable>
       ) : voiceMessage.state === "failed" ? (
         <Pressable
@@ -157,7 +163,7 @@ export function VoiceMessageRecorder({
           accessibilityRole="button"
           accessibilityLabel="Retry voice message"
         >
-          <SFIcon name="arrow.clockwise" size={15} color={lightPalette.primary.contrastText} />
+          <SFIcon name="arrow.clockwise" size={15} color={palette.primary.contrastText} />
         </Pressable>
       ) : (
         <Pressable
@@ -169,9 +175,9 @@ export function VoiceMessageRecorder({
           accessibilityLabel="Send voice message"
         >
           {voiceMessage.isBusy ? (
-            <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+            <ActivityIndicator size="small" color={palette.primary.contrastText} />
           ) : (
-            <SFIcon name="paperplane.fill" size={15} color={lightPalette.primary.contrastText} />
+            <SFIcon name="paperplane.fill" size={15} color={palette.primary.contrastText} />
           )}
         </Pressable>
       )}
@@ -183,14 +189,14 @@ export function VoiceMessageRecorder({
         accessibilityRole="button"
         accessibilityLabel="Cancel voice message"
       >
-        <SFIcon name="xmark" size={14} color={lightPalette.text.secondary} />
+        <SFIcon name="xmark" size={14} color={palette.text.secondary} />
       </Pressable>
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   idleActions: {
     flexDirection: "row",
     alignItems: "center",
@@ -203,8 +209,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
   },
   recorderWrap: {
     flex: 1,
@@ -215,8 +221,8 @@ const styles = StyleSheet.create({
     padding: spacing[2],
     borderRadius: radius.lg,
     borderWidth: border.thin,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: statusColors.info[t.mode].border,
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   recorderBody: {
     flex: 1,
@@ -240,23 +246,23 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   statusDotError: {
-    backgroundColor: lightPalette.error.main,
+    backgroundColor: t.error.main,
   },
   recorderTitle: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700",
   },
   recorderTime: {
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "800",
   },
   recorderDetail: {
-    color: lightPalette.error.dark,
+    color: t.error.dark,
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: 16,
   },
@@ -271,10 +277,10 @@ const styles = StyleSheet.create({
     minWidth: 2,
     maxWidth: 5,
     borderRadius: 3,
-    backgroundColor: "#93c5fd",
+    backgroundColor: t.info.light,
   },
   waveformBarRecent: {
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   recorderActions: {
     flexDirection: "row",
@@ -287,7 +293,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   stopAction: {
     width: 34,
@@ -295,7 +301,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.error.main,
+    backgroundColor: t.error.main,
   },
   cancelAction: {
     width: 34,
@@ -303,7 +309,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   pressed: {
     opacity: opacity.pressed,
@@ -311,4 +317,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

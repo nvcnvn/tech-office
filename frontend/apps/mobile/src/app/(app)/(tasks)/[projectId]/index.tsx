@@ -31,14 +31,15 @@ import { useManualRefresh } from "@/hooks/use-manual-refresh";
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import type { ProjectState, RitualDefinition, Task } from "apis";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   shadows,
   spacing,
   statusColors,
+  type MobilePalette,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 type CardTone = "neutral" | "info" | "success" | "warning" | "danger";
 type MixedSectionKey = "overdue" | "today" | "upcoming" | "no-date";
@@ -82,13 +83,16 @@ const sectionOrder: Array<{ key: MixedSectionKey; title: string; subtitle: strin
   { key: "no-date", title: "No Date", subtitle: "Open work without a schedule yet" },
 ];
 
-const categoryColors: Record<string, string> = {
-  backlog: "#94a3b8",
-  unstarted: lightPalette.info.main,
-  started: lightPalette.warning.main,
-  completed: lightPalette.success.main,
-  cancelled: "#bdbdbd",
-};
+/** A function of the palette: the mapping is fixed, the colours are not. */
+function categoryColors(t: MobilePalette): Record<string, string> {
+  return {
+    backlog: t.taskState.todo.dot,
+    unstarted: t.info.main,
+    started: t.warning.main,
+    completed: t.success.main,
+    cancelled: t.text.disabled,
+  };
+}
 
 function startOfDay(value: Date): Date {
   const date = new Date(value);
@@ -368,42 +372,46 @@ function getRitualStatusIconName(tone: CardTone): string {
   }
 }
 
-function getToneColors(tone: CardTone) {
+function getToneColors(t: MobilePalette, tone: CardTone) {
+  // `statusColors` already carries both modes; it was being read at `.light`
+  // unconditionally, which is the same bug as the rest of this sweep.
   switch (tone) {
     case "danger":
       return {
-        accentColor: lightPalette.error.main,
-        subtleTextColor: statusColors.error.light.text,
+        accentColor: t.error.main,
+        subtleTextColor: statusColors.error[t.mode].text,
       };
     case "warning":
       return {
-        accentColor: lightPalette.warning.main,
-        subtleTextColor: statusColors.warning.light.text,
+        accentColor: t.warning.main,
+        subtleTextColor: statusColors.warning[t.mode].text,
       };
     case "success":
       return {
-        accentColor: lightPalette.success.main,
-        subtleTextColor: statusColors.success.light.text,
+        accentColor: t.success.main,
+        subtleTextColor: statusColors.success[t.mode].text,
       };
     case "info":
       return {
-        accentColor: lightPalette.info.main,
-        subtleTextColor: lightPalette.info.dark,
+        accentColor: t.info.main,
+        subtleTextColor: statusColors.info[t.mode].text,
       };
     default:
       return {
-        accentColor: lightPalette.text.secondary,
-        subtleTextColor: lightPalette.text.secondary,
+        accentColor: t.text.secondary,
+        subtleTextColor: t.text.secondary,
       };
   }
 }
 
-function getStateAccentColor(state?: ProjectState): string {
+function getStateAccentColor(t: MobilePalette, state?: ProjectState): string {
+  // A state may carry its own colour, chosen by whoever configured the project.
+  // That one is data, not a token, and is left exactly as it is in both themes.
   if (state?.color) {
     return state.color;
   }
 
-  return state ? categoryColors[state.category] ?? lightPalette.text.secondary : lightPalette.text.secondary;
+  return state ? categoryColors(t)[state.category] ?? t.text.secondary : t.text.secondary;
 }
 
 function getMixedListItemTime(item: MixedListItem): number {
@@ -445,6 +453,9 @@ function triggerSelectionHaptic() {
 }
 
 function StandardTaskRow({ item, today, nextWeek }: { item: StandardTaskItem; today: Date; nextWeek: Date }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const timingLabel = getStandardTimingLabel(item.task, today, nextWeek);
   const tone = (() => {
     switch (getMixedBucket(item.task, today, nextWeek)) {
@@ -458,7 +469,7 @@ function StandardTaskRow({ item, today, nextWeek }: { item: StandardTaskItem; to
         return "neutral" as const;
     }
   })();
-  const colors = getToneColors(tone);
+  const colors = getToneColors(palette, tone);
   const actionLabel = "Open task";
 
   return (
@@ -480,7 +491,7 @@ function StandardTaskRow({ item, today, nextWeek }: { item: StandardTaskItem; to
             <Text style={[styles.timingText, { color: colors.accentColor }]}>{timingLabel}</Text>
           </View>
           <View style={styles.taskMetaRow}>
-            <Text style={[styles.taskMetaText, styles.taskMetaStrong, { color: getStateAccentColor(item.state) }]}>
+            <Text style={[styles.taskMetaText, styles.taskMetaStrong, { color: getStateAccentColor(palette, item.state) }]}>
               {item.state?.name ?? "Open"}
             </Text>
             <View style={styles.metaDot} />
@@ -488,7 +499,7 @@ function StandardTaskRow({ item, today, nextWeek }: { item: StandardTaskItem; to
             {item.task.commentCount > 0 ? (
               <>
                 <View style={styles.metaDot} />
-                <SFIcon name="bubble.left" size={10} color={lightPalette.text.secondary} />
+                <SFIcon name="bubble.left" size={10} color={palette.text.secondary} />
                 <Text style={styles.taskMetaText}>{item.task.commentCount}</Text>
               </>
             ) : null}
@@ -504,7 +515,10 @@ function StandardTaskRow({ item, today, nextWeek }: { item: StandardTaskItem; to
 }
 
 function RitualTaskRow({ item }: { item: RitualSummaryItem }) {
-  const colors = getToneColors(item.statusTone);
+  const { palette } = useTheme();
+  const styles = useStyles();
+
+  const colors = getToneColors(palette, item.statusTone);
   const actionLabel = getRitualOpenActionLabel(item.activeTask);
 
   return (
@@ -532,7 +546,7 @@ function RitualTaskRow({ item }: { item: RitualSummaryItem }) {
             {item.evidenceLabel ? (
               <>
                 <View style={styles.metaDot} />
-                <SFIcon name="checklist" size={10} color={lightPalette.text.secondary} />
+                <SFIcon name="checklist" size={10} color={palette.text.secondary} />
                 <Text style={styles.taskMetaText}>{item.evidenceLabel}</Text>
               </>
             ) : null}
@@ -552,6 +566,9 @@ function RitualTaskRow({ item }: { item: RitualSummaryItem }) {
 }
 
 export default function TaskListScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { projectId: rawProjectId } = useLocalSearchParams<{ projectId?: string | string[] }>();
   const router = useRouter();
   const auth = useAuth();
@@ -778,7 +795,7 @@ export default function TaskListScreen() {
               onPress={() => router.push(`/(app)/(tasks)/${resolvedProjectId}/create-ritual`)}
               style={styles.createRitualButton}
             >
-              <SFIcon name="plus" size={18} color={lightPalette.primary.main} />
+              <SFIcon name="plus" size={18} color={palette.primary.main} />
               <Text style={styles.createRitualLabel}>Add a ritual</Text>
             </Pressable>
           ) : null}
@@ -849,10 +866,10 @@ export default function TaskListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     paddingBottom: mobileLayout.cardPadding * 2,
@@ -878,13 +895,13 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   createRitualLabel: {
     fontSize: mobileTypography.button.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   sectionBlock: {
     paddingTop: spacing[2],
@@ -899,37 +916,37 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   sectionSubtitle: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginTop: 2,
   },
   sectionCount: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600" as const,
   },
   sectionCard: {
     marginHorizontal: mobileLayout.screenPadding,
     borderRadius: radius.md,
     overflow: "hidden",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     ...shadows.sm,
   },
   cardSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginHorizontal: mobileLayout.cardPadding,
   },
   taskRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   taskRowPressed: {
-    backgroundColor: "#f7fafc",
+    backgroundColor: t.background.default,
   },
   taskContentWrap: {
     flex: 1,
@@ -951,7 +968,7 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     flex: 1,
   },
   timingText: {
@@ -967,7 +984,7 @@ const styles = StyleSheet.create({
   },
   taskMetaText: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   taskMetaStrong: {
     fontWeight: "600" as const,
@@ -986,7 +1003,7 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 999,
-    backgroundColor: lightPalette.text.disabled,
+    backgroundColor: t.text.disabled,
   },
   ritualStatusRow: {
     flexDirection: "row",
@@ -997,4 +1014,4 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
   },
-});
+}));

@@ -52,15 +52,16 @@ import { ensureEvidenceCameraPermission, pickEvidencePhoto, uploadEvidenceAsset 
 import { withNavigationContext } from "@/lib/mobile-navigation";
 import { invalidateTaskQueries } from "@/lib/task-query-invalidation";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   shadows,
   spacing,
   statusColors,
+  type MobilePalette,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 type CardTone = "neutral" | "info" | "success" | "warning" | "danger";
 type RequirementStatus = ApprovalStatus | "missing";
@@ -87,18 +88,21 @@ type TaskContextMessage = {
 
 type DateLike = Date | string | null | undefined;
 
-const categoryColors: Record<string, string> = {
-  todo: "#7a8794",
-  in_progress: lightPalette.warning.main,
-  done: lightPalette.success.main,
-  cancelled: "#9aa4b2",
-  scheduled: lightPalette.info.main,
-  submitted: "#7c5cff",
-  verified: lightPalette.success.main,
-  overdue: lightPalette.error.main,
-  missed: "#a94442",
-  skipped: "#8d99ae",
-};
+/** A function of the palette: the mapping is fixed, the colours are not. */
+function categoryColors(t: MobilePalette): Record<string, string> {
+  return {
+    todo: t.taskState.todo.dot,
+    in_progress: t.warning.main,
+    done: t.success.main,
+    cancelled: t.text.disabled,
+    scheduled: t.info.main,
+    submitted: t.eventCategory.personal,
+    verified: t.success.main,
+    overdue: t.error.main,
+    missed: t.error.dark,
+    skipped: t.text.disabled,
+  };
+}
 
 function parseDateOnly(value?: string): Date | null {
   if (!value) {
@@ -290,47 +294,51 @@ function getEvidenceTypeLabel(type: EvidenceRequirementDetail["evidenceTypes"][n
   }
 }
 
-function getToneColors(tone: CardTone) {
+function getToneColors(t: MobilePalette, tone: CardTone) {
+  // `statusColors` already carries both modes; it was being read at `.light`
+  // unconditionally, which is the same bug as the rest of this sweep.
   switch (tone) {
     case "danger":
       return {
-        accent: lightPalette.error.main,
-        background: statusColors.error.light.bg,
-        text: statusColors.error.light.text,
+        accent: t.error.main,
+        background: statusColors.error[t.mode].bg,
+        text: statusColors.error[t.mode].text,
       };
     case "warning":
       return {
-        accent: lightPalette.warning.main,
-        background: statusColors.warning.light.bg,
-        text: statusColors.warning.light.text,
+        accent: t.warning.main,
+        background: statusColors.warning[t.mode].bg,
+        text: statusColors.warning[t.mode].text,
       };
     case "success":
       return {
-        accent: lightPalette.success.main,
-        background: statusColors.success.light.bg,
-        text: statusColors.success.light.text,
+        accent: t.success.main,
+        background: statusColors.success[t.mode].bg,
+        text: statusColors.success[t.mode].text,
       };
     case "info":
       return {
-        accent: lightPalette.info.main,
-        background: "#edf6ff",
-        text: lightPalette.info.dark,
+        accent: t.info.main,
+        background: statusColors.info[t.mode].bg,
+        text: statusColors.info[t.mode].text,
       };
     default:
       return {
-        accent: lightPalette.text.secondary,
-        background: "#f4f6f8",
-        text: lightPalette.text.secondary,
+        accent: t.text.secondary,
+        background: t.notificationDomain.system.bg,
+        text: t.text.secondary,
       };
   }
 }
 
-function getStateAccentColor(state?: ProjectState): string {
+function getStateAccentColor(t: MobilePalette, state?: ProjectState): string {
+  // A state may carry its own colour, chosen by whoever configured the project.
+  // That one is data, not a token, and is left exactly as it is in both themes.
   if (state?.color) {
     return state.color;
   }
 
-  return state ? categoryColors[state.category] ?? lightPalette.text.secondary : lightPalette.text.secondary;
+  return state ? categoryColors(t)[state.category] ?? t.text.secondary : t.text.secondary;
 }
 
 function getStateTone(state?: ProjectState): CardTone {
@@ -691,8 +699,11 @@ function EvidenceRequirementCard({
   onCancelText: () => void;
   onSubmitText: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const tone = getRequirementTone(item.status);
-  const colors = getToneColors(tone);
+  const colors = getToneColors(palette, tone);
   const actionLabel = getRequirementActionLabel(item);
   const [openingAttachment, setOpeningAttachment] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
@@ -817,7 +828,7 @@ function EvidenceRequirementCard({
                   pressed ? styles.submissionLinkButtonPressed : undefined,
                 ]}
               >
-                <SFIcon name="mappin.and.ellipse" size={13} color={lightPalette.info.main} />
+                <SFIcon name="mappin.and.ellipse" size={13} color={palette.info.main} />
                 <Text style={styles.submissionLinkButtonText}>{getSubmissionMapLabel()}</Text>
               </Pressable>
             ) : null}
@@ -834,13 +845,13 @@ function EvidenceRequirementCard({
                 ]}
               >
                 {openingAttachment ? (
-                  <ActivityIndicator size="small" color={lightPalette.info.main} />
+                  <ActivityIndicator size="small" color={palette.info.main} />
                 ) : (
                   <>
                     <SFIcon
                       name={item.latestSubmission.evidenceType === "photo" ? "eye" : "doc"}
                       size={13}
-                      color={lightPalette.info.main}
+                      color={palette.info.main}
                     />
                     <Text style={styles.submissionLinkButtonText}>
                       {getSubmissionAttachmentLabel(item.latestSubmission)}
@@ -859,7 +870,7 @@ function EvidenceRequirementCard({
                   pressed ? styles.submissionLinkButtonPressed : undefined,
                 ]}
               >
-                <SFIcon name="link" size={13} color={lightPalette.info.main} />
+                <SFIcon name="link" size={13} color={palette.info.main} />
                 <Text style={styles.submissionLinkButtonText}>{getSubmissionLinkLabel()}</Text>
               </Pressable>
             ) : null}
@@ -897,7 +908,7 @@ function EvidenceRequirementCard({
               ]}
             >
               {isSubmitting ? (
-                <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+                <ActivityIndicator size="small" color={palette.primary.contrastText} />
               ) : (
                 <Text style={styles.primaryActionButtonText}>Send note</Text>
               )}
@@ -918,7 +929,7 @@ function EvidenceRequirementCard({
             ]}
           >
             {isSubmitting ? (
-              <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+              <ActivityIndicator size="small" color={palette.primary.contrastText} />
             ) : (
               <Text style={styles.primaryActionButtonText}>{actionLabel}</Text>
             )}
@@ -926,7 +937,7 @@ function EvidenceRequirementCard({
         ) : null}
         {canReview && item.status === "pending_review" ? (
           <View style={styles.reviewerNotice}>
-            <SFIcon name="person.badge.shield.checkmark" size={12} color={lightPalette.info.main} />
+            <SFIcon name="person.badge.shield.checkmark" size={12} color={palette.info.main} />
             <Text style={styles.reviewerNoticeText}>Open in browser for full review controls</Text>
           </View>
         ) : null}
@@ -953,7 +964,7 @@ function EvidenceRequirementCard({
                   pressed ? styles.imagePreviewCloseButtonPressed : undefined,
                 ]}
               >
-                <SFIcon name="xmark" size={14} color={lightPalette.text.secondary} />
+                <SFIcon name="xmark" size={14} color={palette.text.secondary} />
               </Pressable>
             </View>
             {previewImageUrl ? (
@@ -979,6 +990,9 @@ function PhotoEvidencePreflightSheet({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { palette } = useTheme();
+  const preflightStyles = usePreflightStyles();
+
   return (
     <Modal
       transparent
@@ -993,8 +1007,8 @@ function PhotoEvidencePreflightSheet({
           <Text style={preflightStyles.title}>Before you take a photo</Text>
           <View style={preflightStyles.rows}>
             <View style={preflightStyles.row}>
-              <View style={[preflightStyles.iconWrap, { backgroundColor: "#eff6ff" }]}>
-                <SFIcon name="location.fill" size={20} color={lightPalette.info.main} />
+              <View style={[preflightStyles.iconWrap, { backgroundColor: statusColors.info[palette.mode].bg }]}>
+                <SFIcon name="location.fill" size={20} color={palette.info.main} />
               </View>
               <View style={preflightStyles.rowText}>
                 <Text style={preflightStyles.rowTitle}>Location</Text>
@@ -1002,8 +1016,8 @@ function PhotoEvidencePreflightSheet({
               </View>
             </View>
             <View style={preflightStyles.row}>
-              <View style={[preflightStyles.iconWrap, { backgroundColor: "#f1f5f9" }]}>
-                <SFIcon name="camera.fill" size={20} color={lightPalette.primary.main} />
+              <View style={[preflightStyles.iconWrap, { backgroundColor: palette.divider }]}>
+                <SFIcon name="camera.fill" size={20} color={palette.primary.main} />
               </View>
               <View style={preflightStyles.rowText}>
                 <Text style={preflightStyles.rowTitle}>Camera</Text>
@@ -1025,14 +1039,14 @@ function PhotoEvidencePreflightSheet({
   );
 }
 
-const preflightStyles = StyleSheet.create({
+const usePreflightStyles = makeStyles((t) => ({
   backdrop: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
+    backgroundColor: t.overlay.scrim,
     justifyContent: "flex-end",
   },
   sheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
     paddingTop: spacing[1],
@@ -1045,13 +1059,13 @@ const preflightStyles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: lightPalette.text.disabled,
+    backgroundColor: t.text.disabled,
     marginBottom: spacing[0.5],
   },
   title: {
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
   },
   rows: {
@@ -1077,11 +1091,11 @@ const preflightStyles = StyleSheet.create({
   rowTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   rowSubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     lineHeight: 18,
   },
   actions: {
@@ -1094,31 +1108,34 @@ const preflightStyles = StyleSheet.create({
     height: 48,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     alignItems: "center",
     justifyContent: "center",
   },
   cancelText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   continueButton: {
     flex: 1,
     height: 48,
     borderRadius: radius.md,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     alignItems: "center",
     justifyContent: "center",
   },
   continueText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: "#ffffff",
+    color: t.primary.contrastText,
   },
-});
+}));
 
 export default function TaskDetailScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const params = useLocalSearchParams<{
     projectId?: string | string[];
     taskId?: string | string[];
@@ -1595,7 +1612,7 @@ export default function TaskDetailScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={lightPalette.primary.main} />
+        <ActivityIndicator size="large" color={palette.primary.main} />
       </View>
     );
   }
@@ -1633,7 +1650,7 @@ export default function TaskDetailScreen() {
   }
 
   const stateTone = getStateTone(currentState);
-  const stateColors = getToneColors(stateTone);
+  const stateColors = getToneColors(palette, stateTone);
   const scheduleDate = task.taskKind === "ritual_instance" ? parseDateOnly(task.scheduledDate) : parseDateOnly(task.dueDate);
   const dueLabel = task.taskKind === "ritual_instance"
     ? formatRelativeDate(task.completionDeadline ?? scheduleDate)
@@ -1691,7 +1708,7 @@ export default function TaskDetailScreen() {
             testID="task-copy-canonical-link"
           >
             <View style={styles.templateLinkButtonContent}>
-              <SFIcon name="square.and.arrow.up" size={14} color={lightPalette.info.main} />
+              <SFIcon name="square.and.arrow.up" size={14} color={palette.info.main} />
               <Text style={styles.templateLinkButtonText}>Share task link</Text>
             </View>
           </Pressable>
@@ -1730,7 +1747,7 @@ export default function TaskDetailScreen() {
             testID="task-copy-canonical-link"
           >
             <View style={styles.templateLinkButtonContent}>
-              <SFIcon name="square.and.arrow.up" size={14} color={lightPalette.info.main} />
+              <SFIcon name="square.and.arrow.up" size={14} color={palette.info.main} />
               <Text style={styles.templateLinkButtonText}>Share task link</Text>
             </View>
           </Pressable>
@@ -1756,7 +1773,7 @@ export default function TaskDetailScreen() {
         {task.poolAssignmentState === "awaiting_shift" ? (
           <View style={styles.awaitingShiftBanner} testID="task-awaiting-shift-banner">
             <View style={styles.awaitingShiftBannerIconWrap}>
-              <SFIcon name="calendar.badge.clock" size={18} color={lightPalette.info.main} />
+              <SFIcon name="calendar.badge.clock" size={18} color={palette.info.main} />
             </View>
             <View style={styles.awaitingShiftBannerCopy}>
               <Text style={styles.awaitingShiftBannerTitle}>Waiting for the rota</Text>
@@ -1770,7 +1787,7 @@ export default function TaskDetailScreen() {
         {submissionFeedback ? (
           <View style={styles.successBanner}>
             <View style={styles.successBannerIconWrap}>
-              <SFIcon name="checkmark.circle.fill" size={18} color={lightPalette.success.main} />
+              <SFIcon name="checkmark.circle.fill" size={18} color={palette.success.main} />
             </View>
             <View style={styles.successBannerCopy}>
               <Text style={styles.successBannerTitle}>{submissionFeedback.title}</Text>
@@ -1781,7 +1798,7 @@ export default function TaskDetailScreen() {
         <View style={styles.heroCard}>
           <View style={styles.heroTopRow}>
             <View style={[styles.badge, { backgroundColor: stateColors.background }]}> 
-              <Text style={[styles.badgeText, { color: getStateAccentColor(currentState) }]}>
+              <Text style={[styles.badgeText, { color: getStateAccentColor(palette, currentState) }]}>
                 {currentState?.name ?? "Active"}
               </Text>
             </View>
@@ -1799,7 +1816,7 @@ export default function TaskDetailScreen() {
 
           <View style={styles.heroMetaRow}>
             <View style={styles.heroMetaItem}>
-              <SFIcon name={task.taskKind === "ritual_instance" ? "calendar.badge.clock" : "calendar"} size={14} color={lightPalette.text.secondary} />
+              <SFIcon name={task.taskKind === "ritual_instance" ? "calendar.badge.clock" : "calendar"} size={14} color={palette.text.secondary} />
               <Text style={styles.heroMetaText}>{heroTimingLabel}</Text>
             </View>
             {task.assignees.length > 0 ? (
@@ -1807,14 +1824,14 @@ export default function TaskDetailScreen() {
                 <SFIcon
                   name={isAssignedToMe ? "person.crop.circle.badge.checkmark" : "person.2"}
                   size={14}
-                  color={isAssignedToMe ? lightPalette.success.main : lightPalette.text.secondary}
+                  color={isAssignedToMe ? palette.success.main : palette.text.secondary}
                 />
                 <Text style={styles.heroMetaText}>{assigneeSummary}</Text>
               </View>
             ) : null}
             {task.taskKind === "ritual_instance" && evidenceProgress ? (
               <View style={styles.heroMetaItem}>
-                <SFIcon name="checklist" size={14} color={lightPalette.text.secondary} />
+                <SFIcon name="checklist" size={14} color={palette.text.secondary} />
                 <Text style={styles.heroMetaText}>
                   {evidenceProgress.allRequiredApproved
                     ? "Proof ready"
@@ -1836,13 +1853,13 @@ export default function TaskDetailScreen() {
           <View
             style={[
               styles.contextCard,
-              { backgroundColor: getToneColors(taskContextMessage.tone).background },
+              { backgroundColor: getToneColors(palette, taskContextMessage.tone).background },
             ]}
           >
             <Text
               style={[
                 styles.contextCardTitle,
-                { color: getToneColors(taskContextMessage.tone).text },
+                { color: getToneColors(palette, taskContextMessage.tone).text },
               ]}
             >
               {taskContextMessage.title}
@@ -1863,12 +1880,12 @@ export default function TaskDetailScreen() {
                   disabled={stateMutation.isPending}
                   style={({ pressed }) => [
                     styles.stateActionButton,
-                    { borderColor: getStateAccentColor(state) },
+                    { borderColor: getStateAccentColor(palette, state) },
                     pressed && styles.stateActionButtonPressed,
                     stateMutation.isPending && styles.stateActionButtonDisabled,
                   ]}
                 >
-                  <Text style={[styles.stateActionText, { color: getStateAccentColor(state) }]}>{state.name}</Text>
+                  <Text style={[styles.stateActionText, { color: getStateAccentColor(palette, state) }]}>{state.name}</Text>
                 </Pressable>
               ))}
             </View>
@@ -1889,8 +1906,8 @@ export default function TaskDetailScreen() {
                 </Text>
               </View>
               {evidenceProgress ? (
-                <View style={[styles.badge, { backgroundColor: evidenceProgress.allRequiredApproved ? statusColors.success.light.bg : "#f4f6f8" }]}> 
-                  <Text style={[styles.badgeText, { color: evidenceProgress.allRequiredApproved ? statusColors.success.light.text : lightPalette.text.secondary }]}>
+                <View style={[styles.badge, { backgroundColor: evidenceProgress.allRequiredApproved ? statusColors.success[palette.mode].bg : palette.background.default }]}> 
+                  <Text style={[styles.badgeText, { color: evidenceProgress.allRequiredApproved ? statusColors.success[palette.mode].text : palette.text.secondary }]}>
                     {evidenceProgress.allRequiredApproved ? "Ready" : `${evidenceProgress.requiredCount - evidenceProgress.approvedCount} left`}
                   </Text>
                 </View>
@@ -1911,7 +1928,7 @@ export default function TaskDetailScreen() {
                 testID="ritual-procedure-entry"
               >
                 <View style={styles.templateLinkButtonContent}>
-                  <SFIcon name="book" size={14} color={lightPalette.info.main} />
+                  <SFIcon name="book" size={14} color={palette.info.main} />
                   <Text style={styles.procedureButtonText} numberOfLines={1}>
                     {ritualDefinition.procedure.isAvailable
                       ? ritualDefinition.procedure.title
@@ -1994,7 +2011,7 @@ export default function TaskDetailScreen() {
               style={({ pressed }) => [styles.discussionButton, pressed && styles.discussionButtonPressed]}
             >
               <View style={styles.discussionButtonContent}>
-                <SFIcon name="bubble.left.and.bubble.right.fill" size={16} color={lightPalette.info.main} />
+                <SFIcon name="bubble.left.and.bubble.right.fill" size={16} color={palette.info.main} />
                 <Text style={styles.discussionButtonText}>{`Open discussion (${task.commentCount} comments)`}</Text>
               </View>
             </Pressable>
@@ -2026,16 +2043,16 @@ export default function TaskDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     paddingHorizontal: mobileLayout.screenPadding,
@@ -2046,7 +2063,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[1],
     padding: mobileLayout.cardPadding,
     borderRadius: radius.lg,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: spacing[1],
     ...shadows.sm,
   },
@@ -2069,29 +2086,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     paddingVertical: spacing[0.5],
     borderRadius: 999,
-    backgroundColor: "#f2f5f8",
+    backgroundColor: t.background.default,
   },
   kindBadgeText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   heroTitle: {
     fontSize: 26,
     lineHeight: 32,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   heroIdentifierInline: {
     fontSize: 18,
     lineHeight: 32,
     fontWeight: "800" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   heroSummary: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 20,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   secondaryActionButton: {
     alignSelf: "flex-start",
@@ -2099,7 +2116,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     paddingVertical: spacing[0.5],
     borderRadius: radius.md,
-    backgroundColor: "#eef6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   procedureButton: {
     alignSelf: "flex-start",
@@ -2109,13 +2126,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[0.5],
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: "#eef6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
     maxWidth: "100%",
   },
   procedureButtonText: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.info.main,
+    color: t.info.main,
     flexShrink: 1,
   },
   heroLinkButtonPressed: {
@@ -2139,16 +2156,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1],
     paddingVertical: spacing[0.5],
     borderRadius: radius.sm,
-    backgroundColor: "#f6f8fa",
+    backgroundColor: t.background.default,
   },
   heroMetaText: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   card: {
     padding: mobileLayout.cardPadding,
     borderRadius: radius.lg,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: spacing[1.5],
     ...shadows.sm,
   },
@@ -2161,12 +2178,12 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   cardSubtitle: {
     marginTop: 2,
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   infoRow: {
     flexDirection: "row",
@@ -2178,37 +2195,37 @@ const styles = StyleSheet.create({
     flex: 0.42,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   infoValue: {
     flex: 0.58,
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 21,
     textAlign: "right",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   noteCard: {
     padding: spacing[1.5],
     borderRadius: radius.md,
-    backgroundColor: "#f8fafc",
+    backgroundColor: t.background.default,
     gap: spacing[0.5],
   },
   noteLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   noteText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 21,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   templateLinkButton: {
     alignSelf: "flex-start",
     paddingHorizontal: spacing[1.5],
     paddingVertical: spacing[1],
     borderRadius: radius.md,
-    backgroundColor: "#eef6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   templateLinkButtonContent: {
     flexDirection: "row",
@@ -2221,7 +2238,7 @@ const styles = StyleSheet.create({
   templateLinkButtonText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.info.main,
+    color: t.info.main,
   },
   contextCard: {
     padding: spacing[1.5],
@@ -2235,7 +2252,7 @@ const styles = StyleSheet.create({
   contextCardText: {
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   proofSummaryRow: {
     flexDirection: "row",
@@ -2249,26 +2266,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1],
     paddingVertical: spacing[0.5],
     borderRadius: radius.md,
-    backgroundColor: "#f4f6f8",
+    backgroundColor: t.background.default,
   },
   compactStatChipInfo: {
-    backgroundColor: "#edf6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   compactStatChipWarning: {
-    backgroundColor: statusColors.warning.light.bg,
+    backgroundColor: statusColors.warning[t.mode].bg,
   },
   compactStatChipDanger: {
-    backgroundColor: statusColors.error.light.bg,
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   compactStatValue: {
     fontSize: 16,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontVariant: ["tabular-nums"],
   },
   compactStatLabel: {
     fontSize: 12,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   requirementSpacing: {
     marginTop: spacing[1],
@@ -2277,7 +2294,7 @@ const styles = StyleSheet.create({
     padding: spacing[1.5],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     gap: spacing[1],
   },
   requirementHeader: {
@@ -2293,16 +2310,16 @@ const styles = StyleSheet.create({
   requirementTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   requirementCaption: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   requirementBody: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 21,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   statusChip: {
     paddingHorizontal: spacing[1],
@@ -2322,11 +2339,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1],
     paddingVertical: spacing[0.5],
     borderRadius: 999,
-    backgroundColor: "#f4f6f8",
+    backgroundColor: t.background.default,
   },
   metaMiniChipText: {
     fontSize: 12,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600" as const,
   },
   requirementHelperRow: {
@@ -2348,7 +2365,7 @@ const styles = StyleSheet.create({
   submissionCard: {
     padding: spacing[1.5],
     borderRadius: radius.md,
-    backgroundColor: "#f8fafc",
+    backgroundColor: t.background.default,
     gap: spacing[1],
   },
   submissionHeaderRow: {
@@ -2360,16 +2377,16 @@ const styles = StyleSheet.create({
   submissionLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   submissionTimestamp: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   submissionPreviewText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 21,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   submissionActionsRow: {
     flexDirection: "row",
@@ -2382,7 +2399,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     paddingVertical: spacing[1],
     borderRadius: radius.md,
-    backgroundColor: "#eef6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -2397,17 +2414,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1],
     paddingVertical: spacing[0.5],
     borderRadius: 999,
-    backgroundColor: "#eef6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   submissionLinkButtonText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.info.main,
+    color: t.info.main,
   },
   reviewUrgentCard: {
     padding: spacing[1.5],
     borderRadius: radius.md,
-    backgroundColor: statusColors.warning.light.bg,
+    backgroundColor: statusColors.warning[t.mode].bg,
     gap: spacing[1],
   },
   reviewUrgentHeader: {
@@ -2418,12 +2435,12 @@ const styles = StyleSheet.create({
   reviewUrgentTitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   reviewUrgentText: {
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   primaryActionButton: {
     minHeight: 42,
@@ -2431,7 +2448,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   primaryActionButtonPressed: {
     opacity: 0.85,
@@ -2442,7 +2459,7 @@ const styles = StyleSheet.create({
   primaryActionButtonText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   requirementDeadlineRow: {
     flexDirection: "row",
@@ -2451,18 +2468,18 @@ const styles = StyleSheet.create({
   },
   requirementDeadlineText: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   inlineComposerCard: {
     padding: spacing[1.5],
     borderRadius: radius.md,
-    backgroundColor: "#f8fafc",
+    backgroundColor: t.background.default,
     gap: spacing[1],
   },
   inlineComposerLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   inlineComposerInput: {
     minHeight: 92,
@@ -2470,11 +2487,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 21,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   inlineComposerActions: {
     flexDirection: "row",
@@ -2487,7 +2504,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   secondaryInlineButtonPressed: {
     opacity: 0.85,
@@ -2495,7 +2512,7 @@ const styles = StyleSheet.create({
   secondaryInlineButtonText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   primaryInlineButton: {
     minHeight: 40,
@@ -2503,7 +2520,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   primaryInlineButtonPressed: {
     opacity: 0.85,
@@ -2516,11 +2533,11 @@ const styles = StyleSheet.create({
   },
   reviewerNoticeText: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   imagePreviewBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(15, 23, 42, 0.64)",
+    backgroundColor: t.overlay.heavyScrim,
     justifyContent: "center",
     padding: spacing[2],
   },
@@ -2529,7 +2546,7 @@ const styles = StyleSheet.create({
   },
   imagePreviewCard: {
     borderRadius: radius.lg,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     padding: spacing[1.5],
     gap: spacing[1],
   },
@@ -2542,7 +2559,7 @@ const styles = StyleSheet.create({
   imagePreviewTitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   imagePreviewCloseButton: {
     width: 32,
@@ -2550,7 +2567,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f4f6f8",
+    backgroundColor: t.background.default,
   },
   imagePreviewCloseButtonPressed: {
     opacity: 0.75,
@@ -2560,7 +2577,7 @@ const styles = StyleSheet.create({
     minHeight: 280,
     maxHeight: 420,
     borderRadius: radius.md,
-    backgroundColor: "#f8fafc",
+    backgroundColor: t.background.default,
   },
   actionWrap: {
     flexDirection: "row",
@@ -2576,10 +2593,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   stateActionButtonPressed: {
-    backgroundColor: "#f8fafc",
+    backgroundColor: t.background.default,
   },
   stateActionButtonDisabled: {
     opacity: 0.5,
@@ -2592,7 +2609,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     paddingVertical: spacing[1.5],
     borderRadius: radius.md,
-    backgroundColor: "#eef6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   discussionButtonPressed: {
     opacity: 0.85,
@@ -2605,7 +2622,7 @@ const styles = StyleSheet.create({
   discussionButtonText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.info.main,
+    color: t.info.main,
   },
   emptyInlineState: {
     alignItems: "center",
@@ -2616,12 +2633,12 @@ const styles = StyleSheet.create({
   emptyInlineTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   emptyInlineText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     textAlign: "center",
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   successBanner: {
     flexDirection: "row",
@@ -2631,8 +2648,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1.5],
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: "#bbf7d0",
-    backgroundColor: "#f0fdf4",
+    borderColor: statusColors.success[t.mode].border,
+    backgroundColor: statusColors.success[t.mode].bg,
   },
   successBannerIconWrap: {
     width: 28,
@@ -2640,7 +2657,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#dcfce7",
+    backgroundColor: statusColors.success[t.mode].border,
     flexShrink: 0,
   },
   successBannerCopy: {
@@ -2650,11 +2667,11 @@ const styles = StyleSheet.create({
   successBannerTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: "#166534",
+    color: statusColors.success[t.mode].text,
   },
   successBannerText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: "#166534",
+    color: statusColors.success[t.mode].text,
     lineHeight: 18,
   },
   // Mirrors successBanner rather than sharing it: the two never appear in the same colour,
@@ -2669,8 +2686,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1.5],
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: statusColors.info[t.mode].border,
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   awaitingShiftBannerIconWrap: {
     width: 28,
@@ -2678,7 +2695,7 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#dbeafe",
+    backgroundColor: statusColors.info[t.mode].border,
     flexShrink: 0,
   },
   awaitingShiftBannerCopy: {
@@ -2688,11 +2705,11 @@ const styles = StyleSheet.create({
   awaitingShiftBannerTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: "#1e40af",
+    color: statusColors.info[t.mode].text,
   },
   awaitingShiftBannerText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: "#1e40af",
+    color: statusColors.info[t.mode].text,
     lineHeight: 18,
   },
-});
+}));

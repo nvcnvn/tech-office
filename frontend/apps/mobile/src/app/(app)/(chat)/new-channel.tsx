@@ -16,8 +16,11 @@ import {
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createChannel } from "apis";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export default function NewChannelScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
@@ -58,19 +61,20 @@ export default function NewChannelScreen() {
               hitSlop={12}
               onPress={() => router.back()}
             >
-              <Text style={{ color: "#007AFF", fontSize: 17, fontWeight: "500" }}>Cancel</Text>
+              <Text style={{ color: palette.info.main, fontSize: 17, fontWeight: "500" }}>Cancel</Text>
             </Pressable>
           ),
         }}
       />
 
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
           Channel Name
         </Text>
         <TextInput
-          style={inputStyle}
+          style={styles.input}
           placeholder="general"
+          placeholderTextColor={palette.text.disabled}
           autoCapitalize="none"
           autoCorrect={false}
           value={name}
@@ -79,12 +83,13 @@ export default function NewChannelScreen() {
       </View>
 
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
           Description (optional)
         </Text>
         <TextInput
-          style={[inputStyle, { height: 80, textAlignVertical: "top" }]}
+          style={[styles.input, { height: 80, textAlignVertical: "top" }]}
           placeholder="What's this channel about?"
+          placeholderTextColor={palette.text.disabled}
           multiline
           value={description}
           onChangeText={setDescription}
@@ -100,10 +105,10 @@ export default function NewChannelScreen() {
         }}
       >
         <View style={{ flex: 1, paddingRight: 16 }}>
-          <Text style={{ fontSize: 15, fontWeight: "500", color: "#111" }}>
+          <Text style={{ fontSize: 15, fontWeight: "500", color: palette.text.primary }}>
             Private Channel
           </Text>
-          <Text style={{ fontSize: 13, color: "#8e8e93", marginTop: 2 }}>
+          <Text style={{ fontSize: 13, color: palette.text.secondary, marginTop: 2 }}>
             Only invited members can see and join
           </Text>
         </View>
@@ -115,7 +120,11 @@ export default function NewChannelScreen() {
         disabled={!name.trim() || mutation.isPending}
         style={({ pressed }) => ({
           backgroundColor:
-            !name.trim() ? "#ccc" : pressed ? "#020617" : "#0f172a",
+            !name.trim()
+              ? palette.divider
+              : pressed
+              ? palette.primary.dark
+              : palette.primary.main,
           borderRadius: 12,
           borderCurve: "continuous",
           padding: 16,
@@ -123,9 +132,9 @@ export default function NewChannelScreen() {
         })}
       >
         {mutation.isPending ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={palette.primary.contrastText} />
         ) : (
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
+          <Text style={{ color: palette.primary.contrastText, fontWeight: "600", fontSize: 16 }}>
             Create Channel
           </Text>
         )}
@@ -134,12 +143,17 @@ export default function NewChannelScreen() {
   );
 }
 
-const inputStyle = {
-  borderWidth: 1,
-  borderColor: "#ddd",
-  borderRadius: 10,
-  borderCurve: "continuous" as const,
-  padding: 14,
-  fontSize: 16,
-  backgroundColor: "#fafafa",
-};
+const useStyles = makeStyles((t) => ({
+  input: {
+    borderWidth: 1,
+    borderColor: t.divider,
+    borderRadius: 10,
+    borderCurve: "continuous" as const,
+    padding: 14,
+    fontSize: 16,
+    backgroundColor: t.background.default,
+    // React Native's default text colour is black, so an input without this one
+    // takes typed text to black on a dark field.
+    color: t.text.primary,
+  },
+}));

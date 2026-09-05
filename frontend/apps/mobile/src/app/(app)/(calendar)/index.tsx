@@ -12,7 +12,6 @@ import {
   View,
   Pressable,
   RefreshControl,
-  StyleSheet,
 } from "react-native";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
@@ -43,13 +42,13 @@ import { useStreamRecoveryRefresh } from "@/hooks/use-stream-recovery-refresh";
 import { notificationStreamBehavior } from "@/lib/notification-stream-behavior";
 import {
   calendarIcons,
-  eventCategory,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   shadows,
+  type MobilePalette,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
@@ -61,23 +60,24 @@ function getEventEnd(event: CalendarEvent): Date | null {
   return event.endTime ? new Date(event.endTime) : null;
 }
 
-function getEventColor(event: CalendarEvent): string {
+/** A plain function of the palette: the colour depends on the theme, the mapping does not. */
+function getEventColor(t: MobilePalette, event: CalendarEvent): string {
   switch (event.eventType) {
     case "deadline":
-      return eventCategory.deadline;
+      return t.eventCategory.deadline;
     case "reminder":
-      return eventCategory.reminder;
+      return t.eventCategory.reminder;
     case "out_of_office":
-      return eventCategory.holiday;
+      return t.eventCategory.holiday;
     case "shift":
     case "company_event":
-      return eventCategory.personal;
+      return t.eventCategory.personal;
     case "training":
     case "maintenance_window":
-      return eventCategory.other;
+      return t.eventCategory.other;
     case "meeting":
     default:
-      return eventCategory.meeting;
+      return t.eventCategory.meeting;
   }
 }
 
@@ -185,6 +185,9 @@ function MonthGrid({
   onPrevMonth: () => void;
   onNextMonth: () => void;
 }) {
+  const { palette } = useTheme();
+  const gridStyles = useGridStyles();
+
   const days = useMemo(() => {
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
@@ -199,11 +202,11 @@ function MonthGrid({
     <View style={gridStyles.container}>
       <View style={gridStyles.header}>
         <Pressable onPress={onPrevMonth} hitSlop={12} style={gridStyles.navBtn}>
-          <SFIcon name="chevron.left" size={16} color={lightPalette.primary.main} />
+          <SFIcon name="chevron.left" size={16} color={palette.primary.main} />
         </Pressable>
         <Text style={gridStyles.monthTitle}>{format(currentMonth, "MMMM yyyy")}</Text>
         <Pressable onPress={onNextMonth} hitSlop={12} style={gridStyles.navBtn}>
-          <SFIcon name="chevron.right" size={16} color={lightPalette.primary.main} />
+          <SFIcon name="chevron.right" size={16} color={palette.primary.main} />
         </Pressable>
       </View>
 
@@ -266,6 +269,8 @@ function SectionHeader({
   title: string;
   subtitle: string;
 }) {
+  const sectionStyles = useSectionStyles();
+
   return (
     <View style={sectionStyles.header}>
       <Text style={sectionStyles.title}>{title}</Text>
@@ -275,6 +280,8 @@ function SectionHeader({
 }
 
 function SummaryCard({ title, value }: { title: string; value: string }) {
+  const summaryStyles = useSummaryStyles();
+
   return (
     <View style={summaryStyles.card}>
       <Text style={summaryStyles.title}>{title}</Text>
@@ -290,6 +297,8 @@ function ScheduleEmpty({
   title: string;
   subtitle: string;
 }) {
+  const sectionStyles = useSectionStyles();
+
   return (
     <View style={sectionStyles.emptyCard}>
       <Text style={sectionStyles.emptyTitle}>{title}</Text>
@@ -305,8 +314,11 @@ function EventCard({
   event: CalendarEvent;
   label?: string;
 }) {
+  const { palette } = useTheme();
+  const cardStyles = useCardStyles();
+
   const router = useRouter();
-  const color = getEventColor(event);
+  const color = getEventColor(palette, event);
   const startTime = getEventStart(event);
   const durationText = getDurationLabel(event);
   const showCheckIn = Boolean(startTime && isDateToday(startTime) && event.requiresCheckIn);
@@ -338,13 +350,13 @@ function EventCard({
         <View style={cardStyles.metaStack}>
           {event.locationText ? (
             <View style={cardStyles.metaRow}>
-              <SFIcon name="mappin.and.ellipse" size={14} color={lightPalette.text.secondary} />
+              <SFIcon name="mappin.and.ellipse" size={14} color={palette.text.secondary} />
               <Text style={cardStyles.metaText}>{event.locationText}</Text>
             </View>
           ) : null}
           {durationText ? (
             <View style={cardStyles.metaRow}>
-              <SFIcon name="clock" size={14} color={lightPalette.text.secondary} />
+              <SFIcon name="clock" size={14} color={palette.text.secondary} />
               <Text style={cardStyles.metaText}>{durationText}</Text>
             </View>
           ) : null}
@@ -369,7 +381,7 @@ function EventCard({
             <SFIcon
               name="checkmark.circle.fill"
               size={18}
-              color={lightPalette.success.contrastText}
+              color={palette.success.contrastText}
             />
             <Text style={cardStyles.actionText}>Check In</Text>
           </Pressable>
@@ -380,9 +392,12 @@ function EventCard({
 }
 
 function NextUpCard({ event }: { event: CalendarEvent }) {
+  const { palette } = useTheme();
+  const nextUpStyles = useNextUpStyles();
+
   const router = useRouter();
   const now = new Date();
-  const color = getEventColor(event);
+  const color = getEventColor(palette, event);
   const startTime = getEventStart(event);
   const actionLabel = startTime && isDateToday(startTime) && event.requiresCheckIn ? "Check In" : "Open Event";
 
@@ -411,7 +426,7 @@ function NextUpCard({ event }: { event: CalendarEvent }) {
       <Text style={nextUpStyles.time}>{getEventTimeLabel(event)}</Text>
       {event.locationText ? (
         <View style={nextUpStyles.metaRow}>
-          <SFIcon name="mappin.and.ellipse" size={14} color={lightPalette.text.secondary} />
+          <SFIcon name="mappin.and.ellipse" size={14} color={palette.text.secondary} />
           <Text style={nextUpStyles.metaText}>{event.locationText}</Text>
         </View>
       ) : null}
@@ -434,6 +449,11 @@ function NextUpCard({ event }: { event: CalendarEvent }) {
 }
 
 export default function CalendarScreen() {
+  const { palette } = useTheme();
+  const screenStyles = useScreenStyles();
+  const sectionStyles = useSectionStyles();
+  const summaryStyles = useSummaryStyles();
+
   const now = new Date();
   const today = startOfDay(now);
   const router = useRouter();
@@ -578,7 +598,7 @@ export default function CalendarScreen() {
               <SFIcon
                 name={calendarIcons.addEvent.name}
                 size={22}
-                color={lightPalette.primary.main}
+                color={palette.primary.main}
               />
             ),
           },
@@ -609,7 +629,7 @@ export default function CalendarScreen() {
           ]}
         >
           <View style={screenStyles.primaryActionIcon}>
-            <SFIcon name={calendarIcons.addEvent.name} size={18} color={lightPalette.primary.contrastText} />
+            <SFIcon name={calendarIcons.addEvent.name} size={18} color={palette.primary.contrastText} />
           </View>
           <Text style={screenStyles.primaryActionText}>New Event</Text>
         </Pressable>
@@ -731,9 +751,9 @@ export default function CalendarScreen() {
   );
 }
 
-const gridStyles = StyleSheet.create({
+const useGridStyles = makeStyles((t) => ({
   container: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: 18,
     overflow: "hidden",
     ...shadows.sm,
@@ -755,7 +775,7 @@ const gridStyles = StyleSheet.create({
   monthTitle: {
     fontSize: 17,
     fontWeight: "600",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   weekRow: {
     flexDirection: "row",
@@ -767,7 +787,7 @@ const gridStyles = StyleSheet.create({
     textAlign: "center",
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   daysGrid: {
     flexDirection: "row",
@@ -782,42 +802,42 @@ const gridStyles = StyleSheet.create({
     gap: 2,
   },
   dayCellSelected: {
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     borderRadius: 20,
   },
   dayCellToday: {
     borderWidth: 1.5,
-    borderColor: lightPalette.primary.main,
+    borderColor: t.primary.main,
     borderRadius: 20,
   },
   dayText: {
     fontSize: 15,
     fontWeight: "400",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   dayTextMuted: {
-    color: lightPalette.text.disabled,
+    color: t.text.disabled,
   },
   dayTextSelected: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: "600",
   },
   dayTextToday: {
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontWeight: "600",
   },
   eventDot: {
     width: 5,
     height: 5,
     borderRadius: 2.5,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   eventDotSelected: {
-    backgroundColor: lightPalette.primary.contrastText,
+    backgroundColor: t.primary.contrastText,
   },
-});
+}));
 
-const sectionStyles = StyleSheet.create({
+const useSectionStyles = makeStyles((t) => ({
   block: {
     paddingHorizontal: mobileLayout.screenPadding,
     paddingTop: mobileLayout.itemGap,
@@ -829,14 +849,14 @@ const sectionStyles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   subtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   emptyCard: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: 16,
     padding: mobileLayout.cardPadding,
     gap: 6,
@@ -845,15 +865,15 @@ const sectionStyles = StyleSheet.create({
   emptyTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   emptySubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));
 
-const summaryStyles = StyleSheet.create({
+const useSummaryStyles = makeStyles((t) => ({
   row: {
     flexDirection: "row",
     gap: 10,
@@ -862,7 +882,7 @@ const summaryStyles = StyleSheet.create({
   },
   card: {
     flex: 1,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: 16,
     padding: mobileLayout.cardPadding,
     gap: 4,
@@ -871,20 +891,20 @@ const summaryStyles = StyleSheet.create({
   title: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600",
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
   },
   value: {
     fontSize: 28,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
-});
+}));
 
-const cardStyles = StyleSheet.create({
+const useCardStyles = makeStyles((t) => ({
   card: {
     flexDirection: "row",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: 16,
     overflow: "hidden",
     ...shadows.sm,
@@ -918,7 +938,7 @@ const cardStyles = StyleSheet.create({
   title: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   metaStack: {
     gap: 4,
@@ -931,7 +951,7 @@ const cardStyles = StyleSheet.create({
   },
   metaText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   actionBtn: {
     flexDirection: "row",
@@ -941,22 +961,22 @@ const cardStyles = StyleSheet.create({
     marginTop: 6,
     paddingVertical: 8,
     paddingHorizontal: mobileLayout.screenPadding,
-    backgroundColor: lightPalette.success.main,
+    backgroundColor: t.success.main,
     borderRadius: 8,
   },
   actionBtnPressed: {
-    backgroundColor: lightPalette.success.dark,
+    backgroundColor: t.success.dark,
   },
   actionText: {
-    color: lightPalette.success.contrastText,
+    color: t.success.contrastText,
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: mobileTypography.buttonSm.fontWeight as "600",
   },
-});
+}));
 
-const nextUpStyles = StyleSheet.create({
+const useNextUpStyles = makeStyles((t) => ({
   card: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: 20,
     padding: mobileLayout.cardPadding,
     gap: 10,
@@ -982,12 +1002,12 @@ const nextUpStyles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   time: {
     fontSize: 16,
     fontWeight: "600",
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   metaRow: {
     flexDirection: "row",
@@ -996,29 +1016,29 @@ const nextUpStyles = StyleSheet.create({
   },
   metaText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   actionBtn: {
     alignSelf: "flex-start",
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderRadius: 999,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   actionBtnPressed: {
-    backgroundColor: lightPalette.primary.dark,
+    backgroundColor: t.primary.dark,
   },
   actionText: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: "700",
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
-});
+}));
 
-const screenStyles = StyleSheet.create({
+const useScreenStyles = makeStyles((t) => ({
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   contentContainer: {
     flexGrow: 1,
@@ -1030,7 +1050,7 @@ const screenStyles = StyleSheet.create({
     minHeight: 48,
     borderRadius: 14,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1049,7 +1069,7 @@ const screenStyles = StyleSheet.create({
     fontSize: mobileTypography.button.fontSize as number,
     lineHeight: mobileTypography.button.lineHeight as number,
     fontWeight: "700",
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   dayHeader: {
     paddingTop: 2,
@@ -1057,6 +1077,6 @@ const screenStyles = StyleSheet.create({
   dayHeaderText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
-});
+}));

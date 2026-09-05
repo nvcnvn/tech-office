@@ -12,7 +12,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -24,15 +23,19 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export default function BlockedPeopleScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const [people, setPeople] = React.useState<BlockedPerson[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
@@ -86,7 +89,7 @@ export default function BlockedPeopleScreen() {
       ) : null}
 
       {loading && people.length === 0 ? (
-        <ActivityIndicator style={styles.loading} color={lightPalette.text.secondary} />
+        <ActivityIndicator style={styles.loading} color={palette.text.secondary} />
       ) : people.length === 0 ? (
         <EmptyState
           sfSymbol="hand.raised"
@@ -98,7 +101,7 @@ export default function BlockedPeopleScreen() {
           {people.map((person) => (
             <View key={person.blockId} style={styles.row} testID={`blocked-row-${person.employeeId}`}>
               <View style={styles.avatar}>
-                <SFIcon name="person.fill" size={16} color={lightPalette.text.secondary} />
+                <SFIcon name="person.fill" size={16} color={palette.text.secondary} />
               </View>
               <View style={styles.rowCopy}>
                 <Text selectable style={styles.rowTitle}>
@@ -134,10 +137,10 @@ export default function BlockedPeopleScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     padding: mobileLayout.screenPadding,
@@ -149,22 +152,22 @@ const styles = StyleSheet.create({
   },
   introTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   introBody: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   introQuiet: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   errorCard: {
-    backgroundColor: "#fceceb",
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   errorText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   loading: {
     marginTop: spacing[4],
@@ -186,7 +189,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   rowCopy: {
     flex: 1,
@@ -194,11 +197,11 @@ const styles = StyleSheet.create({
   },
   rowTitle: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   rowSubtitle: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   unblockButton: {
     minHeight: 44,
@@ -207,10 +210,10 @@ const styles = StyleSheet.create({
   },
   unblockText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontWeight: "600",
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

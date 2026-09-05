@@ -15,7 +15,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -31,13 +30,14 @@ import { Card } from "@/components/ui/card";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const STATUS_COPY: Record<string, { title: string; body: string }> = {
   outstanding: {
@@ -55,6 +55,9 @@ const STATUS_COPY: Record<string, { title: string; body: string }> = {
 };
 
 export default function RequestRemovalScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const [path, setPath] = React.useState<AccountRemovalPathSummary | null>(null);
   const [note, setNote] = React.useState("");
@@ -109,7 +112,7 @@ export default function RequestRemovalScreen() {
     return (
       <View style={styles.loadingScreen}>
         <Stack.Screen options={{ title: "Remove my account" }} />
-        <ActivityIndicator color={lightPalette.text.secondary} />
+        <ActivityIndicator color={palette.text.secondary} />
       </View>
     );
   }
@@ -128,7 +131,7 @@ export default function RequestRemovalScreen() {
 
       <Card style={styles.headerCard}>
         <View style={styles.headerIconWrap}>
-          <SFIcon name="building.2" size={18} color={lightPalette.primary.main} />
+          <SFIcon name="building.2" size={18} color={palette.primary.main} />
         </View>
         <Text style={styles.headerTitle}>
           {path?.managingOrganizationName || "Your workspace"} manages this account
@@ -162,7 +165,7 @@ export default function RequestRemovalScreen() {
             multiline
             editable={!submitting}
             placeholder="Why you'd like to be removed (optional)"
-            placeholderTextColor={lightPalette.text.disabled}
+            placeholderTextColor={palette.text.disabled}
             testID="removal-request-note"
           />
 
@@ -183,7 +186,7 @@ export default function RequestRemovalScreen() {
             testID="removal-request-submit"
           >
             {submitting ? (
-              <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+              <ActivityIndicator size="small" color={palette.primary.contrastText} />
             ) : (
               <Text style={styles.primaryButtonText}>Request removal</Text>
             )}
@@ -203,16 +206,16 @@ export default function RequestRemovalScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   loadingScreen: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     padding: mobileLayout.screenPadding,
@@ -228,55 +231,55 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef5fc",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   headerTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   headerBody: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   statusCard: {
     gap: spacing[0.5],
-    backgroundColor: "#eef5fc",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   statusTitle: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
   statusBody: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   sectionCard: {
     gap: spacing[1],
   },
   sectionTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   sectionBody: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   input: {
     minHeight: 72,
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     padding: spacing[1.5],
     textAlignVertical: "top",
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   error: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   primaryButton: {
     minHeight: 48,
@@ -284,7 +287,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     marginTop: spacing[1],
   },
   primaryButtonDisabled: {
@@ -292,10 +295,10 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: "600",
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

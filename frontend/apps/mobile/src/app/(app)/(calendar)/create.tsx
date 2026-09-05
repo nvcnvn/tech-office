@@ -15,8 +15,11 @@ import {
 import { Stack, useRouter } from "expo-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createEvent } from "apis";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export default function CreateEventScreen() {
+  const styles = useStyles();
+  const { palette } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
@@ -53,30 +56,33 @@ export default function CreateEventScreen() {
       <Stack.Screen options={{ title: "New Event" }} />
 
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>Title</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>Title</Text>
         <TextInput
-          style={inputStyle}
+          style={styles.input}
           placeholder="Event title"
+          placeholderTextColor={palette.text.disabled}
           value={title}
           onChangeText={setTitle}
         />
       </View>
 
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>Location</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>Location</Text>
         <TextInput
-          style={inputStyle}
+          style={styles.input}
           placeholder="Conference room, Zoom link, etc."
+          placeholderTextColor={palette.text.disabled}
           value={location}
           onChangeText={setLocation}
         />
       </View>
 
       <View style={{ gap: 4 }}>
-        <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>Description</Text>
+        <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>Description</Text>
         <TextInput
-          style={[inputStyle, { height: 100, textAlignVertical: "top" }]}
+          style={[styles.input, { height: 100, textAlignVertical: "top" }]}
           placeholder="Details about this event"
+          placeholderTextColor={palette.text.disabled}
           multiline
           value={description}
           onChangeText={setDescription}
@@ -89,7 +95,11 @@ export default function CreateEventScreen() {
         onPress={() => mutation.mutate()}
         disabled={!title.trim() || mutation.isPending}
         style={({ pressed }) => ({
-          backgroundColor: !title.trim() ? "#ccc" : pressed ? "#020617" : "#0f172a",
+          backgroundColor: !title.trim()
+            ? palette.divider
+            : pressed
+              ? palette.primary.dark
+              : palette.primary.main,
           borderRadius: 12,
           borderCurve: "continuous",
           padding: 16,
@@ -98,9 +108,11 @@ export default function CreateEventScreen() {
         })}
       >
         {mutation.isPending ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={palette.primary.contrastText} />
         ) : (
-          <Text style={{ color: "#fff", fontWeight: "600", fontSize: 16 }}>
+          <Text
+            style={{ color: palette.primary.contrastText, fontWeight: "600", fontSize: 16 }}
+          >
             Create Event
           </Text>
         )}
@@ -109,12 +121,17 @@ export default function CreateEventScreen() {
   );
 }
 
-const inputStyle = {
-  borderWidth: 1,
-  borderColor: "#ddd",
-  borderRadius: 10,
-  borderCurve: "continuous" as const,
-  padding: 14,
-  fontSize: 16,
-  backgroundColor: "#fafafa",
-};
+const useStyles = makeStyles((t) => ({
+  input: {
+    borderWidth: 1,
+    borderColor: t.divider,
+    borderRadius: 10,
+    borderCurve: "continuous" as const,
+    padding: 14,
+    fontSize: 16,
+    backgroundColor: t.background.default,
+    // React Native's default text colour is black, so an input without this one
+    // takes typed text to black on a dark field.
+    color: t.text.primary,
+  },
+}));

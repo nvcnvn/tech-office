@@ -13,7 +13,6 @@ import {
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -23,13 +22,13 @@ import { Stack, useRouter } from "expo-router";
 import { PIN_LENGTH, PINValidationError, setPIN } from "apis";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
 } from "@tech-office/theme-tokens";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { setOnboardingStep } from "@/lib/onboarding-progress";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /**
  * Turn a server PIN complaint into something a person can act on.
@@ -51,6 +50,9 @@ function pinRejectionMessage(err: unknown): string {
 }
 
 export default function OnboardingSetPinScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
 
   const firstRef = useRef<TextInput>(null);
@@ -159,7 +161,7 @@ export default function OnboardingSetPinScreen() {
           ) : null}
 
           {loading ? (
-            <ActivityIndicator size="small" color={lightPalette.primary.main} />
+            <ActivityIndicator size="small" color={palette.primary.main} />
           ) : null}
 
           {error ? (
@@ -167,7 +169,7 @@ export default function OnboardingSetPinScreen() {
               <SFIcon
                 name="exclamationmark.circle.fill"
                 size={16}
-                color={lightPalette.error.main}
+                color={palette.error.main}
               />
               <Text style={styles.errorText} selectable>
                 {error}
@@ -177,7 +179,7 @@ export default function OnboardingSetPinScreen() {
         </View>
 
         <View style={styles.infoCard} testID="onboarding-pin-recovery">
-          <SFIcon name="lifepreserver" size={18} color={lightPalette.info.main} />
+          <SFIcon name="lifepreserver" size={18} color={palette.info.main} />
           <Text style={styles.infoText} selectable>
             Forget your PIN? Sign in with your email and password instead — that always
             works, even if your PIN is locked.
@@ -205,6 +207,8 @@ function PinBoxes({
   autoFocus?: boolean;
   testID: string;
 }) {
+  const styles = useStyles();
+
   const [focused, setFocused] = useState(false);
 
   return (
@@ -263,13 +267,13 @@ function PinBoxes({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   flex: {
     flex: 1,
   },
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     flexGrow: 1,
@@ -280,22 +284,22 @@ const styles = StyleSheet.create({
     marginHorizontal: mobileLayout.screenPadding,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: mobileLayout.cardPadding,
     gap: 20,
   },
   lede: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   fieldGroup: {
     gap: 10,
   },
   fieldLabel: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   pinField: {
     gap: 10,
@@ -310,23 +314,23 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     alignItems: "center",
     justifyContent: "center",
   },
   pinBoxActive: {
-    borderColor: lightPalette.primary.main,
+    borderColor: t.primary.main,
     borderWidth: border.medium,
   },
   pinBoxFilled: {
-    borderColor: lightPalette.primary.main,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.primary.main,
+    backgroundColor: t.background.paper,
   },
   pinDigit: {
     fontSize: 26,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   pinHiddenInput: {
     position: "absolute",
@@ -340,14 +344,14 @@ const styles = StyleSheet.create({
     gap: mobileLayout.itemGap,
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.error.light,
+    borderColor: t.error.light,
     padding: 12,
   },
   errorText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.dark,
+    color: t.error.dark,
     flex: 1,
   },
   infoCard: {
@@ -357,14 +361,14 @@ const styles = StyleSheet.create({
     gap: mobileLayout.iconTextGap,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.info.light,
+    borderColor: t.info.light,
     padding: mobileLayout.cardPadding,
   },
   infoText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     flex: 1,
   },
-});
+}));

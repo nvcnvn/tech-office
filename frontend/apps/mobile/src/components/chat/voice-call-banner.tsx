@@ -2,7 +2,6 @@ import React from "react";
 import {
   ActivityIndicator,
   Pressable,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -15,13 +14,13 @@ import type {
 export type { MobileVoiceCallSummary };
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface VoiceCallBannerProps {
   call: MobileVoiceCallSummary | null;
@@ -82,6 +81,9 @@ export function VoiceCallBanner({
   onLeave,
   onToggleMute,
 }: VoiceCallBannerProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   // Any call action in flight blocks the others — firing two at once is what produced
   // the contorted guards this replaces — but only the action actually running spins.
   const busy = pending !== null;
@@ -109,13 +111,13 @@ export function VoiceCallBanner({
           {pending === "starting" ? (
             <ActivityIndicator
               size="small"
-              color={lightPalette.primary.contrastText}
+              color={palette.primary.contrastText}
             />
           ) : (
             <SFIcon
               name="phone.fill"
               size={18}
-              color={lightPalette.primary.contrastText}
+              color={palette.primary.contrastText}
             />
           )}
           <Text style={styles.startButtonText}>Start voice</Text>
@@ -131,7 +133,7 @@ export function VoiceCallBanner({
   return (
     <View testID="voice-call-banner" style={styles.banner}>
       <View style={styles.iconWrap}>
-        <SFIcon name="phone.fill" size={18} color={lightPalette.primary.main} />
+        <SFIcon name="phone.fill" size={18} color={palette.primary.main} />
       </View>
       <View style={styles.bannerBody}>
         <Text style={styles.title} numberOfLines={1}>
@@ -178,7 +180,7 @@ export function VoiceCallBanner({
             <SFIcon
               name={isMuted ? "mic.slash.fill" : "mic.fill"}
               size={18}
-              color={isMuted ? lightPalette.error.main : lightPalette.text.secondary}
+              color={isMuted ? palette.error.main : palette.text.secondary}
             />
           </Pressable>
         ) : null}
@@ -196,12 +198,12 @@ export function VoiceCallBanner({
             accessibilityLabel="Leave voice call"
           >
             {pending === "leaving" ? (
-              <ActivityIndicator size="small" color={lightPalette.error.main} />
+              <ActivityIndicator size="small" color={palette.error.main} />
             ) : (
               <SFIcon
                 name="phone.down.fill"
                 size={18}
-                color={lightPalette.error.main}
+                color={palette.error.main}
               />
             )}
           </Pressable>
@@ -221,7 +223,7 @@ export function VoiceCallBanner({
             {pending === "joining" ? (
               <ActivityIndicator
                 size="small"
-                color={lightPalette.primary.contrastText}
+                color={palette.primary.contrastText}
               />
             ) : (
               <Text style={styles.joinButtonText}>Join</Text>
@@ -233,23 +235,23 @@ export function VoiceCallBanner({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   startRow: {
     paddingHorizontal: spacing[3],
     paddingTop: spacing[2],
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   startButton: {
     minHeight: touch.comfortable,
     borderRadius: radius.md,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing[2],
   },
   startButtonText: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontSize: mobileTypography.button.fontSize,
     fontWeight: mobileTypography.button.fontWeight,
   },
@@ -257,13 +259,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing[2],
     borderRadius: radius.md,
     borderWidth: border.thin,
-    borderColor: lightPalette.error.main,
-    backgroundColor: lightPalette.error.light,
+    borderColor: t.error.main,
+    backgroundColor: t.error.light,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
   },
   startErrorText: {
-    color: lightPalette.error.dark,
+    color: t.error.dark,
     fontSize: mobileTypography.caption.fontSize,
     fontWeight: "600",
   },
@@ -272,8 +274,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[3],
     paddingVertical: 8,
     borderTopWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[2],
@@ -284,20 +286,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   bannerBody: {
     flex: 1,
     minWidth: 0,
   },
   title: {
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontSize: mobileTypography.listSecondary.fontSize,
     fontWeight: "700",
   },
   subtitle: {
     flex: 1,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize,
   },
   statusRow: {
@@ -307,7 +309,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   error: {
-    color: lightPalette.error.main,
+    color: t.error.main,
     fontSize: mobileTypography.caption.fontSize,
     marginTop: 2,
   },
@@ -320,10 +322,10 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: radius.full,
-    backgroundColor: lightPalette.success.main,
+    backgroundColor: t.success.main,
   },
   qualityWarn: {
-    backgroundColor: lightPalette.warning.main,
+    backgroundColor: t.warning.main,
   },
   iconButton: {
     width: 38,
@@ -331,7 +333,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.error.light,
+    backgroundColor: t.error.light,
   },
   joinButton: {
     minHeight: 36,
@@ -339,10 +341,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   joinButtonText: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontSize: mobileTypography.buttonSm.fontSize,
     fontWeight: mobileTypography.button.fontWeight,
   },
@@ -352,4 +354,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

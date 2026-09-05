@@ -15,7 +15,6 @@ import {
   Pressable,
   ScrollView,
   Share,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -30,13 +29,13 @@ import {
 } from "apis";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
 } from "@tech-office/theme-tokens";
 import { SFIcon } from "@/components/ui/sf-icon";
 import { getOnboardingSubdomain, setOnboardingStep } from "@/lib/onboarding-progress";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface IssuedAccount {
   name: string;
@@ -69,6 +68,9 @@ function handoffMessage(workspace: string, account: IssuedAccount): string {
 }
 
 export default function AddTeammateScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const workspace = getOnboardingSubdomain();
 
@@ -181,7 +183,7 @@ export default function AddTeammateScreen() {
                   <SFIcon
                     name="exclamationmark.triangle.fill"
                     size={16}
-                    color={lightPalette.warning.dark}
+                    color={palette.warning.dark}
                   />
                   <Text style={styles.codeWarningText} selectable>
                     Shown once. Expires in {TEMPORARY_PIN_EXPIRY_DAYS} days.
@@ -208,7 +210,7 @@ export default function AddTeammateScreen() {
                 <SFIcon
                   name="square.and.arrow.up"
                   size={16}
-                  color={lightPalette.primary.contrastText}
+                  color={palette.primary.contrastText}
                 />
                 <Text style={styles.primaryButtonText}>Send to {issued.name}</Text>
               </Pressable>
@@ -248,7 +250,7 @@ export default function AddTeammateScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="Ana Pham"
-                    placeholderTextColor={lightPalette.text.disabled}
+                    placeholderTextColor={palette.text.disabled}
                     autoCapitalize="words"
                     autoCorrect={false}
                     value={name}
@@ -265,7 +267,7 @@ export default function AddTeammateScreen() {
                   <TextInput
                     style={styles.input}
                     placeholder="A badge number or short username"
-                    placeholderTextColor={lightPalette.text.disabled}
+                    placeholderTextColor={palette.text.disabled}
                     autoCapitalize="none"
                     autoCorrect={false}
                     value={identifier}
@@ -283,7 +285,7 @@ export default function AddTeammateScreen() {
                   <SFIcon
                     name="exclamationmark.circle.fill"
                     size={16}
-                    color={lightPalette.error.main}
+                    color={palette.error.main}
                   />
                   <Text style={styles.errorText} selectable>
                     {error}
@@ -304,7 +306,7 @@ export default function AddTeammateScreen() {
                 {loading ? (
                   <ActivityIndicator
                     size="small"
-                    color={lightPalette.primary.contrastText}
+                    color={palette.primary.contrastText}
                   />
                 ) : (
                   <Text style={styles.primaryButtonText}>Add teammate</Text>
@@ -328,13 +330,13 @@ export default function AddTeammateScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   flex: {
     flex: 1,
   },
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     flexGrow: 1,
@@ -345,27 +347,27 @@ const styles = StyleSheet.create({
     marginHorizontal: mobileLayout.screenPadding,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: mobileLayout.cardPadding,
     gap: 20,
   },
   lede: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   fieldGroup: {
     gap: 8,
   },
   fieldLabel: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
   fieldHint: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   inputShell: {
     minHeight: 48,
@@ -374,15 +376,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     overflow: "hidden",
   },
   input: {
     flex: 1,
     minHeight: 48,
     fontSize: 16,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -391,9 +393,9 @@ const styles = StyleSheet.create({
     padding: mobileLayout.cardPadding,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.medium,
-    borderColor: lightPalette.warning.main,
+    borderColor: t.warning.main,
     alignItems: "center",
   },
   codeWarning: {
@@ -403,7 +405,7 @@ const styles = StyleSheet.create({
   },
   codeWarningText: {
     ...mobileTypography.caption,
-    color: lightPalette.warning.dark,
+    color: t.warning.dark,
     fontWeight: "600",
   },
   codeValue: {
@@ -411,11 +413,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 6,
     fontVariant: ["tabular-nums"],
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   codeMeta: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
   },
   errorBanner: {
@@ -424,14 +426,14 @@ const styles = StyleSheet.create({
     gap: mobileLayout.itemGap,
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.error.light,
+    borderColor: t.error.light,
     padding: 12,
   },
   errorText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.dark,
+    color: t.error.dark,
     flex: 1,
   },
   primaryButton: {
@@ -439,36 +441,36 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     alignItems: "center",
     justifyContent: "center",
     gap: mobileLayout.itemGap,
     paddingHorizontal: 16,
   },
   primaryButtonPressed: {
-    backgroundColor: lightPalette.primary.dark,
+    backgroundColor: t.primary.dark,
   },
   primaryButtonDisabled: {
     opacity: 0.7,
   },
   primaryButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   secondaryButton: {
     minHeight: 48,
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   secondaryButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   footerActions: {
     paddingHorizontal: mobileLayout.screenPadding,
@@ -483,7 +485,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.info.main,
+    color: t.info.main,
     fontWeight: "600",
   },
-});
+}));

@@ -5,17 +5,16 @@
 import React from "react";
 import {
   Pressable,
-  StyleSheet,
   Text,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
 import {
   border,
-  lightPalette,
   mobileTypography,
   radius,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface ChipProps {
   label: string;
@@ -30,20 +29,27 @@ export function Chip({
   selected = false,
   onPress,
   style,
-  color = lightPalette.primary.main,
+  color,
 }: ChipProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
+  // Resolved here rather than as a default parameter: a default is evaluated
+  // where the function is declared, which has no theme.
+  const accent = color ?? palette.primary.main;
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
         styles.chip,
         selected
-          ? { backgroundColor: color, borderColor: color }
+          ? { backgroundColor: accent, borderColor: accent }
           : {
               backgroundColor: pressed
-                ? lightPalette.background.default
-                : lightPalette.background.paper,
-              borderColor: lightPalette.divider,
+                ? palette.background.default
+                : palette.background.paper,
+              borderColor: palette.divider,
             },
         style,
       ]}
@@ -51,7 +57,7 @@ export function Chip({
       <Text
         style={[
           styles.label,
-          { color: selected ? lightPalette.primary.contrastText : lightPalette.text.secondary },
+          { color: selected ? palette.primary.contrastText : palette.text.secondary },
         ]}
       >
         {label}
@@ -60,7 +66,7 @@ export function Chip({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   chip: {
     paddingHorizontal: 14,
     paddingVertical: 7,
@@ -74,4 +80,4 @@ const styles = StyleSheet.create({
     fontWeight: mobileTypography.buttonSm.fontWeight,
     lineHeight: mobileTypography.buttonSm.lineHeight,
   },
-});
+}));

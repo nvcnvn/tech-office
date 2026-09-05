@@ -10,8 +10,9 @@
  */
 
 import React from "react";
-import { StyleSheet, Text } from "react-native";
-import { lightPalette, mobileTypography } from "@tech-office/theme-tokens";
+import { Text } from "react-native";
+import { mobileTypography } from "@tech-office/theme-tokens";
+import { makeStyles } from "@/lib/theme";
 
 /**
  * Plain text from TipTap/ProseMirror JSON. Block-level nodes get a trailing newline so a
@@ -49,6 +50,8 @@ export function documentContentToText(content: unknown): string {
 }
 
 export function DocumentContent({ text, testID }: { text: string; testID?: string }) {
+  const styles = useStyles();
+
   return (
     <Text selectable style={styles.body} testID={testID}>
       {text}
@@ -56,10 +59,10 @@ export function DocumentContent({ text, testID }: { text: string; testID?: strin
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   body: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     lineHeight: 24,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
-});
+}));

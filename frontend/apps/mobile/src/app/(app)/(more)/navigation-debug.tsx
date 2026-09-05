@@ -23,12 +23,12 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { toSharedResourceHref, withNavigationContext } from "@/lib/mobile-navigation";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 function buildTaskHref(projectId: string, taskId: string): string {
   return `/(app)/(tasks)/${projectId.trim()}/task/${taskId.trim()}`;
@@ -53,6 +53,9 @@ export default function NavigationDebugScreen() {
 }
 
 function NavigationDebugContent() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const sitemap = useSitemap();
   const [projectId, setProjectId] = React.useState("");
@@ -164,7 +167,7 @@ function NavigationDebugContent() {
             autoCorrect={false}
             style={styles.input}
             placeholder="019dbdd5-..."
-            placeholderTextColor={lightPalette.text.secondary}
+            placeholderTextColor={palette.text.secondary}
           />
         </View>
 
@@ -178,7 +181,7 @@ function NavigationDebugContent() {
             autoCorrect={false}
             style={styles.input}
             placeholder="019dbdd5-..."
-            placeholderTextColor={lightPalette.text.secondary}
+            placeholderTextColor={palette.text.secondary}
           />
         </View>
 
@@ -209,7 +212,7 @@ function NavigationDebugContent() {
             autoCorrect={false}
             style={styles.input}
             placeholder="019db419-..."
-            placeholderTextColor={lightPalette.text.secondary}
+            placeholderTextColor={palette.text.secondary}
           />
         </View>
       </Card>
@@ -226,10 +229,10 @@ function NavigationDebugContent() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     padding: mobileLayout.screenPadding,
@@ -242,12 +245,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: mobileTypography.screenTitle.fontSize as number,
     fontWeight: mobileTypography.screenTitle.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   subtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: mobileTypography.listSecondary.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   formCard: {
     gap: spacing[3],
@@ -258,20 +261,20 @@ const styles = StyleSheet.create({
   label: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: mobileTypography.buttonSm.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   input: {
     minHeight: 48,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     borderRadius: radius.md,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
-    backgroundColor: lightPalette.background.default,
-    color: lightPalette.text.primary,
+    backgroundColor: t.background.default,
+    color: t.text.primary,
     fontSize: mobileTypography.listPrimary.fontSize as number,
   },
   actionsCard: {
     gap: spacing[2],
   },
-});
+}));

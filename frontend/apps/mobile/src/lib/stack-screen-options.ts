@@ -1,5 +1,5 @@
 import { Platform } from "react-native";
-import { lightPalette } from "@tech-office/theme-tokens";
+import type { MobilePalette } from "@tech-office/theme-tokens";
 
 /**
  * Header options shared by every tab-root Stack.
@@ -9,15 +9,29 @@ import { lightPalette } from "@tech-office/theme-tokens";
  * back the inset. That ScrollView prop is iOS-only, so on Android a transparent
  * header leaves screen content pinned at y=0 — under both the header and the
  * status bar. Keeping the header opaque there lets the native toolbar apply the
- * status bar inset itself.
+ * status bar inset itself, which is why `headerStyle.backgroundColor` matters on
+ * Android and is ignored on iOS.
+ *
+ * A plain function of the palette rather than a hook, because `screenOptions` is
+ * read where a hook cannot run — see contracts/theme-runtime.md §6.
  */
-export const tabRootStackScreenOptions = {
-  headerTransparent: Platform.OS === "ios",
-  headerShadowVisible: false,
-  headerBlurEffect: "regular",
-  // Not PlatformColor("label"): that resolves to white when the OS is in dark
-  // mode, and every screen here is hardcoded to lightPalette, so the native
-  // title turned white-on-light and vanished on a dark-mode iPhone.
-  headerTitleStyle: { color: lightPalette.text.primary, fontWeight: "600" },
-  headerBackButtonDisplayMode: "minimal",
-} as const;
+export function tabRootStackScreenOptions(t: MobilePalette) {
+  return {
+    headerTransparent: Platform.OS === "ios",
+    headerShadowVisible: false,
+    // The iOS blur material has to change with the theme: the light "regular"
+    // material over a dark screen reads as a white smear behind the title.
+    headerBlurEffect: t.mode === "dark" ? "systemChromeMaterialDark" : "regular",
+    headerStyle: { backgroundColor: t.background.paper },
+    // Not PlatformColor("label"): it resolves from the *phone's* dark-mode
+    // setting, which this app deliberately no longer follows once somebody has
+    // chosen a theme, so the native title turned white-on-light and vanished.
+    headerTitleStyle: { color: t.text.primary, fontWeight: "600" },
+    headerTintColor: t.text.primary,
+    headerBackButtonDisplayMode: "minimal",
+    // The one that removes the white flash between screen pushes (FR-006):
+    // without it `react-native-screens` paints the navigator's own default
+    // background, which is white in both themes.
+    contentStyle: { backgroundColor: t.background.default },
+  } as const;
+}

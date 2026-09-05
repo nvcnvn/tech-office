@@ -68,6 +68,7 @@ import {
   type LinkedResource,
   listBlockedPeople,
   listTasksBySourceMessages,
+  dateToProtoTimestamp,
   type MessageTaskLink,
 } from "apis";
 import { useAuth } from "@/hooks/use-auth";
@@ -105,10 +106,12 @@ import {
 } from "@/lib/mobile-navigation";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
+  shadows,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 // ── Timestamp helpers ────────────────────────────────────────────────────────
 
@@ -216,6 +219,9 @@ function ReactionPicker({
   onClose: () => void;
   onSelect: (emoji: string) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Modal
       visible={visible}
@@ -237,7 +243,7 @@ function ReactionPicker({
                 style={({ pressed }) => [
                   styles.emojiBtn,
                   pressed && {
-                    backgroundColor: lightPalette.background.default,
+                    backgroundColor: palette.background.default,
                   },
                 ]}
               >
@@ -266,9 +272,12 @@ function HiddenMessageGroup({
   count: number;
   onReveal: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.hiddenGroup} testID="hidden-message-group">
-      <SFIcon name="hand.raised.fill" size={14} color={lightPalette.text.secondary} />
+      <SFIcon name="hand.raised.fill" size={14} color={palette.text.secondary} />
       <Text style={styles.hiddenGroupText}>
         {count === 1 ? "1 message hidden" : `${count} messages hidden`} — you blocked this
         person
@@ -313,6 +322,9 @@ function MessageActionSheet({
    */
   canCreateTask: boolean;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Modal
       visible={visible}
@@ -353,7 +365,7 @@ function MessageActionSheet({
               <SFIcon
                 name="face.smiling"
                 size={18}
-                color={lightPalette.text.primary}
+                color={palette.text.primary}
               />
             </Pressable>
           </View>
@@ -366,7 +378,7 @@ function MessageActionSheet({
             ]}
           >
             <View style={styles.actionSheetIconWrap}>
-              <SFIcon name="link" size={16} color={lightPalette.text.primary} />
+              <SFIcon name="link" size={16} color={palette.text.primary} />
             </View>
             <View style={styles.actionSheetRowBody}>
               <Text style={styles.actionSheetRowTitle}>
@@ -379,7 +391,7 @@ function MessageActionSheet({
             <SFIcon
               name="square.and.arrow.up"
               size={14}
-              color={lightPalette.text.secondary}
+              color={palette.text.secondary}
             />
           </Pressable>
 
@@ -394,7 +406,7 @@ function MessageActionSheet({
               <SFIcon
                 name="bubble.left.and.bubble.right"
                 size={16}
-                color={lightPalette.text.primary}
+                color={palette.text.primary}
               />
             </View>
             <View style={styles.actionSheetRowBody}>
@@ -410,7 +422,7 @@ function MessageActionSheet({
             <SFIcon
               name="chevron.right"
               size={14}
-              color={lightPalette.text.secondary}
+              color={palette.text.secondary}
             />
           </Pressable>
 
@@ -427,7 +439,7 @@ function MessageActionSheet({
                 <SFIcon
                   name="checkmark.square"
                   size={16}
-                  color={lightPalette.text.primary}
+                  color={palette.text.primary}
                 />
               </View>
               <View style={styles.actionSheetRowBody}>
@@ -439,7 +451,7 @@ function MessageActionSheet({
               <SFIcon
                 name="chevron.right"
                 size={14}
-                color={lightPalette.text.secondary}
+                color={palette.text.secondary}
               />
             </Pressable>
           ) : null}
@@ -455,7 +467,7 @@ function MessageActionSheet({
             testID="message-action-report"
           >
             <View style={styles.actionSheetIconWrap}>
-              <SFIcon name="flag" size={16} color={lightPalette.error.main} />
+              <SFIcon name="flag" size={16} color={palette.error.main} />
             </View>
             <View style={styles.actionSheetRowBody}>
               <Text style={styles.actionSheetRowTitle}>Report this message</Text>
@@ -466,7 +478,7 @@ function MessageActionSheet({
             <SFIcon
               name="chevron.right"
               size={14}
-              color={lightPalette.text.secondary}
+              color={palette.text.secondary}
             />
           </Pressable>
 
@@ -480,7 +492,7 @@ function MessageActionSheet({
               testID="message-action-block"
             >
               <View style={styles.actionSheetIconWrap}>
-                <SFIcon name="hand.raised" size={16} color={lightPalette.error.main} />
+                <SFIcon name="hand.raised" size={16} color={palette.error.main} />
               </View>
               <View style={styles.actionSheetRowBody}>
                 <Text style={styles.actionSheetRowTitle}>Block this person</Text>
@@ -491,7 +503,7 @@ function MessageActionSheet({
               <SFIcon
                 name="chevron.right"
                 size={14}
-                color={lightPalette.text.secondary}
+                color={palette.text.secondary}
               />
             </Pressable>
           ) : null}
@@ -504,6 +516,8 @@ function MessageActionSheet({
 // ── Date separator ────────────────────────────────────────────────────────────
 
 function DateSeparator({ date }: { date: Date }) {
+  const styles = useStyles();
+
   const today = new Date();
   const yesterday = new Date(today);
   yesterday.setDate(today.getDate() - 1);
@@ -565,6 +579,9 @@ function MessageBubble({
   onThreadPress: (id: string) => void;
   onRetry: (id: string) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const senderName = messages[0]?.authorName || "Unknown";
 
   return (
@@ -721,7 +738,7 @@ function MessageBubble({
                     <SFIcon
                       name="bubble.left.and.bubble.right"
                       size={13}
-                      color={lightPalette.primary.main}
+                      color={palette.primary.main}
                     />
                     <Text style={styles.threadLinkText}>
                       {item.replyCount}{" "}
@@ -746,6 +763,9 @@ const PAGE_SIZE = 30;
 const IOS_NAVIGATION_BAR_HEIGHT = 44;
 
 export default function ChannelScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const routeParams = useLocalSearchParams<{
@@ -1590,6 +1610,10 @@ export default function ChannelScreen() {
     if (!trimmed || !channelId) return;
 
     const optimisticMessage: OptimisticMessage = {
+      // The optimistic row is shaped like the proto message it stands in for, so
+      // it carries the discriminator too — without it the object is not a
+      // `Message` and the list would be typed as a union of two shapes.
+      $typeName: "rpc.v1.Message",
       id: createOptimisticMessageId(),
       organizationId: auth.organizationId ?? "",
       channelId,
@@ -1598,7 +1622,7 @@ export default function ChannelScreen() {
       parentMessageId: "",
       isDeleted: false,
       isEdited: false,
-      updatedAt: { seconds: Math.floor(Date.now() / 1000) },
+      updatedAt: dateToProtoTimestamp(new Date()),
       authorName: currentUserDisplayName,
       authorEmail: currentUserEmail,
       replyCount: 0,
@@ -1878,7 +1902,7 @@ export default function ChannelScreen() {
     <>
       <KeyboardAvoidingView
         style={[
-          { flex: 1, backgroundColor: lightPalette.background.default },
+          { flex: 1, backgroundColor: palette.background.default },
           // Android draws edge to edge, so the window never shrinks for the keyboard
           // and KeyboardAvoidingView has nothing to measure: the composer stayed
           // behind the keyboard, send button and all. The keyboard height stops at
@@ -1895,14 +1919,14 @@ export default function ChannelScreen() {
             title: channelTitle ?? "Channel",
             headerTransparent: false,
             headerBlurEffect: "none",
-            headerStyle: { backgroundColor: lightPalette.background.paper },
+            headerStyle: { backgroundColor: palette.background.paper },
             headerTitle: () => (
               <Text
                 testID="channel-header-title"
                 style={{
                   fontSize: 17,
                   fontWeight: "600",
-                  color: lightPalette.text.primary,
+                  color: palette.text.primary,
                 }}
               >
                 {channelTitle ?? "Channel"}
@@ -1934,14 +1958,14 @@ export default function ChannelScreen() {
                 <SFIcon
                   name="chevron.left"
                   size={18}
-                  color={lightPalette.text.primary}
+                  color={palette.text.primary}
                 />
                 {showContextBackAction ? (
                   <Text
                     style={{
                       fontSize: 16,
                       fontWeight: "500",
-                      color: lightPalette.primary.main,
+                      color: palette.primary.main,
                     }}
                   >
                     {navigationContext.backLabel}
@@ -1956,14 +1980,14 @@ export default function ChannelScreen() {
           <View style={styles.center}>
             <ActivityIndicator
               size="large"
-              color={lightPalette.text.secondary}
+              color={palette.text.secondary}
             />
           </View>
         ) : (
           <View
             style={{
               flex: 1,
-              backgroundColor: lightPalette.background.default,
+              backgroundColor: palette.background.default,
             }}
           >
             {channelData?.linkedResource ? (
@@ -1973,7 +1997,7 @@ export default function ChannelScreen() {
             ) : null}
             <FlatList
               ref={flatListRef}
-              style={{ backgroundColor: lightPalette.background.default }}
+              style={{ backgroundColor: palette.background.default }}
               contentInsetAdjustmentBehavior="automatic"
               // Dragging the conversation puts the keyboard away, which is how every chat
               // app behaves and the only way to see the messages the keyboard covers on a
@@ -2219,13 +2243,13 @@ export default function ChannelScreen() {
                   {voice.pending === "starting" ? (
                     <ActivityIndicator
                       size="small"
-                      color={lightPalette.primary.main}
+                      color={palette.primary.main}
                     />
                   ) : (
                     <SFIcon
                       name="phone.fill"
                       size={18}
-                      color={lightPalette.primary.main}
+                      color={palette.primary.main}
                     />
                   )}
                 </Pressable>
@@ -2242,7 +2266,7 @@ export default function ChannelScreen() {
                 onChangeText={handleTextChange}
                 multiline
                 returnKeyType="default"
-                placeholderTextColor={lightPalette.text.disabled}
+                placeholderTextColor={palette.text.disabled}
                 accessibilityLabel="Message input"
               />
               <Pressable
@@ -2253,10 +2277,10 @@ export default function ChannelScreen() {
                   styles.sendBtn,
                   {
                     backgroundColor: !text.trim()
-                      ? lightPalette.divider
+                      ? palette.divider
                       : pressed
-                        ? lightPalette.text.primary
-                        : lightPalette.primary.dark,
+                        ? palette.text.primary
+                        : palette.primary.dark,
                   },
                 ]}
                 accessibilityLabel="Send message"
@@ -2265,7 +2289,7 @@ export default function ChannelScreen() {
                 <SFIcon
                   name="arrow.up"
                   size={18}
-                  color={lightPalette.primary.contrastText}
+                  color={palette.primary.contrastText}
                 />
               </Pressable>
             </>
@@ -2372,7 +2396,7 @@ export default function ChannelScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   hiddenGroup: {
     flexDirection: "row",
     alignItems: "center",
@@ -2382,19 +2406,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 10,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   hiddenGroupText: {
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   hiddenGroupAction: {
     fontSize: 13,
     lineHeight: 18,
     fontWeight: "600",
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   center: {
     flex: 1,
@@ -2410,11 +2434,11 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   messageBubblePressed: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   messageHighlight: {
-    backgroundColor: "#fff9c4",
-    borderColor: "#fde68a",
+    backgroundColor: statusColors.warning[t.mode].bg,
+    borderColor: statusColors.warning[t.mode].border,
   },
   messageContent: {
     flex: 1,
@@ -2427,8 +2451,8 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   messageHeader: {
     flexDirection: "row",
@@ -2451,27 +2475,27 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.hairline,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   senderInitialText: {
     fontSize: 11,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   senderName: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   groupCount: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   timestamp: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   groupedMessageRow: {
     borderRadius: 12,
@@ -2480,7 +2504,7 @@ const styles = StyleSheet.create({
   },
   groupedMessageRowSeparated: {
     borderTopWidth: border.hairline,
-    borderTopColor: lightPalette.divider,
+    borderTopColor: t.divider,
     marginTop: 2,
     paddingTop: 10,
   },
@@ -2490,7 +2514,7 @@ const styles = StyleSheet.create({
   },
   messageText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     lineHeight: 22,
   },
   reactionsRow: {
@@ -2505,25 +2529,25 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderRadius: 12,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   reactionChipActive: {
-    backgroundColor: lightPalette.primary.light + "30",
-    borderColor: lightPalette.primary.light,
+    backgroundColor: t.primary.light + "30",
+    borderColor: t.primary.light,
   },
   reactionEmoji: {
     fontSize: 15,
   },
   reactionCount: {
     fontSize: 13,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600",
   },
   reactionCountActive: {
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   threadLink: {
     flexDirection: "row",
@@ -2533,7 +2557,7 @@ const styles = StyleSheet.create({
   },
   threadLinkText: {
     fontSize: 13,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontWeight: "600",
   },
   deliveryRow: {
@@ -2544,20 +2568,20 @@ const styles = StyleSheet.create({
   },
   deliveryText: {
     fontSize: 12,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   deliveryTextError: {
     fontSize: 12,
     fontWeight: "600",
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   deliveryRetryButton: {
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
     borderWidth: border.thin,
-    borderColor: lightPalette.error.main,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.error.main,
+    backgroundColor: t.background.paper,
   },
   deliveryRetryButtonPressed: {
     opacity: 0.8,
@@ -2565,15 +2589,15 @@ const styles = StyleSheet.create({
   deliveryRetryText: {
     fontSize: 12,
     fontWeight: "600",
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",
     padding: 10,
     borderTopWidth: border.hairline,
-    borderTopColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderTopColor: t.divider,
+    backgroundColor: t.background.paper,
     gap: 8,
   },
   composerVoiceMode: {
@@ -2586,11 +2610,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
   },
   composerAccessoryButtonPressed: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   composerAccessoryButtonDisabled: {
     opacity: opacity.disabled,
@@ -2598,15 +2622,15 @@ const styles = StyleSheet.create({
   composerInput: {
     flex: 1,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     borderRadius: 20,
     borderCurve: "continuous",
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
     fontSize: mobileTypography.listPrimary.fontSize as number,
     maxHeight: 120,
-    backgroundColor: lightPalette.background.default,
-    color: lightPalette.text.primary,
+    backgroundColor: t.background.default,
+    color: t.text.primary,
   },
   sendBtn: {
     width: 42,
@@ -2619,21 +2643,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderTopWidth: border.thin,
-    borderTopColor: lightPalette.divider,
-    backgroundColor: "#fff7ed",
+    borderTopColor: t.divider,
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   voiceCallInlineErrorText: {
-    color: lightPalette.error.main,
+    color: t.error.main,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600",
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.4)",
+    backgroundColor: t.overlay.scrim,
     justifyContent: "flex-end",
   },
   emojiSheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -2643,7 +2667,7 @@ const styles = StyleSheet.create({
   emojiSheetTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600",
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
   },
   emojiGrid: {
@@ -2658,13 +2682,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   emojiText: {
     fontSize: 28,
   },
   actionSheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -2677,19 +2701,19 @@ const styles = StyleSheet.create({
     width: 44,
     height: 5,
     borderRadius: 999,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginBottom: 4,
   },
   actionSheetTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
   },
   actionSheetSubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
     marginBottom: 4,
   },
@@ -2705,13 +2729,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   quickReactionBtnPressed: {
-    backgroundColor: lightPalette.primary.light + "20",
-    borderColor: lightPalette.primary.light,
+    backgroundColor: t.primary.light + "20",
+    borderColor: t.primary.light,
   },
   quickReactionText: {
     fontSize: 22,
@@ -2723,13 +2747,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderRadius: 18,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   actionSheetRowPressed: {
-    backgroundColor: lightPalette.primary.light + "20",
-    borderColor: lightPalette.primary.light,
+    backgroundColor: t.primary.light + "20",
+    borderColor: t.primary.light,
   },
   actionSheetIconWrap: {
     width: 34,
@@ -2737,7 +2761,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.light + "30",
+    backgroundColor: t.primary.light + "30",
   },
   actionSheetRowBody: {
     flex: 1,
@@ -2746,12 +2770,12 @@ const styles = StyleSheet.create({
   actionSheetRowTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   actionSheetRowText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   dateSep: {
     flexDirection: "row",
@@ -2762,11 +2786,11 @@ const styles = StyleSheet.create({
   dateLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
   },
   dateText: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600",
   },
   emptyState: {
@@ -2775,7 +2799,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   typingRow: {
     flexDirection: "row",
@@ -2787,7 +2811,7 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: lightPalette.text.secondary,
+    backgroundColor: t.text.secondary,
   },
   dot1: {},
   dot2: {},
@@ -2797,19 +2821,19 @@ const styles = StyleSheet.create({
     position: "absolute",
     bottom: 16,
     alignSelf: "center",
-    backgroundColor: lightPalette.primary.dark,
+    backgroundColor: t.primary.dark,
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
-    shadowColor: "#000",
+    shadowColor: shadows.lg.shadowColor,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
     elevation: 4,
   },
   newMessagesPillText: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontSize: 14,
     fontWeight: "600",
   },
-});
+}));

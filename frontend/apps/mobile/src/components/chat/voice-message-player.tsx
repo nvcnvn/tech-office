@@ -1,17 +1,18 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View, type GestureResponderEvent } from "react-native";
+import { ActivityIndicator, Pressable, Text, View, type GestureResponderEvent } from "react-native";
 import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import { getDownloadUrl } from "apis";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface VoiceMessagePlayerProps {
   fileId: string;
@@ -26,6 +27,9 @@ function formatPlaybackTime(totalSeconds: number): string {
 }
 
 export function VoiceMessagePlayer({ fileId, maxWidth = 320 }: VoiceMessagePlayerProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const player = useAudioPlayer(null);
   const status = useAudioPlayerStatus(player);
   const [downloadUrl, setDownloadUrl] = useState<string | null>(null);
@@ -118,12 +122,12 @@ export function VoiceMessagePlayer({ fileId, maxWidth = 320 }: VoiceMessagePlaye
         accessibilityLabel={status.playing ? "Pause voice message" : "Play voice message"}
       >
         {loading ? (
-          <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+          <ActivityIndicator size="small" color={palette.primary.contrastText} />
         ) : (
           <SFIcon
             name={status.playing ? "pause.fill" : "play.fill"}
             size={15}
-            color={lightPalette.primary.contrastText}
+            color={palette.primary.contrastText}
           />
         )}
       </Pressable>
@@ -156,7 +160,7 @@ export function VoiceMessagePlayer({ fileId, maxWidth = 320 }: VoiceMessagePlaye
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   wrap: {
     marginTop: spacing[1],
     minHeight: 58,
@@ -168,8 +172,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[1],
     borderRadius: radius.lg,
     borderWidth: border.thin,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
+    borderColor: statusColors.info[t.mode].border,
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   playButton: {
     width: touch.minTarget,
@@ -177,7 +181,7 @@ const styles = StyleSheet.create({
     borderRadius: touch.minTarget / 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   body: {
     flex: 1,
@@ -185,18 +189,18 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   title: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700",
   },
   errorText: {
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   progressTrack: {
     height: 12,
     borderRadius: 999,
     overflow: "hidden",
-    backgroundColor: "#bfdbfe",
+    backgroundColor: statusColors.info[t.mode].border,
     justifyContent: "center",
   },
   progressTrackDisabled: {
@@ -211,7 +215,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     borderRadius: 999,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   progressThumb: {
     position: "absolute",
@@ -220,8 +224,8 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     borderWidth: 1.5,
-    borderColor: lightPalette.background.paper,
-    backgroundColor: lightPalette.primary.main,
+    borderColor: t.background.paper,
+    backgroundColor: t.primary.main,
   },
   timeRow: {
     flexDirection: "row",
@@ -230,7 +234,7 @@ const styles = StyleSheet.create({
     gap: spacing[2],
   },
   timeText: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: 11,
     fontWeight: "700",
   },
@@ -240,4 +244,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

@@ -1,0 +1,61 @@
+appId: com.devguards.TechOffice
+name: "Settings — dark mode toggle"
+# The happy path only: choose dark in Settings, and it is still dark after a restart.
+#
+# There is no colour assertion here because Maestro cannot sample a pixel. The theme row
+# reports the active mode through its accessibility value instead, which is why
+# `theme-toggle-row` carries `accessibilityValue={{ text: mode }}`. The eight resolution
+# rules behind that value are covered by `src/lib/theme-resolution.check.ts`, and the
+# contrast of every token pairing by `packages/theme-tokens/src/contrast.check.ts` —
+# neither is something a blackbox driver could enumerate.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible:
+      id: "theme-toggle-row"
+    timeout: 8000
+- assertVisible:
+    id: "theme-toggle-row"
+- tapOn:
+    id: "theme-toggle-switch"
+# The app repaints on the press; the write to the server follows. Waiting on the row's
+# reported value rather than asserting it immediately is what keeps this from racing the
+# repaint on a slow device.
+- extendedWaitUntil:
+    visible:
+      id: "theme-toggle-row"
+      text: "dark"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/01-settings-dark"
+# A restart, not a reinstall: the point is that the choice survives being read back from
+# the server and the local cache, which a cleared state would destroy.
+- runFlow: "../auth/dev-client-relaunch.yaml"
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-settings"
+    timeout: 8000
+- tapOn:
+    id: "menu-settings"
+- extendedWaitUntil:
+    visible:
+      id: "theme-toggle-row"
+      text: "dark"
+    timeout: 12000
+- takeScreenshot: "tmp/maestro-screenshots/02-settings-dark-after-relaunch"

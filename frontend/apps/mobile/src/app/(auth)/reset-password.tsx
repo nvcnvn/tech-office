@@ -15,7 +15,10 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 
+import { useTheme } from "@/lib/theme";
+
 export default function ResetPasswordScreen() {
+  const { palette } = useTheme();
   const { token } = useLocalSearchParams<{ token?: string }>();
   const router = useRouter();
   const [password, setPassword] = useState("");
@@ -25,11 +28,14 @@ export default function ResetPasswordScreen() {
 
   const inputStyle = {
     borderWidth: 1,
-    borderColor: "#ddd",
+    borderColor: palette.divider,
     borderRadius: 10,
     padding: 14,
     fontSize: 16,
-    backgroundColor: "#fafafa",
+    backgroundColor: palette.background.default,
+    // React Native's default text colour is black, so an input without this one
+    // takes typed text to black on a dark field.
+    color: palette.text.primary,
   } as const;
 
   const handleSubmit = async () => {
@@ -67,14 +73,16 @@ export default function ResetPasswordScreen() {
 
         {done ? (
           <View style={{ alignItems: "center", gap: 16 }}>
-            <Text style={{ fontSize: 20, fontWeight: "600" }}>Password updated!</Text>
-            <Text style={{ fontSize: 15, color: "#666", textAlign: "center" }}>
+            <Text style={{ fontSize: 20, fontWeight: "600", color: palette.text.primary }}>
+              Password updated!
+            </Text>
+            <Text style={{ fontSize: 15, color: palette.text.secondary, textAlign: "center" }}>
               Your password has been changed. Please sign in with your new password.
             </Text>
             <Pressable
               onPress={() => router.replace("/(auth)/signin")}
               style={{
-                backgroundColor: "#0f172a",
+                backgroundColor: palette.primary.main,
                 paddingVertical: 16,
                 paddingHorizontal: 32,
                 borderRadius: 12,
@@ -83,23 +91,31 @@ export default function ResetPasswordScreen() {
             
               testID="reset-password-back-to-signin"
             >
-              <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
+              <Text style={{ color: palette.primary.contrastText, fontSize: 16, fontWeight: "600" }}>
                 Sign In
               </Text>
             </Pressable>
           </View>
         ) : (
           <>
-            <Text style={{ fontSize: 20, fontWeight: "600", textAlign: "center" }}>
+            <Text
+              style={{
+                fontSize: 20,
+                fontWeight: "600",
+                textAlign: "center",
+                color: palette.text.primary,
+              }}
+            >
               Set a new password
             </Text>
             <View style={{ gap: 4 }}>
-              <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
                 New Password
               </Text>
               <TextInput
                 style={inputStyle}
                 placeholder="At least 8 characters"
+                placeholderTextColor={palette.text.disabled}
                 secureTextEntry
                 textContentType="newPassword"
                 value={password}
@@ -109,12 +125,13 @@ export default function ResetPasswordScreen() {
             />
             </View>
             <View style={{ gap: 4 }}>
-              <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+              <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
                 Confirm Password
               </Text>
               <TextInput
                 style={inputStyle}
                 placeholder="Repeat your new password"
+                placeholderTextColor={palette.text.disabled}
                 secureTextEntry
                 textContentType="newPassword"
                 value={confirm}
@@ -128,7 +145,11 @@ export default function ResetPasswordScreen() {
               disabled={loading || !password || !confirm}
               style={({ pressed }) => ({
                 backgroundColor:
-                  !password || !confirm ? "#ccc" : pressed ? "#020617" : "#0f172a",
+                  !password || !confirm
+                    ? palette.divider
+                    : pressed
+                      ? palette.primary.dark
+                      : palette.primary.main,
                 paddingVertical: 16,
                 borderRadius: 12,
                 alignItems: "center",
@@ -138,9 +159,9 @@ export default function ResetPasswordScreen() {
               testID="reset-password-submit"
             >
               {loading ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={palette.primary.contrastText} />
               ) : (
-                <Text style={{ color: "#fff", fontSize: 16, fontWeight: "600" }}>
+                <Text style={{ color: palette.primary.contrastText, fontSize: 16, fontWeight: "600" }}>
                   Update Password
                 </Text>
               )}

@@ -17,7 +17,6 @@ import {
   Alert,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -37,15 +36,19 @@ import { Card } from "@/components/ui/card";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export default function DeleteAccountScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const auth = React.use(AuthContext);
   const router = useRouter();
 
@@ -136,7 +139,7 @@ export default function DeleteAccountScreen() {
     return (
       <View style={styles.loadingScreen}>
         <Stack.Screen options={{ title: "Delete account" }} />
-        <ActivityIndicator color={lightPalette.text.secondary} />
+        <ActivityIndicator color={palette.text.secondary} />
       </View>
     );
   }
@@ -159,7 +162,7 @@ export default function DeleteAccountScreen() {
 
       <Card style={styles.headerCard}>
         <View style={styles.headerIconWrap}>
-          <SFIcon name="exclamationmark.triangle.fill" size={18} color={lightPalette.error.main} />
+          <SFIcon name="exclamationmark.triangle.fill" size={18} color={palette.error.main} />
         </View>
         <Text style={styles.headerTitle}>Deleting your account can't be undone</Text>
         <Text style={styles.headerBody}>
@@ -180,7 +183,7 @@ export default function DeleteAccountScreen() {
           </Text>
           {blockedOrgs.map((org) => (
             <View key={org.organizationId} style={styles.blockedRow}>
-              <SFIcon name="building.2" size={14} color={lightPalette.text.secondary} />
+              <SFIcon name="building.2" size={14} color={palette.text.secondary} />
               <Text selectable style={styles.blockedRowText}>
                 {org.organizationName} — {org.memberCount}{" "}
                 {org.memberCount === 1 ? "other person" : "other people"}
@@ -194,7 +197,7 @@ export default function DeleteAccountScreen() {
         <Text style={styles.sectionTitle}>What gets deleted</Text>
         {(preview?.erased ?? []).map((item) => (
           <View key={item.label} style={styles.bulletRow}>
-            <SFIcon name="minus.circle" size={14} color={lightPalette.error.main} />
+            <SFIcon name="minus.circle" size={14} color={palette.error.main} />
             <Text style={styles.bulletText}>{item.label}</Text>
           </View>
         ))}
@@ -215,7 +218,7 @@ export default function DeleteAccountScreen() {
           <Text style={styles.sectionTitle}>Workspaces this affects</Text>
           {(preview?.organizations ?? []).map((org) => (
             <View key={org.organizationId} style={styles.bulletRow}>
-              <SFIcon name="building.2" size={14} color={lightPalette.text.secondary} />
+              <SFIcon name="building.2" size={14} color={palette.text.secondary} />
               <Text selectable style={styles.bulletText}>
                 {org.organizationName}
               </Text>
@@ -237,7 +240,7 @@ export default function DeleteAccountScreen() {
           autoCorrect={false}
           editable={!submitting}
           placeholder={confirmationPhrase}
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           testID="delete-account-phrase"
         />
 
@@ -258,7 +261,7 @@ export default function DeleteAccountScreen() {
           testID="delete-account-submit"
         >
           {submitting ? (
-            <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+            <ActivityIndicator size="small" color={palette.primary.contrastText} />
           ) : (
             <Text style={styles.dangerButtonText}>Delete my account</Text>
           )}
@@ -268,16 +271,16 @@ export default function DeleteAccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   loadingScreen: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     padding: mobileLayout.screenPadding,
@@ -293,28 +296,28 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#fceceb",
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   headerTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   headerBody: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   blockedCard: {
     gap: spacing[1],
-    backgroundColor: "#fff7ed",
+    backgroundColor: statusColors.warning[t.mode].bg,
   },
   blockedTitle: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
   blockedBody: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   blockedRow: {
     flexDirection: "row",
@@ -324,14 +327,14 @@ const styles = StyleSheet.create({
   blockedRowText: {
     flex: 1,
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   sectionCard: {
     gap: spacing[1],
   },
   sectionTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   bulletRow: {
     flexDirection: "row",
@@ -341,41 +344,41 @@ const styles = StyleSheet.create({
   bulletText: {
     flex: 1,
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   retainedRow: {
     gap: 2,
   },
   retainedLabel: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   retainedReason: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   confirmHint: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   confirmPhrase: {
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   input: {
     minHeight: 48,
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     paddingHorizontal: spacing[1.5],
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   error: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   dangerButton: {
     minHeight: 48,
@@ -383,7 +386,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.error.main,
+    backgroundColor: t.error.main,
     marginTop: spacing[1],
   },
   dangerButtonDisabled: {
@@ -391,10 +394,10 @@ const styles = StyleSheet.create({
   },
   dangerButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: "600",
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

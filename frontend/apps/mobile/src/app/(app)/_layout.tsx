@@ -9,7 +9,8 @@
  * Today header, because Today already answers "what is on today" and a
  * separate agenda tab duplicated that answer.
  *
- * High-contrast light theme with subtle borders and restrained styling.
+ * High-contrast theme with subtle borders and restrained styling, painted from
+ * the active palette rather than a fixed one.
  */
 
 import { Redirect, Tabs, usePathname, useRouter } from "expo-router";
@@ -51,13 +52,8 @@ import {
   useNativeCallPresentation,
 } from "@/lib/voice/native-call";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import {
-  lightPalette,
-  mobileLayout,
-  touch,
-  tabIcons,
-  mobileTypography,
-} from "@tech-office/theme-tokens";
+import { mobileLayout, touch, tabIcons } from "@tech-office/theme-tokens";
+import { useTheme } from "@/lib/theme";
 
 /** Map tab keys to Ionicons names (outline / filled) */
 const TAB_IONICONS = {
@@ -93,6 +89,7 @@ export const unstable_settings = {
 };
 
 export default function AppLayout() {
+  const { palette } = useTheme();
   const auth = React.use(AuthContext);
   const router = useRouter();
   const pathname = usePathname();
@@ -294,10 +291,10 @@ export default function AppLayout() {
           flex: 1,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: lightPalette.background.default,
+          backgroundColor: palette.background.default,
         }}
       >
-        <ActivityIndicator size="large" color={lightPalette.primary.main} />
+        <ActivityIndicator size="large" color={palette.primary.main} />
       </View>
     );
   }
@@ -381,14 +378,15 @@ export default function AppLayout() {
       ) : null}
       <Tabs
         screenOptions={{
-          tabBarActiveTintColor: lightPalette.primary.main,
-          tabBarInactiveTintColor: lightPalette.text.disabled,
+          tabBarActiveTintColor: palette.primary.main,
+          tabBarInactiveTintColor: palette.text.disabled,
           tabBarStyle: {
             height: mobileLayout.tabBarHeight + insets.bottom,
-            backgroundColor: lightPalette.background.paper,
+            backgroundColor: palette.background.paper,
             borderTopWidth: 0.5,
-            borderTopColor: lightPalette.divider,
+            borderTopColor: palette.divider,
           },
+          sceneStyle: { backgroundColor: palette.background.default },
           tabBarItemStyle: {
             minHeight: touch.comfortable,
             paddingTop: 6,

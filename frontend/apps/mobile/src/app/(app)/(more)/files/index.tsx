@@ -8,7 +8,6 @@ import {
   Alert,
   FlatList,
   RefreshControl,
-  StyleSheet,
   Text,
   View,
 } from "react-native";
@@ -27,13 +26,13 @@ import { useManualRefresh } from "@/hooks/use-manual-refresh";
 import {
   actionIcons,
   emptyStateIcons,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
   statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 function getFileIconName(file: FileMetadata) {
   const extension = file.originalFilename.split(".").pop()?.toLowerCase() ?? "";
@@ -66,6 +65,9 @@ function formatContextLabel(file: FileMetadata) {
 }
 
 export default function FilesScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const [downloading, setDownloading] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
@@ -101,7 +103,7 @@ export default function FilesScreen() {
   if (isLoading) {
     return (
       <View style={styles.loadingState}>
-        <ActivityIndicator size="large" color={lightPalette.primary.main} />
+        <ActivityIndicator size="large" color={palette.primary.main} />
       </View>
     );
   }
@@ -117,7 +119,7 @@ export default function FilesScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={onRefresh}
-            tintColor={lightPalette.primary.main}
+            tintColor={palette.primary.main}
           />
         }
         contentContainerStyle={styles.listContent}
@@ -126,7 +128,7 @@ export default function FilesScreen() {
           <Card style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <View style={styles.summaryIconWrap}>
-                <SFIcon name="folder.fill" size={18} color={lightPalette.primary.main} />
+                <SFIcon name="folder.fill" size={18} color={palette.primary.main} />
               </View>
               <View style={styles.summaryCopy}>
                 <Text selectable style={styles.summaryTitle}>Shared Files</Text>
@@ -147,7 +149,7 @@ export default function FilesScreen() {
                   <SFIcon
                     name={getFileIconName(item)}
                     size={20}
-                    color={lightPalette.primary.main}
+                    color={palette.primary.main}
                   />
                 </View>
 
@@ -158,8 +160,8 @@ export default function FilesScreen() {
                     </Text>
                     <StateChip
                       label={formatContextLabel(item)}
-                      color={statusColors.info.light.bg}
-                      textColor={statusColors.info.light.text}
+                      color={statusColors.info[palette.mode].bg}
+                      textColor={statusColors.info[palette.mode].text}
                     />
                   </View>
 
@@ -188,7 +190,7 @@ export default function FilesScreen() {
                   <SFIcon
                     name={actionIcons.download.name}
                     size={14}
-                    color={lightPalette.text.secondary}
+                    color={palette.text.secondary}
                   />
                   <Text style={styles.actionHintText}>Saves, then opens share options</Text>
                 </View>
@@ -208,12 +210,12 @@ export default function FilesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   loadingState: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   listContent: {
     padding: mobileLayout.screenPadding,
@@ -238,7 +240,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef5fc",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   summaryCopy: {
     flex: 1,
@@ -248,12 +250,12 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.sectionHeader.fontSize,
     lineHeight: mobileTypography.sectionHeader.lineHeight,
     fontWeight: mobileTypography.sectionHeader.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   summarySubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   fileCard: {
     gap: spacing[1.5],
@@ -269,7 +271,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   fileCopy: {
     flex: 1,
@@ -285,17 +287,17 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.listPrimary.fontSize,
     lineHeight: mobileTypography.listPrimary.lineHeight,
     fontWeight: mobileTypography.listPrimary.fontWeight,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   fileMeta: {
     fontSize: mobileTypography.listSecondary.fontSize,
     lineHeight: mobileTypography.listSecondary.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   fileSubtle: {
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
-    color: lightPalette.text.disabled,
+    color: t.text.disabled,
   },
   fileActions: {
     flexDirection: "row",
@@ -316,6 +318,6 @@ const styles = StyleSheet.create({
   actionHintText: {
     fontSize: mobileTypography.caption.fontSize,
     lineHeight: mobileTypography.caption.lineHeight,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

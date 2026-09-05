@@ -3,13 +3,13 @@
  */
 
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   border,
-  lightPalette,
   mobileTypography,
   radius,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface StateChipProps {
   label: string;
@@ -17,23 +17,27 @@ interface StateChipProps {
   textColor?: string;
 }
 
-export function StateChip({
-  label,
-  color = lightPalette.background.default,
-  textColor = lightPalette.text.primary,
-}: StateChipProps) {
+export function StateChip({ label, color, textColor }: StateChipProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
+  // Resolved here rather than as default parameters: a default is evaluated
+  // where the function is declared, which has no theme.
+  const fill = color ?? palette.background.default;
+  const labelColor = textColor ?? palette.text.primary;
+
   return (
     <View
-      style={[styles.container, { backgroundColor: color }]}
+      style={[styles.container, { backgroundColor: fill }]}
     >
-      <Text style={[styles.label, { color: textColor }]}>
+      <Text style={[styles.label, { color: labelColor }]}>
         {label}
       </Text>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles(() => ({
   container: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -49,4 +53,4 @@ const styles = StyleSheet.create({
     lineHeight: mobileTypography.caption.lineHeight,
     fontWeight: mobileTypography.buttonSm.fontWeight,
   },
-});
+}));

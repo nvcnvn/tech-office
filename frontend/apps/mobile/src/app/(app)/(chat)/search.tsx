@@ -32,13 +32,14 @@ import {
   SearchResultRow,
   SearchResultsCard,
   SearchSectionHeader,
-  searchLayout,
+  useSearchLayout,
 } from "@/components/ui/search-bar";
-import { lightPalette } from "@tech-office/theme-tokens";
-
-const CHANNEL_TINT = "#2563eb";
+import { useTheme } from "@/lib/theme";
 
 export default function ChatSearchScreen() {
+  const searchLayout = useSearchLayout();
+  const { palette } = useTheme();
+
   const router = useRouter();
   const queryClient = useQueryClient();
   const auth = React.use(AuthContext);
@@ -134,10 +135,10 @@ export default function ChatSearchScreen() {
       key={channel.id}
       testID={`search-result-channel-${channel.id}`}
       leading={
-        <SearchIconCircle sfSymbol="bubble.left.fill" tint={CHANNEL_TINT} />
+        <SearchIconCircle sfSymbol="bubble.left.fill" tint={palette.info.main} />
       }
       title={channel.displayName || channel.titleSlug || "Unnamed"}
-      badge={{ label: "Channel", tint: CHANNEL_TINT }}
+      badge={{ label: "Channel", tint: palette.info.main }}
       onPress={() => openChannel(channel.id)}
     />
   );
@@ -176,7 +177,7 @@ export default function ChatSearchScreen() {
                   <SearchResultRow
                     key={emp.id}
                     testID={`search-result-employee-${emp.id}`}
-                    leading={<UserAvatar name={name} size={36} color="#7c3aed" />}
+                    leading={<UserAvatar name={name} size={36} color={palette.eventCategory.personal} />}
                     title={name}
                     subtitle={emp.email}
                     onPress={() => void handleEmployeeTap(emp)}
@@ -206,7 +207,7 @@ export default function ChatSearchScreen() {
         {!hasResults && (
           <View style={searchLayout.emptyContainer}>
             {isSearching ? (
-              <ActivityIndicator color={lightPalette.primary.main} />
+              <ActivityIndicator color={palette.primary.main} />
             ) : (
               <Text style={searchLayout.emptyText}>
                 {debouncedQuery

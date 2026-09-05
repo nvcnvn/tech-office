@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-05.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048.
+**Status date: 2026-09-05.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048, 050.
 
 ## Canonical resource links
 
@@ -282,9 +282,65 @@ context rather than taking IDs.
 Design tokens live in `frontend/packages/theme-tokens` and are shared by web and mobile.
 Client: `packages/apis/src/preference.ts`, `theme-storage.ts`.
 
-**Only the web app participates.** `theme-tokens` exports a `darkPalette`, but every
-mobile screen imports `lightPalette` by name, and mobile never calls `PreferenceService`
-for theme at all. See [D30](#known-drift).
+**Both clients participate.** `getMobilePalette(mode)` returns mode-dependent values for
+the mobile-only semantic groups (`presence`, `notificationDomain`, `taskState`,
+`eventCategory`, `priority`, `overlay`) as well as the shared base palette; the bare
+per-group exports were removed, so the only way to reach a semantic colour is through the
+palette. Every mobile screen builds its styles at render time through `makeStyles` in
+`apps/mobile/src/lib/theme.tsx`, which caches one `StyleSheet` per mode.
+
+### How mobile resolves a theme
+
+The decision is a pure function, `apps/mobile/src/lib/theme-resolution.ts`, so it can be
+exercised without a device (`pnpm --filter mobile check:theme-resolution`). First row that
+matches wins:
+
+| Condition | Theme | Source | Writes back |
+|---|---|---|---|
+| Signed out | the phone's setting | `os_default` | nothing |
+| Stored row, `manual` | the stored mode | `manual` | nothing |
+| Stored row, `os_default` | the phone's setting | `os_default` | `(phone, os_default)`, only if it differs from what is stored |
+| Server answered, no row | the phone's setting | `os_default` | `(phone, os_default)` |
+| Server not answered, per-person cache present | the cached mode | `os_default` | nothing |
+| Server not answered, device key present | the device's last mode | `os_default` | nothing |
+| Nothing known | the phone's setting | `os_default` | nothing |
+
+Presence of a stored preference is keyed off `exists`, never off `theme_mode`:
+`protoThemeModeToString` coerces an enum value it does not recognise to `'light'`, so a
+value the client cannot read is treated as no preference and the app follows the phone
+rather than pinning to light.
+
+The last three rows are provisional — they paint, they never write, and they are
+superseded the moment the server answers. They report `os_default` so a cached value can
+never masquerade as a deliberate choice. Only the Settings theme switch writes `manual`.
+
+Two local keys back the first frame: the existing per-person
+`theme_preference_{employeeId}`, and a device-scoped `theme_last_known` holding nothing but
+`'light'` or `'dark'`. The device key exists because `employeeId` arrives asynchronously
+from SecureStore while MMKV reads synchronously, so at frame zero there is no person to key
+a lookup by. Both are cleared on sign-out, so a remembered theme is never shown to a second
+person. Launch never blocks on the network: an unreachable server leaves the app on whatever
+the cache says, logged and not surfaced.
+
+Native controls — the keyboard, text carets, selection handles, pickers, `Switch` tracks,
+scroll indicators — follow through `Appearance.setColorScheme`, driven by the *preference
+source* rather than by the mode: `'unspecified'` (React Native's "follow the OS") while the
+theme follows the phone, the chosen mode once somebody has chosen. That single mechanism
+gives all three of "native controls match", "follow a later OS change while `os_default`",
+and "ignore the OS once `manual`", because `setColorScheme` also overrides what `Appearance`
+reports back.
+
+**Deliberate divergence between the clients.** Mobile follows a *later* OS change while
+`preference_source = 'os_default'`; the web `ThemeProvider`
+(`apps/web/src/components/ThemeProvider.tsx`) adopts the OS scheme once on first run and
+never re-reads it. Both read the same stored contract under different rules. This is
+intentional — the mobile requirement asked for it and changing the web was out of scope —
+and is recorded in the drift register rather than silently absorbed.
+
+Two runnable guards keep this honest, both wired into `make test-frontend`:
+`packages/theme-tokens/src/contrast.check.ts` measures every declared foreground/background
+pairing in both modes against WCAG 2.1 AA, and an ESLint `no-restricted-syntax` rule scoped
+to `apps/mobile/src/**` rejects raw hex and `rgba(...)` string literals.
 
 ## Feature tour
 
@@ -483,12 +539,13 @@ Expo Router in `apps/mobile/src/app`, five route groups:
     the in-app alert toggle, blocked people, abuse contact, the two published documents,
     and whichever of `delete-account` or `request-removal` this person's path is, asked of
     the server rather than inferred. See [compliance-safety.md](compliance-safety.md).
-    **There is no Dark Mode switch on mobile.** Every mobile screen paints from
-    `lightPalette`, so the toggle only darkened the native controls — Switch, keyboard,
-    carets — sitting on a light UI. `app/_layout.tsx` now pins
-    `Appearance.setColorScheme("light")` at startup instead, which is what keeps those
-    controls consistent on a phone whose OS is in dark mode. The switch returns with the
-    theme, not before it.
+    The **Appearance** section carries the theme switch (`theme-toggle-row`, on ⇒ dark).
+    It records a deliberate choice — `preference_source = 'manual'` — which is the only
+    place in the app that writes that value, and it is the only thing that stops the app
+    following the phone. The screen repaints on the press, before the write settles; if the
+    write fails the control and the theme return to where they were and the screen says so,
+    because an app showing one theme while the server stores the other is worse than a
+    refused change. See [Theme and preferences](#theme-and-preferences).
   - `(more)/docs` and `(more)/files` are read-oriented lists; `(more)/search` is the
     global federated search screen.
 - `(shared)` — resource routes reached from a deep link rather than a tab, so a link opens
@@ -579,7 +636,7 @@ per category. Interactive elements carry `today-section-team`, `today-team-row-<
 | `rpc` | generated Connect clients |
 | `notifications` | `useSSEConnection`, `useNotifications`, `presenceState`, event types |
 | `links` | canonical link helpers |
-| `theme-tokens` | shared design tokens |
+| `theme-tokens` | shared design tokens, and the runnable WCAG contrast sweep over them |
 | `validations` | shared input validation |
 
 `apis` also owns values the backend duplicates, so screens read them rather than restate
@@ -602,8 +659,26 @@ to that list, or the detail never reaches a component.
 
 `integration/canonical_links_test.go`, `context_rail_test.go`, `preference_test.go`,
 `feature_tour_test.go`, `federated_search_test.go`; `apps/web/e2e/`, including
-`federated-search.spec.ts`; Maestro flows for mobile, including `.maestro/feature-tour/`
-and `.maestro/federated-search.yaml`.
+`federated-search.spec.ts`; Maestro flows for mobile, including `.maestro/feature-tour/`,
+`.maestro/federated-search.yaml` and `.maestro/settings/dark-mode-toggle.yaml`.
+
+The mobile theme is guarded by two assertion scripts rather than by a flow, because neither
+thing they check is observable to a blackbox driver.
+`apps/mobile/src/lib/theme-resolution.check.ts` walks every row of the resolution table,
+including the three provisional pre-answer rows — the ones a one-frame flash would come
+from — and `packages/theme-tokens/src/contrast.check.ts` measures all 164 declared
+foreground/background pairings in both modes. Both run under `make test-frontend`.
+Thirteen pairings are pinned as pre-existing exemptions with the ratio measured at the
+time: every one is a
+`colors.ts` value shared with the web theme, so the register fails if one gets worse rather
+than waiving it. The Maestro flow covers the happy path only — choose dark, restart, it is
+still dark — asserted through the theme row's accessibility value, since Maestro cannot
+sample a colour.
+
+A third guard is a lint rule rather than a test: `no-restricted-syntax` scoped to
+`apps/mobile/src/**` rejects string literals that are entirely a hex colour or an
+`rgba(...)`, which is what stops the palette sweep being undone by the first screen that
+reaches for `#fff`.
 
 `internal/search/logic_test.go` covers the fan-out's failure paths — a failing source, a
 panicking adapter, a source past its deadline, every source failing, and the round-robin
@@ -681,15 +756,19 @@ passing blackbox flow.
 project's no-backward-compatibility stance, this is worth revisiting: every legacy shape it
 accepts is a second URL grammar to keep working.
 
-**D30 — mobile does not participate in the theme system.** `PreferenceService` stores a
-`theme_mode` per user and `theme-tokens` exports a `darkPalette`, but the mobile app
-imports `lightPalette` directly in every screen and never reads or writes the preference.
-Its Settings screen used to carry a Dark Mode switch that wrote a local MMKV key and
-called `Appearance.setColorScheme`, which changed nothing the app paints and left the
-native controls dark on a light UI; the switch has been removed and the color scheme
-pinned to light. Closing this means threading a palette through the mobile screens and
-then reading `GetUserPreference`, not restoring the toggle.
+**D30 — the two clients read the same theme contract under different rules.** Mobile
+follows a later OS change while `preference_source = 'os_default'`; the web
+`ThemeProvider` adopts the OS scheme once on first run and never re-reads it, so a web
+session left on `os_default` does not move when the machine switches to dark. This is
+deliberate — following a later OS change is a mobile requirement, and changing the web
+client was out of scope for the feature that added it — but it means the same stored row
+means two things. Closing it means deciding which rule both clients should follow and
+moving the resolver into `packages/apis` beside `theme-storage.ts`, where both can reach
+it.
 
 **`theme_mode` has no `system` value.** "Follow the OS" is expressed indirectly through
 `preference_source = 'os_default'`. This works but is easy to get wrong from a new client,
-which may write `manual` on first render and permanently pin the user's theme.
+which may write `manual` on first render and permanently pin the user's theme. On mobile
+the guard is structural rather than remembered: `resolveTheme` never emits a `manual`
+write, and `setMode` — the Settings control's only entry point — is the one function that
+can.

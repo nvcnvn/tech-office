@@ -8,9 +8,11 @@ import {
   parseNavigationContext,
   resolveNavigationBackHref,
 } from "@/lib/mobile-navigation";
-import { lightPalette, mobileTypography, spacing } from "@tech-office/theme-tokens";
+import { mobileTypography, spacing } from "@tech-office/theme-tokens";
+import { useTheme } from "@/lib/theme";
 
 export default function SharedResourceLayout() {
+  const { palette } = useTheme();
   const router = useRouter();
   const navigation = useNavigation();
   const params = useLocalSearchParams<{
@@ -27,6 +29,10 @@ export default function SharedResourceLayout() {
     <Stack
       screenOptions={{
         headerBackVisible: false,
+        headerStyle: { backgroundColor: palette.background.paper },
+        headerTitleStyle: { color: palette.text.primary },
+        headerTintColor: palette.text.primary,
+        contentStyle: { backgroundColor: palette.background.default },
         headerLeft: () => (
           <Pressable
             accessibilityRole="button"
@@ -46,10 +52,10 @@ export default function SharedResourceLayout() {
               gap: spacing[0.5],
             }}
           >
-            <SFIcon name="chevron.left" size={16} color={lightPalette.info.main} />
+            <SFIcon name="chevron.left" size={16} color={palette.info.main} />
             <Text
               style={{
-                color: lightPalette.info.main,
+                color: palette.info.main,
                 fontSize: mobileTypography.listPrimary.fontSize,
                 fontWeight: "600",
               }}

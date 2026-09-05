@@ -34,7 +34,6 @@ import { SFIcon } from "@/components/ui/sf-icon";
 import { Image } from "expo-image";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
@@ -47,6 +46,7 @@ import {
 } from "../../lib/auth-subdomain-storage";
 import { getCanonicalInAppRoute } from "../../lib/canonical-links";
 import { consumePendingAuthSubdomain, consumePendingPostSignInRedirect } from "../../lib/auth-redirect-handoff";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -62,6 +62,9 @@ interface SignInForm {
 }
 
 export default function SignInScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const params = useLocalSearchParams<{ postSignIn?: string; redirect?: string; subdomain?: string }>();
   const auth = React.use(AuthContext);
@@ -343,12 +346,12 @@ export default function SignInScreen() {
                 </View>
                 <View style={styles.inputShell}>
                   <View style={styles.inputPrefix}>
-                    <SFIcon name="building.2" size={15} color={lightPalette.text.secondary} />
+                    <SFIcon name="building.2" size={15} color={palette.text.secondary} />
                   </View>
                   <TextInput
                     style={styles.input}
                     placeholder="your-company"
-                    placeholderTextColor={lightPalette.text.disabled}
+                    placeholderTextColor={palette.text.disabled}
                     autoCapitalize="none"
                     autoCorrect={false}
                     autoComplete="off"
@@ -387,13 +390,13 @@ export default function SignInScreen() {
                 <Text style={styles.fieldLabel}>Work email</Text>
                 <View style={styles.inputShell}>
                   <View style={styles.inputPrefix}>
-                    <SFIcon name="envelope" size={15} color={lightPalette.text.secondary} />
+                    <SFIcon name="envelope" size={15} color={palette.text.secondary} />
                   </View>
                   <TextInput
                     ref={emailInputRef}
                     style={styles.input}
                     placeholder="you@company.com"
-                    placeholderTextColor={lightPalette.text.disabled}
+                    placeholderTextColor={palette.text.disabled}
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -436,13 +439,13 @@ export default function SignInScreen() {
                 </View>
                 <View style={styles.inputShell}>
                   <View style={styles.inputPrefix}>
-                    <SFIcon name="lock.fill" size={15} color={lightPalette.text.secondary} />
+                    <SFIcon name="lock.fill" size={15} color={palette.text.secondary} />
                   </View>
                   <TextInput
                     ref={passwordInputRef}
                     style={styles.input}
                     placeholder="••••••••"
-                    placeholderTextColor={lightPalette.text.disabled}
+                    placeholderTextColor={palette.text.disabled}
                     secureTextEntry={!passwordVisible}
                     textContentType="password"
                     autoComplete="current-password"
@@ -464,7 +467,7 @@ export default function SignInScreen() {
                     <SFIcon
                       name={passwordVisible ? "eye.slash" : "eye"}
                       size={16}
-                      color={lightPalette.text.secondary}
+                      color={palette.text.secondary}
                     />
                   </Pressable>
                 </View>
@@ -486,11 +489,11 @@ export default function SignInScreen() {
             ]}
           >
             {loading ? (
-              <ActivityIndicator color={lightPalette.primary.contrastText} />
+              <ActivityIndicator color={palette.primary.contrastText} />
             ) : (
               <>
                 <Text style={styles.primaryButtonText}>Sign in</Text>
-                <SFIcon name="arrow.right.circle" size={18} color={lightPalette.primary.contrastText} />
+                <SFIcon name="arrow.right.circle" size={18} color={palette.primary.contrastText} />
               </>
             )}
           </Pressable>
@@ -517,7 +520,7 @@ export default function SignInScreen() {
               ]}
             >
               {ssoLoadingProvider === "google" ? (
-                <ActivityIndicator color={lightPalette.primary.main} />
+                <ActivityIndicator color={palette.primary.main} />
               ) : (
                 <>
                   <Image
@@ -532,7 +535,7 @@ export default function SignInScreen() {
             {Platform.OS === "ios" ? (
               ssoLoadingProvider === "apple" ? (
                 <View style={[styles.ssoButton, styles.ssoButtonDark, { justifyContent: "center" }]}>
-                  <ActivityIndicator color="#ffffff" />
+                  <ActivityIndicator color={palette.primary.contrastText} />
                 </View>
               ) : (
                 <AppleAuthentication.AppleAuthenticationButton
@@ -572,10 +575,10 @@ export default function SignInScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     flexGrow: 1,
@@ -588,30 +591,30 @@ const styles = StyleSheet.create({
   },
   title: {
     ...mobileTypography.screenTitle,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   subtitle: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   card: {
     marginHorizontal: mobileLayout.screenPadding,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: mobileLayout.cardPadding,
     gap: 16,
   },
   cardSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginHorizontal: -mobileLayout.cardPadding,
   },
   sectionLabel: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600",
     letterSpacing: 0.4,
     textTransform: "uppercase",
@@ -627,12 +630,12 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
   fieldHint: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   inputShell: {
     minHeight: 48,
@@ -641,8 +644,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     overflow: "hidden",
   },
   inputPrefix: {
@@ -654,7 +657,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minHeight: 48,
     fontSize: 16,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     paddingVertical: 12,
     paddingRight: 12,
   },
@@ -664,7 +667,7 @@ const styles = StyleSheet.create({
   },
   domainSuffixText: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600",
   },
   trailingAction: {
@@ -688,19 +691,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 10,
     paddingHorizontal: 14,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   ssoButtonPressed: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   ssoButtonDark: {
-    backgroundColor: "#111827",
-    borderColor: "#111827",
+    backgroundColor: t.primary.main,
+    borderColor: t.primary.main,
   },
   ssoButtonDarkPressed: {
-    backgroundColor: "#030712",
+    backgroundColor: t.primary.dark,
   },
   appleButton: {
     height: 48,
@@ -708,12 +711,12 @@ const styles = StyleSheet.create({
   },
   ssoButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
   ssoButtonTextLight: {
     ...mobileTypography.listPrimary,
-    color: "#ffffff",
+    color: t.primary.contrastText,
     fontWeight: "600",
   },
   googleLogo: {
@@ -729,11 +732,11 @@ const styles = StyleSheet.create({
   dividerLine: {
     flex: 1,
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
   },
   dividerText: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.8,
   },
@@ -741,18 +744,18 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
   },
   primaryButtonPressed: {
-    backgroundColor: lightPalette.primary.dark,
+    backgroundColor: t.primary.dark,
   },
   primaryButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: "700",
   },
   disabledButton: {
@@ -760,17 +763,17 @@ const styles = StyleSheet.create({
   },
   inlineLink: {
     ...mobileTypography.caption,
-    color: lightPalette.info.main,
+    color: t.info.main,
     fontWeight: "600",
   },
   supportText: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     lineHeight: 18,
   },
   errorText: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
     lineHeight: 18,
   },
   footerActions: {
@@ -782,18 +785,18 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   secondaryButtonPressed: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   secondaryButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
-});
+}));

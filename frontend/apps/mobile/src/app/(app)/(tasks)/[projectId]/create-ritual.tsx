@@ -17,7 +17,6 @@ import {
   ActivityIndicator,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -38,18 +37,22 @@ import {
 import { AssigneePicker } from "@/components/rituals/assignee-picker";
 import { getDeviceTimezone } from "@/lib/device-timezone";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
+  statusColors,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /** The product default, and the web editor's own initial state. Not collected on mobile. */
 const COMPLETION_WINDOW_HOURS = 24;
 
 export default function CreateRitualScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { projectId: rawProjectId } = useLocalSearchParams<{ projectId?: string | string[] }>();
   const projectId = Array.isArray(rawProjectId) ? rawProjectId[0] : rawProjectId;
   const router = useRouter();
@@ -198,7 +201,7 @@ export default function CreateRitualScreen() {
           style={styles.input}
           autoFocus
           placeholder="Opening checklist"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           value={name}
           onChangeText={setName}
         />
@@ -211,7 +214,7 @@ export default function CreateRitualScreen() {
           testID="ritual-description-input"
           style={[styles.input, styles.multiline]}
           placeholder="What this run is for"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           multiline
           numberOfLines={3}
           value={description}
@@ -256,7 +259,7 @@ export default function CreateRitualScreen() {
         style={[styles.submit, (!name.trim() || mutation.isPending) && styles.submitDisabled]}
       >
         {mutation.isPending ? (
-          <ActivityIndicator color={lightPalette.primary.contrastText} />
+          <ActivityIndicator color={palette.primary.contrastText} />
         ) : (
           <Text style={styles.submitLabel}>Create ritual</Text>
         )}
@@ -265,7 +268,7 @@ export default function CreateRitualScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   content: {
     padding: mobileLayout.screenPadding,
     gap: spacing[2.5],
@@ -275,7 +278,7 @@ const styles = StyleSheet.create({
   },
   cancel: {
     ...mobileTypography.button,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     // Android's native header packs headerLeft flush against the title; without this the
     // two run together as "CancelNew Project" at 360dp.
     paddingRight: spacing[1.5],
@@ -285,15 +288,15 @@ const styles = StyleSheet.create({
   },
   label: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   input: {
     minHeight: touch.comfortable,
     paddingHorizontal: spacing[1.5],
     borderRadius: radius.base,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
-    color: lightPalette.text.primary,
+    borderColor: t.divider,
+    color: t.text.primary,
     fontSize: 16,
   },
   multiline: {
@@ -303,35 +306,35 @@ const styles = StyleSheet.create({
   },
   timezone: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   banner: {
     padding: spacing[1.5],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.error.light,
-    backgroundColor: "#fef2f2",
+    borderColor: t.error.light,
+    backgroundColor: statusColors.error[t.mode].bg,
   },
   bannerText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.dark,
+    color: t.error.dark,
   },
   error: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   submit: {
     minHeight: touch.large,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.md,
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
   },
   submitDisabled: {
-    backgroundColor: lightPalette.text.disabled,
+    backgroundColor: t.text.disabled,
   },
   submitLabel: {
     ...mobileTypography.button,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
-});
+}));

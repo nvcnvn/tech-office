@@ -1,8 +1,9 @@
 import React from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
-import { border, lightPalette, mobileLayout, mobileTypography, radius, spacing } from '@tech-office/theme-tokens';
+import { border, mobileLayout, mobileTypography, radius, spacing } from '@tech-office/theme-tokens';
+import { makeStyles } from "@/lib/theme";
 
 type LinkStatus = 'access_denied' | 'not_found' | 'fallback';
 
@@ -30,6 +31,8 @@ function describeStatus(status: LinkStatus) {
 }
 
 export default function LinkStatusScreen() {
+  const styles = useStyles();
+
 	const router = useRouter();
 	const params = useLocalSearchParams<{ status?: string; fallback?: string; browserUrl?: string }>();
 	const status = (typeof params.status === 'string' ? params.status : 'fallback') as LinkStatus;
@@ -63,56 +66,56 @@ export default function LinkStatusScreen() {
 	);
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
 	screen: {
 		flex: 1,
-		backgroundColor: lightPalette.background.default,
+		backgroundColor: t.background.default,
 		paddingHorizontal: mobileLayout.screenPadding,
 		paddingVertical: spacing[3],
 		justifyContent: 'center',
 	},
 	card: {
-		backgroundColor: lightPalette.background.paper,
+		backgroundColor: t.background.paper,
 		borderRadius: radius.xl,
 		padding: mobileLayout.cardPadding,
 		borderWidth: border.hairline,
-		borderColor: lightPalette.divider,
+		borderColor: t.divider,
 		gap: 16,
 	},
 	title: {
 		fontSize: mobileTypography.screenTitle.fontSize,
 		fontWeight: mobileTypography.screenTitle.fontWeight,
 		lineHeight: mobileTypography.screenTitle.lineHeight,
-		color: lightPalette.text.primary,
+		color: t.text.primary,
 	},
 	description: {
 		fontSize: mobileTypography.listSecondary.fontSize,
 		lineHeight: mobileTypography.listSecondary.lineHeight,
-		color: lightPalette.text.secondary,
+		color: t.text.secondary,
 	},
 	primaryButton: {
 		borderRadius: radius.lg,
 		paddingVertical: 14,
 		alignItems: 'center',
-		backgroundColor: lightPalette.primary.main,
+		backgroundColor: t.primary.main,
 	},
 	primaryButtonText: {
 		fontSize: mobileTypography.button.fontSize,
 		fontWeight: '700',
 		lineHeight: mobileTypography.button.lineHeight,
-		color: lightPalette.primary.contrastText,
+		color: t.primary.contrastText,
 	},
 	secondaryButton: {
 		borderRadius: radius.lg,
 		paddingVertical: 14,
 		alignItems: 'center',
 		borderWidth: border.hairline,
-		borderColor: lightPalette.divider,
+		borderColor: t.divider,
 	},
 	secondaryButtonText: {
 		fontSize: mobileTypography.button.fontSize,
 		fontWeight: '600',
 		lineHeight: mobileTypography.button.lineHeight,
-		color: lightPalette.text.primary,
+		color: t.text.primary,
 	},
-});
+}));

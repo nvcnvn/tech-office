@@ -1,17 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Linking, Pressable, Text, View } from "react-native";
 import { getCallRecord, getDownloadUrl, listCallRecords, type GetCallRecordResponse } from "apis";
 import { voice } from "rpc";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
 import { VoiceMessagePlayer } from "./voice-message-player";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 type VoiceCallRecordData = NonNullable<GetCallRecordResponse["record"]>;
 type VoiceCallArtifact = VoiceCallRecordData["artifacts"][number];
@@ -201,6 +202,9 @@ export function VoiceCallRecord({
   outcomeHint,
   maxWidth = 320,
 }: VoiceCallRecordProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const [record, setRecord] = useState<VoiceCallRecordData | null>(null);
   const shouldLoadRecord = Boolean(outcomeHint && (callId || channelId));
   const [loading, setLoading] = useState(shouldLoadRecord);
@@ -291,7 +295,7 @@ export function VoiceCallRecord({
     <View testID="voice-call-record" style={[styles.card, { maxWidth }]}> 
       <View style={styles.headerRow}>
         <View style={styles.iconWrap}>
-          <SFIcon name="phone.fill" size={16} color={lightPalette.primary.main} />
+          <SFIcon name="phone.fill" size={16} color={palette.primary.main} />
         </View>
         <View style={styles.headerText}>
           <Text style={styles.title} numberOfLines={1}>
@@ -321,7 +325,7 @@ export function VoiceCallRecord({
               accessibilityRole="button"
               accessibilityLabel="Open voice transcript"
             >
-              <SFIcon name="doc.text" size={14} color={lightPalette.primary.main} />
+              <SFIcon name="doc.text" size={14} color={palette.primary.main} />
               <Text style={styles.transcriptLinkText}>Transcript</Text>
             </Pressable>
           ) : null}
@@ -334,7 +338,7 @@ export function VoiceCallRecord({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   card: {
     alignSelf: "center",
     width: "100%",
@@ -342,8 +346,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: radius.lg,
     borderWidth: border.thin,
-    borderColor: "#dbeafe",
-    backgroundColor: "#f8fbff",
+    borderColor: statusColors.info[t.mode].border,
+    backgroundColor: statusColors.info[t.mode].bg,
     gap: spacing[2],
   },
   headerRow: {
@@ -357,19 +361,19 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   headerText: {
     flex: 1,
     minWidth: 0,
   },
   title: {
-    color: "#1e3a8a",
+    color: t.info.dark,
     fontSize: mobileTypography.listSecondary.fontSize,
     fontWeight: "700",
   },
   subtitle: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize,
   },
   metaRow: {
@@ -384,10 +388,10 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#e0f2fe",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   statusPillText: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize,
     fontWeight: "600",
   },
@@ -399,14 +403,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: spacing[1],
-    backgroundColor: "#dbeafe",
+    backgroundColor: t.info.light,
   },
   transcriptLinkText: {
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontSize: mobileTypography.caption.fontSize,
     fontWeight: "700",
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

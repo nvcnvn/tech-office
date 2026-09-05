@@ -1,8 +1,11 @@
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { useLocalSearchParams, usePathname } from "expo-router";
+import { makeStyles } from "@/lib/theme";
 
 export default function SharedProbeRoute() {
+  const styles = useStyles();
+
   const pathname = usePathname();
   const { id } = useLocalSearchParams<{ id?: string }>();
 
@@ -19,25 +22,25 @@ export default function SharedProbeRoute() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     gap: 12,
-    backgroundColor: "#f8fafc",
+    backgroundColor: t.background.default,
     padding: 24,
   },
   title: {
     fontSize: 18,
     lineHeight: 24,
     fontWeight: "700",
-    color: "#111827",
+    color: t.text.primary,
   },
   value: {
     fontSize: 14,
     lineHeight: 20,
-    color: "#374151",
+    color: t.text.secondary,
     textAlign: "center",
   },
-});
+}));

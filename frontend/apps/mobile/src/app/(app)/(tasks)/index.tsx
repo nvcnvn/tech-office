@@ -41,14 +41,15 @@ import { withNavigationContext } from "@/lib/mobile-navigation";
 import { notificationStreamBehavior } from "@/lib/notification-stream-behavior";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
   statusColors,
+  type MobilePalette,
   tabIcons,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 type TaskMode = "focus" | "projects";
 type FocusFilter = "all" | "standard" | "ritual";
@@ -544,7 +545,7 @@ function triggerSelectionHaptic() {
   void Haptics.selectionAsync();
 }
 
-function getCardColors(tone: CardTone): {
+function getCardColors(t: MobilePalette, tone: CardTone): {
   backgroundColor: string;
   borderColor: string;
   iconBackgroundColor: string;
@@ -553,56 +554,60 @@ function getCardColors(tone: CardTone): {
   pillTextColor: string;
   accentColor: string;
 } {
+  // `statusColors` already carries both modes; it was being read at `.light`
+  // unconditionally, which is the same bug as the rest of this sweep. The `18`
+  // and `16` suffixes are alpha bytes on an eight-digit hex, so they stay: the
+  // wash is a fraction of whichever accent the mode supplies, not a fixed colour.
   switch (tone) {
     case "danger":
       return {
-        backgroundColor: statusColors.error.light.bg,
-        borderColor: statusColors.error.light.border,
-        iconBackgroundColor: `${lightPalette.error.main}18`,
-        iconColor: lightPalette.error.main,
-        pillBackgroundColor: `${lightPalette.error.main}18`,
-        pillTextColor: statusColors.error.light.text,
-        accentColor: lightPalette.error.main,
+        backgroundColor: statusColors.error[t.mode].bg,
+        borderColor: statusColors.error[t.mode].border,
+        iconBackgroundColor: `${t.error.main}18`,
+        iconColor: t.error.main,
+        pillBackgroundColor: `${t.error.main}18`,
+        pillTextColor: statusColors.error[t.mode].text,
+        accentColor: t.error.main,
       };
     case "warning":
       return {
-        backgroundColor: statusColors.warning.light.bg,
-        borderColor: statusColors.warning.light.border,
-        iconBackgroundColor: `${lightPalette.warning.main}18`,
-        iconColor: lightPalette.warning.dark,
-        pillBackgroundColor: `${lightPalette.warning.main}18`,
-        pillTextColor: statusColors.warning.light.text,
-        accentColor: lightPalette.warning.main,
+        backgroundColor: statusColors.warning[t.mode].bg,
+        borderColor: statusColors.warning[t.mode].border,
+        iconBackgroundColor: `${t.warning.main}18`,
+        iconColor: t.mode === "dark" ? t.warning.main : t.warning.dark,
+        pillBackgroundColor: `${t.warning.main}18`,
+        pillTextColor: statusColors.warning[t.mode].text,
+        accentColor: t.warning.main,
       };
     case "success":
       return {
-        backgroundColor: statusColors.success.light.bg,
-        borderColor: statusColors.success.light.border,
-        iconBackgroundColor: `${lightPalette.success.main}18`,
-        iconColor: lightPalette.success.dark,
-        pillBackgroundColor: `${lightPalette.success.main}18`,
-        pillTextColor: statusColors.success.light.text,
-        accentColor: lightPalette.success.main,
+        backgroundColor: statusColors.success[t.mode].bg,
+        borderColor: statusColors.success[t.mode].border,
+        iconBackgroundColor: `${t.success.main}18`,
+        iconColor: t.mode === "dark" ? t.success.main : t.success.dark,
+        pillBackgroundColor: `${t.success.main}18`,
+        pillTextColor: statusColors.success[t.mode].text,
+        accentColor: t.success.main,
       };
     case "info":
       return {
-        backgroundColor: `${lightPalette.info.main}0d`,
-        borderColor: `${lightPalette.info.main}24`,
-        iconBackgroundColor: `${lightPalette.info.main}16`,
-        iconColor: lightPalette.info.dark,
-        pillBackgroundColor: `${lightPalette.info.main}16`,
-        pillTextColor: lightPalette.info.dark,
-        accentColor: lightPalette.info.main,
+        backgroundColor: `${t.info.main}0d`,
+        borderColor: `${t.info.main}24`,
+        iconBackgroundColor: `${t.info.main}16`,
+        iconColor: t.mode === "dark" ? t.info.main : t.info.dark,
+        pillBackgroundColor: `${t.info.main}16`,
+        pillTextColor: statusColors.info[t.mode].text,
+        accentColor: t.info.main,
       };
     default:
       return {
-        backgroundColor: lightPalette.background.paper,
-        borderColor: lightPalette.divider,
-        iconBackgroundColor: "#eef2f6",
-        iconColor: lightPalette.text.secondary,
-        pillBackgroundColor: "#eef2f6",
-        pillTextColor: lightPalette.text.secondary,
-        accentColor: lightPalette.text.secondary,
+        backgroundColor: t.background.paper,
+        borderColor: t.divider,
+        iconBackgroundColor: t.notificationDomain.system.bg,
+        iconColor: t.text.secondary,
+        pillBackgroundColor: t.notificationDomain.system.bg,
+        pillTextColor: t.text.secondary,
+        accentColor: t.text.secondary,
       };
   }
 }
@@ -615,7 +620,11 @@ function getCardColors(tone: CardTone): {
  * they had to decode. The tab now opens straight into their own work, and the
  * project-first drilldown stays one tap away for whoever runs the projects.
  */
-function taskModeHeaderAction(mode: TaskMode, onChange: (value: TaskMode) => void) {
+function taskModeHeaderAction(
+  t: MobilePalette,
+  mode: TaskMode,
+  onChange: (value: TaskMode) => void
+) {
   const goingToProjects = mode === "focus";
   return {
     key: "task-mode",
@@ -626,7 +635,7 @@ function taskModeHeaderAction(mode: TaskMode, onChange: (value: TaskMode) => voi
       <SFIcon
         name={goingToProjects ? "folder" : "checkmark.square.fill"}
         size={22}
-        color={lightPalette.primary.main}
+        color={t.primary.main}
       />
     ),
   };
@@ -639,6 +648,8 @@ function FocusFilterRow({
   value: FocusFilter;
   onChange: (filter: FocusFilter) => void;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.focusFilterRow}>
       {([
@@ -683,6 +694,9 @@ function TasksOverviewCard({
   secondaryCount: number;
   secondaryLabel: string;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Card style={styles.summaryCard}>
       <View style={styles.summaryRow}>
@@ -690,7 +704,7 @@ function TasksOverviewCard({
           <SFIcon
             name={mode === "focus" ? "checkmark.square.fill" : "folder.fill"}
             size={18}
-            color={lightPalette.primary.main}
+            color={palette.primary.main}
           />
         </View>
         <View style={styles.summaryCopy}>
@@ -734,6 +748,9 @@ function TasksOverviewCard({
  * showing an empty queue to everyone would be noise on every employee's home screen.
  */
 function ReviewQueueEntryCard() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { data } = useQuery({
     queryKey: reviewQueueCountQueryKey,
     queryFn: async () => await getEvidenceReviewQueueCount(),
@@ -758,7 +775,7 @@ function ReviewQueueEntryCard() {
           <SFIcon
             name={hasPending ? "checkmark.circle.fill" : "checkmark.circle"}
             size={18}
-            color={hasPending ? statusColors.warning.light.text : lightPalette.text.secondary}
+            color={hasPending ? statusColors.warning[palette.mode].text : palette.text.secondary}
           />
         </View>
         <View style={styles.reviewEntryCopy}>
@@ -774,13 +791,15 @@ function ReviewQueueEntryCard() {
             <Text style={styles.reviewEntryBadgeText}>{countLabel}</Text>
           </View>
         ) : null}
-        <SFIcon name="chevron.right" size={14} color={lightPalette.text.disabled} />
+        <SFIcon name="chevron.right" size={14} color={palette.text.disabled} />
       </Pressable>
     </Link>
   );
 }
 
 function ProjectRow({ item }: { item: ProjectOverviewItem }) {
+  const styles = useStyles();
+
   const memberLabel = item.project.memberCount === 1 ? "1 member" : `${item.project.memberCount} members`;
   const openTaskLabel = item.openCount === 1 ? "1 open task" : `${item.openCount} open tasks`;
   const todayLabel = item.todayCount === 1 ? "1 due today" : `${item.todayCount} due today`;
@@ -847,9 +866,12 @@ function ProjectRow({ item }: { item: ProjectOverviewItem }) {
 }
 
 function FocusTaskRow({ item, today }: { item: FocusTaskItem; today: Date }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const stateLabel = item.state?.name ?? "Open";
   const cardTone = getTaskTone(item, today, addDays(today, 7));
-  const colors = getCardColors(cardTone);
+  const colors = getCardColors(palette, cardTone);
   const iconName = item.task.taskKind === "ritual_instance" ? "repeat.circle.fill" : "checklist";
   const timingLabel = getStandardTaskTimingLabel(item, today, addDays(today, 7));
   const actionLabel = item.task.taskKind === "ritual_instance"
@@ -903,10 +925,13 @@ function FocusTaskRow({ item, today }: { item: FocusTaskItem; today: Date }) {
 }
 
 function RitualFocusRow({ item }: { item: RitualFocusItem }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const href = item.activeTask
     ? buildRitualTaskHref(item.project.id, item.activeTask.task)
     : `/(app)/(tasks)/${item.project.id}`;
-  const colors = getCardColors(item.statusTone);
+  const colors = getCardColors(palette, item.statusTone);
   const actionLabel = item.activeTask ? getRitualOpenActionLabel(item.activeTask.task) : "Open run";
 
   return (
@@ -938,7 +963,7 @@ function RitualFocusRow({ item }: { item: RitualFocusItem }) {
             {item.evidenceLabel ? (
               <>
                 <View style={styles.metaDot} />
-                <SFIcon name="checklist" size={10} color={lightPalette.text.secondary} />
+                <SFIcon name="checklist" size={10} color={palette.text.secondary} />
                 <Text style={styles.taskMetaText}>{item.evidenceLabel}</Text>
               </>
             ) : null}
@@ -960,6 +985,9 @@ function RitualFocusRow({ item }: { item: RitualFocusItem }) {
 }
 
 export default function TasksScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const auth = React.use(AuthContext);
   const hasLoadedRef = useRef(false);
   const queryClient = useQueryClient();
@@ -1340,7 +1368,7 @@ export default function TasksScreen() {
       <>
         <Stack.Screen options={createTopLevelTabHeader(
           mode === "focus" ? tabIcons.tasks.label : "Projects",
-          [taskModeHeaderAction(mode, setMode)],
+          [taskModeHeaderAction(palette, mode, setMode)],
         )} />
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
@@ -1375,7 +1403,7 @@ export default function TasksScreen() {
       <>
         <Stack.Screen options={createTopLevelTabHeader(
           "Projects",
-          [taskModeHeaderAction(mode, setMode)],
+          [taskModeHeaderAction(palette, mode, setMode)],
         )} />
         <ScrollView
           contentInsetAdjustmentBehavior="automatic"
@@ -1402,7 +1430,7 @@ export default function TasksScreen() {
               onPress={() => router.push("/(app)/(tasks)/create-project")}
               style={styles.createProjectButton}
             >
-              <SFIcon name="plus" size={18} color={lightPalette.primary.main} />
+              <SFIcon name="plus" size={18} color={palette.primary.main} />
               <Text style={styles.createProjectLabel}>New project</Text>
             </Pressable>
           ) : null}
@@ -1443,7 +1471,7 @@ export default function TasksScreen() {
     <>
       <Stack.Screen options={createTopLevelTabHeader(
         tabIcons.tasks.label,
-        [taskModeHeaderAction(mode, setMode)],
+        [taskModeHeaderAction(palette, mode, setMode)],
       )} />
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
@@ -1501,7 +1529,7 @@ export default function TasksScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   createProjectButton: {
     flexDirection: "row",
     alignItems: "center",
@@ -1513,13 +1541,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   createProjectLabel: {
     fontSize: mobileTypography.button.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   reviewEntryCard: {
     flexDirection: "row",
@@ -1532,8 +1560,8 @@ const styles = StyleSheet.create({
     borderRadius: taskScreenLayout.cardRadius,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   reviewEntryIconWrap: {
     width: 36,
@@ -1541,7 +1569,7 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   reviewEntryCopy: {
     flex: 1,
@@ -1550,11 +1578,11 @@ const styles = StyleSheet.create({
   reviewEntryTitle: {
     ...mobileTypography.listPrimary,
     fontWeight: "600",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   reviewEntrySubtitle: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   reviewEntryBadge: {
     minWidth: 28,
@@ -1564,17 +1592,17 @@ const styles = StyleSheet.create({
     borderCurve: "continuous",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: statusColors.warning.light.bg,
+    backgroundColor: statusColors.warning[t.mode].bg,
     borderWidth: border.thin,
-    borderColor: statusColors.warning.light.border,
+    borderColor: statusColors.warning[t.mode].border,
   },
   reviewEntryBadgeText: {
     ...mobileTypography.badge,
-    color: statusColors.warning.light.text,
+    color: statusColors.warning[t.mode].text,
   },
   container: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   loadingScrollContent: {
     flexGrow: 1,
@@ -1598,7 +1626,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef5fc",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   summaryCopy: {
     flex: 1,
@@ -1608,12 +1636,12 @@ const styles = StyleSheet.create({
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     lineHeight: mobileTypography.sectionHeader.lineHeight as number,
     fontWeight: mobileTypography.sectionHeader.fontWeight as "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   summarySubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: mobileTypography.listSecondary.lineHeight as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   summaryStatsRow: {
     flexDirection: "row",
@@ -1622,7 +1650,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[1.5],
     paddingTop: spacing[1.5],
     borderTopWidth: border.hairline,
-    borderTopColor: lightPalette.divider,
+    borderTopColor: t.divider,
   },
   summaryStatBlock: {
     flex: 1,
@@ -1631,17 +1659,17 @@ const styles = StyleSheet.create({
   summaryStatValue: {
     fontSize: 20,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontVariant: ["tabular-nums"],
   },
   summaryStatLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   summaryStatDivider: {
     width: border.hairline,
     alignSelf: "stretch",
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
   },
   focusFilterRow: {
     flexDirection: "row",
@@ -1653,21 +1681,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 9,
     borderRadius: taskScreenLayout.controlRadius,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   filterChipActive: {
-    backgroundColor: lightPalette.primary.main,
-    borderColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
+    borderColor: t.primary.main,
   },
   filterChipText: {
     fontSize: mobileTypography.buttonSm.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   filterChipTextActive: {
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   sectionBlock: {
     paddingTop: taskScreenLayout.sectionGap,
@@ -1682,39 +1710,39 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   sectionSubtitle: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginTop: 2,
   },
   sectionCount: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600" as const,
   },
   sectionCard: {
     marginHorizontal: mobileLayout.screenPadding,
     borderRadius: taskScreenLayout.cardRadius,
     overflow: "hidden",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   cardSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginHorizontal: mobileLayout.cardPadding,
   },
   taskRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   taskRowPressed: {
     opacity: 1,
-    backgroundColor: "#f7fafc",
+    backgroundColor: t.background.default,
   },
   taskContentWrap: {
     flex: 1,
@@ -1736,7 +1764,7 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     flex: 1,
   },
   timingText: {
@@ -1752,7 +1780,7 @@ const styles = StyleSheet.create({
   },
   taskMetaText: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   taskMetaStrong: {
     fontWeight: "600" as const,
@@ -1771,7 +1799,7 @@ const styles = StyleSheet.create({
     width: 3,
     height: 3,
     borderRadius: 999,
-    backgroundColor: lightPalette.text.disabled,
+    backgroundColor: t.text.disabled,
   },
   statusDot: {
     width: 6,
@@ -1793,10 +1821,10 @@ const styles = StyleSheet.create({
   projectRow: {
     flexDirection: "row",
     alignItems: "stretch",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   projectRowPressed: {
-    backgroundColor: "#f7fafc",
+    backgroundColor: t.background.default,
   },
   projectRowBody: {
     flex: 1,
@@ -1812,13 +1840,13 @@ const styles = StyleSheet.create({
   projectName: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     flex: 1,
   },
   projectKey: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontVariant: ["tabular-nums"],
   },
   projectMetaRow: {
@@ -1829,14 +1857,14 @@ const styles = StyleSheet.create({
   },
   projectMetric: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontWeight: "600" as const,
   },
   projectMetricActive: {
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   projectMetricDanger: {
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   center: {
     flex: 1,
@@ -1847,9 +1875,9 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.error.main,
+    color: t.error.main,
     textAlign: "center",
   },
   retryBtn: {
   },
-});
+}));

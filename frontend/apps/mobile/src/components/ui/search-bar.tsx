@@ -19,13 +19,13 @@ import {
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface SearchBarProps {
   value: string;
@@ -49,19 +49,22 @@ export function SearchBar({
   autoFocus = true,
   returnKeyType = "search",
 }: SearchBarProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.searchBar}>
       <View style={styles.inputRow}>
         <SFIcon
           name="magnifyingglass"
           size={18}
-          color={lightPalette.text.secondary}
+          color={palette.text.secondary}
         />
         <TextInput
           testID={inputTestID}
           style={styles.input}
           placeholder={placeholder}
-          placeholderTextColor={lightPalette.text.secondary}
+          placeholderTextColor={palette.text.secondary}
           value={value}
           onChangeText={onChangeText}
           autoFocus={autoFocus}
@@ -87,6 +90,8 @@ export function SearchBar({
 }
 
 export function SearchSectionHeader({ title }: { title: string }) {
+  const styles = useStyles();
+
   return (
     <View style={styles.listHeader}>
       <Text style={styles.listHeaderText}>{title}</Text>
@@ -96,6 +101,8 @@ export function SearchSectionHeader({ title }: { title: string }) {
 
 /** Grouped card with hairline separators, like the rest of the app's lists. */
 export function SearchResultsCard({ children }: { children: React.ReactNode }) {
+  const styles = useStyles();
+
   const rows = React.Children.toArray(children).filter(Boolean);
   return (
     <View style={styles.resultsCard}>
@@ -131,6 +138,8 @@ export function SearchResultRow({
   disabled,
   testID,
 }: SearchResultRowProps) {
+  const styles = useStyles();
+
   return (
     <Pressable
       testID={testID}
@@ -171,6 +180,8 @@ export function SearchIconCircle({
   sfSymbol: string;
   tint: string;
 }) {
+  const styles = useStyles();
+
   return (
     <View style={[styles.iconCircle, { backgroundColor: `${tint}15` }]}>
       <SFIcon name={sfSymbol} size={20} color={tint} />
@@ -178,10 +189,11 @@ export function SearchIconCircle({
   );
 }
 
-export const searchLayout = StyleSheet.create({
+/** Shared by the two search screens, which paint the same empty and error states. */
+export const useSearchLayout = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   emptyContainer: {
     flex: 1,
@@ -192,12 +204,12 @@ export const searchLayout = StyleSheet.create({
   },
   emptyText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
   },
-});
+}));
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
@@ -205,14 +217,14 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: mobileLayout.iconTextGap,
     borderBottomWidth: border.hairline,
-    borderBottomColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderBottomColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   inputRow: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderRadius: radius.sm,
     paddingHorizontal: 12,
     gap: 8,
@@ -221,7 +233,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     padding: 0,
   },
   cancelBtn: {
@@ -230,7 +242,7 @@ const styles = StyleSheet.create({
   },
   cancelText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
     fontWeight: "500" as const,
   },
   listHeader: {
@@ -241,7 +253,7 @@ const styles = StyleSheet.create({
   listHeaderText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },
@@ -250,13 +262,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     overflow: "hidden",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   cardSeparator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginHorizontal: mobileLayout.cardPadding,
   },
   row: {
@@ -266,7 +278,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     minHeight: mobileLayout.compactRowHeight,
     gap: mobileLayout.iconTextGap,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
   },
   rowPressed: {
     opacity: opacity.pressed,
@@ -278,11 +290,11 @@ const styles = StyleSheet.create({
   rowTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: mobileTypography.listPrimary.fontWeight as "500",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   rowSubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   badge: {
     paddingHorizontal: 8,
@@ -300,4 +312,4 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-});
+}));

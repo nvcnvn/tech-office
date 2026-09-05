@@ -29,7 +29,6 @@ import type { ReviewQueueEntry } from "apis";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
@@ -37,6 +36,7 @@ import {
   spacing,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export function RejectReasonSheet({
   entry,
@@ -50,6 +50,9 @@ export function RejectReasonSheet({
   onCancel: () => void;
   onConfirm: (reason: string) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight();
   const [reason, setReason] = useState("");
@@ -94,7 +97,7 @@ export function RejectReasonSheet({
             <TextInput
               style={styles.input}
               placeholder="What was wrong with this evidence"
-              placeholderTextColor={lightPalette.text.disabled}
+              placeholderTextColor={palette.text.disabled}
               value={reason}
               onChangeText={setReason}
               multiline
@@ -114,7 +117,7 @@ export function RejectReasonSheet({
               testID="review-reject-confirm-button"
             >
               {submitting ? (
-                <ActivityIndicator size="small" color={lightPalette.error.contrastText} />
+                <ActivityIndicator size="small" color={palette.error.contrastText} />
               ) : (
                 <Text style={styles.confirmButtonText}>Reject submission</Text>
               )}
@@ -135,14 +138,14 @@ export function RejectReasonSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(15,23,42,0.35)",
+    backgroundColor: t.overlay.scrim,
   },
   sheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     borderCurve: "continuous",
@@ -155,7 +158,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: radius.sm,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginBottom: spacing[2],
   },
   body: {
@@ -163,23 +166,23 @@ const styles = StyleSheet.create({
   },
   title: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   subtitle: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   input: {
     minHeight: 96,
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     padding: spacing[1.5],
     textAlignVertical: "top",
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   confirmButton: {
     minHeight: touch.large,
@@ -187,11 +190,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.error.main,
+    backgroundColor: t.error.main,
   },
   confirmButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.error.contrastText,
+    color: t.error.contrastText,
   },
   cancelButton: {
     minHeight: touch.comfortable,
@@ -200,7 +203,7 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   pressed: {
     opacity: opacity.pressed,
@@ -208,4 +211,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

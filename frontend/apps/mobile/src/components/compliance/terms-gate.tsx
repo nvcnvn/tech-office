@@ -11,7 +11,7 @@
  */
 
 import React from "react";
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from "react-native";
 import { openBrowserAsync } from "expo-web-browser";
 import {
   PRIVACY_POLICY_PATH,
@@ -25,15 +25,19 @@ import { SFIcon } from "@/components/ui/sf-icon";
 import { buildWebUrl } from "@/lib/constants";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
   radius,
   spacing,
+  statusColors,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 export function TermsGate({ children }: { children: React.ReactNode }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const [needsAcceptance, setNeedsAcceptance] = React.useState<boolean | null>(null);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState("");
@@ -80,7 +84,7 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
     <View style={styles.screen} testID="terms-gate">
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.iconWrap}>
-          <SFIcon name="doc.text.fill" size={20} color={lightPalette.primary.main} />
+          <SFIcon name="doc.text.fill" size={20} color={palette.primary.main} />
         </View>
 
         <Text style={styles.title}>Before you carry on</Text>
@@ -94,9 +98,9 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
           style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
           testID="terms-gate-terms-link"
         >
-          <SFIcon name="doc.text" size={16} color={lightPalette.text.secondary} />
+          <SFIcon name="doc.text" size={16} color={palette.text.secondary} />
           <Text style={styles.linkLabel}>Terms of service</Text>
-          <SFIcon name="chevron.right" size={13} color={lightPalette.text.secondary} />
+          <SFIcon name="chevron.right" size={13} color={palette.text.secondary} />
         </Pressable>
 
         <Pressable
@@ -104,9 +108,9 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
           style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
           testID="terms-gate-privacy-link"
         >
-          <SFIcon name="lock.shield" size={16} color={lightPalette.text.secondary} />
+          <SFIcon name="lock.shield" size={16} color={palette.text.secondary} />
           <Text style={styles.linkLabel}>Privacy policy</Text>
-          <SFIcon name="chevron.right" size={13} color={lightPalette.text.secondary} />
+          <SFIcon name="chevron.right" size={13} color={palette.text.secondary} />
         </Pressable>
 
         {error ? (
@@ -122,7 +126,7 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
           testID="terms-gate-accept"
         >
           {submitting ? (
-            <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+            <ActivityIndicator size="small" color={palette.primary.contrastText} />
           ) : (
             <Text style={styles.primaryButtonText}>I agree</Text>
           )}
@@ -132,10 +136,10 @@ export function TermsGate({ children }: { children: React.ReactNode }) {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   content: {
     flexGrow: 1,
@@ -149,15 +153,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#eef5fc",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   title: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   body: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginBottom: spacing[1],
   },
   linkRow: {
@@ -169,17 +173,17 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.divider,
+    backgroundColor: t.background.paper,
   },
   linkLabel: {
     flex: 1,
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   error: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   primaryButton: {
     minHeight: 50,
@@ -187,15 +191,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     marginTop: spacing[2],
   },
   primaryButtonText: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
     fontWeight: "600",
   },
   pressed: {
     opacity: opacity.pressed,
   },
-});
+}));

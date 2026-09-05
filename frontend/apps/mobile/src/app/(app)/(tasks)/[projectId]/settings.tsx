@@ -14,20 +14,29 @@ import {
 } from "react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { statusColors } from "@tech-office/theme-tokens";
 import { getProject, updateProject, archiveProject, type UpdateProjectParams } from "apis";
 import { useResolvedProjectId } from "@/hooks/use-resolved-project-id";
+import { makeStyles, useTheme } from "@/lib/theme";
 
-const inputStyle = {
-  borderWidth: 1,
-  borderColor: "#ddd",
-  borderRadius: 10,
-  padding: 14,
-  fontSize: 16,
-  backgroundColor: "#fafafa",
-} as const;
+const useStyles = makeStyles((t) => ({
+  input: {
+    borderWidth: 1,
+    borderColor: t.divider,
+    borderRadius: 10,
+    padding: 14,
+    fontSize: 16,
+    backgroundColor: t.background.default,
+    // React Native's default text colour is black, so an input without this one
+    // takes typed text to black on a dark field.
+    color: t.text.primary,
+  },
+}));
 
 export default function ProjectSettingsScreen() {
   const { projectId: rawProjectId } = useLocalSearchParams<{ projectId?: string | string[] }>();
+  const styles = useStyles();
+  const { palette } = useTheme();
   const router = useRouter();
   const queryClient = useQueryClient();
   const { resolvedProjectId, isResolvingProjectId } = useResolvedProjectId(rawProjectId);
@@ -114,12 +123,12 @@ export default function ProjectSettingsScreen() {
 
       {/* General */}
       <View style={{ gap: 12 }}>
-        <Text style={{ fontSize: 12, fontWeight: "600", color: "#666" }}>
+        <Text style={{ fontSize: 12, fontWeight: "600", color: palette.text.secondary }}>
           GENERAL
         </Text>
         <View
           style={{
-            backgroundColor: "#f8f9fa",
+            backgroundColor: palette.background.default,
             borderRadius: 12,
             borderCurve: "continuous",
             padding: 16,
@@ -127,25 +136,27 @@ export default function ProjectSettingsScreen() {
           }}
         >
           <View style={{ gap: 4 }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
               Name
             </Text>
             <TextInput
-              style={inputStyle}
+              style={styles.input}
               value={name}
               onChangeText={setName}
               placeholder="Project name"
+              placeholderTextColor={palette.text.disabled}
             />
           </View>
           <View style={{ gap: 4 }}>
-            <Text style={{ fontSize: 13, fontWeight: "600", color: "#333" }}>
+            <Text style={{ fontSize: 13, fontWeight: "600", color: palette.text.primary }}>
               Description
             </Text>
             <TextInput
-              style={[inputStyle, { height: 80, textAlignVertical: "top" }]}
+              style={[styles.input, { height: 80, textAlignVertical: "top" }]}
               value={description}
               onChangeText={setDescription}
               placeholder="What is this project about?"
+              placeholderTextColor={palette.text.disabled}
               multiline
             />
           </View>
@@ -154,16 +165,26 @@ export default function ProjectSettingsScreen() {
             disabled={updateMutation.isPending || !name.trim()}
             style={({ pressed }) => ({
               backgroundColor:
-                !name.trim() ? "#ccc" : pressed ? "#020617" : "#0f172a",
+                !name.trim()
+                  ? palette.text.disabled
+                  : pressed
+                    ? palette.primary.dark
+                    : palette.primary.main,
               paddingVertical: 14,
               borderRadius: 10,
               alignItems: "center",
             })}
           >
             {updateMutation.isPending ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={palette.primary.contrastText} />
             ) : (
-              <Text style={{ color: "#fff", fontWeight: "600", fontSize: 15 }}>
+              <Text
+                style={{
+                  color: palette.primary.contrastText,
+                  fontWeight: "600",
+                  fontSize: 15,
+                }}
+              >
                 Save Changes
               </Text>
             )}
@@ -173,23 +194,25 @@ export default function ProjectSettingsScreen() {
 
       {/* Danger zone */}
       <View style={{ gap: 12 }}>
-        <Text style={{ fontSize: 12, fontWeight: "600", color: "#dc2626" }}>
+        <Text style={{ fontSize: 12, fontWeight: "600", color: palette.error.main }}>
           DANGER ZONE
         </Text>
         <Pressable
           onPress={handleArchive}
           disabled={archiveMutation.isPending}
           style={({ pressed }) => ({
-            backgroundColor: pressed ? "#ffebee" : "#fff",
+            backgroundColor: pressed
+              ? statusColors.error[palette.mode].bg
+              : palette.background.paper,
             borderRadius: 12,
             borderCurve: "continuous",
             padding: 16,
             borderWidth: 1,
-            borderColor: "#ef9a9a",
+            borderColor: palette.error.light,
             alignItems: "center",
           })}
         >
-          <Text style={{ color: "#dc2626", fontSize: 15, fontWeight: "600" }}>
+          <Text style={{ color: palette.error.main, fontSize: 15, fontWeight: "600" }}>
             Archive Project
           </Text>
         </Pressable>

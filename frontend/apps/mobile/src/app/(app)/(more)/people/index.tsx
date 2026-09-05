@@ -25,12 +25,12 @@ import { SkeletonList } from "@/components/ui/skeleton";
 import { useDirectoryList, useOpenPerson } from "@/hooks/use-directory";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const SEARCH_DEBOUNCE_MS = 250;
 
@@ -46,15 +46,18 @@ function PeopleSearchHeader({
   value: string;
   onChangeText: (next: string) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.searchWrap}>
       <View style={styles.searchRow}>
-        <SFIcon name="magnifyingglass" size={16} color={lightPalette.text.secondary} />
+        <SFIcon name="magnifyingglass" size={16} color={palette.text.secondary} />
         <TextInput
           testID="people-search-input"
           style={styles.searchInput}
           placeholder="Search people…"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           value={value}
           onChangeText={onChangeText}
           autoCapitalize="none"
@@ -68,6 +71,8 @@ function PeopleSearchHeader({
 }
 
 export default function PeopleDirectoryScreen() {
+  const styles = useStyles();
+
   const [query, setQuery] = React.useState("");
   const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const openPerson = useOpenPerson();
@@ -157,24 +162,24 @@ export default function PeopleDirectoryScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   list: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   searchWrap: {
     padding: mobileLayout.screenPadding,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   searchRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[1],
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     paddingHorizontal: spacing[1.5],
     // An explicit height, not minHeight: on iOS a bare TextInput contributes no
     // intrinsic height, and the whole row collapsed to nothing while still being
@@ -184,7 +189,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     padding: 0,
   },
   listContent: {
@@ -193,13 +198,13 @@ const styles = StyleSheet.create({
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginLeft: mobileLayout.cardPadding,
   },
   footer: {
     padding: mobileLayout.screenPadding,
     textAlign: "center",
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

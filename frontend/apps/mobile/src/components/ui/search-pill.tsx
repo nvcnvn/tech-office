@@ -6,16 +6,16 @@
  */
 
 import React from "react";
-import { Pressable, Text, StyleSheet } from "react-native";
+import { Pressable, Text } from "react-native";
 import { useRouter } from "expo-router";
 import { SFIcon } from "@/components/ui/sf-icon";
 import {
-  lightPalette,
   mobileLayout,
   touch,
   radius,
   searchIcons,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface SearchPillProps {
   placeholder?: string;
@@ -24,6 +24,9 @@ interface SearchPillProps {
 export function SearchPill({
   placeholder = "Search people, tasks, chats\u2026",
 }: SearchPillProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
 
   return (
@@ -40,7 +43,7 @@ export function SearchPill({
       <SFIcon
         name={searchIcons.searchPill.name}
         size={18}
-        color={lightPalette.text.secondary}
+        color={palette.text.secondary}
       />
       <Text style={styles.placeholder} numberOfLines={1}>
         {placeholder}
@@ -49,7 +52,7 @@ export function SearchPill({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   pill: {
     flexDirection: "row",
     alignItems: "center",
@@ -58,14 +61,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     height: touch.comfortable,
     paddingHorizontal: mobileLayout.screenPadding,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     gap: 10,
   },
   pillPressed: {
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
   },
   icon: {
     width: 18,
@@ -74,6 +77,6 @@ const styles = StyleSheet.create({
   placeholder: {
     flex: 1,
     fontSize: 16,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

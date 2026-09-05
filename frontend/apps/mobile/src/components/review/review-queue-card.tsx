@@ -25,7 +25,6 @@ import { SFIcon } from "@/components/ui/sf-icon";
 import { ProcedureSheet } from "@/components/rituals/procedure-sheet";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   opacity,
@@ -34,6 +33,7 @@ import {
   statusColors,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 const FILE_BACKED_TYPES = new Set(["photo", "voice_memo", "pdf", "file"]);
 
@@ -91,6 +91,9 @@ type EvidenceState = "idle" | "loading" | "ready" | "unavailable";
  * broken upload silently clear the queue, which is what FR-009 exists to prevent.
  */
 function ReviewEvidence({ entry }: { entry: ReviewQueueEntry }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { width } = useWindowDimensions();
   const [url, setUrl] = useState<string | undefined>();
   const [state, setState] = useState<EvidenceState>("idle");
@@ -148,7 +151,7 @@ function ReviewEvidence({ entry }: { entry: ReviewQueueEntry }) {
         style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
         testID="review-evidence-link"
       >
-        <SFIcon name="link" size={14} color={lightPalette.primary.main} />
+        <SFIcon name="link" size={14} color={palette.primary.main} />
         <Text numberOfLines={1} style={styles.secondaryButtonText}>
           {entry.linkUrl}
         </Text>
@@ -170,7 +173,7 @@ function ReviewEvidence({ entry }: { entry: ReviewQueueEntry }) {
   if (state === "loading") {
     return (
       <View style={styles.evidenceLoading} testID="review-evidence-loading">
-        <ActivityIndicator size="small" color={lightPalette.text.secondary} />
+        <ActivityIndicator size="small" color={palette.text.secondary} />
       </View>
     );
   }
@@ -178,7 +181,7 @@ function ReviewEvidence({ entry }: { entry: ReviewQueueEntry }) {
   if (state === "unavailable") {
     return (
       <View style={styles.evidenceUnavailable} testID="review-evidence-unavailable">
-        <SFIcon name="exclamationmark.triangle.fill" size={14} color={statusColors.warning.light.text} />
+        <SFIcon name="exclamationmark.triangle.fill" size={14} color={statusColors.warning[palette.mode].text} />
         <Text style={styles.evidenceUnavailableText}>
           Evidence unavailable — the uploaded file could not be opened. You can still decide.
         </Text>
@@ -226,7 +229,7 @@ function ReviewEvidence({ entry }: { entry: ReviewQueueEntry }) {
               style={({ pressed }) => [styles.fullscreenClose, pressed && styles.pressed]}
               testID="review-photo-fullscreen-close"
             >
-              <SFIcon name="xmark" size={16} color={lightPalette.primary.contrastText} />
+              <SFIcon name="xmark" size={16} color={palette.overlay.mediaText} />
             </Pressable>
           </View>
         </Modal>
@@ -241,7 +244,7 @@ function ReviewEvidence({ entry }: { entry: ReviewQueueEntry }) {
         style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
         testID="review-evidence-file"
       >
-        <SFIcon name="doc.text.fill" size={14} color={lightPalette.primary.main} />
+        <SFIcon name="doc.text.fill" size={14} color={palette.primary.main} />
         <Text style={styles.secondaryButtonText}>Open {fileKindLabel(entry.evidenceType)}</Text>
       </Pressable>
     );
@@ -262,6 +265,9 @@ export function ReviewQueueCard({
   onApprove: (entry: ReviewQueueEntry) => void;
   onReject: (entry: ReviewQueueEntry) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   // Feature 043. The sheet draws over this card rather than navigating, so the reviewer's
   // place in the queue and any rejection reason already typed into RejectReasonSheet are
   // untouched by reading the procedure (D5, FR-014).
@@ -274,7 +280,7 @@ export function ReviewQueueCard({
       <View style={styles.chipRow}>
         {isLate ? (
           <View style={styles.lateChip} testID={`review-queue-late-badge-${entry.evidenceSubmissionId}`}>
-            <SFIcon name="exclamationmark.circle.fill" size={12} color={statusColors.error.light.text} />
+            <SFIcon name="exclamationmark.circle.fill" size={12} color={statusColors.error[palette.mode].text} />
             <Text style={styles.lateChipText}>
               {entry.instanceStateCategory === "missed" ? "Missed" : "Overdue"}
             </Text>
@@ -316,7 +322,7 @@ export function ReviewQueueCard({
           style={({ pressed }) => [styles.procedureButton, pressed && styles.pressed]}
           testID="review-procedure-button"
         >
-          <SFIcon name="book" size={14} color={lightPalette.info.main} />
+          <SFIcon name="book" size={14} color={palette.info.main} />
           <Text style={styles.procedureButtonText}>Procedure</Text>
         </Pressable>
       ) : null}
@@ -340,7 +346,7 @@ export function ReviewQueueCard({
           ]}
           testID="review-approve-button"
         >
-          <SFIcon name="checkmark" size={16} color={lightPalette.success.contrastText} />
+          <SFIcon name="checkmark" size={16} color={palette.success.contrastText} />
           <Text style={styles.approveButtonText}>Approve</Text>
         </Pressable>
         <Pressable
@@ -353,7 +359,7 @@ export function ReviewQueueCard({
           ]}
           testID="review-reject-button"
         >
-          <SFIcon name="xmark" size={16} color={lightPalette.error.main} />
+          <SFIcon name="xmark" size={16} color={palette.error.main} />
           <Text style={styles.rejectButtonText}>Reject</Text>
         </Pressable>
       </View>
@@ -361,13 +367,13 @@ export function ReviewQueueCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   card: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: mobileLayout.cardPadding,
     gap: spacing[0.5],
   },
@@ -384,13 +390,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[0.5],
     borderRadius: radius.xl,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   chipText: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   lateChip: {
     flexDirection: "row",
@@ -400,34 +406,34 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[0.5],
     borderRadius: radius.xl,
     borderCurve: "continuous",
-    backgroundColor: statusColors.error.light.bg,
+    backgroundColor: statusColors.error[t.mode].bg,
     borderWidth: border.thin,
-    borderColor: statusColors.error.light.border,
+    borderColor: statusColors.error[t.mode].border,
   },
   lateChipText: {
     ...mobileTypography.caption,
     fontWeight: "600",
-    color: statusColors.error.light.text,
+    color: statusColors.error[t.mode].text,
   },
   title: {
     ...mobileTypography.listPrimary,
     fontWeight: "600",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   subtitle: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   meta: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   evidenceBlock: {
     marginTop: spacing[1],
   },
   evidenceText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   evidenceLoading: {
     height: touch.comfortable,
@@ -440,14 +446,14 @@ const styles = StyleSheet.create({
     padding: spacing[1],
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: statusColors.warning.light.bg,
+    backgroundColor: statusColors.warning[t.mode].bg,
     borderWidth: border.thin,
-    borderColor: statusColors.warning.light.border,
+    borderColor: statusColors.warning[t.mode].border,
   },
   evidenceUnavailableText: {
     flex: 1,
     ...mobileTypography.caption,
-    color: statusColors.warning.light.text,
+    color: statusColors.warning[t.mode].text,
   },
   photoWrap: {
     alignSelf: "flex-start",
@@ -457,7 +463,7 @@ const styles = StyleSheet.create({
   },
   fullscreenBackdrop: {
     flex: 1,
-    backgroundColor: "rgba(2,6,23,0.94)",
+    backgroundColor: t.overlay.mediaSurface,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -474,7 +480,7 @@ const styles = StyleSheet.create({
     borderRadius: mobileLayout.headerActionSize / 2,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(255,255,255,0.16)",
+    backgroundColor: t.overlay.mediaControl,
   },
   secondaryButton: {
     minHeight: touch.comfortable,
@@ -485,13 +491,13 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
   },
   secondaryButtonText: {
     flexShrink: 1,
     ...mobileTypography.buttonSm,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   procedureButton: {
     alignSelf: "flex-start",
@@ -506,7 +512,7 @@ const styles = StyleSheet.create({
   },
   procedureButtonText: {
     ...mobileTypography.buttonSm,
-    color: lightPalette.info.main,
+    color: t.info.main,
   },
   actions: {
     flexDirection: "row",
@@ -522,11 +528,11 @@ const styles = StyleSheet.create({
     gap: mobileLayout.itemGap,
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.success.main,
+    backgroundColor: t.success.main,
   },
   approveButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.success.contrastText,
+    color: t.success.contrastText,
   },
   rejectButton: {
     flex: 1,
@@ -538,12 +544,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.base,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.error.main,
-    backgroundColor: lightPalette.background.paper,
+    borderColor: t.error.main,
+    backgroundColor: t.background.paper,
   },
   rejectButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   pressed: {
     opacity: opacity.pressed,
@@ -551,4 +557,4 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: opacity.disabled,
   },
-});
+}));

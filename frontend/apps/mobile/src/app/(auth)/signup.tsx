@@ -18,7 +18,6 @@ import {
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
-  StyleSheet,
   Text,
   TextInput,
   View,
@@ -38,7 +37,6 @@ import {
 } from "apis";
 import {
   border,
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
@@ -56,6 +54,7 @@ import { beginOnboarding } from "@/lib/onboarding-progress";
 // One definition, shared with the web signup form and mirroring iam.MinPasswordLength.
 // Stated before submit, not discovered on rejection.
 import { PASSWORD_MIN_LENGTH } from "@tech-office/validations";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /** Split a person's full name the way the API wants it. */
 function splitName(fullName: string): { givenName: string; familyName: string } {
@@ -66,6 +65,9 @@ function splitName(fullName: string): { givenName: string; familyName: string } 
 }
 
 export default function SignUpScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const router = useRouter();
   const auth = React.use(AuthContext);
 
@@ -276,7 +278,7 @@ export default function SignUpScreen() {
                   <SFIcon
                     name="building.2"
                     size={16}
-                    color={lightPalette.text.secondary}
+                    color={palette.text.secondary}
                   />
                   <View style={styles.addressText}>
                     <Text style={styles.addressLabel}>Your team will sign in at</Text>
@@ -285,7 +287,7 @@ export default function SignUpScreen() {
                     </Text>
                   </View>
                   {checkingAddress ? (
-                    <ActivityIndicator size="small" color={lightPalette.text.secondary} />
+                    <ActivityIndicator size="small" color={palette.text.secondary} />
                   ) : (
                     <Pressable
                       onPress={() => {
@@ -401,7 +403,7 @@ export default function SignUpScreen() {
               <SFIcon
                 name="exclamationmark.circle.fill"
                 size={16}
-                color={lightPalette.error.main}
+                color={palette.error.main}
               />
               <Text style={styles.errorText} selectable>
                 {error}
@@ -420,7 +422,7 @@ export default function SignUpScreen() {
             testID="signup-submit"
           >
             {loading ? (
-              <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+              <ActivityIndicator size="small" color={palette.primary.contrastText} />
             ) : (
               <Text style={styles.primaryButtonText}>Create workspace</Text>
             )}
@@ -453,13 +455,16 @@ function Field({
   error?: string;
   testID: string;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <View style={styles.fieldGroup}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.inputShell}>
         <TextInput
           style={styles.input}
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           autoCorrect={false}
           testID={testID}
           {...inputProps}
@@ -475,13 +480,13 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   flex: {
     flex: 1,
   },
   screen: {
     flex: 1,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   scrollContent: {
     flexGrow: 1,
@@ -492,9 +497,9 @@ const styles = StyleSheet.create({
     marginHorizontal: mobileLayout.screenPadding,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     padding: mobileLayout.cardPadding,
     gap: 20,
   },
@@ -503,16 +508,16 @@ const styles = StyleSheet.create({
   },
   fieldLabel: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
   fieldHint: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   fieldError: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   inputShell: {
     minHeight: 48,
@@ -521,15 +526,15 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderCurve: "continuous",
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.default,
+    borderColor: t.divider,
+    backgroundColor: t.background.default,
     overflow: "hidden",
   },
   input: {
     flex: 1,
     minHeight: 48,
     fontSize: 16,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -539,7 +544,7 @@ const styles = StyleSheet.create({
     marginTop: -8,
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   addressRow: {
     flexDirection: "row",
@@ -553,16 +558,16 @@ const styles = StyleSheet.create({
   },
   addressLabel: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   addressValue: {
     ...mobileTypography.listPrimary,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     fontWeight: "600",
   },
   addressNote: {
     ...mobileTypography.caption,
-    color: lightPalette.warning.dark,
+    color: t.warning.dark,
   },
   suggestion: {
     minHeight: 44,
@@ -570,7 +575,7 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.info.main,
+    color: t.info.main,
     fontWeight: "600",
   },
   errorBanner: {
@@ -579,34 +584,34 @@ const styles = StyleSheet.create({
     gap: mobileLayout.itemGap,
     borderRadius: radius.base,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.error.light,
+    borderColor: t.error.light,
     padding: 12,
   },
   errorText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.dark,
+    color: t.error.dark,
     flex: 1,
   },
   primaryButton: {
     minHeight: 48,
     borderRadius: radius.md,
     borderCurve: "continuous",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: 16,
   },
   primaryButtonPressed: {
-    backgroundColor: lightPalette.primary.dark,
+    backgroundColor: t.primary.dark,
   },
   primaryButtonDisabled: {
     opacity: 0.7,
   },
   primaryButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   footerActions: {
     paddingHorizontal: mobileLayout.screenPadding,
@@ -621,7 +626,7 @@ const styles = StyleSheet.create({
   },
   linkText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.info.main,
+    color: t.info.main,
     fontWeight: "600",
   },
-});
+}));

@@ -15,7 +15,7 @@ import { useRouter } from "expo-router";
 import RenderHtml from "react-native-render-html";
 
 import { getTaskOrigin, type TaskOrigin } from "apis";
-import { lightPalette } from "@tech-office/theme-tokens";
+import { useTheme } from "@/lib/theme";
 
 interface TaskOriginBlockProps {
   taskId: string;
@@ -25,6 +25,8 @@ interface TaskOriginBlockProps {
 }
 
 export function TaskOriginBlock({ taskId, sourceMessageId, contentWidth }: TaskOriginBlockProps) {
+  const { palette } = useTheme();
+
   const router = useRouter();
   const [origin, setOrigin] = useState<TaskOrigin | null>(null);
 
@@ -60,8 +62,8 @@ export function TaskOriginBlock({ taskId, sourceMessageId, contentWidth }: TaskO
         padding: 14,
         borderRadius: 14,
         borderWidth: 1,
-        borderColor: "#e2e8f0",
-        backgroundColor: "#f8fafc",
+        borderColor: palette.divider,
+        backgroundColor: palette.background.default,
       }}
     >
       <Text
@@ -70,7 +72,7 @@ export function TaskOriginBlock({ taskId, sourceMessageId, contentWidth }: TaskO
           fontWeight: "700",
           letterSpacing: 0.8,
           textTransform: "uppercase",
-          color: lightPalette.text.secondary,
+          color: palette.text.secondary,
         }}
       >
         From a conversation
@@ -78,7 +80,7 @@ export function TaskOriginBlock({ taskId, sourceMessageId, contentWidth }: TaskO
 
       <Text
         testID="task-origin-channel"
-        style={{ marginTop: 4, fontSize: 14, fontWeight: "600", color: lightPalette.text.primary }}
+        style={{ marginTop: 4, fontSize: 14, fontWeight: "600", color: palette.text.primary }}
       >
         {origin.channelDisplayName || "a conversation"}
         {origin.authorDisplayName ? ` · ${origin.authorDisplayName}` : ""}
@@ -87,18 +89,18 @@ export function TaskOriginBlock({ taskId, sourceMessageId, contentWidth }: TaskO
       {origin.sourceMessageAvailable ? (
         <View
           testID="task-origin-excerpt"
-          style={{ marginTop: 8, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: "#e2e8f0" }}
+          style={{ marginTop: 8, paddingLeft: 10, borderLeftWidth: 3, borderLeftColor: palette.divider }}
         >
           <RenderHtml
             contentWidth={Math.max(contentWidth - 80, 120)}
             source={{ html: origin.excerptHtml }}
-            baseStyle={{ fontSize: 13, color: lightPalette.text.secondary, lineHeight: 19 }}
+            baseStyle={{ fontSize: 13, color: palette.text.secondary, lineHeight: 19 }}
           />
         </View>
       ) : (
         <Text
           testID="task-origin-message-unavailable"
-          style={{ marginTop: 8, fontSize: 13, fontStyle: "italic", color: lightPalette.text.secondary }}
+          style={{ marginTop: 8, fontSize: 13, fontStyle: "italic", color: palette.text.secondary }}
         >
           The original message has been deleted.
         </Text>
@@ -117,7 +119,7 @@ export function TaskOriginBlock({ taskId, sourceMessageId, contentWidth }: TaskO
         }
         style={({ pressed }) => ({ marginTop: 12, opacity: pressed ? 0.6 : 1 })}
       >
-        <Text style={{ fontSize: 14, fontWeight: "600", color: lightPalette.primary.main }}>
+        <Text style={{ fontSize: 14, fontWeight: "600", color: palette.primary.main }}>
           Open the conversation
         </Text>
       </Pressable>

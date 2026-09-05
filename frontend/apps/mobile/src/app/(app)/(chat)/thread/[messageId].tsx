@@ -60,10 +60,10 @@ import {
 } from "@/lib/mobile-navigation";
 import {
   border,
-  lightPalette,
   mobileTypography,
 } from "@tech-office/theme-tokens";
 import { API_BASE_URL } from "@/lib/constants";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 interface ProtoTimestamp {
   seconds?: number | string;
@@ -117,6 +117,9 @@ function ReactionPicker({
   onClose: () => void;
   onSelect: (emoji: string) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Modal
       visible={visible}
@@ -137,7 +140,7 @@ function ReactionPicker({
                 }}
                 style={({ pressed }) => [
                   styles.emojiBtn,
-                  pressed && { backgroundColor: lightPalette.background.default },
+                  pressed && { backgroundColor: palette.background.default },
                 ]}
               >
                 <Text style={styles.emojiText}>{emoji}</Text>
@@ -165,6 +168,9 @@ function ThreadMessageActionSheet({
   onCopyLink: () => void;
   onMoveToChannel: () => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   return (
     <Modal
       visible={visible}
@@ -200,7 +206,7 @@ function ThreadMessageActionSheet({
               ]}
               accessibilityLabel="Open reaction picker"
             >
-              <SFIcon name="face.smiling" size={18} color={lightPalette.text.primary} />
+              <SFIcon name="face.smiling" size={18} color={palette.text.primary} />
             </Pressable>
           </View>
 
@@ -212,7 +218,7 @@ function ThreadMessageActionSheet({
             ]}
           >
             <View style={styles.actionSheetIconWrap}>
-              <SFIcon name="link" size={16} color={lightPalette.text.primary} />
+              <SFIcon name="link" size={16} color={palette.text.primary} />
             </View>
             <View style={styles.actionSheetRowBody}>
               <Text style={styles.actionSheetRowTitle}>Share canonical link</Text>
@@ -220,7 +226,7 @@ function ThreadMessageActionSheet({
                 Share a stable link that opens this message inside the thread.
               </Text>
             </View>
-            <SFIcon name="square.and.arrow.up" size={14} color={lightPalette.text.secondary} />
+            <SFIcon name="square.and.arrow.up" size={14} color={palette.text.secondary} />
           </Pressable>
 
           <Pressable
@@ -231,13 +237,13 @@ function ThreadMessageActionSheet({
             ]}
           >
             <View style={styles.actionSheetIconWrap}>
-              <SFIcon name="arrow.right.circle" size={16} color={lightPalette.text.primary} />
+              <SFIcon name="arrow.right.circle" size={16} color={palette.text.primary} />
             </View>
             <View style={styles.actionSheetRowBody}>
               <Text style={styles.actionSheetRowTitle}>Move to channel</Text>
               <Text style={styles.actionSheetRowText}>Jump back to the parent message in the channel timeline.</Text>
             </View>
-            <SFIcon name="chevron.right" size={14} color={lightPalette.text.secondary} />
+            <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
           </Pressable>
         </View>
       </View>
@@ -270,6 +276,8 @@ function ReplyItem({
   onLongPress: (message: ThreadReply) => void;
   onReactionPress: (messageId: string, emojiCode: string, currentlyReacted: boolean) => void;
 }) {
+  const styles = useStyles();
+
   const msgDate = protoToDate(item.updatedAt);
   return (
     <Pressable
@@ -359,6 +367,9 @@ function ParentMessageCard({
   onLongPress: (message: ThreadReply) => void;
   onReactionPress: (messageId: string, emojiCode: string, currentlyReacted: boolean) => void;
 }) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const msgDate = protoToDate(item.updatedAt);
 
   return (
@@ -379,7 +390,7 @@ function ParentMessageCard({
         <Text style={styles.parentCardLabel}>Message details</Text>
         <View style={styles.parentCardAction}>
           <Text style={styles.parentCardActionText}>Back to channel</Text>
-          <SFIcon name="chevron.right" size={12} color={lightPalette.text.secondary} />
+          <SFIcon name="chevron.right" size={12} color={palette.text.secondary} />
         </View>
       </View>
       <View style={styles.replyItem}>
@@ -441,6 +452,9 @@ function ParentMessageCard({
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function ThreadScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const insets = useSafeAreaInsets();
   const segments = useSegments();
   const { messageId, highlightedMessageId, navParent, navFallback, navTab, navLabel } = useLocalSearchParams<{
@@ -1035,8 +1049,8 @@ export default function ThreadScreen() {
                   accessibilityLabel={`Back to ${navigationContext.backLabel}`}
                   accessibilityRole="button"
                 >
-                  <SFIcon name="chevron.left" size={18} color={lightPalette.text.primary} />
-                  <Text style={{ fontSize: 16, fontWeight: "500", color: lightPalette.primary.main }}>
+                  <SFIcon name="chevron.left" size={18} color={palette.text.primary} />
+                  <Text style={{ fontSize: 16, fontWeight: "500", color: palette.primary.main }}>
                     {navigationContext.backLabel}
                   </Text>
                 </Pressable>
@@ -1047,7 +1061,7 @@ export default function ThreadScreen() {
 
       {isInitialLoading ? (
         <View style={styles.center}>
-          <ActivityIndicator size="large" color={lightPalette.text.secondary} />
+          <ActivityIndicator size="large" color={palette.text.secondary} />
         </View>
       ) : (
         <FlatList
@@ -1146,7 +1160,7 @@ export default function ThreadScreen() {
           value={text}
           onChangeText={handleTextChange}
           returnKeyType="default"
-          placeholderTextColor={lightPalette.text.disabled}
+          placeholderTextColor={palette.text.disabled}
           accessibilityLabel="Reply input"
         />
         <Pressable
@@ -1156,19 +1170,19 @@ export default function ThreadScreen() {
             styles.sendBtn,
             {
               backgroundColor: !text.trim()
-                ? lightPalette.divider
+                ? palette.divider
                 : pressed
-                ? lightPalette.text.primary
-                : lightPalette.primary.dark,
+                ? palette.text.primary
+                : palette.primary.dark,
             },
           ]}
           accessibilityRole="button"
           accessibilityLabel="Send reply"
         >
           {sendMutation.isPending ? (
-            <ActivityIndicator size="small" color={lightPalette.primary.contrastText} />
+            <ActivityIndicator size="small" color={palette.primary.contrastText} />
           ) : (
-            <SFIcon name="arrow.up" size={18} color={lightPalette.primary.contrastText} />
+            <SFIcon name="arrow.up" size={18} color={palette.primary.contrastText} />
           )}
         </Pressable>
       </View>
@@ -1204,7 +1218,7 @@ export default function ThreadScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   center: {
     flex: 1,
     justifyContent: "center",
@@ -1217,15 +1231,15 @@ const styles = StyleSheet.create({
   },
   overlay: {
     flex: 1,
-    backgroundColor: "rgba(17,24,39,0.28)",
+    backgroundColor: t.overlay.scrim,
     justifyContent: "flex-end",
   },
   listHeader: {
     marginBottom: 16,
   },
   parentCard: {
-    backgroundColor: lightPalette.background.default,
-    borderColor: lightPalette.divider,
+    backgroundColor: t.background.default,
+    borderColor: t.divider,
     borderRadius: 16,
     borderWidth: border.thin,
     padding: 12,
@@ -1240,7 +1254,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   parentCardLabel: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700",
     textTransform: "uppercase",
@@ -1251,7 +1265,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   parentCardActionText: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "600",
   },
@@ -1261,12 +1275,12 @@ const styles = StyleSheet.create({
     marginHorizontal: -8,
   },
   replyPressablePressed: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   messageHighlight: {
-    backgroundColor: lightPalette.primary.light + "24",
+    backgroundColor: t.primary.light + "24",
     borderWidth: border.thin,
-    borderColor: lightPalette.primary.light,
+    borderColor: t.primary.light,
   },
   replyItem: {
     flexDirection: "row",
@@ -1285,15 +1299,15 @@ const styles = StyleSheet.create({
   senderName: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   timestamp: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   replyText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     lineHeight: 22,
   },
   reactionsRow: {
@@ -1309,10 +1323,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   reactionChipActive: {
-    backgroundColor: lightPalette.primary.light + "30",
+    backgroundColor: t.primary.light + "30",
   },
   reactionEmoji: {
     fontSize: 14,
@@ -1320,10 +1334,10 @@ const styles = StyleSheet.create({
   reactionCount: {
     fontSize: 12,
     fontWeight: "600",
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   reactionCountActive: {
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   emptyState: {
     padding: 40,
@@ -1331,29 +1345,29 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   composer: {
     flexDirection: "row",
     alignItems: "flex-end",
     padding: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: lightPalette.divider,
-    backgroundColor: lightPalette.background.paper,
+    borderTopColor: t.divider,
+    backgroundColor: t.background.paper,
     gap: 8,
   },
   input: {
     flex: 1,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     borderRadius: 20,
     borderCurve: "continuous",
     paddingHorizontal: 16,
     paddingVertical: Platform.OS === "ios" ? 10 : 8,
     fontSize: mobileTypography.listPrimary.fontSize as number,
     maxHeight: 120,
-    backgroundColor: lightPalette.background.default,
-    color: lightPalette.text.primary,
+    backgroundColor: t.background.default,
+    color: t.text.primary,
   },
   sendBtn: {
     width: 42,
@@ -1369,17 +1383,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: lightPalette.info.main,
+    backgroundColor: t.info.main,
     borderWidth: border.hairline,
-    borderColor: lightPalette.info.dark,
+    borderColor: t.info.dark,
   },
   newMessagesPillText: {
-    color: lightPalette.info.contrastText,
+    color: t.info.contrastText,
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700",
   },
   emojiSheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -1389,7 +1403,7 @@ const styles = StyleSheet.create({
   emojiSheetTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
     marginBottom: 12,
   },
@@ -1405,15 +1419,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   emojiText: {
     fontSize: 28,
   },
   actionSheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 20,
@@ -1426,19 +1440,19 @@ const styles = StyleSheet.create({
     width: 44,
     height: 5,
     borderRadius: 999,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginBottom: 4,
   },
   actionSheetTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     textAlign: "center",
   },
   actionSheetSubtitle: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     textAlign: "center",
     marginBottom: 4,
   },
@@ -1454,13 +1468,13 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   quickReactionBtnPressed: {
-    backgroundColor: lightPalette.primary.light + "20",
-    borderColor: lightPalette.primary.light,
+    backgroundColor: t.primary.light + "20",
+    borderColor: t.primary.light,
   },
   quickReactionText: {
     fontSize: 22,
@@ -1472,13 +1486,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 14,
     borderRadius: 18,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   actionSheetRowPressed: {
-    backgroundColor: lightPalette.primary.light + "20",
-    borderColor: lightPalette.primary.light,
+    backgroundColor: t.primary.light + "20",
+    borderColor: t.primary.light,
   },
   actionSheetIconWrap: {
     width: 34,
@@ -1486,7 +1500,7 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.light + "30",
+    backgroundColor: t.primary.light + "30",
   },
   actionSheetRowBody: {
     flex: 1,
@@ -1495,11 +1509,11 @@ const styles = StyleSheet.create({
   actionSheetRowTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   actionSheetRowText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));

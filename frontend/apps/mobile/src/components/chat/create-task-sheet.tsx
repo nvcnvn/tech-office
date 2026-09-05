@@ -41,11 +41,11 @@ import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
 import { invalidateTaskQueries } from "@/lib/task-query-invalidation";
 import {
   border,
-  lightPalette,
   mobileTypography,
   radius,
   spacing,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 /** Where a derived title is cut. Mirrors MaxTaskTitleLength on the server. */
 const MAX_TITLE_LENGTH = 120;
@@ -108,6 +108,9 @@ export function CreateTaskSheet({
   mentionedEmployeeIds = [],
   onCreated,
 }: CreateTaskSheetProps) {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const queryClient = useQueryClient();
   // The title field takes focus as the sheet opens, so the keyboard is up before anyone
   // has decided anything. Nothing lifts a Modal clear of it, which left the project
@@ -278,7 +281,7 @@ export function CreateTaskSheet({
               }}
               style={[styles.input, titleError ? styles.inputError : null]}
               placeholder="What needs doing?"
-              placeholderTextColor={lightPalette.text.secondary}
+              placeholderTextColor={palette.text.secondary}
               // Not auto-focused: the title arrives pre-filled from the message, so the
               // common case needs no typing, and raising the keyboard on open squeezed
               // the sheet on a small phone until the project list and the confirm button
@@ -331,7 +334,7 @@ export function CreateTaskSheet({
                         {project.name}
                       </Text>
                       {selected ? (
-                        <SFIcon name="checkmark" size={14} color={lightPalette.primary.main} />
+                        <SFIcon name="checkmark" size={14} color={palette.primary.main} />
                       ) : null}
                     </Pressable>
                   );
@@ -368,7 +371,7 @@ export function CreateTaskSheet({
                         {member.employeeId}
                       </Text>
                       {selected ? (
-                        <SFIcon name="checkmark" size={14} color={lightPalette.primary.main} />
+                        <SFIcon name="checkmark" size={14} color={palette.primary.main} />
                       ) : null}
                     </Pressable>
                   );
@@ -382,7 +385,7 @@ export function CreateTaskSheet({
               onChangeText={setDueDate}
               style={styles.input}
               placeholder="YYYY-MM-DD"
-              placeholderTextColor={lightPalette.text.secondary}
+              placeholderTextColor={palette.text.secondary}
               autoCapitalize="none"
               autoCorrect={false}
               testID="create-task-sheet-due-date"
@@ -405,7 +408,7 @@ export function CreateTaskSheet({
               testID="create-task-sheet-submit"
             >
               {createMutation.isPending ? (
-                <ActivityIndicator color={lightPalette.primary.contrastText} />
+                <ActivityIndicator color={palette.primary.contrastText} />
               ) : (
                 <Text style={styles.primaryButtonText}>Create task</Text>
               )}
@@ -417,14 +420,14 @@ export function CreateTaskSheet({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   overlay: {
     flex: 1,
     justifyContent: "flex-end",
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: t.overlay.scrim,
   },
   sheet: {
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     borderTopLeftRadius: radius.lg,
     borderTopRightRadius: radius.lg,
     paddingHorizontal: spacing[3],
@@ -439,16 +442,16 @@ const styles = StyleSheet.create({
     width: 36,
     height: 4,
     borderRadius: 2,
-    backgroundColor: lightPalette.divider,
+    backgroundColor: t.divider,
     marginBottom: spacing[1],
   },
   sheetTitle: {
     ...mobileTypography.sectionHeader,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   sheetSubtitle: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginBottom: spacing[2],
   },
   scroll: {
@@ -459,31 +462,31 @@ const styles = StyleSheet.create({
   },
   label: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
     marginTop: spacing[2],
     marginBottom: spacing[0.5],
   },
   input: {
     ...mobileTypography.messageBody,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     borderRadius: radius.md,
     paddingHorizontal: spacing[2],
     paddingVertical: spacing[1],
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   inputError: {
-    borderColor: lightPalette.error.main,
+    borderColor: t.error.main,
   },
   fieldError: {
     ...mobileTypography.caption,
-    color: lightPalette.error.main,
+    color: t.error.main,
     marginTop: spacing[0.5],
   },
   hint: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   loader: {
     alignSelf: "flex-start",
@@ -491,7 +494,7 @@ const styles = StyleSheet.create({
   },
   optionList: {
     borderWidth: border.thin,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     borderRadius: radius.md,
     overflow: "hidden",
   },
@@ -503,33 +506,33 @@ const styles = StyleSheet.create({
     // Tall enough to be a comfortable target on a small phone.
     paddingVertical: spacing[1.5],
     borderBottomWidth: border.thin,
-    borderBottomColor: lightPalette.divider,
+    borderBottomColor: t.divider,
   },
   optionRowSelected: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
   },
   optionRowPressed: {
     opacity: 0.7,
   },
   optionKey: {
     ...mobileTypography.caption,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   optionLabel: {
     ...mobileTypography.messageBody,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
     flex: 1,
   },
   errorBanner: {
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     borderLeftWidth: 3,
-    borderLeftColor: lightPalette.error.main,
+    borderLeftColor: t.error.main,
     borderRadius: radius.sm,
     padding: spacing[1],
   },
   errorText: {
     ...mobileTypography.listSecondary,
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   footer: {
     flexDirection: "row",
@@ -540,13 +543,13 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: lightPalette.primary.main,
+    backgroundColor: t.primary.main,
     borderRadius: radius.md,
     paddingVertical: spacing[2],
   },
   primaryButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.primary.contrastText,
+    color: t.primary.contrastText,
   },
   secondaryButton: {
     alignItems: "center",
@@ -557,9 +560,9 @@ const styles = StyleSheet.create({
   },
   secondaryButtonText: {
     ...mobileTypography.button,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   buttonPressed: {
     opacity: 0.7,
   },
-});
+}));

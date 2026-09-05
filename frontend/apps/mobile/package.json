@@ -15,7 +15,8 @@
 		"check:store-manifest": "node scripts/check-store-manifest.js",
 		"check:voice-state": "node --experimental-strip-types src/hooks/channel-voice-call-state.check.ts",
 		"check:doc-rows": "node --experimental-strip-types src/lib/doc-rows.check.ts",
-		"check:device-timezone": "node --experimental-strip-types src/lib/device-timezone.check.ts"
+		"check:device-timezone": "node --experimental-strip-types src/lib/device-timezone.check.ts",
+		"check:theme-resolution": "node --experimental-strip-types src/lib/theme-resolution.check.ts"
 	},
 	"dependencies": {
 		"@connectrpc/connect": "^2.1.0",

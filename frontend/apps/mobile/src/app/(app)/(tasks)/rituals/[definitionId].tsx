@@ -1,17 +1,18 @@
 import React from "react";
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { archiveRitualDefinition, getProject, getRitualDefinition, type RitualDefinition } from "apis";
 import {
-  lightPalette,
   mobileLayout,
   mobileTypography,
   radius,
   shadows,
   spacing,
+  statusColors,
   touch,
 } from "@tech-office/theme-tokens";
+import { makeStyles, useTheme } from "@/lib/theme";
 
 function getEvidenceTypeLabel(type: RitualDefinition["evidenceRequirements"][number]["evidenceTypes"][number]): string {
   switch (type) {
@@ -29,6 +30,9 @@ function getEvidenceTypeLabel(type: RitualDefinition["evidenceRequirements"][num
 }
 
 export default function RitualTemplateScreen() {
+  const { palette } = useTheme();
+  const styles = useStyles();
+
   const { definitionId, taskId } = useLocalSearchParams<{
     definitionId: string;
     taskId?: string;
@@ -89,7 +93,7 @@ export default function RitualTemplateScreen() {
   if (definitionQuery.isLoading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={lightPalette.primary.main} />
+        <ActivityIndicator size="large" color={palette.primary.main} />
       </View>
     );
   }
@@ -230,13 +234,13 @@ export default function RitualTemplateScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((t) => ({
   loadingContainer: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
     paddingHorizontal: mobileLayout.screenPadding,
-    backgroundColor: lightPalette.background.default,
+    backgroundColor: t.background.default,
     gap: spacing[1],
   },
   scrollContent: {
@@ -248,7 +252,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[1],
     padding: mobileLayout.cardPadding,
     borderRadius: radius.lg,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: spacing[1],
     ...shadows.sm,
   },
@@ -257,13 +261,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1.5],
     paddingVertical: spacing[0.5],
     borderRadius: 999,
-    backgroundColor: "#eef6ff",
+    backgroundColor: statusColors.info[t.mode].bg,
   },
   archivedBadge: {
-    backgroundColor: "#f1f5f9",
+    backgroundColor: t.divider,
   },
   archivedBadgeText: {
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   archiveAction: {
     alignSelf: "flex-start",
@@ -272,70 +276,70 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[2],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
   },
   archiveActionLabel: {
     fontSize: mobileTypography.button.fontSize as number,
     fontWeight: "600" as const,
-    color: lightPalette.primary.main,
+    color: t.primary.main,
   },
   archiveActionDestructive: {
-    color: lightPalette.error.main,
+    color: t.error.main,
   },
   templateBadgeText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.info.main,
+    color: t.info.main,
   },
   heroTitle: {
     fontSize: 26,
     lineHeight: 32,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   heroText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 22,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   noticeCard: {
     padding: mobileLayout.cardPadding,
     borderRadius: radius.lg,
-    backgroundColor: "#f8fafc",
+    backgroundColor: t.background.default,
     gap: spacing[1],
     ...shadows.sm,
   },
   noticeTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   noticeText: {
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   card: {
     padding: mobileLayout.cardPadding,
     borderRadius: radius.lg,
-    backgroundColor: lightPalette.background.paper,
+    backgroundColor: t.background.paper,
     gap: spacing[1.5],
     ...shadows.sm,
   },
   cardTitle: {
     fontSize: mobileTypography.sectionHeader.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   cardSubtitle: {
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   bodyText: {
     fontSize: mobileTypography.listSecondary.fontSize as number,
     lineHeight: 21,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   infoRow: {
     flexDirection: "row",
@@ -346,19 +350,19 @@ const styles = StyleSheet.create({
   infoLabel: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   infoValue: {
     flexShrink: 1,
     textAlign: "right",
     fontSize: mobileTypography.listSecondary.fontSize as number,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   requirementCard: {
     padding: spacing[1.5],
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: lightPalette.divider,
+    borderColor: t.divider,
     gap: spacing[1],
   },
   requirementHeader: {
@@ -370,11 +374,11 @@ const styles = StyleSheet.create({
   requirementTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   requirementCaption: {
     fontSize: mobileTypography.caption.fontSize as number,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   requirementTypeRow: {
     flexDirection: "row",
@@ -385,27 +389,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[1],
     paddingVertical: spacing[0.5],
     borderRadius: 999,
-    backgroundColor: "#f4f6f8",
+    backgroundColor: t.background.default,
   },
   typeChipText: {
     fontSize: mobileTypography.caption.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   helperText: {
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
   errorTitle: {
     fontSize: mobileTypography.listPrimary.fontSize as number,
     fontWeight: "700" as const,
-    color: lightPalette.text.primary,
+    color: t.text.primary,
   },
   errorText: {
     textAlign: "center",
     fontSize: mobileTypography.caption.fontSize as number,
     lineHeight: 18,
-    color: lightPalette.text.secondary,
+    color: t.text.secondary,
   },
-});
+}));
