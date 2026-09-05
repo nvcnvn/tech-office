@@ -326,3 +326,16 @@ existing assumption list.
   pre-052 tree (checked out at `a11ffa7` in a worktree and run against the same server).
   The gate is therefore treated as met. `TestPeopleDirectory`'s failure was root-caused
   rather than dismissed — see drift D70, added by this feature.]
+- [ASSUMPTION: on re-verification of the whole feature the gates were re-run from a clean
+  checkout of the branch. `make test-backend` failed on exactly one test,
+  `TestPeopleDirectory/.../it never returns a person from another organization`, with D70's
+  exact signature — the query `"Outsider"` returning the caller's own owner, Olive Owner.
+  Every voice test passed, including `TestUnreachableCalleeStillGetsAMissedCall` and
+  `TestVoiceConstantSync`, so the gate is treated as met and D70 was updated to record the
+  second reproduction. The web E2E was run as `pnpm --filter web exec playwright test
+  --config=e2e/playwright.config.ts voice-communication` (12/12) because D71 still blocks
+  `make test-frontend`; the config path must be passed explicitly or Playwright loads no
+  baseURL and every navigation fails. The backend suite must likewise be run through
+  `make test-backend` rather than a bare `go test`, because only the Makefile target sources
+  `backend/scripts/dev/voice-env.sh`, and without it the test process expects
+  `ws://localhost:7880` while the running server hands clients the LAN IP.]
