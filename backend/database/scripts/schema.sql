@@ -1203,7 +1203,6 @@ CREATE TABLE collaboration.task (
     CONSTRAINT task_comment_count_check CHECK ((comment_count >= 0)),
     CONSTRAINT task_depth_check CHECK (((depth >= 0) AND (depth <= 5))),
     CONSTRAINT task_kind_check CHECK ((task_kind = ANY (ARRAY['standard'::text, 'ritual_instance'::text]))),
-    CONSTRAINT task_source_message_consistency CHECK (((source_channel_id IS NULL) = (source_message_id IS NULL))),
     CONSTRAINT valid_date_range CHECK (((start_date IS NULL) OR (due_date IS NULL) OR (start_date <= due_date)))
 );
 
@@ -6923,7 +6922,7 @@ ALTER TABLE ONLY chat.channel_membership
 --
 
 ALTER TABLE ONLY chat.channel_membership
-    ADD CONSTRAINT fk_channel_membership_last_viewed_message FOREIGN KEY (organization_id, last_viewed_message_id) REFERENCES chat.message(organization_id, id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_channel_membership_last_viewed_message FOREIGN KEY (organization_id, last_viewed_message_id) REFERENCES chat.message(organization_id, id) ON DELETE SET NULL (last_viewed_message_id);
 
 
 --
@@ -7403,7 +7402,7 @@ ALTER TABLE ONLY collaboration.task
 --
 
 ALTER TABLE ONLY collaboration.task
-    ADD CONSTRAINT fk_task_source_channel FOREIGN KEY (organization_id, source_channel_id) REFERENCES chat.channel(organization_id, id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_task_source_channel FOREIGN KEY (organization_id, source_channel_id) REFERENCES chat.channel(organization_id, id) ON DELETE SET NULL (source_channel_id);
 
 
 --
@@ -7411,7 +7410,7 @@ ALTER TABLE ONLY collaboration.task
 --
 
 ALTER TABLE ONLY collaboration.task
-    ADD CONSTRAINT fk_task_source_message FOREIGN KEY (organization_id, source_message_id) REFERENCES chat.message(organization_id, id) ON DELETE SET NULL;
+    ADD CONSTRAINT fk_task_source_message FOREIGN KEY (organization_id, source_message_id) REFERENCES chat.message(organization_id, id) ON DELETE SET NULL (source_message_id);
 
 
 --
@@ -8547,7 +8546,7 @@ ALTER TABLE ONLY voice.voice_message
 --
 
 ALTER TABLE ONLY voice.voice_message
-    ADD CONSTRAINT fk_voice_message_message FOREIGN KEY (organization_id, message_id) REFERENCES chat.message(organization_id, id) ON DELETE RESTRICT;
+    ADD CONSTRAINT fk_voice_message_message FOREIGN KEY (organization_id, message_id) REFERENCES chat.message(organization_id, id) ON DELETE CASCADE;
 
 
 --

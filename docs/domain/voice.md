@@ -3,7 +3,8 @@
 Channel-scoped voice calls, voice messages, recordings and transcripts. Owned by
 `internal/voice`; contract in `rpc/v1/voice.proto` (`VoiceService`, 12 RPCs).
 
-**Status date: 2026-09-05.** Supersedes specs 032, 037 and 052. Deeper reference:
+**Status date: 2026-09-12.** Supersedes specs 032, 037 and 052; voice-message delete
+behaviour from spec 057. Deeper reference:
 `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`.
 
 ## Split of responsibility
@@ -199,6 +200,18 @@ Asynchronous voice notes, separate from calls: `RequestVoiceMessageUpload`,
 `ConfirmVoiceMessageUpload`, `CancelVoiceMessage`. `voice.voice_message` tracks
 `requested → uploading → posted | failed | cancelled` and FKs to `files.file_metadata`.
 Posting produces a `chat.message` with `message_kind = 'voice'`.
+
+A recording exists to be played inside that message, so **hard-deleting the `chat.message`
+deletes the `voice_message` row with it** — `fk_voice_message_message` is
+`ON DELETE CASCADE`. Nulling `message_id` instead is not available:
+`voice_message_posted_requires_assets` asserts `status <> 'posted' OR message_id IS NOT
+NULL`, so it would trade a referential failure for a CHECK failure. Nothing references
+`voice.voice_message` in turn, so the cascade stops there. The recording's
+`files.file_metadata` row is left behind — `fk_voice_message_file` points the other way and
+blocks nothing — so it becomes a storage row with no reader rather than a constraint
+failure; file lifetime is a pre-existing gap. Chat's own message deletion is a *soft*
+delete and does none of this; see
+[chat.md](chat.md#hard-deleting-a-message).
 
 On mobile the player derives a voice note's length from the audio file itself and
 draws no waveform, so it shows `--:--` until enough of the file has loaded to report

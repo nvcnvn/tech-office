@@ -4,7 +4,7 @@ Cross-cutting mechanics every domain depends on: how a request is authenticated 
 authorised, how tenant data stays separated, how background work runs, and how the whole
 thing is tested.
 
-**Status date: 2026-09-06.**
+**Status date: 2026-09-12.**
 
 ## Shape
 
@@ -75,12 +75,31 @@ actually scopes the data. A query that forgets it is a tenant leak, and no datab
 backstop will catch it.
 
 **`make lint-tenancy` is that backstop.** `backend/tools/tenancylint` parses `schema.sql`
-and all 554 sqlc queries with the real PostgreSQL parser and fails the build unless every
+and all 557 sqlc queries with the real PostgreSQL parser and fails the build unless every
 tenant table in a statement is transitively connected, through `organization_id`
 equalities, to an `organization_id = <parameter>` predicate. That one rule catches both a
 missing filter and a join that forgot to carry `organization_id`. Tenant tables are
 discovered from the schema — a table with an `organization_id` column is a tenant table —
 so there is no list to keep in sync.
+
+Two schema rules run alongside it, over the same parse of `schema.sql`:
+
+- **`unique-key`** — every primary key and unique constraint on a tenant table must
+  include `organization_id`, because sharding cannot enforce a uniqueness that spans
+  shards. Accepted exceptions live in `knownUniqueGaps` and print as `deferred` on every
+  run rather than failing the build.
+- **`set-null-tenant-column`** — a composite foreign key on a tenant table may not null the
+  whole key on delete, and may not name `organization_id` among the columns it does null.
+  A bare `ON DELETE SET NULL` nulls *every* column of the referencing key, so on a key
+  leading with `organization_id` the action the database attempts is
+  `SET organization_id = NULL` against a `NOT NULL` column and the delete fails outright —
+  at runtime, on a row nobody is thinking about. The fix the finding states is PostgreSQL
+  15's column list, `ON DELETE SET NULL (<column>)`. `SET DEFAULT` is covered for the same
+  reason; `ON UPDATE` is not, because the referenced keys are UUID v7 primary keys and
+  nothing updates them.
+
+Both rules read the **generated** snapshot, so they only see a new constraint after
+`backend/scripts/regen-schema.sh` has been run.
 
 Fourteen queries are legitimately cross-tenant (scheduler sweeps, the delivery retry worker,
 the account-deletion path) and carry a `-- lint:cross-tenant <reason>` marker above their
@@ -90,7 +109,8 @@ each `-- name:`. They must run on `AdminPool`.
 The database is a **single PostgreSQL node** and is not sharded — an earlier single-node
 Citus deployment was removed in August 2026, since it imposed real constraints (no
 triggers, no `now()` in `ON CONFLICT DO UPDATE`, no `ON DELETE SET NULL`) while delivering
-nothing at one node. The discipline above outlives it: it is what keeps tenants isolated
+nothing at one node. `ON DELETE SET NULL` is therefore available again, and is used —
+always in its column-list form, which `set-null-tenant-column` enforces. The discipline above outlives it: it is what keeps tenants isolated
 today, and what would let the database be split later without a data migration. Two known
 exceptions are recorded in `knownUniqueGaps` in the linter — `iam.invitation`'s primary key
 and token uniqueness are global, because an invitation is resolved by token before the

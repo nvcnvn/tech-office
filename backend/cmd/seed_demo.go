@@ -184,13 +184,13 @@ func seedDemoOrg(ctx context.Context, cmd *cli.Command) error {
 
 	// --- 4. Content worth reviewing -----------------------------------------
 	//
-	// The work goes first, and the conversation second, because a task captured
-	// from a message holds a reference to it. Clearing the conversation while such
-	// a task exists fails outright: the foreign key is ON DELETE SET NULL over
-	// (organization_id, source_message_id), and Postgres nulls every column of a
-	// composite key, including the NOT NULL organization_id. A reviewer using the
-	// chat quick action is exactly the thing this fixture invites, so the seed must
-	// survive having been used.
+	// The work goes first and the conversation second, but nothing depends on that
+	// order any more: fk_task_source_message is ON DELETE SET NULL (source_message_id),
+	// so clearing the conversation nulls a captured task's pointer to its message and
+	// leaves organization_id — and the rest of the task — untouched. Both steps are
+	// idempotent on their own, which is what lets a reviewer use this workspace (read
+	// the channel, capture a task from a message, leave a voice note) and have the seed
+	// re-run against it afterwards.
 	if err := seedDemoWork(ctx, adminPool, queries, result.OrganizationID, ownerID, spareID, workerID, seededAt); err != nil {
 		return err
 	}

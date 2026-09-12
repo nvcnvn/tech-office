@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -469,6 +470,144 @@ func TestChatTaskCapture(t *testing.T) {
 			assert.False(t, origin.SourceMessageAvailable)
 			assert.Empty(t, origin.ExcerptHtml,
 				"the deletion placeholder must not be shown as what was said")
+		})
+	})
+
+	// Feature 057, FR-001 to FR-005, SC-001, SC-002, SC-005.
+	//
+	// A *hard* delete is the case the soft-delete block above does not cover, and it is a
+	// different contract: the row is gone, so the origin cannot survive. What must survive
+	// is the task — with its organization intact. The two origin foreign keys used to be
+	// declared ON DELETE SET NULL over the composite key (organization_id, source_*_id),
+	// and a bare SET NULL nulls *every* column of the key, so PostgreSQL tried to write
+	// organization_id = NULL against a NOT NULL column and refused the delete outright.
+	t.Run("when the source message is hard-deleted afterwards", func(t *testing.T) {
+		proj := w.createProject(owner, "Hard Delete", uniqueProjectKey("HARD"))
+		w.addProjectMember(owner, proj.ID, member.ID, rpcv1.ProjectMemberRole_PROJECT_MEMBER_ROLE_MEMBER)
+
+		channelID := w.createChannel(owner, "Hard Delete Channel", false)
+		w.inviteToChannel(owner, channelID, member.ID)
+		messageID := w.sendMessage(owner, channelID, "Erase this entirely")
+
+		// FR-025 permits one message to produce more than one task, and both must survive.
+		first := w.createTaskFromMessage(owner, createTaskFromMessageInput{
+			ChannelID: channelID, MessageID: messageID, ProjectID: proj.ID,
+			Title: "Survives the erasure", DueDate: ptr("2026-09-04"),
+		})
+		second := w.createTaskFromMessage(member, createTaskFromMessageInput{
+			ChannelID: channelID, MessageID: messageID, ProjectID: proj.ID,
+			Title: "Also survives the erasure",
+		})
+		hardLevel0 := levelByDepth(proj.Levels, 0)
+		require.NotNil(t, hardLevel0)
+		unrelated := w.createTask(owner, proj.ID, "Never came from a message", hardLevel0.Id)
+
+		// The two RESTRICT dependents that used to block this delete on their own: a
+		// member who has read the message, and a posted voice recording attached to one.
+		w.markChannelAsReadUpTo(member, channelID, messageID)
+		require.Equal(t, messageID, w.channelLastViewedMessageID(member, channelID),
+			"reading the channel must leave a pointer at the message, or this proves nothing")
+		voice := w.postVoiceMessage(member, channelID, fmt.Sprintf("hard-delete-%d", time.Now().UnixNano()))
+
+		beforeOrgID, _, _ := w.taskOriginRow(first.Task.Id)
+		beforeState := w.getTask(owner, first.Task.Id).StateId
+
+		// Act: the delete the constraints used to refuse. FR-001.
+		require.NoError(t, w.hardDeleteMessageErr(messageID),
+			"a message a task was made from must be hard-deletable")
+
+		// FR-005: the voice recording's own message goes the same way, with its posted
+		// voice_message row cascading rather than blocking.
+		require.NoError(t, w.hardDeleteMessageErr(voice.GetMessageId()),
+			"a message carrying a posted voice recording must be hard-deletable")
+
+		// SC-002, scenario 2
+		t.Run("every task made from it survives with its organization and columns intact", func(t *testing.T) {
+			for _, created := range []*rpcv1.CreateTaskFromMessageResponse{first, second} {
+				reread := w.getTask(owner, created.Task.Id)
+				assert.Equal(t, created.Task.Identifier, reread.Identifier)
+				assert.Equal(t, created.Task.Title, reread.Title)
+				assert.Equal(t, created.Task.ProjectId, reread.ProjectId)
+				assert.Equal(t, created.Task.StateId, reread.StateId)
+
+				orgID, _, sourceMessageID := w.taskOriginRow(created.Task.Id)
+				assert.Equal(t, w.OrgID, orgID,
+					"the tenant column is what a bare composite SET NULL would have erased")
+				assert.Empty(t, sourceMessageID, "the pointer to the erased message is nulled")
+			}
+			assert.Equal(t, w.OrgID, beforeOrgID)
+			assert.Equal(t, beforeState, w.getTask(owner, first.Task.Id).StateId)
+		})
+
+		// FR-003, scenario 3
+		t.Run("the task shows no origin at all", func(t *testing.T) {
+			origin := w.getTaskOrigin(owner, first.Task.Id)
+			assert.False(t, origin.HasOrigin,
+				"half an origin is no origin: there is nothing left to render or navigate to")
+
+			reread := w.getTask(owner, first.Task.Id)
+			assert.Nil(t, reread.SourceMessageId)
+			assert.Nil(t, reread.SourceChannelId,
+				"taskToProto must emit both halves or neither, even while storage still holds the channel half")
+		})
+
+		// FR-003
+		t.Run("no chip points back at the erased message", func(t *testing.T) {
+			assert.Empty(t, w.listTasksBySourceMessages(owner, []string{messageID}))
+		})
+
+		// FR-005, contract 1
+		t.Run("nothing anywhere still references the erased message", func(t *testing.T) {
+			assert.Zero(t, w.rowsReferencingMessage(messageID))
+			assert.Zero(t, w.rowsReferencingMessage(voice.GetMessageId()))
+			assert.False(t, w.voiceMessageExists(voice.GetId()),
+				"a recording is unreachable without its message, so it cascades")
+		})
+
+		// Scenario 5
+		t.Run("a task that never had an origin is untouched", func(t *testing.T) {
+			reread := w.getTask(owner, unrelated.Id)
+			assert.Equal(t, "Never came from a message", reread.Title)
+			assert.Nil(t, reread.SourceMessageId)
+			assert.Nil(t, reread.SourceChannelId)
+		})
+	})
+
+	// Feature 057, FR-002 and FR-004, scenario 4.
+	//
+	// This is the case that catches a re-introduced CHECK relating the two origin columns.
+	// PostgreSQL nulls source_channel_id *before* the channel's messages cascade into
+	// source_message_id, so the row passes through (NULL, message) mid-statement — and a
+	// row-level CHECK is never deferrable, so it would see exactly that row and refuse.
+	t.Run("when the channel the task came from is deleted", func(t *testing.T) {
+		proj := w.createProject(owner, "Channel Gone", uniqueProjectKey("CGON"))
+		channelID := w.createChannel(owner, "Doomed Channel", false)
+		messageID := w.sendMessage(owner, channelID, "This whole room is going away")
+
+		first := w.createTaskFromMessage(owner, createTaskFromMessageInput{
+			ChannelID: channelID, MessageID: messageID, ProjectID: proj.ID,
+			Title: "Outlives its channel",
+		})
+		second := w.createTaskFromMessage(owner, createTaskFromMessageInput{
+			ChannelID: channelID, MessageID: messageID, ProjectID: proj.ID,
+			Title: "Also outlives its channel",
+		})
+
+		require.NoError(t, w.hardDeleteChannelErr(channelID),
+			"deleting a channel a task was made from must succeed")
+
+		t.Run("both tasks keep their organization and lose both origin halves", func(t *testing.T) {
+			for _, created := range []*rpcv1.CreateTaskFromMessageResponse{first, second} {
+				orgID, sourceChannelID, sourceMessageID := w.taskOriginRow(created.Task.Id)
+				assert.Equal(t, w.OrgID, orgID)
+				assert.Empty(t, sourceChannelID)
+				assert.Empty(t, sourceMessageID)
+
+				reread := w.getTask(owner, created.Task.Id)
+				assert.Equal(t, created.Task.Title, reread.Title)
+				assert.Equal(t, created.Task.Identifier, reread.Identifier)
+				assert.False(t, w.getTaskOrigin(owner, created.Task.Id).HasOrigin)
+			}
 		})
 	})
 
@@ -974,5 +1113,121 @@ func (w *testWorld) hardDeleteProject(projectID string) {
 	_, err = globalDB.Exec(context.Background(),
 		`DELETE FROM collaboration.project WHERE organization_id = $1 AND id = $2`,
 		w.OrgID, id)
+	require.NoError(w.t, err)
+}
+
+// hardDeleteMessageErr removes a chat message row outright and returns whatever the
+// database said. The product's own message deletion is a SOFT delete, so this exists to
+// exercise the referential actions a hard delete fires — which is the whole subject of
+// feature 057. It returns the error rather than asserting on it because "this delete
+// succeeds" is the assertion under test, not setup.
+func (w *testWorld) hardDeleteMessageErr(messageID string) error {
+	w.t.Helper()
+	id, err := dbuuid.Parse(messageID)
+	require.NoError(w.t, err)
+	_, err = globalDB.Exec(context.Background(),
+		`DELETE FROM chat.message WHERE organization_id = $1 AND id = $2`,
+		w.OrgID, id)
+	return err
+}
+
+// hardDeleteChannelErr removes a channel row outright, cascading its messages.
+func (w *testWorld) hardDeleteChannelErr(channelID string) error {
+	w.t.Helper()
+	id, err := dbuuid.Parse(channelID)
+	require.NoError(w.t, err)
+	_, err = globalDB.Exec(context.Background(),
+		`DELETE FROM chat.channel WHERE organization_id = $1 AND id = $2`,
+		w.OrgID, id)
+	return err
+}
+
+// taskOriginRow reads the three columns the origin foreign keys touch straight from
+// storage. The proto deliberately hides a half-present origin (contract 3), so an
+// assertion about what the *database* holds cannot be made through the RPC surface.
+func (w *testWorld) taskOriginRow(taskID string) (orgID dbuuid.UUID, sourceChannelID, sourceMessageID string) {
+	w.t.Helper()
+	id, err := dbuuid.Parse(taskID)
+	require.NoError(w.t, err)
+	require.NoError(w.t, globalDB.QueryRow(context.Background(),
+		`SELECT organization_id,
+		        COALESCE(source_channel_id::text, ''),
+		        COALESCE(source_message_id::text, '')
+		   FROM collaboration.task WHERE organization_id = $1 AND id = $2`,
+		w.OrgID, id).Scan(&orgID, &sourceChannelID, &sourceMessageID))
+	return orgID, sourceChannelID, sourceMessageID
+}
+
+// channelLastViewedMessageID reads the pointer a read receipt leaves behind. Nothing in
+// the product reads this column — unread counts come from last_viewed_at — but its
+// foreign key used to be ON DELETE RESTRICT, so it blocked the delete on its own.
+func (w *testWorld) channelLastViewedMessageID(actor testUser, channelID string) string {
+	w.t.Helper()
+	id, err := dbuuid.Parse(channelID)
+	require.NoError(w.t, err)
+	var messageID string
+	require.NoError(w.t, globalDB.QueryRow(context.Background(),
+		`SELECT COALESCE(last_viewed_message_id::text, '')
+		   FROM chat.channel_membership
+		  WHERE organization_id = $1 AND channel_id = $2 AND employee_id = $3`,
+		w.OrgID, id, actor.ID).Scan(&messageID))
+	return messageID
+}
+
+// rowsReferencingMessage counts every row in the system that still points at a message,
+// across all five foreign keys that reference chat.message. After a hard delete it must
+// be zero: the dependents either cascade or have their pointer nulled, and none of them
+// may be left dangling.
+func (w *testWorld) rowsReferencingMessage(messageID string) int {
+	w.t.Helper()
+	id, err := dbuuid.Parse(messageID)
+	require.NoError(w.t, err)
+	var count int
+	require.NoError(w.t, globalDB.QueryRow(context.Background(),
+		`SELECT (SELECT count(*) FROM chat.message WHERE organization_id = $1 AND parent_message_id = $2)
+		      + (SELECT count(*) FROM chat.reaction WHERE organization_id = $1 AND message_id = $2)
+		      + (SELECT count(*) FROM voice.voice_message WHERE organization_id = $1 AND message_id = $2)
+		      + (SELECT count(*) FROM chat.channel_membership WHERE organization_id = $1 AND last_viewed_message_id = $2)
+		      + (SELECT count(*) FROM collaboration.task WHERE organization_id = $1 AND source_message_id = $2)`,
+		w.OrgID, id).Scan(&count))
+	return count
+}
+
+func (w *testWorld) voiceMessageExists(voiceMessageID string) bool {
+	w.t.Helper()
+	id, err := dbuuid.Parse(voiceMessageID)
+	require.NoError(w.t, err)
+	var exists bool
+	require.NoError(w.t, globalDB.QueryRow(context.Background(),
+		`SELECT EXISTS (SELECT 1 FROM voice.voice_message WHERE organization_id = $1 AND id = $2)`,
+		w.OrgID, id).Scan(&exists))
+	return exists
+}
+
+// postVoiceMessage runs the whole recording flow — request, upload, confirm — so the
+// channel holds a voice message in the posted state, which is the only state
+// voice_message_posted_requires_assets forces to keep a non-null message_id.
+func (w *testWorld) postVoiceMessage(actor testUser, channelID, dedupKey string) *rpcv1.VoiceMessage {
+	w.t.Helper()
+	content := []byte("voice-message-audio-bytes")
+	upload := w.requestVoiceMessageUpload(actor, channelID, dedupKey, "note.webm", "audio/webm", int64(len(content)), 2400)
+	w.putUploadObject(upload.GetUploadUrl(), "audio/webm", content)
+	posted := w.confirmVoiceMessageUpload(actor, upload.GetVoiceMessageId(), upload.GetFileId(), dedupKey, 2400, []float32{0.2, 0.6, 0.4})
+	require.Equal(w.t, rpcv1.VoiceMessageStatus_VOICE_MESSAGE_STATUS_POSTED, posted.GetStatus())
+	require.NotEmpty(w.t, posted.GetMessageId())
+	return posted
+}
+
+// markChannelAsReadUpTo is markChannelAsRead with the optional pointer supplied, which is
+// what the clients send and what actually writes channel_membership.last_viewed_message_id.
+// The no-argument helper leaves that column NULL.
+func (w *testWorld) markChannelAsReadUpTo(actor testUser, channelID, messageID string) {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.MarkChannelAsReadRequest{
+		ChannelId:         channelID,
+		LastReadMessageId: messageID,
+	})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.chat.MarkChannelAsRead(context.Background(), req)
 	require.NoError(w.t, err)
 }

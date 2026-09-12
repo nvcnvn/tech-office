@@ -35,8 +35,8 @@ Backend-only change. Paths are repo-relative from `/Volumes/T5/Codes/tech-office
 
 **Purpose**: Get a live PostgreSQL 18 to run migrations and integration tests against. No project scaffolding is needed — every file this feature touches already exists.
 
-- [ ] T001 Start the project's PostgreSQL 18 container and confirm connectivity: `cd backend && cp -n .env.example .env && docker compose up -d postgres`, then `export DATABASE_URL='postgres://postgres:tech_office_password@localhost:15432/tech_office_db?sslmode=disable'` and verify with `psql "$DATABASE_URL" -c 'select version()'` — expect PostgreSQL 18 (per quickstart.md Prerequisites)
-- [ ] T002 Record the pre-change baseline so the snapshot diff in T005 is reviewable: run `cd backend && ./scripts/migrate.sh` to bring the database to head, then `git status --porcelain backend/database/scripts/schema.sql` must be clean
+- [X] T001 Start the project's PostgreSQL 18 container and confirm connectivity: `cd backend && cp -n .env.example .env && docker compose up -d postgres`, then `export DATABASE_URL='postgres://postgres:tech_office_password@localhost:15432/tech_office_db?sslmode=disable'` and verify with `psql "$DATABASE_URL" -c 'select version()'` — expect PostgreSQL 18 (per quickstart.md Prerequisites)
+- [X] T002 Record the pre-change baseline so the snapshot diff in T005 is reviewable: run `cd backend && ./scripts/migrate.sh` to bring the database to head, then `git status --porcelain backend/database/scripts/schema.sql` must be clean
 
 ---
 
@@ -46,16 +46,16 @@ Backend-only change. Paths are repo-relative from `/Volumes/T5/Codes/tech-office
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T003 Create the migration `backend/database/migrations/20260912000001_composite_fk_set_null_columns.up.sql` containing all five constraint changes, each preceded by a comment saying why, using `DROP CONSTRAINT IF EXISTS` before `ADD CONSTRAINT` for idempotency (forward-only, no `.down.sql`, matching the existing files in that directory):
+- [X] T003 Create the migration `backend/database/migrations/20260912000001_composite_fk_set_null_columns.up.sql` containing all five constraint changes, each preceded by a comment saying why, using `DROP CONSTRAINT IF EXISTS` before `ADD CONSTRAINT` for idempotency (forward-only, no `.down.sql`, matching the existing files in that directory):
   1. `collaboration.task` — replace `fk_task_source_message` with `FOREIGN KEY (organization_id, source_message_id) REFERENCES chat.message(organization_id, id) ON DELETE SET NULL (source_message_id)`
   2. `collaboration.task` — replace `fk_task_source_channel` with `FOREIGN KEY (organization_id, source_channel_id) REFERENCES chat.channel(organization_id, id) ON DELETE SET NULL (source_channel_id)`
   3. `collaboration.task` — `DROP CONSTRAINT IF EXISTS task_source_message_consistency` with a comment recording research R2/R3: both `(NULL, message)` and `(channel, NULL)` are reachable intermediate states, a row-level CHECK is never deferrable, so no CHECK relating the two columns can hold
   4. `chat.channel_membership` — replace `fk_channel_membership_last_viewed_message` with `FOREIGN KEY (organization_id, last_viewed_message_id) REFERENCES chat.message(organization_id, id) ON DELETE SET NULL (last_viewed_message_id)`, commenting that unread counts are computed from `last_viewed_at`, not this pointer (`chat.query.sql:756`)
   5. `voice.voice_message` — replace `fk_voice_message_message` with `FOREIGN KEY (organization_id, message_id) REFERENCES chat.message(organization_id, id) ON DELETE CASCADE`, commenting that `SET NULL` is barred by `voice_message_posted_requires_assets`
-- [ ] T004 Apply the migration: `cd backend && ./scripts/migrate.sh` — it must apply cleanly against the container from T001
-- [ ] T005 Regenerate the schema snapshot: `cd backend && ./scripts/regen-schema.sh`, then review `git diff backend/database/scripts/schema.sql` — expect exactly four FK constraint lines changed and one `CHECK` line removed (`task_source_message_consistency` at `schema.sql:1206`). Never hand-edit this file (FR-008)
-- [ ] T006 Verify the column list survived `pg_dump` (research R1 — the linter in Story 3 parses this file, so if the dump dropped the column list the rule would flag the very constraints this feature fixes): `grep -E 'fk_task_source_(message|channel)|fk_channel_membership_last_viewed|fk_voice_message_message' backend/database/scripts/schema.sql` must show `ON DELETE SET NULL (source_message_id)`, `ON DELETE SET NULL (source_channel_id)`, `ON DELETE SET NULL (last_viewed_message_id)` and `ON DELETE CASCADE`, and `grep -n 'ON DELETE SET NULL;' backend/database/scripts/schema.sql` must return nothing
-- [ ] T007 Confirm the existing backend build and tenancy linter still pass on the new snapshot before any story work: `cd backend && go build ./... && make -C .. lint-tenancy`
+- [X] T004 Apply the migration: `cd backend && ./scripts/migrate.sh` — it must apply cleanly against the container from T001
+- [X] T005 Regenerate the schema snapshot: `cd backend && ./scripts/regen-schema.sh`, then review `git diff backend/database/scripts/schema.sql` — expect exactly four FK constraint lines changed and one `CHECK` line removed (`task_source_message_consistency` at `schema.sql:1206`). Never hand-edit this file (FR-008)
+- [X] T006 Verify the column list survived `pg_dump` (research R1 — the linter in Story 3 parses this file, so if the dump dropped the column list the rule would flag the very constraints this feature fixes): `grep -E 'fk_task_source_(message|channel)|fk_channel_membership_last_viewed|fk_voice_message_message' backend/database/scripts/schema.sql` must show `ON DELETE SET NULL (source_message_id)`, `ON DELETE SET NULL (source_channel_id)`, `ON DELETE SET NULL (last_viewed_message_id)` and `ON DELETE CASCADE`, and `grep -n 'ON DELETE SET NULL;' backend/database/scripts/schema.sql` must return nothing
+- [X] T007 Confirm the existing backend build and tenancy linter still pass on the new snapshot before any story work: `cd backend && go build ./... && make -C .. lint-tenancy`
 
 **Checkpoint**: The database now permits a hard delete of a message a task was made from. User stories can begin.
 
@@ -69,12 +69,12 @@ Backend-only change. Paths are repo-relative from `/Volumes/T5/Codes/tech-office
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Replace the origin block in `taskToProto` at `backend/internal/collaboration/task_logic.go:955` so it emits **both** `SourceChannelId` and `SourceMessageId` or **neither** — guard on `t.SourceChannelID.Valid && t.SourceMessageID.Valid` — and replace the comment that asserts "The table's CHECK guarantees both halves are set together" (a CHECK T003 deletes) with the real reason: storage may hold a half-present origin after a hard delete, and contract 3 requires every reader to treat that as no origin (FR-003, SC-005)
-- [ ] T009 [P] [US1] Verify the other two origin readers need no change and record the verification in the test from T010 rather than editing them: `GetTaskOrigin` (`backend/internal/collaboration/task_from_message_logic.go:314`) already returns `HasOrigin: false` when either half is absent, and `ListTasksBySourceMessages` (`:276`) is backed by the partial index `idx_task_source_message WHERE source_message_id IS NOT NULL`. If either does branch on one half alone, fix it here (research R5)
+- [X] T008 [US1] Replace the origin block in `taskToProto` at `backend/internal/collaboration/task_logic.go:955` so it emits **both** `SourceChannelId` and `SourceMessageId` or **neither** — guard on `t.SourceChannelID.Valid && t.SourceMessageID.Valid` — and replace the comment that asserts "The table's CHECK guarantees both halves are set together" (a CHECK T003 deletes) with the real reason: storage may hold a half-present origin after a hard delete, and contract 3 requires every reader to treat that as no origin (FR-003, SC-005)
+- [X] T009 [P] [US1] Verify the other two origin readers need no change and record the verification in the test from T010 rather than editing them: `GetTaskOrigin` (`backend/internal/collaboration/task_from_message_logic.go:314`) already returns `HasOrigin: false` when either half is absent, and `ListTasksBySourceMessages` (`:276`) is backed by the partial index `idx_task_source_message WHERE source_message_id IS NOT NULL`. If either does branch on one half alone, fix it here (research R5)
 
 ### Tests for User Story 1
 
-- [ ] T010 [US1] Add the delete scenarios to `TestChatTaskCapture` in `backend/integration/chat_task_capture_test.go` as nested `t.Run` subtests following the existing testWorld arrange/act/assert pattern in that file, covering every acceptance scenario in spec.md Story 1:
+- [X] T010 [US1] Add the delete scenarios to `TestChatTaskCapture` in `backend/integration/chat_task_capture_test.go` as nested `t.Run` subtests following the existing testWorld arrange/act/assert pattern in that file, covering every acceptance scenario in spec.md Story 1:
   - create a task from a message, `DELETE FROM chat.message` for that row, assert no error returned (scenario 1, FR-001)
   - read the task back: it exists, `organization_id` unchanged, `identifier`, `title`, `project_id` and state unchanged, `source_message_id` now `NULL` (scenario 2, SC-002)
   - `GetTaskOrigin` returns `has_origin: false` and the task proto carries **neither** origin field (scenario 3, FR-003)
@@ -82,7 +82,7 @@ Backend-only change. Paths are repo-relative from `/Volumes/T5/Codes/tech-office
   - deleting the **channel** succeeds and leaves both tasks intact with both origin columns `NULL` — this is the case that catches a re-introduced CHECK, because the channel half is nulled before the message cascade (scenario 4, FR-002/FR-004)
   - a member's `last_viewed_message_id` pointing at the message, and a posted `voice.voice_message` attached to it, neither block the delete; after it, no row references the deleted message (FR-005, contract 1)
   - a task that never had an origin is untouched throughout (scenario 5)
-- [ ] T011 [US1] Run `make test-backend-one T=TestChatTaskCapture` and confirm green
+- [X] T011 [US1] Run `make test-backend-one T=TestChatTaskCapture` and confirm green
 
 **Checkpoint**: FR-001 through FR-005 and SC-001/SC-002/SC-005 hold. Story 1 is independently shippable.
 
@@ -98,15 +98,19 @@ Backend-only change. Paths are repo-relative from `/Volumes/T5/Codes/tech-office
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Rewrite the comment at `backend/cmd/seed_demo.go:187` (the "--- 4. Content worth reviewing ---" block) so it stops asserting a constraint that no longer exists: the work-before-content ordering is now incidental, not required, because `fk_task_source_message` nulls only `source_message_id` and leaves `organization_id` alone. Do **not** change the ordering or any seed logic (FR-009, research R7)
-- [ ] T013 [US2] Verify no other comment or doc in the seed path still describes the old failure: `grep -rn "SET NULL" backend/cmd/ backend/internal/chat/` and reconcile anything that asserts a message cannot be deleted
+- [X] T012 [US2] Rewrite the comment at `backend/cmd/seed_demo.go:187` (the "--- 4. Content worth reviewing ---" block) so it stops asserting a constraint that no longer exists: the work-before-content ordering is now incidental, not required, because `fk_task_source_message` nulls only `source_message_id` and leaves `organization_id` alone. Do **not** change the ordering or any seed logic (FR-009, research R7)
+- [X] T013 [US2] Verify no other comment or doc in the seed path still describes the old failure: `grep -rn "SET NULL" backend/cmd/ backend/internal/chat/` and reconcile anything that asserts a message cannot be deleted
 
 ### Tests for User Story 2
 
-- [ ] T014 [US2] Run the manual re-run check from quickstart.md step 4 against the container from T001: `cd backend && go run ./cmd/seed-demo-org --subdomain demo`, then exercise the workspace (sign in as the demo worker, open the demo channel to set a last-viewed pointer, convert the rude message to a task via the chat quick action, record a voice message), then re-run the same command. Assert exit 0, the demo channel holds exactly the six fixture messages once, and the reviewer's task survives without an origin (FR-006, SC-003, spec Story 2 scenarios 1–3)
-- [ ] T015 [US2] Confirm the never-seeded path is unchanged (Story 2 scenario 4): run the seed against a fresh subdomain and assert it behaves as it does today
+- [X] T014 [US2] Run the manual re-run check from quickstart.md step 4 against the container from T001: `cd backend && go run ./cmd/seed-demo-org --subdomain demo`, then exercise the workspace (sign in as the demo worker, open the demo channel to set a last-viewed pointer, convert the rude message to a task via the chat quick action, record a voice message), then re-run the same command. Assert exit 0, the demo channel holds exactly the six fixture messages once, and the reviewer's task survives without an origin (FR-006, SC-003, spec Story 2 scenarios 1–3)
+- [X] T015 [US2] Confirm the never-seeded path is unchanged (Story 2 scenario 4): run the seed against a fresh subdomain and assert it behaves as it does today
 
 **Checkpoint**: FR-006, FR-009 and SC-003 hold. The published reviewer-notes promise is now true.
+
+> [ASSUMPTION: T014 was implemented as an integration test — a new `when a reviewer has used the workspace before the seed runs again` block in `backend/integration/demo_seed_test.go` — rather than as the manual browser walkthrough quickstart.md step 4 describes. An unattended run cannot drive a browser, and a repeatable test is what a senior engineer would leave behind for a claim published to Apple and Google. The reviewer's residue is written straight to storage because the demo accounts sign in by password and PIN and the test holds no session for them; the constraints under test do not care which statement wrote the rows, and the RPC-driven version of the same delete is `TestChatTaskCapture`'s hard-delete block.]
+>
+> [ASSUMPTION: the sub-assertion quickstart.md step 4 states as "the task the reviewer created survives without an origin" was found to be false and was not written. `refreshDemoProjects` (`backend/cmd/seed_demo.go`) empties the demo projects outright — "including anything a reviewer created while looking around", by its own comment — and it runs *before* the conversation is cleared, so a reviewer's captured task is deleted by the refresh and never reaches the message delete at all. What the seed was actually blocked by, and what the test now asserts, is the pair of `ON DELETE RESTRICT` dependents that the work refresh does not clear: the read receipt (`chat.channel_membership.last_viewed_message_id`) and the posted voice recording (`voice.voice_message.message_id`). FR-003's "survives without an origin" behaviour is proven by Story 1's integration test instead.]
 
 ---
 
@@ -120,13 +124,15 @@ Backend-only change. Paths are repo-relative from `/Volumes/T5/Codes/tech-office
 
 ### Implementation for User Story 3
 
-- [ ] T016 [US3] Split `loadSchema` in `backend/tools/tenancylint/main.go:139` into a file-reading half that keeps the name `loadSchema(path string)` and a parse half `collectSchema(src string) (map[string]*tableInfo, error)`, so the new rule can be unit-tested against DDL strings. No existing behaviour moves — this is the only refactor (research R6)
-- [ ] T017 [US3] Add the `fkInfo` type and collect foreign keys in `backend/tools/tenancylint/main.go` from the same walk that already collects unique keys, reading `conname`, `fk_attrs`, `fk_del_action` and `fk_del_set_cols` from `CONSTR_FOREIGN` nodes in both `CreateStmt` table elements and `AlterTableStmt` commands (the snapshot declares FKs via `ALTER TABLE ... ADD CONSTRAINT`), and store them on `tableInfo` as declared in data-model.md
-- [ ] T018 [US3] Add `checkForeignKeys` to `backend/tools/tenancylint/main.go` implementing rule `set-null-tenant-column`, evaluated only for tables already classified `tenant`: report a finding when `delAction ∈ {"n","d"}` AND `len(attrs) > 1` AND (`len(delSetCols) == 0` OR `organization_id ∈ delSetCols`). Emit findings in sorted order and format the message per contract 4 — naming the table and constraint, saying Postgres would null `organization_id` (NOT NULL), and stating the fix, e.g. `Write: ON DELETE SET NULL (source_message_id)`. Wire it into the same call site and exit-code-1 path as the existing `unique-key` rule (FR-007)
-- [ ] T019 [US3] Add Story 3's five scenarios as table-driven cases in `backend/tools/tenancylint/main_test.go`, calling `collectSchema` with DDL strings: composite `SET NULL` with no column list → finding naming the constraint; composite `SET NULL (source_message_id)` → clean; composite `SET NULL (organization_id, source_message_id)` → finding; single-column `SET NULL` on a table with no `organization_id` column → clean; and the real `backend/database/scripts/schema.sql` → no `set-null-tenant-column` findings. Also cover `SET DEFAULT` and a single-column `SET NULL` on a tenant table (clean), per the verdict table in data-model.md
-- [ ] T020 [US3] Run `make lint-tenancy` — expect the unit tests green and the linter reporting no findings on the fixed schema (Story 3 scenario 5, SC-004). Then prove the rule bites: temporarily delete `(source_message_id)` from the snapshot, re-run, confirm it fails naming `fk_task_source_message`, and restore with `git checkout backend/database/scripts/schema.sql`
+- [X] T016 [US3] Split `loadSchema` in `backend/tools/tenancylint/main.go:139` into a file-reading half that keeps the name `loadSchema(path string)` and a parse half `collectSchema(src string) (map[string]*tableInfo, error)`, so the new rule can be unit-tested against DDL strings. No existing behaviour moves — this is the only refactor (research R6)
+- [X] T017 [US3] Add the `fkInfo` type and collect foreign keys in `backend/tools/tenancylint/main.go` from the same walk that already collects unique keys, reading `conname`, `fk_attrs`, `fk_del_action` and `fk_del_set_cols` from `CONSTR_FOREIGN` nodes in both `CreateStmt` table elements and `AlterTableStmt` commands (the snapshot declares FKs via `ALTER TABLE ... ADD CONSTRAINT`), and store them on `tableInfo` as declared in data-model.md
+- [X] T018 [US3] Add `checkForeignKeys` to `backend/tools/tenancylint/main.go` implementing rule `set-null-tenant-column`, evaluated only for tables already classified `tenant`: report a finding when `delAction ∈ {"n","d"}` AND `len(attrs) > 1` AND (`len(delSetCols) == 0` OR `organization_id ∈ delSetCols`). Emit findings in sorted order and format the message per contract 4 — naming the table and constraint, saying Postgres would null `organization_id` (NOT NULL), and stating the fix, e.g. `Write: ON DELETE SET NULL (source_message_id)`. Wire it into the same call site and exit-code-1 path as the existing `unique-key` rule (FR-007)
+- [X] T019 [US3] Add Story 3's five scenarios as table-driven cases in `backend/tools/tenancylint/main_test.go`, calling `collectSchema` with DDL strings: composite `SET NULL` with no column list → finding naming the constraint; composite `SET NULL (source_message_id)` → clean; composite `SET NULL (organization_id, source_message_id)` → finding; single-column `SET NULL` on a table with no `organization_id` column → clean; and the real `backend/database/scripts/schema.sql` → no `set-null-tenant-column` findings. Also cover `SET DEFAULT` and a single-column `SET NULL` on a tenant table (clean), per the verdict table in data-model.md
+- [X] T020 [US3] Run `make lint-tenancy` — expect the unit tests green and the linter reporting no findings on the fixed schema (Story 3 scenario 5, SC-004). Then prove the rule bites: temporarily delete `(source_message_id)` from the snapshot, re-run, confirm it fails naming `fk_task_source_message`, and restore with `git checkout backend/database/scripts/schema.sql`
 
 **Checkpoint**: All three stories independently functional. FR-007 and SC-004 hold.
+
+> [ASSUMPTION: T020's restore step was done with `backend/scripts/regen-schema.sh`, not `git checkout backend/database/scripts/schema.sql` as written. The regeneration from T005 is uncommitted at this point in the sequence, so `git checkout` discards it along with the deliberate temporary edit and leaves the snapshot at the pre-migration state — which then fails `make lint-tenancy` for real. Re-running the generator is the operation the task intended: it restores the snapshot from the migrations, which is the only thing allowed to write that file.]
 
 ---
 
@@ -134,11 +140,20 @@ Backend-only change. Paths are repo-relative from `/Volumes/T5/Codes/tech-office
 
 **Purpose**: Documentation half of the Definition of Done (Constitution principle XII) and the full gate.
 
-- [ ] T021 [P] Update `docs/domain/rituals-tasks.md` to describe what a **hard** delete now does to a task's origin — today it documents only the soft-delete case ("a soft-deleted source message does not remove the origin"). State that a hard delete nulls the origin column, the task survives with its organization intact, and a half-present origin reads as no origin everywhere (FR-008, plan.md Constitution Check XII)
-- [ ] T022 [P] Update `docs/domain/chat.md` with the message hard-delete contract from `contracts/referential-actions.md` §1: the delete succeeds unconditionally, replies and reactions and voice rows cascade, last-viewed pointers and task origins are nulled, and soft deletion is a separate unaffected operation
-- [ ] T023 Reconcile the drift register in `docs/domain/README.md` — remove any entry this feature closes, and add none that it does not create (T021 and T022 must land first so the register reflects the updated docs)
-- [ ] T024 Run the full gate from quickstart.md: `make lint-tenancy && make test-backend && make test-frontend`. `make test-frontend-one F=chat-task-capture` must stay green with no frontend change — the E2E run confirms both clients still gate the origin block on `sourceMessageId` alone, it is not testing new UI (SC-005)
-- [ ] T025 Final review pass: confirm no `.down.sql` was added (migrations are forward-only), `backend/database/scripts/schema.sql` shows only regenerated output, no proto file changed, and no file under `frontend/` changed
+- [X] T021 [P] Update `docs/domain/rituals-tasks.md` to describe what a **hard** delete now does to a task's origin — today it documents only the soft-delete case ("a soft-deleted source message does not remove the origin"). State that a hard delete nulls the origin column, the task survives with its organization intact, and a half-present origin reads as no origin everywhere (FR-008, plan.md Constitution Check XII)
+- [X] T022 [P] Update `docs/domain/chat.md` with the message hard-delete contract from `contracts/referential-actions.md` §1: the delete succeeds unconditionally, replies and reactions and voice rows cascade, last-viewed pointers and task origins are nulled, and soft deletion is a separate unaffected operation
+- [X] T023 Reconcile the drift register in `docs/domain/README.md` — remove any entry this feature closes, and add none that it does not create (T021 and T022 must land first so the register reflects the updated docs)
+- [X] T024 Run the full gate from quickstart.md: `make lint-tenancy && make test-backend && make test-frontend`. `make test-frontend-one F=chat-task-capture` must stay green with no frontend change — the E2E run confirms both clients still gate the origin block on `sourceMessageId` alone, it is not testing new UI (SC-005)
+- [X] T025 Final review pass: confirm no `.down.sql` was added (migrations are forward-only), `backend/database/scripts/schema.sql` shows only regenerated output, no proto file changed, and no file under `frontend/` changed
+
+**Gate results**
+
+- `make lint-tenancy` — green, including the new `set-null-tenant-column` rule and its unit tests.
+- `make test-backend` — green, whole suite, exit 0.
+- `make test-frontend-one F=chat-task-capture` — 8/8 green with no frontend change (SC-005).
+- `make test-frontend` — 235 passed, 2 failed. Both failures are the pre-existing drift-register item [D41](../../docs/domain/README.md#drift-register): `legal-surface.spec.ts:59` and `user-guide-screenshots.spec.ts:626`, which fail in setup because `RegisterOrganizationWithAdminPassword` refuses the terms version their fixtures send. Neither touches chat, tasks or the schema. [ASSUMPTION: the gate is treated as met at the documented D41 baseline rather than at zero failures, because `make test-frontend` is known not to be green on a clean tree and this change set does not modify anything under `frontend/`. D41's third listed spec, `context-rail.spec.ts:155`, passed on this run.]
+- Migration re-run against an already-migrated database: clean, no-op (`DROP CONSTRAINT IF EXISTS` before each `ADD CONSTRAINT`).
+- T025 review: one `.up.sql` added and no `.down.sql`; `backend/database/scripts/schema.sql` shows only generator output (4 foreign-key lines, 1 `CHECK` removed); no `.proto` or generated `rpc/v1` file changed; no file under `frontend/` changed.
 
 ---
 

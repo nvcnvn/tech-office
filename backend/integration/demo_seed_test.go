@@ -297,6 +297,115 @@ func TestDemoSeed(t *testing.T) {
 		})
 	})
 
+	// Feature 057, FR-006 and SC-003. The reviewer notes published to Apple and Google
+	// promise this command can be re-run; before this feature it could not be, once a
+	// reviewer had actually used the workspace. Refreshing the fixture ends in
+	// `DELETE FROM chat.message`, and two dependents of chat.message were ON DELETE
+	// RESTRICT and refused it outright: the read receipt a reviewer leaves by opening the
+	// channel, and a posted voice recording. Neither is cleared by the work refresh that
+	// runs first, so neither could be ordered around.
+	//
+	// The captured task is set up here too, for completeness, though it is not what broke
+	// the seed: refreshDemoProjects empties the demo projects before the conversation is
+	// touched, so the task is already gone by the time the message delete runs. Its
+	// composite ON DELETE SET NULL is exercised by TestChatTaskCapture instead.
+	//
+	// The residue below is written straight to storage rather than driven through the
+	// RPCs, because the demo accounts sign in by password and PIN and this test holds no
+	// session for them. The rows are the ones those RPCs produce, and the constraints
+	// under test do not care which statement wrote them. The RPC-driven version of the
+	// same delete is TestChatTaskCapture's hard-delete block.
+	t.Run("when a reviewer has used the workspace before the seed runs again", func(t *testing.T) { // FR-006, SC-003
+		ctx := context.Background()
+		orgID := demoOrgID(t, subdomain)
+
+		var channelID, messageID, workerID dbuuid.UUID
+		require.NoError(t, globalDB.QueryRow(ctx,
+			`SELECT c.id, m.id, m.author_employee_id
+			   FROM chat.channel c
+			   JOIN chat.message m ON (m.organization_id, m.channel_id) = (c.organization_id, c.id)
+			  WHERE c.organization_id = $1 AND c.title_slug = 'site-updates'
+			  ORDER BY m.id
+			  LIMIT 1`, orgID).Scan(&channelID, &messageID, &workerID),
+			"the seeded demo conversation is what a reviewer reads")
+
+		// The reviewer opens the channel: a read receipt points at the message.
+		_, err := globalDB.Exec(ctx,
+			`UPDATE chat.channel_membership SET last_viewed_message_id = $3, last_viewed_at = now()
+			  WHERE organization_id = $1 AND channel_id = $2`, orgID, channelID, messageID)
+		require.NoError(t, err)
+
+		// The reviewer uses the chat quick action: one demo task now carries an origin.
+		var capturedTaskID dbuuid.UUID
+		require.NoError(t, globalDB.QueryRow(ctx,
+			`UPDATE collaboration.task SET source_channel_id = $2, source_message_id = $3
+			  WHERE organization_id = $1 AND task_kind = 'standard' AND NOT is_deleted
+			    AND id = (SELECT id FROM collaboration.task
+			               WHERE organization_id = $1 AND task_kind = 'standard' AND NOT is_deleted
+			               ORDER BY id LIMIT 1)
+			  RETURNING id`, orgID, channelID, messageID).Scan(&capturedTaskID))
+
+		// The reviewer records a voice note: a posted recording hangs off a message,
+		// and a posted recording is the state that also pins a file_metadata row.
+		var fileID dbuuid.UUID
+		require.NoError(t, globalDB.QueryRow(ctx,
+			`INSERT INTO files.file_metadata
+			     (organization_id, original_filename, storage_key, size_bytes, mime_type,
+			      upload_context, uploaded_by_employee_id, validation_status)
+			 VALUES ($1, 'reviewer-note.webm', 'demo/reviewer-note.webm', 2048, 'audio/webm',
+			         'chat', $2, 'verified')
+			 RETURNING id`, orgID, workerID).Scan(&fileID))
+		_, err = globalDB.Exec(ctx,
+			`INSERT INTO voice.voice_message
+			     (organization_id, channel_id, sender_employee_id, message_id, file_id,
+			      client_deduplication_key, status, duration_ms, mime_type, size_bytes, posted_at)
+			 VALUES ($1, $2, $3, $4, $5, 'reviewer-note', 'posted', 3200, 'audio/webm', 2048, now())`,
+			orgID, channelID, workerID, messageID, fileID)
+		require.NoError(t, err)
+
+		output, runErr := runResult()
+
+		t.Run("the seed succeeds against the used workspace", func(t *testing.T) { // FR-006
+			require.NoError(t, runErr, "seed-demo-org must survive having been used: %s", output)
+			assert.Contains(t, output, "Reusing existing demo workspace")
+		})
+
+		t.Run("the conversation holds exactly one copy of the fixture", func(t *testing.T) { // SC-003
+			assert.Equal(t, 6, countRows(t,
+				`SELECT COUNT(*) FROM chat.message m
+				   JOIN public.organization o ON o.id = m.organization_id
+				  WHERE o.subdomain = $1`, subdomain))
+		})
+
+		t.Run("the read receipt and the voice recording gave way rather than blocking", func(t *testing.T) { // FR-005
+			// These two are what actually blocked the re-run: both foreign keys were
+			// ON DELETE RESTRICT, and neither row is cleared by the work refresh that
+			// runs before the conversation is cleared.
+			assert.Zero(t, countRows(t,
+				`SELECT COUNT(*) FROM chat.channel_membership cm
+				  WHERE cm.organization_id = $1 AND cm.last_viewed_message_id = $2`,
+				orgID, messageID), "the read receipt is nulled, not left dangling")
+			assert.Zero(t, countRows(t,
+				`SELECT COUNT(*) FROM voice.voice_message vm
+				  WHERE vm.organization_id = $1 AND vm.message_id = $2`,
+				orgID, messageID), "the recording cascades with the message it lived in")
+		})
+
+		t.Run("every surviving task keeps its organization", func(t *testing.T) { // SC-003
+			// The captured task itself is gone, and deliberately so: refreshDemoProjects
+			// empties the demo projects outright, including anything a reviewer created
+			// while looking around. What the origin columns had to survive is the delete,
+			// not the refresh — and every surviving task keeps its organization.
+			assert.Zero(t, countRows(t,
+				`SELECT COUNT(*) FROM collaboration.task
+				  WHERE organization_id = $1 AND id = $2`, orgID, capturedTaskID))
+			assert.Equal(t, 6, countRows(t, countDemoStandardTasks, subdomain))
+			assert.Equal(t, 6, countRows(t,
+				countDemoStandardTasks+` AND t.organization_id IS NOT NULL`, subdomain),
+				"the tenant column is what a bare composite SET NULL would have erased")
+		})
+	})
+
 	t.Run("the demo PIN does not expire", func(t *testing.T) { // FR-033
 		// The ordinary temporary PIN expires in three days and forces a change at
 		// first sign-in. A reviewer reaching the demo a week after submission would

@@ -951,15 +951,16 @@ func (l *logicImpl) taskToProto(t *database.CollaborationTask, assignees []*data
 		task.ParentTaskId = &s
 	}
 
-	// Where the task came from, when it was created from a chat message. The table's
-	// CHECK guarantees both halves are set together, so either both appear or neither.
-	if t.SourceChannelID.Valid {
-		s := t.SourceChannelID.UUID.String()
-		task.SourceChannelId = &s
-	}
-	if t.SourceMessageID.Valid {
-		s := t.SourceMessageID.UUID.String()
-		task.SourceMessageId = &s
+	// Where the task came from, when it was created from a chat message. Emit both halves
+	// or neither: storage may hold a half-present origin after the source message or
+	// channel is hard-deleted (the delete nulls one column and leaves the other), and an
+	// origin is only real when both halves are there — a channel without a message has no
+	// excerpt to render, and a message without a channel has nowhere to navigate to.
+	if t.SourceChannelID.Valid && t.SourceMessageID.Valid {
+		channelID := t.SourceChannelID.UUID.String()
+		messageID := t.SourceMessageID.UUID.String()
+		task.SourceChannelId = &channelID
+		task.SourceMessageId = &messageID
 	}
 
 	if t.StartDate.Valid {

@@ -5,7 +5,7 @@ with evidence capture and compliance reporting. Owned by `internal/collaboration
 contract in `rpc/v1/collaboration.proto` (`CollaborationService`, 73 RPCs — the largest
 surface in the system).
 
-**Status date: 2026-09-05.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044, 045, 046, 047 (034 and
+**Status date: 2026-09-12.** Supersedes specs 017, 022, 023, 028, 029, 034, 038, 040, 041, 042, 044, 045, 046, 047, 057 (034 and
 038 are in development on this branch; their backend changes are described here as shipped
 because the code and migrations are both present).
 
@@ -68,8 +68,12 @@ checked by the interceptor.
 - **Cross-domain** — `channel_id` → `chat.channel` (comments),
   `description_document_id` → `docs.document` (rich description), `file_ids uuid[]` →
   `files.file_metadata`
-- **Origin** — `source_channel_id` and `source_message_id`, set together or not at all
-  (a CHECK enforces it), recording the chat message a task was created from
+- **Origin** — `source_channel_id` and `source_message_id`, recording the chat message a
+  task was created from. They are *written* together, in one statement inside the
+  conversion transaction, but no CHECK enforces the pairing — a hard delete of the message
+  or the channel nulls one half and leaves the other, and both half-present states are
+  reachable. Every reader treats a half-present origin as no origin; see
+  [When the source message is deleted](#when-the-source-message-is-deleted)
 - **Ritual fields** — `task_kind IN ('standard','ritual_instance')`,
   `ritual_definition_id`, `scheduled_date`, `completion_deadline`, `skip_reason`,
   `detached_from_ritual`
@@ -170,10 +174,38 @@ task read stays a single-domain query; clients make it only when the task carrie
 `source_message_id`. Both chat reads run as the caller, so someone who can see the task but
 not the private channel it came from gets the identifiers and nothing else.
 
-A **soft-deleted source message does not remove the origin.** The row and its foreign keys
-survive, so the task still names the conversation; only `source_message_available` goes
-false and the excerpt is withheld — showing chat's deletion placeholder as an excerpt would
-misrepresent it as what was said.
+#### When the source message is deleted
+
+Chat's own message deletion is a **soft** delete, and a soft-deleted source message does
+not remove the origin. The row and its foreign keys survive, so the task still names the
+conversation; only `source_message_available` goes false and the excerpt is withheld —
+showing chat's deletion placeholder as an excerpt would misrepresent it as what was said.
+
+A **hard** delete is the other case, and it removes the origin rather than degrading it:
+
+- **The delete always succeeds.** `fk_task_source_message` is
+  `ON DELETE SET NULL (source_message_id)` — the PostgreSQL 15 column-list form, which
+  nulls only the pointer. A bare `ON DELETE SET NULL` over the composite key
+  `(organization_id, source_message_id)` would null *every* column of the key, including
+  the `NOT NULL` `organization_id`, and refuse the delete outright — which is why
+  `make lint-tenancy` rejects the bare form on any tenant table.
+- **The task survives whole.** Its `organization_id`, `identifier`, `title`, `project_id`,
+  state and every other column are untouched. Only `source_message_id` becomes `NULL`.
+- **Deleting the channel does the same** through `fk_task_source_channel`
+  (`ON DELETE SET NULL (source_channel_id)`), and cascades the channel's messages, so both
+  origin halves end up `NULL`. `fk_task_channel` — the task's own comment thread, a
+  different column — is still `ON DELETE RESTRICT` and can still block a channel delete.
+- **A half-present origin reads as no origin, everywhere.** Storage may briefly or durably
+  hold `(source_channel_id set, source_message_id NULL)`; `GetTaskOrigin` returns
+  `has_origin: false`, `ListTasksBySourceMessages` returns no link, and `taskToProto` emits
+  **neither** origin field. No RPC returns a partial origin and no client renders a chip or
+  origin block for content that is not there.
+
+No CHECK relates the two columns, and none can: PostgreSQL nulls `source_channel_id`
+*before* the channel's messages cascade into `source_message_id`, so the row passes through
+`(NULL, message)` mid-statement, while a message delete leaves `(channel, NULL)`. A
+row-level CHECK is never deferrable, so any constraint relating the two would see one of
+those states and refuse a legitimate delete.
 
 #### The channel's remembered destination
 

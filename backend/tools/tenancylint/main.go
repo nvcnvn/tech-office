@@ -81,6 +81,7 @@ func main() {
 
 	var findings []finding
 	findings = append(findings, checkSchema(*schemaPath, tables)...)
+	findings = append(findings, checkForeignKeys(*schemaPath, tables)...)
 
 	files, err := filepath.Glob(*queryGlob)
 	if err != nil || len(files) == 0 {
@@ -134,6 +135,21 @@ type tableInfo struct {
 	// uniques are the PK and UNIQUE key sets declared for the table, by constraint
 	// or index name. A shard key must appear in every one of them.
 	uniques map[string][]string
+	// fks are the foreign keys declared on the table, in declaration order. Only the
+	// fields the delete-action rule needs are kept.
+	fks []fkInfo
+}
+
+// fkInfo is one foreign key, as much of it as the set-null-tenant-column rule reads.
+type fkInfo struct {
+	name  string   // conname
+	attrs []string // fk_attrs — the referencing columns, in key order
+	// delAction is libpg_query's fk_del_action character: "a" no action, "r" restrict,
+	// "c" cascade, "n" set null, "d" set default.
+	delAction string
+	// delSetCols is the ON DELETE SET NULL/DEFAULT column list. Empty when none was
+	// written, which is the case that nulls the whole key.
+	delSetCols []string
 }
 
 func loadSchema(path string) (map[string]*tableInfo, error) {
@@ -141,9 +157,19 @@ func loadSchema(path string) (map[string]*tableInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	tree, err := parse(string(src))
+	tables, err := collectSchema(string(src))
 	if err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
+	}
+	return tables, nil
+}
+
+// collectSchema is the parsing half of loadSchema, split out so the schema rules can be
+// tested against DDL strings rather than against the generated snapshot on disk.
+func collectSchema(src string) (map[string]*tableInfo, error) {
+	tree, err := parse(src)
+	if err != nil {
+		return nil, err
 	}
 
 	tables := map[string]*tableInfo{}
@@ -177,6 +203,9 @@ func loadSchema(path string) (map[string]*tableInfo, error) {
 					if keys := constraintKeys(c); keys != nil {
 						t.uniques[str(c, "conname")+"@inline"] = keys
 					}
+					if fk, ok := foreignKey(c); ok {
+						t.fks = append(t.fks, fk)
+					}
 				}
 			}
 		case "AlterTableStmt":
@@ -197,6 +226,12 @@ func loadSchema(path string) (map[string]*tableInfo, error) {
 				if con := child(child(c, "def"), "Constraint"); con != nil {
 					if keys := constraintKeys(con); keys != nil {
 						t.uniques[str(con, "conname")] = keys
+					}
+					// The generated snapshot declares every foreign key as a separate
+					// ALTER TABLE ... ADD CONSTRAINT, so this is the branch that sees
+					// them in practice; the CreateStmt one covers inline DDL.
+					if fk, ok := foreignKey(con); ok {
+						t.fks = append(t.fks, fk)
 					}
 				}
 			}
@@ -223,6 +258,31 @@ func loadSchema(path string) (map[string]*tableInfo, error) {
 		}
 	})
 	return tables, nil
+}
+
+// foreignKey reads a CONSTR_FOREIGN node into the shape the delete-action rule needs.
+func foreignKey(c node) (fkInfo, bool) {
+	if str(c, "contype") != "CONSTR_FOREIGN" {
+		return fkInfo{}, false
+	}
+	return fkInfo{
+		name:       str(c, "conname"),
+		attrs:      stringList(c, "fk_attrs"),
+		delAction:  str(c, "fk_del_action"),
+		delSetCols: stringList(c, "fk_del_set_cols"),
+	}, true
+}
+
+// stringList reads a list of libpg_query String nodes, which is how column name lists
+// are carried on a Constraint.
+func stringList(n node, key string) []string {
+	var out []string
+	for _, item := range list(n, key) {
+		if sv := child(item, "String"); sv != nil {
+			out = append(out, str(sv, "sval"))
+		}
+	}
+	return out
 }
 
 func constraintKeys(c node) []string {
@@ -275,6 +335,81 @@ func checkSchema(path string, tables map[string]*tableInfo) []finding {
 				msg: fmt.Sprintf("%s: unique key %q does not include %s (keys: %s)",
 					name, c, orgCol, strings.Join(t.uniques[c], ", ")),
 			})
+		}
+	}
+	return out
+}
+
+// checkForeignKeys enforces rule set-null-tenant-column.
+//
+// PostgreSQL's bare `ON DELETE SET NULL` nulls EVERY column of the referencing key. On a
+// tenant table every foreign key is composite and leads with organization_id, which is
+// NOT NULL, so the action the database would attempt is `SET organization_id = NULL` and
+// the delete fails outright — at runtime, on a row nobody is thinking about, years after
+// the constraint was written. PostgreSQL 15's column list says which columns to null:
+//
+//	ON DELETE SET NULL (source_message_id)
+//
+// SET DEFAULT is included because its failure mode is identical: organization_id has no
+// default, so it would be set to NULL against a NOT NULL column. There are none in the
+// schema today; the rule exists so there are none tomorrow.
+//
+// ON UPDATE is deliberately out of scope. Same defect in principle, unreachable in
+// practice: the referenced keys are UUID v7 primary keys and nothing updates them.
+func checkForeignKeys(path string, tables map[string]*tableInfo) []finding {
+	var out []finding
+	names := make([]string, 0, len(tables))
+	for n := range tables {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		t := tables[name]
+		if !t.tenant {
+			continue
+		}
+		var bad []fkInfo
+		for _, fk := range t.fks {
+			if fk.delAction != "n" && fk.delAction != "d" {
+				continue
+			}
+			// A single-column key has no tenant column to take down with it.
+			if len(fk.attrs) < 2 {
+				continue
+			}
+			if len(fk.delSetCols) != 0 && !contains(fk.delSetCols, orgCol) {
+				continue
+			}
+			bad = append(bad, fk)
+		}
+		sort.Slice(bad, func(i, j int) bool { return bad[i].name < bad[j].name })
+		for _, fk := range bad {
+			action := "SET NULL"
+			if fk.delAction == "d" {
+				action = "SET DEFAULT"
+			}
+			shape := fmt.Sprintf("is ON DELETE %s over a composite key without a column list", action)
+			if len(fk.delSetCols) != 0 {
+				shape = fmt.Sprintf("is ON DELETE %s (%s), which names the tenant column",
+					action, strings.Join(fk.delSetCols, ", "))
+			}
+			fix := strings.Join(without(fk.attrs, orgCol), ", ")
+			out = append(out, finding{
+				file: path, rule: "set-null-tenant-column",
+				msg: fmt.Sprintf("%s: foreign key %q %s, so Postgres would null %s (NOT NULL). Write: ON DELETE %s (%s)",
+					name, fk.name, shape, orgCol, action, fix),
+			})
+		}
+	}
+	return out
+}
+
+// without returns hay with every occurrence of needle removed.
+func without(hay []string, needle string) []string {
+	out := make([]string, 0, len(hay))
+	for _, h := range hay {
+		if h != needle {
+			out = append(out, h)
 		}
 	}
 	return out

@@ -5,7 +5,7 @@ Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RP
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
 **Status date: 2026-09-12.** Supersedes specs 009, 010, 027, 046; deep-link
-response fields corrected by spec 056.
+response fields corrected by spec 056; message hard-delete contract from spec 057.
 
 ## Channels
 
@@ -42,7 +42,10 @@ advances the cursor and `GetUnreadCount` derives from it.
 - **Threading is exactly one level.** `parent_message_id` points at a top-level message; a
   reply cannot itself be replied to.
 - `is_deleted` is a soft delete (placeholder text preserved); `is_edited` plus
-  `edit_history` (JSONB array of `{edited_at, previous_text}`) keeps the trail.
+  `edit_history` (JSONB array of `{edited_at, previous_text}`) keeps the trail. This is
+  the only deletion the product offers a member; a **hard** delete of the row is a
+  different operation with a different contract — see
+  [Hard-deleting a message](#hard-deleting-a-message).
 - `mentions` is a JSONB array of `{type: "employee"|"department", id, label}` — department
   mentions fan out to every member.
 - `file_ids uuid[]` references `files.file_metadata`.
@@ -109,6 +112,45 @@ Previews are fetched once per rendered page by the list, never per message
 (`VirtualizedMessageList` on web, `[channelId].tsx` and `thread/[messageId].tsx` on
 mobile), so opening a busy channel costs one request and message text never waits on a
 card.
+
+## Hard-deleting a message
+
+Removing the `chat.message` row itself — as distinct from the soft delete above — **always
+succeeds**. No constraint referencing `chat.message` is `RESTRICT` or `NO ACTION`, so a
+caller may issue the delete without clearing dependents first. The two callers today are
+the demo fixture (`seed-demo-org`, which refreshes its conversation) and the voice-call
+timeline de-duplication in `chat`'s logic layer.
+
+What happens to each dependent:
+
+| dependent | on delete |
+|---|---|
+| `chat.message.parent_message_id` (replies) | `CASCADE` — a reply to a deleted message is unreachable |
+| `chat.reaction.message_id` | `CASCADE` |
+| `voice.voice_message.message_id` | `CASCADE` — a recording exists to be rendered inside its message; `SET NULL` is barred by `voice_message_posted_requires_assets` |
+| `chat.channel_membership.last_viewed_message_id` | `SET NULL (last_viewed_message_id)` — free, because unread counts come from `last_viewed_at`, not this pointer, so no badge moves |
+| `collaboration.task.source_message_id` | `SET NULL (source_message_id)` — the task survives whole, with its `organization_id` untouched |
+
+Afterwards no row anywhere references the deleted message, and every
+`collaboration.task` that referenced it still exists with the same `organization_id`,
+`identifier`, `title`, `project_id` and state — showing no origin at all. See
+[rituals-tasks.md](rituals-tasks.md#when-the-source-message-is-deleted).
+
+Deleting a **channel** cascades its messages, so each one follows the table above, and
+nulls `collaboration.task.source_channel_id` as well. It succeeds unless a task's own
+comment thread lives in that channel: `fk_task_channel` is `ON DELETE RESTRICT` and is the
+one thing that can still block it.
+
+The column-list form (`ON DELETE SET NULL (<column>)`, PostgreSQL 15+) is load-bearing on
+the two composite keys above. A bare `ON DELETE SET NULL` nulls *every* column of the
+referencing key, including the `NOT NULL` `organization_id`, and fails the delete outright.
+`make lint-tenancy` rejects the bare form on any tenant table, so the mistake cannot be
+written again.
+
+Accepted residue: a cascaded voice recording leaves its `files.file_metadata` row
+orphaned. `fk_voice_message_file` points the other way and blocks nothing, so this is a
+storage row with no reader rather than a constraint failure. File lifetime is a pre-existing
+gap, not something the delete path introduces.
 
 ## Direct conversations and the block guard
 
@@ -255,7 +297,10 @@ is nothing for that component to measure against (`src/hooks/use-keyboard-height
 
 `integration/chat_messaging_test.go`, `chat_stream_test.go`,
 `workflow_chat_files_test.go`, `notification_chat_acknowledgement_test.go`,
-`context_rail_test.go`, `chat_link_previews_test.go`. Web:
+`context_rail_test.go`, `chat_link_previews_test.go`. The hard-delete contract above is
+covered by `integration/chat_task_capture_test.go` (message and channel delete, with a read
+receipt, a posted voice recording and two captured tasks in the way) and
+`integration/demo_seed_test.go` (the seed re-run against a used workspace). Web:
 `e2e/chat-link-previews.spec.ts`. Mobile: `.maestro/chat-link-previews.yaml`.
 
 ## Known drift
@@ -273,12 +318,3 @@ None specific to chat. Two adjacent items land here:
   otherwise. The backend state is correct; only the surfaces are missing.
 - `crm_deal_notes` and `support_ticket` channel types are reserved in the CHECK constraint
   and the proto enum but nothing creates them; the `crm` and `support` schemas are empty.
-- **A message a task was captured from cannot be hard-deleted.** `collaboration.task`'s
-  `fk_task_source_message` is `ON DELETE SET NULL` over the composite
-  `(organization_id, source_message_id)`, and Postgres nulls every column of a composite
-  key — including `task.organization_id`, which is `NOT NULL`. The delete therefore fails
-  with `null value in column "organization_id" of relation "task"` instead of detaching
-  the task from its origin. The product's own message deletion is the soft delete above,
-  so this is not reachable from the message menu; a channel delete cascading to its
-  messages, and any job that clears messages directly, do reach it. See
-  [D75](README.md#drift-register).

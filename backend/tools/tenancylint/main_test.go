@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"os"
+	"strings"
+	"testing"
+)
 
 // tenant tables for the cases below; anything absent is treated as global.
 var testTables = map[string]*tableInfo{
@@ -105,5 +109,139 @@ SELECT 2;
 	}
 	if qs[1].name != "Exempt" || !qs[1].exempt {
 		t.Errorf("second query: %+v", qs[1])
+	}
+}
+
+// TestForeignKeySetNullTenantColumn covers rule set-null-tenant-column: a composite
+// foreign key on a tenant table may not null the whole key, and may not name the tenant
+// column among the columns it does null. Each case is DDL rather than a hand-built
+// tableInfo, so the parse and the rule are exercised together — the parse is where this
+// rule can silently stop working, because it depends on pg_dump emitting the column list.
+func TestForeignKeySetNullTenantColumn(t *testing.T) {
+	const parent = `CREATE TABLE chat.message (organization_id uuid NOT NULL, id uuid NOT NULL);
+`
+	cases := []struct {
+		name string
+		ddl  string
+		want bool // want a finding
+	}{
+		{
+			name: "composite SET NULL with no column list nulls the tenant column",
+			ddl: `CREATE TABLE collaboration.task (organization_id uuid NOT NULL, source_message_id uuid);
+			      ALTER TABLE collaboration.task ADD CONSTRAINT fk_task_source_message
+			          FOREIGN KEY (organization_id, source_message_id)
+			          REFERENCES chat.message(organization_id, id) ON DELETE SET NULL;`,
+			want: true,
+		},
+		{
+			name: "composite SET NULL naming only the pointer is the fix",
+			ddl: `CREATE TABLE collaboration.task (organization_id uuid NOT NULL, source_message_id uuid);
+			      ALTER TABLE collaboration.task ADD CONSTRAINT fk_task_source_message
+			          FOREIGN KEY (organization_id, source_message_id)
+			          REFERENCES chat.message(organization_id, id) ON DELETE SET NULL (source_message_id);`,
+			want: false,
+		},
+		{
+			name: "a column list that names the tenant column is the defect itself",
+			ddl: `CREATE TABLE collaboration.task (organization_id uuid NOT NULL, source_message_id uuid);
+			      ALTER TABLE collaboration.task ADD CONSTRAINT fk_task_source_message
+			          FOREIGN KEY (organization_id, source_message_id)
+			          REFERENCES chat.message(organization_id, id)
+			          ON DELETE SET NULL (organization_id, source_message_id);`,
+			want: true,
+		},
+		{
+			name: "single-column SET NULL on a global table",
+			ddl: `CREATE TABLE flows.step (id uuid NOT NULL, message_id uuid);
+			      ALTER TABLE flows.step ADD CONSTRAINT fk_step_message
+			          FOREIGN KEY (message_id) REFERENCES chat.message(id) ON DELETE SET NULL;`,
+			want: false,
+		},
+		{
+			name: "single-column SET NULL on a tenant table has no tenant column to null",
+			ddl: `CREATE TABLE collaboration.task (organization_id uuid NOT NULL, source_message_id uuid);
+			      ALTER TABLE collaboration.task ADD CONSTRAINT fk_task_source_message
+			          FOREIGN KEY (source_message_id) REFERENCES chat.message(id) ON DELETE SET NULL;`,
+			want: false,
+		},
+		{
+			name: "composite SET DEFAULT fails the same way, since the tenant column has none",
+			ddl: `CREATE TABLE collaboration.task (organization_id uuid NOT NULL, source_message_id uuid);
+			      ALTER TABLE collaboration.task ADD CONSTRAINT fk_task_source_message
+			          FOREIGN KEY (organization_id, source_message_id)
+			          REFERENCES chat.message(organization_id, id) ON DELETE SET DEFAULT;`,
+			want: true,
+		},
+		{
+			name: "composite CASCADE is out of the rule's scope",
+			ddl: `CREATE TABLE voice.voice_message (organization_id uuid NOT NULL, message_id uuid);
+			      ALTER TABLE voice.voice_message ADD CONSTRAINT fk_voice_message_message
+			          FOREIGN KEY (organization_id, message_id)
+			          REFERENCES chat.message(organization_id, id) ON DELETE CASCADE;`,
+			want: false,
+		},
+		{
+			name: "composite RESTRICT is out of the rule's scope",
+			ddl: `CREATE TABLE collaboration.task (organization_id uuid NOT NULL, channel_id uuid);
+			      ALTER TABLE collaboration.task ADD CONSTRAINT fk_task_channel
+			          FOREIGN KEY (organization_id, channel_id)
+			          REFERENCES chat.channel(organization_id, id) ON DELETE RESTRICT;`,
+			want: false,
+		},
+		{
+			name: "an inline table constraint is read the same as an ALTER TABLE one",
+			ddl: `CREATE TABLE collaboration.task (
+			          organization_id uuid NOT NULL,
+			          source_message_id uuid,
+			          CONSTRAINT fk_task_source_message FOREIGN KEY (organization_id, source_message_id)
+			              REFERENCES chat.message(organization_id, id) ON DELETE SET NULL);`,
+			want: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			tables, err := collectSchema(parent + c.ddl)
+			if err != nil {
+				t.Fatalf("collectSchema: %v", err)
+			}
+			got := checkForeignKeys("schema.sql", tables)
+			if c.want && len(got) == 0 {
+				t.Fatal("expected a finding, got clean")
+			}
+			if !c.want && len(got) != 0 {
+				t.Fatalf("expected clean, got: %s", got[0].msg)
+			}
+			if c.want {
+				if got[0].rule != "set-null-tenant-column" {
+					t.Errorf("rule = %q", got[0].rule)
+				}
+				// The message has to name the constraint and state the fix, or the
+				// person who hits it in CI has to go and read this file.
+				for _, want := range []string{"fk_task_source_message", orgCol, "ON DELETE SET"} {
+					if !strings.Contains(got[0].msg, want) {
+						t.Errorf("message %q does not mention %q", got[0].msg, want)
+					}
+				}
+			}
+		})
+	}
+}
+
+// TestRealSchemaHasNoSetNullTenantColumn is the one case that guards the property rather
+// than the rule: the generated snapshot this linter ships against must be clean. It also
+// proves pg_dump round-trips the column list — if it did not, every fixed constraint
+// would show up here as a finding.
+func TestRealSchemaHasNoSetNullTenantColumn(t *testing.T) {
+	src, err := os.ReadFile("../../database/scripts/schema.sql")
+	if err != nil {
+		t.Fatalf("reading the generated snapshot: %v", err)
+	}
+	tables, err := collectSchema(string(src))
+	if err != nil {
+		t.Fatalf("collectSchema: %v", err)
+	}
+	for _, f := range checkForeignKeys("database/scripts/schema.sql", tables) {
+		t.Errorf("%s", f.msg)
 	}
 }
