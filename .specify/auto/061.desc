@@ -1,0 +1,1 @@
+Green and enforced test gates. Fix the four failing web E2E specs, restore the Maestro fixture account, add mobile typecheck to CI, and fix the three mobile type errors. Constitution II names the suites as the correctness gate and today they cannot be trusted to say no. Clears drift D34, D40, D41.
