@@ -107,6 +107,90 @@ const INTERNAL_VOCABULARY = ["ritual", "employee_id", "rpc", "tenant"];
 const MIN_PERMISSION_STRING_LENGTH = 40;
 
 // ---------------------------------------------------------------------------
+// The compliance-prose vocabulary (Feature 054, FR-016/FR-017/FR-018).
+//
+// Feature 053 stopped the app *asking* for a Face ID permission it never used and
+// left the prose a reviewer actually reads still promising the feature. A
+// capability named in a document pasted into a store console is a claim, and a
+// reviewer who goes looking for it and cannot find it has found a discrepancy by
+// following our own instructions.
+//
+// Each term is mapped to the declaration that would make naming it a true claim.
+// "Declared" is `ALLOWED_IOS_KEYS ∪ ALLOWED_ANDROID_PERMISSIONS` — the sets above —
+// rather than a second list, because a second list of what the app declares is the
+// failure mode this rule exists to catch, one layer up.
+//
+// The terms are compound where the bare word would be ambiguous. "location",
+// "camera", "photos", "microphone" and "notifications" are absent because they are
+// declared and would pass trivially; "calendar" and "contacts" are absent because
+// they are this product's own feature words.
+// ---------------------------------------------------------------------------
+
+const CAPABILITY_TERMS = [
+  ["face id", "NSFaceIDUsageDescription"],
+  ["touch id", "NSFaceIDUsageDescription"],
+  ["biometric", "android.permission.USE_BIOMETRIC"],
+  ["fingerprint", "android.permission.USE_FINGERPRINT"],
+  ["background location", "NSLocationAlwaysUsageDescription"],
+  ["always-on location", "NSLocationAlwaysAndWhenInUseUsageDescription"],
+  ["bluetooth", "android.permission.BLUETOOTH_CONNECT"],
+  ["healthkit", "NSHealthShareUsageDescription"],
+  ["speech recognition", "NSSpeechRecognitionUsageDescription"],
+  ["motion and fitness", "NSMotionUsageDescription"],
+  ["nfc", "NFCReaderUsageDescription"],
+  ["contact list", "NSContactsUsageDescription"],
+  ["address book", "NSContactsUsageDescription"],
+];
+
+// Recording an absence is the opposite of promising a feature, so each document
+// declares the sections where it may name a capability the app does not have. This
+// is the whole exemption mechanism: a term outside these sections whose declaration
+// is not in the allowed set fails the build.
+//
+// Deliberately not negation detection ("no", "not", "never" in the sentence). That
+// is a natural-language heuristic pretending to be a build rule, and it fails open
+// in the dangerous direction — "Face ID sign-in requires no additional setup" would
+// pass it while being exactly the false promise this guards against.
+const RECORDED_ABSENCE_SECTIONS = {
+  "permission-justifications.md": ["Permissions deliberately blocked", "Keys deliberately absent"],
+  "data-collection-inventory.md": ["Not collected"],
+  "reviewer-notes.md": ["Not requested"],
+  "age-rating-answers.md": ["Capabilities the app does not have"],
+};
+
+/**
+ * 1-based line numbers of every line inside one of `headings` in `content`.
+ *
+ * A section opens at its heading line and closes at the next heading of the same or
+ * shallower level, or at end of file. A deeper sub-heading does not close it, so a
+ * `#### NSFaceIDUsageDescription` under `### Keys deliberately absent` stays exempt.
+ * Headings are matched case-insensitively after trimming.
+ */
+function recordedAbsenceLines(content, headings) {
+  const wanted = new Set(headings.map((heading) => heading.trim().toLowerCase()));
+  const exempt = new Set();
+  let openLevel = 0;
+
+  content.split("\n").forEach((line, index) => {
+    const heading = /^(#{1,6})\s+(.*?)$/.exec(line.trim());
+    if (heading) {
+      const level = heading[1].length;
+      if (openLevel > 0 && level <= openLevel) openLevel = 0;
+      if (wanted.has(heading[2].toLowerCase())) openLevel = level;
+    }
+    if (openLevel > 0) exempt.add(index + 1);
+  });
+
+  return exempt;
+}
+
+module.exports = { CAPABILITY_TERMS, RECORDED_ABSENCE_SECTIONS, recordedAbsenceLines };
+
+// Everything below runs the gate. `check-compliance-prose.check.js` requires this
+// file for the region parser above and must not trigger a full run by doing so.
+if (require.main !== module) return;
+
+// ---------------------------------------------------------------------------
 // 1. Expo config
 // ---------------------------------------------------------------------------
 
@@ -305,6 +389,37 @@ if (!fs.existsSync(justificationsPath)) {
       fail(`docs/compliance/permission-justifications.md does not mention ${permission}. The manifest and the document must agree (FR-030).`);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// 4. No compliance document names a capability the app does not declare
+//    (Feature 054, FR-016/FR-017/FR-018).
+// ---------------------------------------------------------------------------
+
+const complianceDir = path.join(repoRoot, "docs/compliance");
+const declared = new Set([...ALLOWED_IOS_KEYS, ...ALLOWED_ANDROID_PERMISSIONS]);
+
+// Read the directory rather than a hard-coded list, so a fifth compliance document
+// is covered the day it is added.
+for (const file of fs.readdirSync(complianceDir).filter((name) => name.endsWith(".md")).sort()) {
+  const headings = RECORDED_ABSENCE_SECTIONS[file] ?? [];
+  const content = fs.readFileSync(path.join(complianceDir, file), "utf8");
+  const exempt = recordedAbsenceLines(content, headings);
+  const wayOut = headings.length > 0 ? headings.join(", ") : "none declared for this file";
+
+  content.split("\n").forEach((line, index) => {
+    const lower = line.toLowerCase();
+    for (const [term, declaration] of CAPABILITY_TERMS) {
+      if (!lower.includes(term)) continue;
+      if (declared.has(declaration)) continue;
+      if (exempt.has(index + 1)) continue;
+      fail(
+        `docs/compliance/${file}:${index + 1}: "${term}" names a capability the app does not declare ` +
+          `(${declaration} is not in the allowed set). Either the app must declare it, or the sentence ` +
+          `must move into a recorded-absence section (${wayOut}).`
+      );
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

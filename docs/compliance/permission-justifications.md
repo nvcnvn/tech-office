@@ -62,9 +62,9 @@ at the right place — a site visit, a delivery, an equipment check. The app cap
 a single coordinate at the moment the person checks in or completes such a task.
 
 **Foreground only**: the app calls only `requestForegroundPermissionsAsync`. It
-declares no background-location key and performs no background location updates,
-geofencing, or significant-change monitoring. There is no location tracking between
-those explicit actions.
+declares no background-location key, takes no location readings while it is in the
+background, and performs no geofencing or significant-change monitoring. There is no
+location tracking between those explicit actions.
 
 **When it is requested**: the first time someone checks in to an event or completes
 a task that requires location evidence.

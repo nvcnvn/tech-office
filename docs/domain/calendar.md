@@ -4,7 +4,7 @@ Events, recurrence, RSVP, room/equipment resources, free-busy and slot suggestio
 booking links, delegation, and attendance check-in with evidence. Owned by
 `internal/calendar`; contract in `rpc/v1/calendar.proto` (`CalendarService`, 26 RPCs).
 
-**Status date: 2026-09-05.** Supersedes specs 026, 045 and 046; shift coverage added by spec 042.
+**Status date: 2026-09-12.** Supersedes specs 026, 045 and 046; shift coverage added by spec 042.
 
 ## Events
 
@@ -221,4 +221,24 @@ domain `calendar`.
 
 ## Known drift
 
-None recorded.
+**The mobile check-in path asks for location and throws the answer away.**
+`frontend/apps/mobile/src/app/(app)/(calendar)/[eventId].tsx:69-75` calls
+`Location.requestForegroundPermissionsAsync()`, refuses to check in if the person
+declines, then calls `Location.getCurrentPositionAsync()` and **discards the result**,
+calling `checkInToEvent(eventId)` with no coordinate. Its own comment says the reading is
+"used for client-side context; server validates geofence", but nothing client-side
+consumes it and no geofence is evaluated on this path. `calendar.check_in` has no
+coordinate columns at all — only `checked_in_at`, `is_late` and `evidence_file_ids` — so
+there is nowhere for a coordinate to go even if one were sent.
+
+The user-visible consequence is a permission prompt, and a hard failure on refusal, for
+data the app does not keep. That is the same shape of problem feature 053 removed one
+layer up, where the app *declared* permissions it did not use.
+
+Found while answering the age-rating questionnaire's location question for feature 054,
+which is scoped to documents and one build check and changes no app behaviour. Recorded
+rather than fixed there because deleting the call moves the first location prompt from
+check-in to the first task-evidence submission, which is a user-visible behaviour change.
+Closing it means either dropping both calls from the check-in path, or storing the
+coordinate and disclosing it — and the second is a schema change, a privacy-disclosure
+change and an age-rating answer change together.

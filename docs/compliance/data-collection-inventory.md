@@ -46,7 +46,7 @@ owned by other companies, and contains no advertising or analytics SDK that does
 | User content | Content reports, including a snapshot of the reported content | Reviewing abuse reports; kept so a report outlives deletion of its subject | Yes | Reporting | None |
 | Identifiers | User ID, employee ID, organization ID | Identifying the person and their workspace | Yes | Throughout | None |
 | Identifiers | Push notification token, device identifier | Delivering notifications to the right device | Yes | Push registration | Firebase Cloud Messaging (Android), Apple Push Notification service (iOS) |
-| Location | Coarse and precise location, captured once at check-in or on completing a task that requires proof of presence | Confirming presence at a job site | Yes | Calendar check-in, ritual task evidence | None |
+| Location | Coarse and precise location, captured once on submitting evidence for a task that requires proof of presence | Confirming presence at a job site | Yes | Ritual task evidence | None |
 | Usage data | Presence status, last-seen time, sign-in times | Showing colleagues who is available; letting a person review their own sessions | Yes | Presence, sessions | None |
 | Diagnostics | IP address, user agent recorded against a session | Letting a person recognise and end a session; abuse investigation | Yes | Sign-in | None |
 | Audio data | Voice call audio while a call is in progress; recording and transcript only when someone in the call turns recording on | Placing calls; keeping a record the workspace asked for | Yes | Voice calls | LiveKit (call media), Cloudflare R2 (recordings) |
@@ -57,9 +57,10 @@ Stated explicitly because both forms ask, and "not collected" is an answer that 
 to be true rather than merely unstated:
 
 - Payment or financial information.
-- Health, fitness, or biometric identifiers. Face ID and fingerprint sign-in are
-  performed by the operating system; the app receives only success or failure and
-  never the biometric itself.
+- Health, fitness, or biometric identifiers. The app performs no biometric
+  authentication at all: there is no Face ID or fingerprint sign-in on any screen,
+  and no biometric authentication library is a dependency. There is therefore no
+  biometric data flow to describe, in either direction.
 - Browsing history, search history outside the app, or advertising identifiers.
 - Contacts, calendars, or photos beyond the individual items a person chooses to
   attach.
@@ -117,12 +118,4 @@ Declare that data is **encrypted in transit**, and that users **can request that
 data be deleted** — with the in-app path described in
 [reviewer-notes.md](reviewer-notes.md), not a web form.
 
-### Age rating
-
-Both stores' questionnaires must be answered honestly about **unmoderated
-person-to-person messaging**: the app allows people in the same workspace to
-message and call each other without pre-publication moderation. Answer **Yes** to
-the user-generated content and person-to-person communication questions, and
-describe the safeguards: in-app reporting to the workspace's owners, blocking of
-direct contact, published terms prohibiting objectionable content, and a monitored
-abuse contact address.
+**Age rating** is a separate questionnaire on both stores, with its own questions and its own answers; it is answered in full, per store and with evidence, in [age-rating-answers.md](age-rating-answers.md).

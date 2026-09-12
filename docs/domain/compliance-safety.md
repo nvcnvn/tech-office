@@ -244,13 +244,91 @@ report status, removal-request status, account-deletion state. The TypeScript
 wrapper maps proto enums to string unions at the boundary so no screen ever
 compares a raw enum number.
 
+## Review materials
+
+Four documents under `docs/compliance/` are pasted into a store console at submission,
+which makes every sentence in them a claim a reviewer will check against the app:
+
+| Document | Pasted into |
+|---|---|
+| `reviewer-notes.md` | App Store Connect → App Review Information → Notes; Play Console → Testing instructions |
+| `permission-justifications.md` | App Review notes; Play Console Data safety and sensitive-permission declarations |
+| `data-collection-inventory.md` | App Store Connect privacy questionnaire; Play Console Data safety form |
+| `age-rating-answers.md` | Both stores' age-rating questionnaires |
+
+**The device permissions the notes describe are exactly the five the app declares** —
+microphone, camera, photos, location (foreground only) and notifications. There is no
+biometric sign-in anywhere in the product, on any screen or in any dependency, and no
+compliance document describes one as a capability: the reviewer notes name it under
+`### Not requested`, the inventory names it under `### Not collected`, and the
+justifications record the blocked Android permissions and the absent iOS key. Those
+are statements of absence, which is the only sanctioned way for this document set to
+name a capability the app does not have.
+
+Age-rating answers live in `age-rating-answers.md` and nowhere else. It answers each
+store's questionnaire separately, carries the evidence behind every answer, states the
+closed-workspace boundary before the answers so the honest `Yes` answers to messaging
+and user-posted content are not read as a social network, and carries the date its
+answers were last checked against the live forms.
+
 ## Store manifest
 
 Not a runtime behaviour, but maintained by the same feature:
 `frontend/apps/mobile/scripts/check-store-manifest.js` runs in `make test-mobile`
 and fails the build on an unexpected permission, a background-location key, a
-missing `POST_NOTIFICATIONS`, a development-only permission string, or a
+missing `POST_NOTIFICATIONS`, a development-only permission string, a
 disagreement between the manifest and
-`docs/compliance/permission-justifications.md`.
+`docs/compliance/permission-justifications.md`, or a compliance document that
+names a capability the app does not declare.
+
+### The compliance-prose rule
+
+Section 4 of the script, added by feature 054. The justifications cross-check above
+reads one document; this one reads **every** `*.md` directly under
+`docs/compliance/`, discovered with `readdirSync` rather than a hard-coded list, so a
+fifth document is covered the day it is added.
+
+It matches a fixed **capability vocabulary** — `CAPABILITY_TERMS`, thirteen
+lower-cased substrings (`face id`, `touch id`, `biometric`, `fingerprint`,
+`background location`, `always-on location`, `bluetooth`, `healthkit`,
+`speech recognition`, `motion and fitness`, `nfc`, `contact list`, `address book`),
+each paired with the manifest key or Android permission that would make naming it a
+true claim. A match passes if that declaration is in
+`ALLOWED_IOS_KEYS ∪ ALLOWED_ANDROID_PERMISSIONS` — the sets the same script already
+uses to decide what the app may declare, so there is no second list of what the app
+has. The terms are compound where the bare word would be ambiguous; `location`,
+`camera`, `photos`, `microphone` and `notifications` are absent because they are
+declared and would pass trivially, and `calendar` and `contacts` are absent because
+they are this product's own feature words.
+
+**The one exemption is a recorded-absence section**, declared per document in
+`RECORDED_ABSENCE_SECTIONS`: `Permissions deliberately blocked` and
+`Keys deliberately absent` in `permission-justifications.md`, `Not collected` in
+`data-collection-inventory.md`, `Not requested` in `reviewer-notes.md`, and
+`Capabilities the app does not have` in `age-rating-answers.md`. A section opens at
+its heading (`#` to `######`, matched case-insensitively after trimming), includes
+its own heading line, and closes at the next heading of the same or shallower level
+or at end of file — a deeper sub-heading does **not** close it. The parser is
+exported and asserted by `scripts/check-compliance-prose.check.js`, a dependency-free
+`assert` self-check over in-memory document strings.
+
+The exemption is a declared section rather than negation detection, deliberately.
+Allowing any sentence containing "no", "not" or "never" would work on today's text
+and fails open in the dangerous direction: *"Face ID sign-in requires no additional
+setup"* passes a negation check while being exactly the false promise the rule
+exists to catch.
+
+A failure names the document, the line, the term, the unsatisfied declaration and
+the declared headings for that file, so the fix needs no reading of the script:
+
+```
+docs/compliance/reviewer-notes.md:131: "face id" names a capability the app does not
+declare (NSFaceIDUsageDescription is not in the allowed set). Either the app must
+declare it, or the sentence must move into a recorded-absence section (Not requested).
+```
+
+What it deliberately does not do: parse English (a sentence describing an
+unimplemented capability in words outside the vocabulary passes), scan outside
+`docs/compliance/`, or track code fences.
 
 It passes at HEAD, so `make test-mobile` is the suite's entry point again. Feature 053 removed the five declarations it was complaining about — the two `NSLocationAlways*` keys, `NSFaceIDUsageDescription`, and the `NSLocalNetworkUsageDescription`/`NSBonjourServices` pair — at their source in `app.json` (`locationAlwaysPermission: false`, `locationAlwaysAndWhenInUsePermission: false`, `faceIDPermission: false`, and the two biometric Android permissions added to `blockedPermissions`), so a regeneration reproduces the removal rather than undoing it. The local-network keys are needed only by a debug build reaching Metro over the LAN. They are not simply *not added*: `expo-dev-launcher`'s config plugin, autolinked through `expo-dev-client`, writes `NSBonjourServices` and `NSLocalNetworkUsageDescription` on **every** prebuild and strips them again only in a non-Debug Xcode build phase — too late for a committed prebuild, which is the artifact EAS builds and the gate reads. `plugins/with-dev-local-network.js` therefore owns both keys outright: it deletes them unless `EXPO_LOCAL_DEV_NETWORK=1`, and writes the app's own strings when that is set. The gate now also reads purpose strings out of the committed `ios/TechOffice/Info.plist`, not only out of `app.json` — which is where the framework placeholder `Allow $(PRODUCT_NAME) to access your location` actually lived.

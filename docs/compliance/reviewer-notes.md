@@ -124,10 +124,23 @@ elsewhere to finish.
 ### Permissions
 
 The app asks for microphone (voice calls and voice messages), camera and photos
-(attaching photos to messages, tasks and job records), Face ID (optional faster
-sign-in), location (confirming presence at a job site, foreground only) and
-notifications. Every one of them is optional: refusing any single permission leaves
-the rest of the app working. There is no background location.
+(attaching photos to messages, tasks and job records), location (confirming
+presence at a job site, foreground only) and notifications. Every one of them is
+optional: refusing any single permission leaves the rest of the app working.
+
+### Not requested
+
+Two things you might expect an app like this to ask for, listed so their absence
+reads as a decision rather than an oversight:
+
+- **Background location.** The app reads a coordinate only while it is open, and
+  only at the moment someone checks in or completes a task that needs proof of
+  presence. It declares no "always" location key, runs no geofencing, and does no
+  significant-change monitoring.
+- **Face ID or fingerprint sign-in.** There is no biometric sign-in anywhere in
+  the app, and no biometric authentication library is a dependency. Signing in is
+  email and password, or workspace address with login ID and PIN. No screen
+  offers a biometric option, so please do not look for one.
 
 ---
 
