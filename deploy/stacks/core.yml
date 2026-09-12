@@ -189,7 +189,13 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       FLOW_SHARD_COUNT: ${FLOW_SHARD_COUNT}
+      # Declared, not left to the default, so an operator reading this file sees the
+      # setting exists. In this profile a failing startup safety check refuses to start.
+      APP_ENV: production
+      # Also the allowed browser origin in the production profile.
       WEBAPP_URL: https://${WEB_DOMAIN}
+      # Any further browser origin, comma-separated. Empty on a single-domain deployment.
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt.pem
       GOOGLE_APPLICATION_CREDENTIALS: ${FCM_CREDENTIALS_PATH}
       APNS_VOIP_KEY_PATH: ${APNS_VOIP_KEY_PATH}

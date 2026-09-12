@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -51,6 +52,16 @@ var StartServer = &cli.Command{
 
 func startServer(ctx context.Context, cmd *cli.Command) error {
 	cfg := config.Get()
+
+	// The safety report runs before anything else: a deployment that fails it must not
+	// open a database connection or bind a port, so there is nothing to tear down and
+	// nothing that briefly answered (FR-007, FR-008). main.go routes the error through
+	// log.Fatal, which exits 1.
+	profile, err := cfg.EnforceSafety(ctx)
+	if err != nil {
+		return err
+	}
+
 	port := cfg.ServerPort
 	slog.InfoContext(ctx, "startServer with", "port", port)
 	dsl := cfg.DatabaseURL
@@ -106,7 +117,7 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 		}
 		slog.InfoContext(ctx, "JWT signer initialized", "key_path", cfg.JWTPrivateKeyPath)
 	} else {
-		slog.WarnContext(ctx, "JWT_PRIVATE_KEY_PATH not set, using ephemeral key (dev only)")
+		// Unreachable in the production profile: EnforceSafety refused to start.
 		jwtSigner, err = iam.NewEphemeralSigner()
 		if err != nil {
 			slog.ErrorContext(ctx, "failed to create ephemeral JWT signer", "error", err)
@@ -122,20 +133,27 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	}
 	slog.InfoContext(ctx, "internal JWT verifier initialized")
 
-	// Initialize JWKS verifier for SSO (Google, Apple)
-	// Audience validation is skipped when GOOGLE_CLIENT_IDS / APPLE_CLIENT_IDS are unset (dev only).
-	if len(cfg.GoogleClientIDs) == 0 {
-		slog.WarnContext(ctx, "GOOGLE_CLIENT_IDS not set — Google token audience validation disabled (dev only)")
-	}
-	if len(cfg.AppleClientIDs) == 0 {
-		slog.WarnContext(ctx, "APPLE_CLIENT_IDS not set — Apple token audience validation disabled (dev only)")
-	}
+	// Initialize JWKS verifier for SSO (Google, Apple). A provider with no configured
+	// audiences is disabled, not audience-unchecked: its JWKS endpoint is not fetched
+	// and every token exchange for it is refused.
 	jwksVerifier, err := iam.NewJWKSVerifier(ctx, cfg.GoogleClientIDs, cfg.AppleClientIDs)
 	if err != nil {
 		slog.ErrorContext(ctx, "failed to create JWKS verifier", "error", err)
 		return err
 	}
-	slog.InfoContext(ctx, "JWKS verifier initialized (Google, Apple)")
+	// Reported in every profile, so an operator scanning a fresh deployment's first ten
+	// lines sees which sign-in methods exist without grepping for an absence (FR-027).
+	enabledProviders := jwksVerifier.EnabledProviders()
+	disabledProviders := []string{}
+	for _, p := range []string{iam.SSOProviderGoogle, iam.SSOProviderApple} {
+		if !slices.Contains(enabledProviders, p) {
+			disabledProviders = append(disabledProviders, p)
+		}
+	}
+	slog.InfoContext(ctx, "identity providers resolved",
+		"enabled", enabledProviders,
+		"disabled", disabledProviders,
+		"reason", "no audiences configured")
 
 	// Build auth interceptor with internal JWT verifier
 	auth = interceptor.NewAuthInterceptor(internalVerifier)
@@ -716,7 +734,7 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	// Use h2c so we can serve HTTP/2 without TLS.
 	p.SetUnencryptedHTTP2(true)
 	s := http.Server{
-		Handler:   withCORS(mux),
+		Handler:   withCORS(mux, cfg.AllowedOrigins(profile)),
 		Protocols: p,
 		// A request that never finishes its headers must not hold a slot forever.
 		// ReadTimeout and WriteTimeout stay unset on purpose: streaming RPCs and SSE
@@ -762,8 +780,31 @@ func startMetricsServer(ctx context.Context, port string, pools map[string]datab
 	}()
 }
 
-func withCORS(connectHandler http.Handler) http.Handler {
-	c := cors.AllowAll()
+// withCORS is cors.AllowAll()'s option set with AllowedOrigins replaced — the narrowest
+// possible change to a middleware that sits in front of every request.
+//
+// AllowedHeaders stays "*" so Connect's own preflight headers (Connect-Protocol-Version,
+// Connect-Timeout-Ms) keep working without enumerating them, which is the class of
+// omission that breaks streaming in production and not in a test. AllowCredentials stays
+// false because the clients send a bearer token in a header, not a cookie.
+//
+// In development origins is ["*"], making that path byte-for-byte today's behaviour.
+// The metrics server on METRICS_PORT is a separate http.Server that never passes through
+// here, so it is unaffected either way.
+func withCORS(connectHandler http.Handler, origins []string) http.Handler {
+	c := cors.New(cors.Options{
+		AllowedOrigins: origins,
+		AllowedMethods: []string{
+			http.MethodHead,
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPut,
+			http.MethodPatch,
+			http.MethodDelete,
+		},
+		AllowedHeaders:   []string{"*"},
+		AllowCredentials: false,
+	})
 	return c.Handler(connectHandler)
 }
 

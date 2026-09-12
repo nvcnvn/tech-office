@@ -30,9 +30,27 @@ type Config struct {
 
 	// SSO audience validation — comma-separated lists of OAuth client/service IDs
 	// that the backend will accept in the `aud` claim of Google/Apple id_tokens.
-	// If empty, audience validation is skipped (dev-only fallback).
+	// An empty list means the provider is disabled: every token exchange and identity
+	// link for it is refused. See internal/config/safety.go and internal/iam/jwks.go.
 	GoogleClientIDs []string
 	AppleClientIDs  []string
+
+	// AppEnvRaw is APP_ENV exactly as the environment supplied it, before any
+	// interpretation. ParseProfile turns it into a Profile; keeping the raw string means
+	// the error message can quote what the operator actually wrote.
+	AppEnvRaw string
+
+	// CORSAllowedOrigins holds any browser origins allowed in addition to the one derived
+	// from WebappURL. Empty on a single-domain deployment, which is the common case.
+	CORSAllowedOrigins []string
+
+	// GoogleClientIDsRaw and AppleClientIDsRaw keep the unparsed environment values.
+	// getEnvStringSlice drops blank entries, so " , " and unset both parse to nil — and
+	// those two mean different things: unset is a deliberately disabled provider, while
+	// " , " is a configuration attempt that did not take. Only the raw string tells them
+	// apart, and the safety report needs to (FR-026, FR-028).
+	GoogleClientIDsRaw string
+	AppleClientIDsRaw  string
 
 	// File Storage (Cloudflare R2)
 	R2AccountID         string
@@ -87,6 +105,10 @@ func load() *Config {
 		GoogleAppCredentials: getEnv("GOOGLE_APPLICATION_CREDENTIALS", ""),
 		GoogleClientIDs:      getEnvStringSlice("GOOGLE_CLIENT_IDS"),
 		AppleClientIDs:       getEnvStringSlice("APPLE_CLIENT_IDS"),
+		AppEnvRaw:            getEnv("APP_ENV", ""),
+		CORSAllowedOrigins:   getEnvStringSlice("CORS_ALLOWED_ORIGINS"),
+		GoogleClientIDsRaw:   getEnv("GOOGLE_CLIENT_IDS", ""),
+		AppleClientIDsRaw:    getEnv("APPLE_CLIENT_IDS", ""),
 		R2AccountID:          getEnv("R2_ACCOUNT_ID", ""),
 		R2AccessKeyID:        getEnv("R2_ACCESS_KEY_ID", ""),
 		R2SecretAccessKey:    getEnv("R2_SECRET_ACCESS_KEY", ""),

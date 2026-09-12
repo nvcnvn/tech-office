@@ -5,6 +5,7 @@
 import { iamClient } from "./rpc";
 import rpcCall from "./rpcWrapper";
 import { AuthError, ValidationError } from "./errors";
+import { preconditionViolation } from "./errorDetails";
 import { iam } from "rpc";
 import { setAuthToken, clearAuthToken } from "./token";
 import { protoTimestampToDate } from "./proto-utils";
@@ -18,6 +19,38 @@ export type IdentityRole = 'owner' | 'operator' | 'employee';
 
 export type UserStatus = 'active' | 'suspended' | 'deleted';
 export type SSOProviderType = 'google' | 'apple';
+
+/**
+ * Mirrors backend/internal/iam/constants.go SSOProviderNotEnabledType (Constitution VIII).
+ *
+ * The backend refuses a provider it has no accepted audiences configured for. That is a
+ * different thing from a rejected token — it is FAILED_PRECONDITION rather than
+ * UNAUTHENTICATED — and this violation type is how a client tells them apart without
+ * matching on message text.
+ */
+export const SSO_PROVIDER_NOT_ENABLED = 'SSO_PROVIDER_NOT_ENABLED';
+
+/**
+ * The person-facing error for a sign-in method this deployment does not offer, or
+ * undefined when the failure was something else.
+ *
+ * Both clients already hide a provider button whose client ID is absent, so on a
+ * coherently configured deployment this is unreachable. It is the guard for the case
+ * where the client is configured and the server is not — and it is still written for the
+ * person holding the phone rather than shown raw.
+ */
+function ssoProviderNotEnabledError(err: unknown): AuthError | undefined {
+	const violation = preconditionViolation(err, SSO_PROVIDER_NOT_ENABLED);
+	if (!violation) return undefined;
+
+	const provider = violation.subject === 'apple' ? 'Apple'
+		: violation.subject === 'google' ? 'Google'
+		: 'That';
+	return new AuthError(
+		SSO_PROVIDER_NOT_ENABLED,
+		`${provider} sign-in isn't available for this workspace. Sign in with your email and password, or ask your workspace admin to turn it on.`,
+	);
+}
 
 const invitationSSOEmailMismatchMessage = 'this sign-in used a different email than the one invited. continue with your invited email first, then link apple or google later';
 export type InvitationStatusType = 'pending' | 'accepted' | 'cancelled' | 'expired';
@@ -203,11 +236,18 @@ export async function exchangeTokenForOrganization(
 	isNewUser: boolean;
 }> {
 	return rpcCall(async () => {
-		const resp = await iamClient.exchangeToken({
-			provider: toSSOProvider(provider),
-			idToken,
-			organizationId,
-		});
+		let resp;
+		try {
+			resp = await iamClient.exchangeToken({
+				provider: toSSOProvider(provider),
+				idToken,
+				organizationId,
+			});
+		} catch (err) {
+			// Mapped here rather than after rpcCall, because rpcCall flattens an
+			// unhandled code into a NetworkError and the structured detail would be gone.
+			throw ssoProviderNotEnabledError(err) ?? err;
+		}
 		if (!resp.user) throw new AuthError('NO_USER', 'No user in response');
 		await setAuthToken(resp.accessToken, Number(resp.expiresAt));
 		return {
@@ -329,10 +369,15 @@ export async function updateProfile(displayName?: string, profilePictureUrl?: st
 
 export async function linkSSOIdentity(provider: SSOProviderType, idToken: string): Promise<SSOIdentity> {
 	return rpcCall(async () => {
-		const resp = await iamClient.linkSSOIdentity({
-			provider: toSSOProvider(provider),
-			idToken,
-		});
+		let resp;
+		try {
+			resp = await iamClient.linkSSOIdentity({
+				provider: toSSOProvider(provider),
+				idToken,
+			});
+		} catch (err) {
+			throw ssoProviderNotEnabledError(err) ?? err;
+		}
 		if (!resp.ssoIdentity) throw new AuthError('NO_SSO', 'No SSO identity in response');
 		return ssoFromProto(resp.ssoIdentity);
 	});

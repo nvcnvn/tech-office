@@ -31,7 +31,12 @@ var (
 	ErrSSOIdentityNotFound        = errors.New("SSO identity not found")
 	ErrSSOIdentityNotOwned        = errors.New("SSO identity does not belong to this user")
 	ErrInvalidSSOToken            = errors.New("invalid SSO token")
-	ErrSessionNotFound            = errors.New("session not found")
+	// ErrSSOProviderNotEnabled is returned for a provider this deployment has not
+	// configured any accepted audiences for. The wording is for the person holding the
+	// phone, not the operator: naming an environment variable would be useless to them.
+	// The diagnostic that names the setting is the startup log line.
+	ErrSSOProviderNotEnabled = errors.New("this sign-in method is not enabled for this workspace")
+	ErrSessionNotFound       = errors.New("session not found")
 
 	// PIN-based auth errors
 	ErrPINTooShort              = errors.New("PIN must be exactly 6 digits")
@@ -60,6 +65,16 @@ type ErrAccountLocked struct {
 	AdminRequired bool
 }
 
+// ssoProviderNotEnabledError carries which provider was refused, so the Connect error
+// can name it in a structured detail rather than only in prose.
+type ssoProviderNotEnabledError struct {
+	provider string
+}
+
+func (e *ssoProviderNotEnabledError) Error() string { return ErrSSOProviderNotEnabled.Error() }
+
+func (e *ssoProviderNotEnabledError) Unwrap() error { return ErrSSOProviderNotEnabled }
+
 func (e *ErrAccountLocked) Error() string {
 	if e.AdminRequired {
 		return "account is locked, contact admin to unlock"
@@ -69,10 +84,14 @@ func (e *ErrAccountLocked) Error() string {
 
 // ToConnectError maps a domain error to a connect.Error with appropriate gRPC code.
 func ToConnectError(err error) *connect.Error {
-	// Check typed error first
+	// Check typed errors first
 	var lockoutErr *ErrAccountLocked
 	if errors.As(err, &lockoutErr) {
 		return lockoutToConnectError(lockoutErr)
+	}
+	var notEnabledErr *ssoProviderNotEnabledError
+	if errors.As(err, &notEnabledErr) {
+		return ssoProviderNotEnabledToConnectError(notEnabledErr)
 	}
 
 	switch {
@@ -138,6 +157,31 @@ func ToConnectError(err error) *connect.Error {
 	default:
 		return connect.NewError(connect.CodeInternal, err)
 	}
+}
+
+// ssoProviderNotEnabledToConnectError creates a FailedPrecondition error with a
+// google.rpc.PreconditionFailure naming the provider.
+//
+// The code is deliberately not Unauthenticated — that is what a *rejected token* maps to.
+// A client has to be able to tell "this deployment does not offer that provider" from
+// "your token was rejected" without matching on message text (FR-024).
+func ssoProviderNotEnabledToConnectError(err *ssoProviderNotEnabledError) *connect.Error {
+	cErr := connect.NewError(connect.CodeFailedPrecondition, err)
+
+	pf := &errdetails.PreconditionFailure{
+		Violations: []*errdetails.PreconditionFailure_Violation{
+			{
+				Type:        SSOProviderNotEnabledType,
+				Subject:     err.provider,
+				Description: "this deployment has no accepted audiences configured for this provider",
+			},
+		},
+	}
+	if d, detailErr := connect.NewErrorDetail(pf); detailErr == nil {
+		cErr.AddDetail(d)
+	}
+
+	return cErr
 }
 
 // lockoutToConnectError creates a ResourceExhausted error with PinAuthErrorDetail.

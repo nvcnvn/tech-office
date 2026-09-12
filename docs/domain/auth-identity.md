@@ -55,10 +55,46 @@ the API contract.
 
 `ExchangeToken` takes a provider ID token, verifies it against the provider's JWKS
 (`internal/iam/jwks.go`), find-or-creates the `iam.user`, links the `iam.sso_identity`, and
-issues an internal JWT. **Audience validation is skipped when `GOOGLE_CLIENT_IDS` /
-`APPLE_CLIENT_IDS` are unset** — the server logs this as dev-only, and it must not ship
-that way. `LinkSSOIdentity` / `UnlinkSSOIdentity` manage additional providers on an
-existing account.
+issues an internal JWT. `LinkSSOIdentity` / `UnlinkSSOIdentity` manage additional providers
+on an existing account.
+
+**A provider's audience list decides whether the provider exists here at all.**
+`GOOGLE_CLIENT_IDS` / `APPLE_CLIENT_IDS` hold the client IDs accepted in a token's `aud`
+claim. Left unset, the provider is **disabled**, in every profile including development:
+its JWKS endpoint is never fetched, and `ExchangeToken`, `LinkSSOIdentity` and the SSO path
+of `AcceptInvitation` refuse before the token is parsed, so no `iam.user` is created and no
+`iam.sso_identity` is linked. With a list present the audience comparison is unconditional
+— there is no configuration in which a token is accepted without its audience being
+checked. A deployment that signs people in with workspace passwords and worker PINs sets
+neither variable and is unaffected.
+
+The decision lives in `JWKSVerifier.VerifyProviderToken`, the single point all three call
+sites route through, so a call site added later cannot miss it. Not fetching the keys of a
+disabled provider is also what lets an air-gapped deployment boot: `NewJWKSVerifier` aborts
+startup on an unreachable JWKS endpoint.
+
+The refusal is `FAILED_PRECONDITION` — deliberately not the `UNAUTHENTICATED` that a
+*rejected token* maps to, so a client can tell "this deployment does not offer that
+provider" from "your token was rejected" without matching on message text. It carries one
+`google.rpc.PreconditionFailure` violation:
+
+| Field | Value |
+|---|---|
+| `type` | `SSO_PROVIDER_NOT_ENABLED` (`iam.SSOProviderNotEnabledType`, mirrored in `frontend/packages/apis/src/iam.ts`) |
+| `subject` | `google` or `apple` |
+| `description` | `this deployment has no accepted audiences configured for this provider` |
+
+The message — "this sign-in method is not enabled for this workspace" — is written for the
+person reading it, not the operator: it names no environment variable, because the person
+holding the phone cannot set one. The diagnostic that does name the setting is the
+`identity providers resolved` startup log line. Both clients already hide a provider button
+whose client ID is absent, so on a coherently configured deployment this error is
+unreachable from the UI; it is the guard for the case where the client is configured and
+the server is not.
+
+A value that is set but parses to no usable entry (`" , "`) is a different thing again: it
+means somebody tried to configure the provider and it did not take, and the production
+profile refuses to start on it. See [platform.md](platform.md#runtime-profile-and-startup-safety).
 
 ### 3. PIN (org-managed worker accounts)
 
@@ -297,8 +333,3 @@ deleted, and `public.organization.project_id` / `app_id` were dropped by
 `20260830000001_drift_register_fixes.up.sql`. `frontend/packages/apis/dst/` may still hold
 compiled `ZitadelAuthService` output on a machine that built before 018 — it is gitignored
 build output, cleared by a rebuild, not source.
-
-**SSO audience validation is opt-in.** With `GOOGLE_CLIENT_IDS`/`APPLE_CLIENT_IDS` unset
-the server accepts any Google- or Apple-signed ID token regardless of which application it
-was issued for. This is logged at startup but not enforced. Treat these as required in any
-non-development deployment.

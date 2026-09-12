@@ -708,8 +708,26 @@ Apply the same shape to any future compare-and-swap: put the guard in the `WHERE
 
 The server boots services in strict dependency order, ensuring no service is used before its dependencies are ready.
 
+### Phase 0: the startup safety gate
+
+`cfg.EnforceSafety(ctx)` is the **first statement** of `startServer`, before
+`database.NewAdminPool` and before `net.Listen`. It resolves the runtime profile from
+`APP_ENV` (absent means `production`) and evaluates the three configuration checks —
+durable signing key, cross-origin policy, SSO audience lists. In the production profile a
+non-empty report returns an error naming every violation; `main.go` routes that through
+`log.Fatal`, so the process exits 1 having opened no connection and bound no port. In the
+development profile the same violations are logged as warnings and boot continues.
+
+Its position is the point: a misconfigured deployment must not briefly answer, and must
+not hold a database connection it is about to abandon. Anything added to `startServer`
+belongs *after* this call.
+
 ```mermaid
 graph TD
+    subgraph "Phase 0: Startup Gate"
+        SAFETY["config.EnforceSafety<br/>(runtime profile,<br/>3 safety checks)<br/>exits 1 before any I/O"]
+    end
+
     subgraph "Phase 1: Infrastructure"
         POOLS["Database Pools<br/>(Admin, Tenant, Flow)"]
         AUTH["Auth Infrastructure<br/>(JWT Signer/Verifier,<br/>JWKS, Interceptor,<br/>PermissionLookup)"]
@@ -742,6 +760,7 @@ graph TD
         START["NotificationService.Start()<br/>Flow Worker.Start()"]
     end
 
+    SAFETY --> POOLS
     POOLS --> AUTH
     AUTH --> ORG_INIT
     AUTH --> IAM_INIT
@@ -775,7 +794,7 @@ graph TD
     classDef orchestrator fill:#fce4ec,stroke:#c62828,stroke-width:2px
     classDef postinit fill:#fafafa,stroke:#616161,stroke-width:1px,stroke-dasharray: 5 5
 
-    class POOLS,AUTH infra
+    class SAFETY,POOLS,AUTH infra
     class ORG_INIT,IAM_INIT,DEPT_INIT foundation
     class NOTIF_INIT,FILES_INIT,PREF_INIT kernel
     class CHAT_INIT,DOCS_INIT core

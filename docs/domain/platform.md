@@ -142,8 +142,9 @@ Both `WrapUnary` and `WrapStreamingHandler` implement this, so the SSE notificat
 is authorised on the same rules as unary calls.
 
 Tokens are internal JWTs signed by `iam.InternalJWTSigner` (RSA key from
-`JWT_PRIVATE_KEY_PATH`; an ephemeral key is generated with a warning when unset — dev
-only). Permissions are resolved per request by `iam.PermissionLookup` against the
+`JWT_PRIVATE_KEY_PATH`). When that setting is unset an ephemeral key is generated, which
+the production profile refuses to start with — see *Runtime profile and startup safety*
+below. Permissions are resolved per request by `iam.PermissionLookup` against the
 `AdminPool`, because role/permission rows must be readable regardless of tenant context.
 
 The permission catalogue itself lives in `public.permission` (120 rows across 12 domains, `<domain>.<action>`
@@ -195,6 +196,55 @@ interactive latency target — the account erase is the clearest case, because t
 signed out synchronously before it is queued — and it is why tests that wait on background
 work budget for the whole rotation rather than the lucky case.
 
+## Runtime profile and startup safety
+
+`APP_ENV` declares the posture of a process. It accepts exactly `development` and
+`production`, case-sensitive with surrounding whitespace trimmed. **Unset or empty means
+`production`** — the safe posture is the one you get by not thinking about it. Anything
+else (`prod`, `Production`, `staging`) refuses to start with a message listing the two
+accepted values; a staging fleet declares `production`, and there is no third profile.
+
+`config.EnforceSafety` runs as the first statement of `startServer`, before
+`database.NewAdminPool` and before `net.Listen`, so a process that fails it has opened no
+connection and bound no port. Three checks are evaluated, and **none of them short-circuits**
+— one restart shows the whole list:
+
+| Check | Setting | Fails when |
+|---|---|---|
+| `durable-signing-key` | `JWT_PRIVATE_KEY_PATH` | unset, so sessions would be signed with a per-process key: everyone signed out on restart, and two replicas rejecting each other's tokens. A path that is set but unreadable still fails in `iam.NewInternalJWTSigner`, in every profile. |
+| `cross-origin` | `WEBAPP_URL`, `CORS_ALLOWED_ORIGINS` | the origin list contains `*`, or `WEBAPP_URL` is empty, not an absolute URL with a scheme and host, or a loopback address (`localhost`, `127.0.0.0/8`, `::1`, `0.0.0.0`). Private LAN ranges and `.local`/`.internal` names pass — LAN-only and air-gapped fleets are supported deployments. |
+| `sso-audience` | `GOOGLE_CLIENT_IDS`, `APPLE_CLIENT_IDS` | the raw value holds something but parses to no usable entry (`" , "`). A provider left *entirely* unset is not a violation — it is disabled deliberately. |
+
+In the **production** profile a non-empty report is fatal: one message naming every
+violation with its setting, what it exposes and what a correct value looks like, and a
+non-zero exit. No configured value is echoed, because the report goes to a log that may be
+shipped off the box. In the **development** profile the same list is emitted as one
+`slog.Warn` per violation reading "safety check would fail in the production profile", and
+the server starts exactly as it did before.
+
+The refusal itself is also emitted at `Info`, not `Error` — `main.go` calls
+`slog.SetDefault`, which redirects the standard `log` package through the slog handler at
+`LevelInfo`, and the message reaches the operator through `log.Fatal`. Look for the text,
+not the level (drift row D84).
+
+Two lines are logged at `Info` in every profile: `runtime profile resolved` and
+`identity providers resolved`, the latter naming which sign-in methods are enabled and
+which are disabled, so an operator can see it without grepping for an absence.
+
+`make voice-dev-backend` sets `APP_ENV=development`; `deploy/stacks/core.yml` sets
+`APP_ENV: production`.
+
+**CORS.** `withCORS` is `cors.AllowAll()`'s option set with `AllowedOrigins` replaced by
+`config.AllowedOrigins(profile)`. Development returns `["*"]`. Production returns the
+origin of `WEBAPP_URL` — scheme, host and port, with the path and any trailing slash
+discarded, because a browser's `Origin` header never carries them — followed by each entry
+of `CORS_ALLOWED_ORIGINS`. Every other option is unchanged, including
+`AllowedHeaders: ["*"]`, which is what keeps Connect's own preflight headers working. A
+request with **no** `Origin` header passes straight through, so native mobile clients,
+`/healthz` and server-to-server calls are unaffected; and CORS never touches a response
+body, so SSE and Connect streaming behave identically. `/metrics` is on a separate
+`http.Server` on `METRICS_PORT` that never passes through `withCORS` at all.
+
 ## Configuration
 
 `internal/config` reads from the environment. The settings that change behaviour rather
@@ -202,16 +252,16 @@ than just endpoints:
 
 | Variable | Effect when unset |
 |---|---|
-| `JWT_PRIVATE_KEY_PATH` | ephemeral signing key — all tokens die on restart |
-| `GOOGLE_CLIENT_IDS` / `APPLE_CLIENT_IDS` | SSO token **audience validation is disabled** (logged as dev-only) |
+| `APP_ENV` | the **production** profile: a failing safety check refuses to start |
+| `JWT_PRIVATE_KEY_PATH` | ephemeral signing key — all tokens die on restart, and the production profile will not start |
+| `GOOGLE_CLIENT_IDS` / `APPLE_CLIENT_IDS` | the provider is **disabled**: its keys are never fetched, and every token exchange and identity link for it is refused |
+| `CORS_ALLOWED_ORIGINS` | no origin beyond the one derived from `WEBAPP_URL` |
 | `GOOGLE_APPLICATION_CREDENTIALS` | FCM client not built — **push notifications silently disabled** |
 | `APNS_VOIP_*` | APNs VoIP client not built — iOS calls fall back to the alert ring instead of presenting as system calls. A *partially* set credential fails startup rather than degrading, because that is a deployment mistake and not an opt-out. See `backend/docs/APNS-VOIP-SETUP.md`. |
 | `R2_*` | file storage unavailable |
 | `R2_PUBLIC_URL` | downloads are presigned URLs against the R2 S3 endpoint instead of the custom file domain (`transformar.file.devguards.com`); set, it also requires `R2_PUBLIC_URL_HMAC_SECRET` and a matching Cloudflare WAF token-auth rule — see [files.md](files.md#serving) |
 | `LIVEKIT_*` | voice falls back to dev defaults (`ws://localhost:7880`, `devkey`) |
 | `SES_*` | email sender logs instead of sending |
-
-CORS is currently `cors.AllowAll()`.
 
 Operational endpoints outside the RPC surface: `/healthz` (container health probes;
 the binary's own `tech-office healthcheck` subcommand probes it from inside the

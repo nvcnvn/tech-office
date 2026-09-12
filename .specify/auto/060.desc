@@ -1,0 +1,1 @@
+Production safety defaults. Fail startup outside a development profile when SSO audience validation is off, when the JWT signing key is ephemeral, or when CORS allows all origins. All three are logged as dev-only and nothing stops a hosted deployment shipping that way.

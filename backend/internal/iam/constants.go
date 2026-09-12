@@ -35,6 +35,11 @@ const (
 	SSOProviderApple  = "apple"
 )
 
+// SSOProviderNotEnabledType is the google.rpc.PreconditionFailure violation type carried
+// by a refusal to use an identity provider this deployment has not configured. Mirrored
+// in frontend/packages/apis/src/iam.ts (Constitution VIII).
+const SSOProviderNotEnabledType = "SSO_PROVIDER_NOT_ENABLED"
+
 // Invitation status values matching iam.invitation.status CHECK constraint.
 const (
 	InvitationStatusPending   = "pending"

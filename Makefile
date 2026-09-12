@@ -323,7 +323,7 @@ voice-dev-backend:
 	@eval "$$(bash backend/scripts/dev/voice-env.sh)"; \
 		echo "Starting backend with local voice env..."; \
 		echo "  PUBLIC_LIVEKIT_URL=$$PUBLIC_LIVEKIT_URL"; \
-		cd backend && go run ./cmd server
+		cd backend && APP_ENV=development go run ./cmd server
 
 .PHONY: infra-up
 infra-up:
