@@ -23,6 +23,7 @@ import {
   resolveSSOAvailability,
   type SSOAvailabilityInput,
   type SSOAvailability,
+  type SSOGap,
 } from "./sso-availability.ts";
 
 /** Defaults chosen so each case below states only what it is about. */
@@ -112,6 +113,53 @@ for (const platform of ["web", "windows", "macos"]) {
 }
 
 
+// ── What the developer is told (FR-010) ────────────────────────────────────
+// The gaps are data, so they are asserted on the return value — no console spy
+// and nothing rendered. The wording itself cannot live out here: it has to sit
+// inside the hook's `if (__DEV__)` block for Metro to strip it from a release
+// bundle, so it is checked as source text further down.
+{
+  const gapsFor = (overrides: Partial<SSOAvailabilityInput>) =>
+    resolveSSOAvailability(input(overrides)).gaps;
+
+  // Rows 1, 2, 6 and 8 — nothing is missing, so there is nothing to say.
+  assert.deepEqual(gapsFor({ appleAvailable: null }), [], "row 1");
+  assert.deepEqual(gapsFor({ appleAvailable: true }), [], "row 2");
+  assert.deepEqual(gapsFor({ platform: "android", appleAvailable: null }), [], "row 6");
+  assert.deepEqual(
+    gapsFor({ platform: "web", googleClientId: undefined }),
+    [],
+    "row 8: an unsupported platform is not a missing configuration value"
+  );
+
+  // Row 3 — Google is fine; the device is the reason the Apple button is gone.
+  assert.deepEqual(gapsFor({ appleAvailable: false }), ["apple-unavailable-on-device"], "row 3");
+
+  // Row 4 — the compiled-in iOS identifier was emptied. Cannot happen in a
+  // correctly built app, which is exactly why it is asserted here.
+  assert.deepEqual(
+    gapsFor({ googleClientId: "", appleAvailable: true }),
+    ["google-ios-client-id-missing"],
+    "row 4"
+  );
+
+  // Row 5 — both at once, reported in one line rather than two.
+  assert.deepEqual(
+    gapsFor({ googleClientId: "", appleAvailable: false }),
+    ["google-ios-client-id-missing", "apple-unavailable-on-device"],
+    "row 5"
+  );
+
+  // Row 7 — the headline case, and the one an engineer actually hits.
+  for (const googleClientId of ABSENT) {
+    assert.deepEqual(
+      gapsFor({ platform: "android", googleClientId, appleAvailable: null }),
+      ["google-android-client-id-missing"],
+      "row 7"
+    );
+  }
+}
+
 // ── The copy rule (FR-007, FR-008, FR-009) ──────────────────────────────────
 // Every auth screen is read, not just signin.tsx: the message this feature
 // deletes would be just as wrong on the PIN screen or the invitation screen,
@@ -147,7 +195,7 @@ const BANNED: ReadonlyArray<readonly [RegExp, string]> = [
  * Literals that are not prose: testIDs, route paths, SF Symbol names such as
  * `building.2`. No person ever reads one, so neither rule applies.
  */
-const NOT_PROSE = /^[a-z0-9.\-\/]+$/;
+const NOT_PROSE = /^[a-z0-9.\-/]+$/;
 
 /**
  * Pull the text out of every string and template literal. A deliberately small
@@ -262,6 +310,42 @@ function stringLiterals(source: string): string[] {
       message,
       /email and password|try again|in a moment|Enter your workspace subdomain/,
       `"${prefix}" tells the reader something failed without telling them what to do next (FR-009)`
+    );
+  }
+}
+
+// ── …and that it still names the configuration value (FR-010, FR-011) ──────
+// The wording is read as source text because it deliberately lives inside the
+// hook's `if (__DEV__)` block, which is a file Node cannot import (react-native
+// again) and which Metro removes from release bundles. Reading it here keeps
+// the two halves — which gap, and what the engineer is told about it — from
+// drifting apart silently.
+{
+  const HOOK = join(dirname(fileURLToPath(import.meta.url)), "use-sso-availability.ts");
+  const source = readFileSync(HOOK, "utf8");
+
+  assert.match(
+    source,
+    /if \(__DEV__\) \{/,
+    "the diagnostic must sit inside an `if (__DEV__) {` block or Metro will ship its wording"
+  );
+
+  const NAMES: ReadonlyArray<readonly [SSOGap, RegExp]> = [
+    ["google-android-client-id-missing", /EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID/],
+    ["google-ios-client-id-missing", /GOOGLE_IOS_CLIENT_ID/],
+    ["apple-unavailable-on-device", /Sign in with Apple is unavailable/],
+  ];
+
+  const devBlock = source.slice(source.indexOf("if (__DEV__) {"));
+  for (const [gap, names] of NAMES) {
+    assert.ok(
+      devBlock.includes(gap),
+      `use-sso-availability.ts never handles the "${gap}" gap, so an engineer hitting it is told nothing (FR-010)`
+    );
+    assert.match(
+      devBlock,
+      names,
+      `the "${gap}" diagnostic no longer names the configuration value it is about (FR-010)`
     );
   }
 }

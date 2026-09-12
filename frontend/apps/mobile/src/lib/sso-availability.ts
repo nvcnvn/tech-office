@@ -11,9 +11,11 @@
  * so `sso-availability.check.ts` can walk every row of the decision table
  * without a simulator. The React wrapper lives in `use-sso-availability.ts`.
  *
- * `diagnostic` is returned as data rather than logged from in here: this
- * function decides *what* an engineer needs to be told, the hook decides
- * *whether* to say it (`__DEV__`, once per mount).
+ * What an engineer needs to be told is returned as `gaps` — machine-readable
+ * tokens, not prose. The wording lives inside the hook's `if (__DEV__)` block
+ * so that Metro strips it from a release bundle entirely (FR-011): a sentence
+ * built out here would sit in every shipped APK naming the configuration it
+ * was looking for, whether or not anything ever logged it.
  */
 
 /** The iOS client identifier is compiled in, so it can only go missing by edit. */
@@ -33,6 +35,12 @@ export interface SSOAvailabilityInput {
   appleAvailable: boolean | null;
 }
 
+/** A reason a provider is not being offered, for the development console. */
+export type SSOGap =
+  | "google-ios-client-id-missing"
+  | "google-android-client-id-missing"
+  | "apple-unavailable-on-device";
+
 export interface SSOAvailability {
   /** Render the Continue with Google button. */
   google: boolean;
@@ -42,8 +50,9 @@ export interface SSOAvailability {
   any: boolean;
   /** Every input is known. False only while the Apple answer is outstanding. */
   resolved: boolean;
-  /** Development-only line naming the missing configuration, or `null`. */
-  diagnostic: string | null;
+  /** Why anything is missing, in the order it should be reported. Empty when
+   *  nothing is. The hook turns these into a development-only console line. */
+  gaps: readonly SSOGap[];
 }
 
 /**
@@ -57,7 +66,7 @@ function isPresent(clientId: string | undefined): boolean {
 export function resolveSSOAvailability(input: SSOAvailabilityInput): SSOAvailability {
   const { platform, googleClientId, appleAvailable } = input;
   const googleConfigured = isPresent(googleClientId);
-  const notes: string[] = [];
+  const gaps: SSOGap[] = [];
 
   let google = false;
   let apple = false;
@@ -70,24 +79,12 @@ export function resolveSSOAvailability(input: SSOAvailabilityInput): SSOAvailabi
     apple = appleAvailable === true;
     resolved = appleAvailable !== null;
 
-    if (!googleConfigured) {
-      notes.push(
-        "Google sign-in is hidden on iOS because GOOGLE_IOS_CLIENT_ID is empty in src/lib/sso-availability.ts."
-      );
-    }
-    if (appleAvailable === false) {
-      notes.push(
-        "Sign in with Apple is unavailable on this device, so the Apple button is hidden. Check that the Sign In with Apple capability is in the native entitlements and that the device is signed in to iCloud."
-      );
-    }
+    if (!googleConfigured) gaps.push("google-ios-client-id-missing");
+    if (appleAvailable === false) gaps.push("apple-unavailable-on-device");
   } else if (platform === "android") {
     google = googleConfigured;
 
-    if (!googleConfigured) {
-      notes.push(
-        "Google sign-in is hidden on Android because EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID is not set in the app environment."
-      );
-    }
+    if (!googleConfigured) gaps.push("google-android-client-id-missing");
   }
   // Every other platform — web included — is a target for neither provider.
   // Nothing renders, and nothing is missing, so there is nothing to report.
@@ -97,6 +94,6 @@ export function resolveSSOAvailability(input: SSOAvailabilityInput): SSOAvailabi
     apple,
     any: google || apple,
     resolved,
-    diagnostic: notes.length > 0 ? notes.join(" ") : null,
+    gaps,
   };
 }

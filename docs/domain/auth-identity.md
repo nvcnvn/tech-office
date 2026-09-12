@@ -232,8 +232,24 @@ document ACL), which is a different question.
     "workspace is ready, but we couldn't sign you in".
   - `set-pin` — a worker choosing their own PIN after signing in with a one-time code,
     authorised by `pin_change_token`.
-  - `signin` (email + password + SSO), `forgot-password`, `reset-password`,
-    `accept-invitation`, `sso-callback`.
+  - `signin` — email + password, plus whichever single-tap providers can actually
+    complete a sign-in on the running build and device. `src/lib/sso-availability.ts`
+    decides that from the platform, the presence of the Google client identifier and
+    the device's own answer to `AppleAuthentication.isAvailableAsync()`; the Apple
+    button stays hidden until that answer arrives, so it never appears and is then
+    pulled away. A provider that cannot work is not rendered at all rather than
+    rendered and refused, and when neither can, the "or continue with" divider, the
+    SSO card and its support text are all omitted, leaving the email form as the whole
+    screen. Both providers keep their tap-time guards for a device that withdraws
+    Sign in with Apple mid-session. Every failure message on the screen names signing
+    in with email and password as the way through; provider and network errors are
+    passed through verbatim with that framing appended. Which configuration value is
+    missing is a development-only `console.warn`, emitted once per screen mount and
+    stripped from release bundles by Metro — it is not reachable from the interface in
+    any build. `src/lib/sso-availability.check.ts` walks the decision table and fails
+    the build if any string on an `(auth)` screen talks about builds, native code, SDKs
+    or environment variables.
+  - `forgot-password`, `reset-password`, `accept-invitation`, `sso-callback`.
 - Mobile `app/(onboarding)/` — the owner's first-run sequence, entered from `signup`:
   - `set-pin` — mandatory, non-dismissible, with a confirmation entry and a card stating
     that email and password remain the recovery path.
