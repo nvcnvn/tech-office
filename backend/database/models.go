@@ -733,7 +733,9 @@ type ChatChannel struct {
 	TitleSlug      string      `json:"title_slug"`
 	DisplayName    string      `json:"display_name"`
 	Description    pgtype.Text `json:"description"`
-	// Channel type: chat, direct_message, project_ticket_thread, crm_deal_notes, support_ticket. MUST align with backend constants in internal/chat/constants.go, proto enum rpc.v1.ChannelType, and frontend TypeScript types in packages/apis/src/chat.ts
+	// Channel type: chat, direct_message, project_ticket_thread. MUST align with backend
+	// constants in internal/chat/constants.go, proto enum rpc.v1.ChannelType, and frontend
+	// TypeScript types in packages/apis/src/chat.ts
 	ChannelType         string             `json:"channel_type"`
 	IsPrivate           bool               `json:"is_private"`
 	IsArchived          bool               `json:"is_archived"`
@@ -3057,7 +3059,11 @@ type FilesFileAccessRule struct {
 	ID             dbuuid.UUID `json:"id"`
 	OrganizationID dbuuid.UUID `json:"organization_id"`
 	FileID         dbuuid.UUID `json:"file_id"`
-	// Upload context type: chat_channel, project, department_docs, calendar_event, support_ticket, crm_deal. MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts. Set by domain service (e.g., ChatService for chat_channel), NOT client-controlled.
+	// Access-rule context type: chat_channel, project, department_docs, calendar_event. MUST
+	// align with backend constants in internal/files/constants.go and the proto enum
+	// rpc.v1.FileContextType, which packages/apis/src/files-security.ts re-exports rather than
+	// restating. Set by domain service (e.g., ChatService for chat_channel), NOT
+	// client-controlled.
 	ContextType string      `json:"context_type"`
 	ContextID   dbuuid.UUID `json:"context_id"`
 	// Access scope: public (all organization members), private (context members only), department (department members only). MUST align with backend constants in internal/files/constants.go. Derived from context properties (e.g., channel.is_private), NOT client-controlled.
@@ -3745,13 +3751,17 @@ func (s *IamAccountLockout) FieldsMap() map[string]any {
 	}
 }
 
-// Org-scoped credentials for PIN and biometric authentication. Supports temporary (admin-generated) and active (user-set) states. One active credential per type per identity. Temporary PINs default to 3-day expiry (configurable via column default). credential_type and state MUST align with backend constants.
+// Org-scoped credentials for PIN authentication. Supports temporary (admin-generated) and
+// active (user-set) states. One active credential per type per identity. Temporary PINs
+// default to 3-day expiry (configurable via column default). credential_type and state MUST
+// align with backend constants.
 type IamCredential struct {
 	ID             dbuuid.UUID `json:"id"`
 	OrganizationID dbuuid.UUID `json:"organization_id"`
 	IdentityID     dbuuid.UUID `json:"identity_id"`
 	CredentialType string      `json:"credential_type"`
-	// Bcrypt hash of the credential value (PIN digits, biometric key). Never stored in plaintext after initial generation.
+	// Bcrypt hash of the credential value (PIN digits). Never stored in plaintext after initial
+	// generation.
 	CredentialHash string `json:"credential_hash"`
 	State          string `json:"state"`
 	// Expiry timestamp for temporary credentials. Default 3 days from creation (configurable by updating column default). NULL or past = expired. Only meaningful for state=temporary.
@@ -4747,7 +4757,9 @@ func (s *NotificationLiveReceipt) FieldsMap() map[string]any {
 type NotificationNotification struct {
 	ID             dbuuid.UUID `json:"id"`
 	OrganizationID dbuuid.UUID `json:"organization_id"`
-	// Backend service that published notification: chat, crm, projects, hr, support, finance, system. MUST align with backend constants in internal/notification/constants.go and frontend TypeScript types in packages/apis/src/notifications.ts
+	// Backend service that published notification: chat, projects, docs, calendar, system. MUST
+	// align with backend constants in internal/notification/constants.go and frontend TypeScript
+	// types in packages/apis/src/notification.ts
 	SourceDomain string `json:"source_domain"`
 	// What happened. MUST equal notification.AllNotificationTypes() in backend/internal/notification/constants.go — TestNotificationTypeCheckMatchesGoConstants asserts it.
 	NotificationType    string      `json:"notification_type"`
@@ -5059,7 +5071,11 @@ type NotificationPersonalPreference struct {
 	DndEnabled bool        `json:"dnd_enabled"`
 	DndStart   pgtype.Time `json:"dnd_start"`
 	DndEnd     pgtype.Time `json:"dnd_end"`
-	// Domains for which the employee will not receive push notifications. SSE delivery, the notification row and the unread count are unaffected, and priority-0 notifications (mentions, incoming calls) are never suppressed. MUST hold the same nine values as notification.AllSourceDomains in Go, the notification.notification source_domain CHECK, and SOURCE_DOMAINS in frontend/packages/apis.
+	// Domains for which the employee will not receive push notifications. SSE delivery, the
+	// notification row and the unread count are unaffected, and priority-0 notifications
+	// (mentions, incoming calls) are never suppressed. MUST hold the same five values as
+	// notification.AllSourceDomains in Go, the notification.notification source_domain CHECK,
+	// and SOURCE_DOMAINS in frontend/packages/apis.
 	MutedDomains []string           `json:"muted_domains"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`

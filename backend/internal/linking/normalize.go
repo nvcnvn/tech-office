@@ -9,7 +9,6 @@ import (
 type NormalizeResult struct {
 	Target           CanonicalLinkTarget
 	IgnoredQueryKeys []string
-	LegacyNormalized bool
 	FallbackURL      string
 }
 
@@ -42,65 +41,5 @@ func Normalize(raw string) (NormalizeResult, error) {
 		return NormalizeResult{Target: target, IgnoredQueryKeys: ignored}, nil
 	}
 
-	legacy := normalizeLegacyRoute(parsed)
-	if legacy == nil {
-		return NormalizeResult{}, fmt.Errorf("unsupported canonical or legacy path")
-	}
-	return *legacy, nil
-}
-
-func normalizeLegacyRoute(parsed *url.URL) *NormalizeResult {
-	hostParts := strings.Split(parsed.Hostname(), ".")
-	pathParts := strings.Split(strings.Trim(parsed.Path, "/"), "/")
-	if len(hostParts) < 3 || len(pathParts) == 0 {
-		return nil
-	}
-	tenantKey := hostParts[0]
-	var resourceType ResourceType
-	var resourceID string
-	switch pathParts[0] {
-	case "workspace":
-		if len(pathParts) >= 4 && pathParts[1] == "projects" && pathParts[3] == "tasks" && len(pathParts) >= 5 {
-			resourceType = ResourceTypeTaskInstance
-			resourceID = pathParts[4]
-		} else if len(pathParts) >= 3 && pathParts[1] == "tasks" {
-			resourceType = ResourceTypeTaskInstance
-			resourceID = pathParts[2]
-		}
-	case "chat":
-		if len(pathParts) >= 2 {
-			resourceType = ResourceTypeChatChannel
-			resourceID = pathParts[1]
-		}
-	case "docs":
-		if len(pathParts) >= 2 {
-			resourceType = ResourceTypeDocumentPage
-			resourceID = pathParts[1]
-		}
-	case "calendar":
-		if len(pathParts) >= 2 {
-			resourceType = ResourceTypeCalendarEvent
-			resourceID = pathParts[1]
-		}
-	}
-	if resourceType == "" || resourceID == "" {
-		return nil
-	}
-	allowed, ignored := NormalizeAllowedQuery(parsed.Query())
-	result := &NormalizeResult{
-		Target: CanonicalLinkTarget{
-			TenantKey:        tenantKey,
-			ResourceType:     resourceType,
-			ResourceID:       resourceID,
-			FocusIntent:      allowed.Get("focusIntent"),
-			EntryContext:     allowed.Get("entryContext"),
-			RequirementID:    allowed.Get("requirementId"),
-			AnchorType:       AnchorType(allowed.Get("anchorType")),
-			AnchorID:         allowed.Get("anchorId"),
-			CanonicalVersion: CanonicalVersion,
-		},
-		IgnoredQueryKeys: ignored,
-		LegacyNormalized: true,
-	}
-	return result
+	return NormalizeResult{}, fmt.Errorf("unsupported canonical path")
 }

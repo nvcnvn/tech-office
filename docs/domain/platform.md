@@ -384,9 +384,17 @@ restore drill, not the warning, is the signal to trust.
 - Go types come from sqlc (`backend/sqlc.yaml` → `backend/database/*.query.sql.go`),
   generated from `database/migrations/`.
 
-Schemas reserved but unused so far: `timekeeping`, `learning`, `compliance`, `payroll`,
-`inventory`, `hiring`, `retention`, `communication`, `finance`, `procurement`, `assets`,
-`crm`, `support`, `integrations`.
+Eleven application schemas exist, and every one of them holds objects: `calendar`, `chat`,
+`collaboration`, `compliance`, `docs`, `files`, `flows`, `iam`, `notification`,
+`organization`, `voice`. (`public` holds the migration runner's own bookkeeping.)
+
+Thirteen further schemas — `assets`, `communication`, `crm`, `finance`, `hiring`,
+`integrations`, `inventory`, `learning`, `payroll`, `procurement`, `retention`, `support`,
+`timekeeping` — were created ahead of features that were never built, held nothing for the
+life of the project, and were dropped by feature 062. `compliance` was previously listed
+among them by mistake; it holds four objects and is in active use. `TestPlatformSchemaLayout`
+in the integration suite now fails on any schema with no objects in it, so an empty one
+cannot quietly reappear.
 
 ## Testing
 

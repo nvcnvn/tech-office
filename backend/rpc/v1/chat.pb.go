@@ -29,8 +29,6 @@ const (
 	ChannelType_CHANNEL_TYPE_CHAT                  ChannelType = 1
 	ChannelType_CHANNEL_TYPE_DIRECT_MESSAGE        ChannelType = 2
 	ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD ChannelType = 3
-	ChannelType_CHANNEL_TYPE_CRM_DEAL_NOTES        ChannelType = 4
-	ChannelType_CHANNEL_TYPE_SUPPORT_TICKET        ChannelType = 5
 )
 
 // Enum value maps for ChannelType.
@@ -40,16 +38,12 @@ var (
 		1: "CHANNEL_TYPE_CHAT",
 		2: "CHANNEL_TYPE_DIRECT_MESSAGE",
 		3: "CHANNEL_TYPE_PROJECT_TICKET_THREAD",
-		4: "CHANNEL_TYPE_CRM_DEAL_NOTES",
-		5: "CHANNEL_TYPE_SUPPORT_TICKET",
 	}
 	ChannelType_value = map[string]int32{
 		"CHANNEL_TYPE_UNSPECIFIED":           0,
 		"CHANNEL_TYPE_CHAT":                  1,
 		"CHANNEL_TYPE_DIRECT_MESSAGE":        2,
 		"CHANNEL_TYPE_PROJECT_TICKET_THREAD": 3,
-		"CHANNEL_TYPE_CRM_DEAL_NOTES":        4,
-		"CHANNEL_TYPE_SUPPORT_TICKET":        5,
 	}
 )
 
@@ -6087,14 +6081,12 @@ const file_rpc_v1_chat_proto_rawDesc = "" +
 	"resourceId\x12\x1b\n" +
 	"\tparent_id\x18\x03 \x01(\tR\bparentId\x12-\n" +
 	"\x12display_identifier\x18\x04 \x01(\tR\x11displayIdentifier\x12#\n" +
-	"\rdisplay_title\x18\x05 \x01(\tR\fdisplayTitle*\xcd\x01\n" +
+	"\rdisplay_title\x18\x05 \x01(\tR\fdisplayTitle*\x8b\x01\n" +
 	"\vChannelType\x12\x1c\n" +
 	"\x18CHANNEL_TYPE_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11CHANNEL_TYPE_CHAT\x10\x01\x12\x1f\n" +
 	"\x1bCHANNEL_TYPE_DIRECT_MESSAGE\x10\x02\x12&\n" +
-	"\"CHANNEL_TYPE_PROJECT_TICKET_THREAD\x10\x03\x12\x1f\n" +
-	"\x1bCHANNEL_TYPE_CRM_DEAL_NOTES\x10\x04\x12\x1f\n" +
-	"\x1bCHANNEL_TYPE_SUPPORT_TICKET\x10\x05*\xab\x01\n" +
+	"\"CHANNEL_TYPE_PROJECT_TICKET_THREAD\x10\x03*\xab\x01\n" +
 	"\x16NotificationPreference\x12'\n" +
 	"#NOTIFICATION_PREFERENCE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bNOTIFICATION_PREFERENCE_ALL\x10\x01\x12$\n" +

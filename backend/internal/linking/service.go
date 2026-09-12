@@ -158,7 +158,6 @@ func (s *Service) Resolve(ctx context.Context, rawURL string, platform Platform,
 		AppliedContext:   appliedContext(normalized.Target),
 		IgnoredContext:   normalized.IgnoredQueryKeys,
 		FallbackURL:      canonicalURL,
-		LegacyNormalized: normalized.LegacyNormalized,
 	}
 	result.WebRoute = s.buildWebRoute(ctx, organizationID, normalized.Target)
 	result.MobileRoute = s.buildMobileRoute(ctx, organizationID, normalized.Target)

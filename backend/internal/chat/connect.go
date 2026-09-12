@@ -1002,10 +1002,6 @@ func (s *ChatServiceConnect) SearchChannels(
 			channelType = rpcv1.ChannelType_CHANNEL_TYPE_DIRECT_MESSAGE
 		case ChannelTypeProjectTicketThread:
 			channelType = rpcv1.ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD
-		case ChannelTypeCRMDealNotes:
-			channelType = rpcv1.ChannelType_CHANNEL_TYPE_CRM_DEAL_NOTES
-		case ChannelTypeSupportTicket:
-			channelType = rpcv1.ChannelType_CHANNEL_TYPE_SUPPORT_TICKET
 		}
 
 		protoResults[i] = &rpcv1.ChannelSearchResult{
@@ -1152,10 +1148,6 @@ func (s *ChatServiceConnect) AutocompleteChannels(
 			channelType = rpcv1.ChannelType_CHANNEL_TYPE_DIRECT_MESSAGE
 		case ChannelTypeProjectTicketThread:
 			channelType = rpcv1.ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD
-		case ChannelTypeCRMDealNotes:
-			channelType = rpcv1.ChannelType_CHANNEL_TYPE_CRM_DEAL_NOTES
-		case ChannelTypeSupportTicket:
-			channelType = rpcv1.ChannelType_CHANNEL_TYPE_SUPPORT_TICKET
 		}
 
 		protoSuggestions[i] = &rpcv1.ChannelAutocompleteSuggestion{

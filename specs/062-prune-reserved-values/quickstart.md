@@ -13,7 +13,8 @@ Use the repository's supported tooling — Makefile targets and `backend/docker-
 
 ```bash
 cd /Volumes/T5/Codes/tech-office
-make dev-db                       # Postgres for the backend suite
+make infra-up                     # Postgres and supporting services for the backend suite
+make check-postgres               # confirm it is reachable
 cd frontend && pnpm install && pnpm --filter "./packages/*" run build
 ```
 
@@ -25,7 +26,7 @@ gitignored `dst/`, so a typecheck on a clean tree fails with dozens of
 
 ```bash
 cd backend
-go run ./cmd migrate                 # applies 20260912000003_prune_reserved_values
+./scripts/migrate.sh up              # applies 20260912000003_prune_reserved_values
 ./scripts/regen-schema.sh            # regenerates database/scripts/schema.sql
 sqlc generate                        # regenerates database/models.go
 buf generate                         # regenerates rpc/v1/*.pb.go and frontend/packages/rpc
@@ -109,8 +110,11 @@ Then open the app and check by hand (mobile is the owner's day-to-day surface, a
 habitual test device is an iPhone SE — verify on a narrow Android viewport too):
 
 ```bash
-make dev-mobile
+cd frontend && pnpm --filter mobile run ios      # or: pnpm --filter mobile run android
 ```
+
+Both resolve the LAN IP through `scripts/with-lan-ip.sh`, so the same command works for
+either platform.
 
 Navigate to **More → Settings → notification mutes**. **Expected**: exactly five rows —
 Chat, Tasks and projects, Calendar, Documents, System. Toggle one and confirm a

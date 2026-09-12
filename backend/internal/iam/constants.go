@@ -64,8 +64,7 @@ const (
 
 // Credential type values matching iam.credential.credential_type CHECK constraint.
 const (
-	CredentialTypePIN       = "pin"
-	CredentialTypeBiometric = "biometric"
+	CredentialTypePIN = "pin"
 )
 
 // Credential state values matching iam.credential.state CHECK constraint.

@@ -53,7 +53,7 @@ export interface DepartmentSuggestion {
 // ============================================================================
 
 // Note: ChannelType is already defined in '../chat' with values:
-// 'chat' | 'direct_message' | 'project_ticket_thread' | 'crm_deal_notes' | 'support_ticket'
+// 'chat' | 'direct_message' | 'project_ticket_thread'
 export type ChannelType = import('../chat').ChannelType;
 
 export interface ChannelSearchResult {

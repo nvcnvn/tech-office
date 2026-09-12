@@ -1,0 +1,99 @@
+# Baseline test counts for 062-prune-reserved-values
+# Captured: 2026-09-12T12:32:24Z
+# Code state: HEAD 6a99cad (pre-change); database already at migration 20260912000003
+
+## Suite inventories (pre-change code)
+
+backend integration top-level tests : 157   (go test -list '.*' ./integration/...)
+web E2E tests                       : 241 in 27 files (playwright --list)
+mobile typecheck                    : 0 diagnostics expected (pnpm run typecheck:mobile)
+
+## Backend baseline run (make test-backend)
+
+See "Backend baseline result" below. The run was made against the pre-change Go code with
+the database already at migration 20260912000003, which is the only ordering available
+once the migration has been applied; the failures it shows are read in that light.
+
+## Backend baseline result (pre-change code, migrated database)
+
+Top-level tests run       : 154
+Passing test lines        : 2305
+Failing top-level tests   : 9
+  TestNotificationPersonalPreference  — expected: the suite still wrote 'support'/'finance'
+                                        into muted_domains, which the narrowed CHECK now
+                                        rejects. Retargeted onto surviving domains.
+  TestVoiceLiveKitConnectivity        \
+  TestVoiceCommunicationLifecycle      |  environment: the LiveKit container was not
+  TestUnreachableCalleeStillGetsAMissedCall |  running. `make voice-dev-infra-up` starts it;
+  TestNativeCallWakeupDispatch         |  all four pass once it is up.
+  TestNativeCallWakeupRefusals         |
+  TestNativeCallWakeupTerminalEvents   |
+  TestNativeCallWakeupConcurrentSweep /
+  TestContentIndexing                 — pre-existing load-dependence under -parallel 8
+                                        (drift D52). Passes in isolation, before and after.
+
+## Backend result after the change
+
+Top-level tests run       : 155   (+1: TestPlatformSchemaLayout)
+Passing test lines        : 2393  (+88)
+Failing top-level tests   : 1     (TestContentIndexing, the D52 flake above; re-run alone
+                                   with `make test-backend-one T=TestContentIndexing` → PASS)
+
+SC-006 / FR-012: no reduction. The check count rose in every direction measured. The two
+tests this feature edited are accounted for individually:
+
+- `notification_personal_preference_test.go` — the "every source domain the system
+  publishes from can be muted" scenario (FR-013) was **not** edited and passes over the
+  five surviving domains, which is the alignment guard holding. Three sibling subtests
+  used 'support'/'finance' as arbitrary sample domains and were retargeted onto 'docs';
+  the assertions themselves are unchanged and the count is unchanged.
+- `canonical_links_test.go` — two `t.Skip("TODO")` placeholders under "when a legacy
+  product link is normalized" were replaced by four executing assertions that a
+  legacy-shaped URL now gets the standard unrecognised-link outcome. Skipped checks became
+  running ones: a net gain of four, not a loss of two.
+
+## Frontend result after the change
+
+Web E2E tests run : 243  (241 baseline + 2 new in workspace-navigation.spec.ts)
+Passed            : 242
+Failed            : 1    feature-tour.spec.ts "the ritual stop opens the project the
+                         rituals would live in" — landed on /workspace/calendar/ instead
+                         of the project's ritual tab. Re-run alone (`make
+                         test-frontend-one F=feature-tour`): 19/19 pass. Same class as the
+                         web suite's known cold-cache/ordering flake (drift D54); nothing
+                         in this change touches the tour sequence or the calendar route.
+
+Static checks     : theme-tokens contrast, mobile theme-resolution, mobile
+                    sso-availability — all ok.
+
+## Typecheck
+
+mobile : 0 diagnostics (pnpm run typecheck:mobile)
+web    : 0 diagnostics (pnpm --filter web exec tsc -p tsconfig.json --noEmit)
+
+## make lint-tenancy
+
+OK — 103 tables (87 tenant, 16 global), 555 queries checked, two pre-existing documented
+deferrals on iam.invitation. The regenerated schema.sql still satisfies the discipline.
+
+## Mobile verification (T051)
+
+`make test-mobile-one F=settings/notification-preferences`, run on both:
+
+- Android emulator `emulator-5554` (Medium_Phone_API_36.1) — PASS
+- iOS simulator `iPhone 17 Pro Max` (iOS 26.2)            — PASS
+
+The flow was extended to assert the mute list holds exactly the five surviving rows and
+that `setting-mute-system` is the last of them (the Safety section follows it directly),
+which is the viewport-independent way to say "and nothing else". The screenshot taken by
+the run shows Chat, Tasks and projects, Calendar, Documents, System and no sixth row.
+
+Two adjustments the shorter list forced, both in the Maestro flow rather than the app:
+
+- The five-row check walks the list with `scrollUntilVisible` in order instead of asserting
+  one screenful. Five rows fit above the fold on the Android emulator and do not on the
+  iPhone, and "below the fold" must not read as "missing".
+- The three `scrollUntilVisible` steps that precede a tap on `setting-mute-calendar` now
+  set `centerElement: true`. With nine rows the scroll always left Calendar mid-screen;
+  with five the page is short enough that it settled at the very bottom, where the tap
+  landed on the tab bar behind it and the flow navigated to My Work instead of toggling.

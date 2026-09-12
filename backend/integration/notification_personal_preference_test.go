@@ -102,12 +102,12 @@ func TestNotificationPersonalPreference(t *testing.T) {
 		current := w.getNotificationPreferences(person).Preferences
 		afterMute := w.updateNotificationPreferences(person, &rpcv1.UpdateNotificationPreferencesRequest{
 			InAppAlertsEnabled: current.InAppAlertsEnabled,
-			MutedDomains:       []string{"support"},
+			MutedDomains:       []string{"docs"},
 			DndEnabled:         current.DndEnabled,
 			DndStart:           current.DndStart,
 			DndEnd:             current.DndEnd,
 		})
-		assert.Equal(t, []string{"support"}, afterMute.MutedDomains)
+		assert.Equal(t, []string{"docs"}, afterMute.MutedDomains)
 		assert.True(t, afterMute.DndEnabled, "an untouched setting must survive a change to another")
 		assert.Equal(t, "21:00", afterMute.DndStart)
 
@@ -115,7 +115,7 @@ func TestNotificationPersonalPreference(t *testing.T) {
 		// merging with what was there.
 		cleared := w.updateNotificationPreferences(person, &rpcv1.UpdateNotificationPreferencesRequest{
 			InAppAlertsEnabled: true,
-			MutedDomains:       []string{"support"},
+			MutedDomains:       []string{"docs"},
 			DndEnabled:         false,
 		})
 		assert.False(t, cleared.DndEnabled)
@@ -128,7 +128,7 @@ func TestNotificationPersonalPreference(t *testing.T) {
 	// FR-007: a refusal names the value, and stores nothing
 	t.Run("a domain the system does not recognise is refused by name and stores nothing", func(t *testing.T) {
 		person := w.withEmployee()
-		before := w.muteDomains(person, "chat", "finance")
+		before := w.muteDomains(person, "chat", "docs")
 
 		_, err := w.updateNotificationPreferencesErr(person, &rpcv1.UpdateNotificationPreferencesRequest{
 			InAppAlertsEnabled: true,

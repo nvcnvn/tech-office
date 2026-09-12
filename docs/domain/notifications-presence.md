@@ -4,7 +4,7 @@ The delivery backbone every other domain publishes into, plus the presence signa
 decides how something gets delivered. Owned by `internal/notification`; contract in
 `rpc/v1/notification.proto` (`NotificationService`, 21 RPCs + one server-streaming RPC).
 
-**Status date: 2026-09-05.** Supersedes specs 007, 008, 012, 019, 021, 033, 037, 040, 042, 051. Deeper
+**Status date: 2026-09-12.** Supersedes specs 007, 008, 012, 019, 021, 033, 037, 040, 042, 051, 062. Deeper
 references: `backend/docs/NOTIFICATION-SYSTEM-ARCHITECTURE.md`,
 `NOTIFICATION-RESCUE-PUSH-DESIGN.md`, `NOTIFICATION-RULES.md`, `FCM-SETUP.md`.
 
@@ -225,7 +225,7 @@ do-not-disturb off.
 | Column | Meaning |
 |---|---|
 | `in_app_alerts_enabled` | draw the mobile foreground banner. **Stored and returned by the server, never read by the delivery pipeline** — with it false the notification is still recorded, listed, counted as unread and pushed |
-| `muted_domains` | `text[]`, `CHECK (muted_domains <@ ARRAY['chat','projects','docs','crm','hr','support','finance','system','calendar'])` — all nine source domains, `calendar` included |
+| `muted_domains` | `text[]`, `CHECK (muted_domains <@ ARRAY['chat','projects','docs','system','calendar'])` — all five source domains, `calendar` included |
 | `dnd_enabled`, `dnd_start`, `dnd_end` | `time without time zone`, read against `LOCALTIME`; windows may wrap midnight |
 
 Two RPCs own it, guarded by the pre-existing `pref.view` and `pref.update` permissions
@@ -244,7 +244,7 @@ back-fill):
   `InvalidArgument` naming the value and writes nothing; the mute list is stored
   deduplicated and sorted.
 
-The nine source domains live in four places that must agree — `allSourceDomains` in
+The five source domains live in four places that must agree — `allSourceDomains` in
 `internal/notification/constants.go`, the `notification.notification.source_domain` CHECK,
 the `muted_domains` CHECK, and `SourceDomain`/`SOURCE_DOMAINS` in
 `packages/apis/src/notification.ts`. The "every source domain the system publishes from
@@ -388,8 +388,8 @@ than inferring from loose IDs.
 task (6), docs (3), ritual/evidence (7 — `evidence_submitted`, `evidence_approved`,
 `evidence_rejected`, `ritual_instances_scheduled`, `ritual_instance_overdue`,
 `ritual_instance_missed`, `ritual_instance_unassigned`), calendar (6), and
-`account_removal_requested`. Source domains: `chat`, `crm`, `projects`, `hr`, `support`,
-`finance`, `docs`, `system`, `calendar`.
+`account_removal_requested`. Source domains: `chat`, `projects`, `docs`, `calendar`,
+`system`.
 
 `ritual_instance_overdue` and `ritual_instance_missed` were removed on 2026-08-30 as dead
 values and restored by feature 040, which gave them a producer: the ritual reconciliation
@@ -449,7 +449,8 @@ while the union stopped at `doc_mentioned`.
   Query key `["notification-preferences"]` (optimistic with rollback, persisted to MMKV by
   `setupQueryPersistence`, cleared on sign-out by `resetAuthenticatedAppState`). Both are
   edited in the Notifications section of `(more)/settings`, which renders one mute row per
-  entry of `SOURCE_DOMAINS`. `(app)/_layout.tsx` gates the foreground
+  entry of `SOURCE_DOMAINS` — five rows: Chat, Tasks and projects, Calendar, Documents,
+  System. `(app)/_layout.tsx` gates the foreground
   `LiveNotificationBanner` on `inAppAlertsEnabled`, reading `true` while the record is
   still loading. In-App Alerts suppresses only that banner — the SSE stream, unread counts
   and push notifications are unaffected, and it is not a do-not-disturb setting. There is

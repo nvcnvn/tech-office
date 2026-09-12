@@ -39,7 +39,6 @@ export interface CanonicalLinkResolution {
 	requiresAuthentication?: boolean;
 	fallbackUrl?: string;
 	ignoredContext?: string[];
-	legacyNormalized?: boolean;
 }
 
 /**

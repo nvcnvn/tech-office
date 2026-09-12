@@ -498,10 +498,6 @@ func mapChannelTypeToString(ct rpcv1.ChannelType) string {
 		return ChannelTypeDirectMessage
 	case rpcv1.ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD:
 		return ChannelTypeProjectTicketThread
-	case rpcv1.ChannelType_CHANNEL_TYPE_CRM_DEAL_NOTES:
-		return ChannelTypeCRMDealNotes
-	case rpcv1.ChannelType_CHANNEL_TYPE_SUPPORT_TICKET:
-		return ChannelTypeSupportTicket
 	default:
 		return ChannelTypeChat
 	}
@@ -515,10 +511,6 @@ func mapStringToChannelType(s string) rpcv1.ChannelType {
 		return rpcv1.ChannelType_CHANNEL_TYPE_DIRECT_MESSAGE
 	case ChannelTypeProjectTicketThread:
 		return rpcv1.ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD
-	case ChannelTypeCRMDealNotes:
-		return rpcv1.ChannelType_CHANNEL_TYPE_CRM_DEAL_NOTES
-	case ChannelTypeSupportTicket:
-		return rpcv1.ChannelType_CHANNEL_TYPE_SUPPORT_TICKET
 	default:
 		return rpcv1.ChannelType_CHANNEL_TYPE_UNSPECIFIED
 	}
@@ -4122,10 +4114,6 @@ func mapDBChannelTypeToProto(dbType string) rpcv1.ChannelType {
 		return rpcv1.ChannelType_CHANNEL_TYPE_DIRECT_MESSAGE
 	case ChannelTypeProjectTicketThread:
 		return rpcv1.ChannelType_CHANNEL_TYPE_PROJECT_TICKET_THREAD
-	case ChannelTypeCRMDealNotes:
-		return rpcv1.ChannelType_CHANNEL_TYPE_CRM_DEAL_NOTES
-	case ChannelTypeSupportTicket:
-		return rpcv1.ChannelType_CHANNEL_TYPE_SUPPORT_TICKET
 	default:
 		slog.Warn("unknown channel type, defaulting to UNSPECIFIED",
 			"channel_type", dbType,

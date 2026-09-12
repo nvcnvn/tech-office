@@ -3,7 +3,7 @@
 Who a person is, how they prove it, which organizations they belong to, and what they are
 allowed to do. Owned by `internal/iam` and `rpc/v1/iam.proto` (`IAMService`, 45 RPCs).
 
-**Status date: 2026-09-12.** Supersedes specs 001, 002, 018, 020, 024, 035, 058.
+**Status date: 2026-09-12.** Supersedes specs 001, 002, 018, 020, 024, 035, 058, 062.
 
 ## The identity model
 
@@ -32,7 +32,7 @@ Credentials hang off whichever layer they belong to:
 - `iam.user.terms_version_accepted` / `terms_accepted_at` — global, the person's current
   acceptance of the published terms. Only the current one is kept, not a history.
 - `iam.sso_identity` — global, provider `google` or `apple`.
-- `iam.credential` — **org-scoped**, `credential_type IN ('pin','biometric')`, states
+- `iam.credential` — **org-scoped**, `credential_type = 'pin'` (the only kind), states
   `active | temporary | revoked`, `expires_at` defaulting to `now() + 3 days`.
 
 ## Authentication methods
@@ -321,11 +321,12 @@ PIN → teammate). All three run under `make test-mobile`.
 
 **Spec 024 says passkey; the code says PIN.** There is no WebAuthn, no passkey, and no
 `navigator.credentials` anywhere in the repo. Feature 024 shipped as PIN authentication
-with escalating lockout. One artefact of the abandoned half remains:
-`iam.credential.credential_type` allows `'biometric'` and `iam.CredentialTypeBiometric` is
-declared, but nothing ever writes or reads it. (`expo-local-authentication` and the Face ID
-/ fingerprint permissions it needed are gone from the mobile app; the hook that used it was
-deleted in 035.) Read spec 024 for intent only; the file name and title are misleading.
+with escalating lockout. The last artefact of the abandoned half — a `'biometric'` value in
+the `iam.credential.credential_type` CHECK and an `iam.CredentialTypeBiometric` constant
+nothing ever wrote or read — was removed by feature 062; `pin` is now the only credential
+kind. (`expo-local-authentication` and the Face ID / fingerprint permissions it needed had
+already gone from the mobile app, and the hook that used it was deleted in 035.) Read spec
+024 for intent only; the file name and title are misleading.
 
 **Spec 002 describes Zitadel, which feature 018 removed.** The removal is now complete:
 `LoginForm.tsx` (the last file that still named Zitadel, and which nothing rendered) is

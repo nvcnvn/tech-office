@@ -71,9 +71,7 @@ const LIST_MESSAGES_DIRECTION = {
 export type ChannelType =
 	| 'chat'
 	| 'direct_message'
-	| 'project_ticket_thread'
-	| 'crm_deal_notes'
-	| 'support_ticket';
+	| 'project_ticket_thread';
 
 
 /**
@@ -857,10 +855,6 @@ function convertChannelType(protoType: chat.ChannelType): SearchChannelType {
 			return 'direct_message';
 		case chat.ChannelType.PROJECT_TICKET_THREAD:
 			return 'project_ticket_thread';
-		case chat.ChannelType.CRM_DEAL_NOTES:
-			return 'crm_deal_notes';
-		case chat.ChannelType.SUPPORT_TICKET:
-			return 'support_ticket';
 		default:
 			return 'chat'; // Default to chat type for unspecified
 	}
@@ -1062,10 +1056,10 @@ export interface ChannelWithDetails {
 
 /**
  * Linked resource metadata for channels that are discussion surfaces for other domain objects.
- * Populated for task channels, CRM deal channels, support ticket channels, etc.
+ * Populated for task channels.
  */
 export interface LinkedResource {
-	resourceType: string;        // "task", "crm_deal", "support_ticket"
+	resourceType: string;        // "task"
 	resourceId: string;          // Primary resource ID (e.g., task UUID)
 	parentId: string;            // Parent resource ID (e.g., project UUID for tasks)
 	displayIdentifier: string;   // Human-readable identifier (e.g., "PROJ-123")

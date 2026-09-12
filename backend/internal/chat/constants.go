@@ -42,8 +42,6 @@ const (
 	ChannelTypeChat                = "chat"
 	ChannelTypeDirectMessage       = "direct_message"
 	ChannelTypeProjectTicketThread = "project_ticket_thread"
-	ChannelTypeCRMDealNotes        = "crm_deal_notes"
-	ChannelTypeSupportTicket       = "support_ticket"
 )
 
 // IsValidChannelType checks if a channel type string is valid.
@@ -51,9 +49,7 @@ func IsValidChannelType(channelType string) bool {
 	switch channelType {
 	case ChannelTypeChat,
 		ChannelTypeDirectMessage,
-		ChannelTypeProjectTicketThread,
-		ChannelTypeCRMDealNotes,
-		ChannelTypeSupportTicket:
+		ChannelTypeProjectTicketThread:
 		return true
 	default:
 		return false

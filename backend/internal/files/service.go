@@ -1418,10 +1418,6 @@ func protoContextTypeToString(contextType rpcv1.FileContextType) string {
 		return ContextTypeDepartmentDocs
 	case rpcv1.FileContextType_FILE_CONTEXT_TYPE_CALENDAR_EVENT:
 		return ContextTypeCalendarEvent
-	case rpcv1.FileContextType_FILE_CONTEXT_TYPE_SUPPORT_TICKET:
-		return ContextTypeSupportTicket
-	case rpcv1.FileContextType_FILE_CONTEXT_TYPE_CRM_DEAL:
-		return ContextTypeCRMDeal
 	default:
 		return ""
 	}
@@ -1437,10 +1433,6 @@ func stringToProtoContextType(contextType string) rpcv1.FileContextType {
 		return rpcv1.FileContextType_FILE_CONTEXT_TYPE_DEPARTMENT_DOCS
 	case ContextTypeCalendarEvent:
 		return rpcv1.FileContextType_FILE_CONTEXT_TYPE_CALENDAR_EVENT
-	case ContextTypeSupportTicket:
-		return rpcv1.FileContextType_FILE_CONTEXT_TYPE_SUPPORT_TICKET
-	case ContextTypeCRMDeal:
-		return rpcv1.FileContextType_FILE_CONTEXT_TYPE_CRM_DEAL
 	default:
 		return rpcv1.FileContextType_FILE_CONTEXT_TYPE_UNSPECIFIED
 	}

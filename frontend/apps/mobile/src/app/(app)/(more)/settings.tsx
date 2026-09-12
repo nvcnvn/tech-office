@@ -59,10 +59,6 @@ const MUTE_ROWS: Record<SourceDomain, { label: string; icon: string }> = {
   projects: { label: "Tasks and projects", icon: "checklist" },
   calendar: { label: "Calendar", icon: "calendar" },
   docs: { label: "Documents", icon: "doc.text.fill" },
-  crm: { label: "Customers", icon: "person.2.fill" },
-  hr: { label: "People and HR", icon: "person.badge.shield.checkmark" },
-  support: { label: "Support", icon: "lifepreserver" },
-  finance: { label: "Finance", icon: "creditcard.fill" },
   system: { label: "System", icon: "gearshape.fill" },
 };
 

@@ -4,7 +4,7 @@ Binary storage on Cloudflare R2 with per-org quota, virus scanning, MIME validat
 context-scoped access rules, PDF conversion and content indexing. Owned by
 `internal/files`; contract in `rpc/v1/files.proto` (`FileService`, 15 RPCs).
 
-**Status date: 2026-09-12.** Supersedes specs 014, 015, 045, 059.
+**Status date: 2026-09-12.** Supersedes specs 014, 015, 045, 059, 062.
 
 ## Upload flow
 
@@ -92,7 +92,7 @@ allowed), `failed` (validation error), `skipped`, `dangerous` (virus detected).
 
 `files.file_access_rule` binds a file to the context it was uploaded into:
 
-- `context_type IN ('chat_channel','project','department_docs','calendar_event','support_ticket','crm_deal')`
+- `context_type IN ('chat_channel','project','department_docs','calendar_event')`
 - `access_scope IN ('public','private','department')`
 
 `AccessLogic` resolves a download request by checking the caller's membership of that
@@ -271,8 +271,8 @@ nothing in the repo writes it, because the calendar domain stores `evidence_file
 `file_ids` referencing files uploaded through other contexts.
 
 Note that `context_type` on `files.file_access_rule` is a *different* enum with its own
-broader value set (`calendar_event`, `support_ticket`, `crm_deal`) — do not conflate the
-two.
+value set (`chat_channel`, `project`, `department_docs`, `calendar_event`) — do not
+conflate the two.
 
 `testWorld.seedFile` in the integration suite seeds against the world's *current*
 organisation rather than the uploader's own, so a seed taken after a helper that registers

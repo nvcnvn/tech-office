@@ -361,7 +361,7 @@ type PublishNotificationRequest struct {
 	// Recipient targeting
 	Recipients *NotificationRecipients `protobuf:"bytes,2,opt,name=recipients,proto3" json:"recipients,omitempty"`
 	// Notification content
-	SourceDomain     string `protobuf:"bytes,3,opt,name=source_domain,json=sourceDomain,proto3" json:"source_domain,omitempty"`             // chat, crm, projects, hr, support, finance, system
+	SourceDomain     string `protobuf:"bytes,3,opt,name=source_domain,json=sourceDomain,proto3" json:"source_domain,omitempty"`             // chat, projects, docs, calendar, system
 	NotificationType string `protobuf:"bytes,4,opt,name=notification_type,json=notificationType,proto3" json:"notification_type,omitempty"` // message, mention, task_assigned, deal_updated, etc.
 	Title            string `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`
 	Message          string `protobuf:"bytes,6,opt,name=message,proto3" json:"message,omitempty"`
@@ -780,7 +780,7 @@ type ListNotificationsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Filters
 	UnreadOnly    bool     `protobuf:"varint,1,opt,name=unread_only,json=unreadOnly,proto3" json:"unread_only,omitempty"`         // Default: false (show all)
-	SourceDomains []string `protobuf:"bytes,2,rep,name=source_domains,json=sourceDomains,proto3" json:"source_domains,omitempty"` // Filter by source domain (empty = all)
+	SourceDomains []string `protobuf:"bytes,2,rep,name=source_domains,json=sourceDomains,proto3" json:"source_domains,omitempty"` // Filter by source domain — chat, projects, docs, calendar, system (empty = all)
 	// Pagination
 	PageSize      int32  `protobuf:"varint,3,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`   // Default: 50, max: 100
 	PageToken     string `protobuf:"bytes,4,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"` // Cursor for next page (empty for first page)
@@ -2879,7 +2879,7 @@ type NotificationPreferences struct {
 	// Source domains whose push notifications are suppressed for this person.
 	//
 	// Values are from the same set the publisher accepts as source_domain:
-	// chat, crm, projects, docs, hr, support, finance, system, calendar.
+	// chat, projects, docs, calendar, system.
 	// Muting suppresses push only — SSE delivery, the notification list and the
 	// unread count are unaffected — and never applies to priority 0
 	// notifications, which is how mentions and incoming calls always come through.

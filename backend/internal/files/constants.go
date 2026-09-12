@@ -53,15 +53,13 @@ const (
 // Context Type Constants (Feature 015)
 // MUST align with:
 // - Database CHECK constraint in files.file_access_rule.context_type
-// - Proto enum rpc.v1.ContextType
+// - Proto enum rpc.v1.FileContextType
 // - Frontend TypeScript types in packages/apis/src/files.ts
 const (
 	ContextTypeChatChannel    = "chat_channel"
 	ContextTypeProject        = "project"
 	ContextTypeDepartmentDocs = "department_docs"
 	ContextTypeCalendarEvent  = "calendar_event"
-	ContextTypeSupportTicket  = "support_ticket"
-	ContextTypeCRMDeal        = "crm_deal"
 )
 
 // Access Scope Constants (Feature 015)

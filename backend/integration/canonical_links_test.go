@@ -3,6 +3,7 @@ package integration
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -77,6 +78,33 @@ func postCanonicalResolveWithToken(t *testing.T, rawURL string, platform linking
 	var payload canonicalResolveResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&payload))
 	return payload
+}
+
+// postCanonicalResolveRaw returns the HTTP status and body rather than requiring 200, so a
+// URL the workspace refuses to resolve can be asserted on directly.
+func postCanonicalResolveRaw(t *testing.T, rawURL string, platform linking.Platform, bearerToken string) (int, string) {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"url":             rawURL,
+		"platform":        platform,
+		"isAuthenticated": true,
+	})
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, serverBaseURL+"/api/linking/resolve", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	if bearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+bearerToken)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, string(raw)
 }
 
 func containsString(items []string, expected string) bool {
@@ -247,14 +275,24 @@ func TestCanonicalLinks(t *testing.T) {
 		})
 	})
 
-	// FR-024 FR-025 FR-028
-	t.Run("when a legacy product link is normalized", func(t *testing.T) {
-		t.Run("it resolves to the current canonical target when the mapping is supported", func(t *testing.T) {
-			t.Skip("TODO: implement after scenario review")
-		})
-		t.Run("it degrades to a recoverable fallback when full normalization is unavailable", func(t *testing.T) {
-			t.Skip("TODO: implement after scenario review")
-		})
+	// US4: one link grammar. The hostname-derived legacy shape was removed in feature
+	// 062 -- it resolved links nothing in the product had generated since the canonical
+	// grammar landed, and it was the only producer of the LegacyNormalized flag.
+	t.Run("when a link uses the retired hostname-derived grammar", func(t *testing.T) {
+		legacyShapes := map[string]string{
+			"a chat channel":   "https://" + tenantKey + ".example.com/chat/" + dbuuid.Must().String(),
+			"a document page":  "https://" + tenantKey + ".example.com/docs/" + dbuuid.Must().String(),
+			"a calendar event": "https://" + tenantKey + ".example.com/calendar/" + dbuuid.Must().String(),
+			"a task":           "https://" + tenantKey + ".example.com/workspace/tasks/" + task.Id,
+		}
+		for name, rawURL := range legacyShapes {
+			t.Run("it gives the standard unrecognised-link outcome for "+name, func(t *testing.T) {
+				status, body := postCanonicalResolveRaw(t, rawURL, linking.PlatformWeb, owner.Token)
+				require.Equal(t, http.StatusNotFound, status,
+					"a legacy-shaped link is now simply a link the workspace does not recognise")
+				require.Contains(t, body, "unsupported canonical path")
+			})
+		}
 	})
 
 	// FR-016 FR-017 FR-018

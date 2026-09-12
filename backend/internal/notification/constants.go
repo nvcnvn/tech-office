@@ -1,13 +1,13 @@
 // Package notification defines notification service constants.
 // All notification types and source domains MUST align with:
 // - Database CHECK constraints: notification.notification.notification_type, notification.notification.source_domain
-// - Frontend TypeScript types: NotificationType union type in packages/apis/src/notifications.ts
+// - Frontend TypeScript types: NotificationType union type in packages/apis/src/notification.ts
 // - API contract: NotificationEvent.notification_type field
 //
 // When adding/removing values:
 // 1. Update the database CHECK constraint with a migration in backend/database/migrations/
 // 2. Update these Go constants
-// 3. Update frontend TypeScript types in packages/apis/src/notifications.ts
+// 3. Update frontend TypeScript types in packages/apis/src/notification.ts
 // 4. Submit all changes in single PR with alignment verification
 package notification
 
@@ -266,11 +266,7 @@ func AllNotificationTypes() []string {
 // These MUST match the database CHECK constraint in notification.notification table.
 const (
 	SourceDomainChat     = "chat"
-	SourceDomainCRM      = "crm"
 	SourceDomainProjects = "projects"
-	SourceDomainHR       = "hr"
-	SourceDomainSupport  = "support"
-	SourceDomainFinance  = "finance"
 	SourceDomainDocs     = "docs"
 	SourceDomainSystem   = "system"
 	SourceDomainCalendar = "calendar"
@@ -296,11 +292,7 @@ const (
 // without widening that CHECK fails that test on the first run.
 var allSourceDomains = []string{
 	SourceDomainChat,
-	SourceDomainCRM,
 	SourceDomainProjects,
-	SourceDomainHR,
-	SourceDomainSupport,
-	SourceDomainFinance,
 	SourceDomainDocs,
 	SourceDomainSystem,
 	SourceDomainCalendar,

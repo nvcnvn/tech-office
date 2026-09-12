@@ -4,7 +4,7 @@ Channels, messages, threads, reactions, presence-aware typing, and the per-user 
 Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RPCs) and
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
-**Status date: 2026-09-12.** Supersedes specs 009, 010, 027, 046; deep-link
+**Status date: 2026-09-12.** Supersedes specs 009, 010, 027, 046, 062; deep-link
 response fields corrected by spec 056; message hard-delete contract from spec 057.
 
 ## Channels
@@ -20,8 +20,6 @@ other domains:
 | `chat` | users | ordinary channel |
 | `direct_message` | `CreateOrGetDirectMessage` | 1:1 DM |
 | `project_ticket_thread` | collaboration, when a task is first opened | task comment thread |
-| `crm_deal_notes` | — | reserved |
-| `support_ticket` | — | reserved |
 
 That reuse is why `collaboration.task.channel_id` FKs into `chat.channel`, and why chat
 notifications need `sourceDomain` to distinguish a real chat message from a task comment.
@@ -316,5 +314,3 @@ None specific to chat. Two adjacent items land here:
   conversation changed therefore returns to a channel list showing nothing unread, even
   though `GetUnreadMessageCount`'s predicate — which counts system messages too — says
   otherwise. The backend state is correct; only the surfaces are missing.
-- `crm_deal_notes` and `support_ticket` channel types are reserved in the CHECK constraint
-  and the proto enum but nothing creates them; the `crm` and `support` schemas are empty.

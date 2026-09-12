@@ -131,7 +131,6 @@ type LinkResolutionResult struct {
 	AppliedContext         []string            `json:"appliedContext,omitempty"`
 	IgnoredContext         []string            `json:"ignoredContext,omitempty"`
 	FallbackURL            string              `json:"fallbackUrl,omitempty"`
-	LegacyNormalized       bool                `json:"legacyNormalized,omitempty"`
 }
 
 type ClientRouteTranslation struct {

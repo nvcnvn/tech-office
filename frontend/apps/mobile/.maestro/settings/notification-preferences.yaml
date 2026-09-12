@@ -46,15 +46,65 @@ name: "Settings — notification preferences"
       id: "setting-in-app-alerts"
     timeout: 8000
 # The mute list exists, and Calendar is in it — the whole of drift D28 from outside.
-# scrollUntilVisible rather than assertVisible: the nine rows sit below the fold on a
+# scrollUntilVisible rather than assertVisible: the five rows sit below the fold on a
 # narrow screen, and "not scrolled to yet" must not read as "not there".
 - scrollUntilVisible:
     element:
       id: "setting-mute-calendar"
     direction: DOWN
     timeout: 8000
+    # Centre it. With five mute rows the list is short enough that "scrolled until
+    # visible" can leave Calendar at the very bottom of the viewport, where the tap
+    # lands on the tab bar behind it and the flow ends up on My Work.
+    centerElement: true
 - assertVisible:
     id: "setting-mute-intro"
+# Five rows, and only five. Feature 062 removed crm, hr, support and finance: nothing
+# publishes into them, so each was a switch that could never change what arrived.
+#
+# Walked with scrollUntilVisible in list order rather than asserted in one screenful,
+# because how much of the list fits above the fold differs by handset — five rows fit on
+# a Medium Phone emulator and do not on an iPhone, and "below the fold" must not read as
+# "missing". Each step only ever scrolls further down, which is the order the rows are in.
+- scrollUntilVisible:
+    element:
+      id: "setting-mute-projects"
+    direction: DOWN
+    timeout: 8000
+- scrollUntilVisible:
+    element:
+      id: "setting-mute-docs"
+    direction: DOWN
+    timeout: 8000
+- scrollUntilVisible:
+    element:
+      id: "setting-mute-system"
+    direction: DOWN
+    timeout: 8000
+# System is the *last* mute row: the next thing below it is the Safety section. That is
+# the viewport-independent way to say "and nothing else" — a removed row coming back would
+# sit between these two and push them apart.
+- assertVisible:
+    id: "setting-mute-system"
+- scrollUntilVisible:
+    element:
+      id: "setting-blocked-people"
+    direction: DOWN
+    timeout: 8000
+- assertNotVisible:
+    id: "setting-mute-crm"
+- assertNotVisible:
+    id: "setting-mute-hr"
+- assertNotVisible:
+    id: "setting-mute-support"
+- assertNotVisible:
+    id: "setting-mute-finance"
+# Back up to the mute list for the rest of the flow.
+- scrollUntilVisible:
+    element:
+      id: "setting-mute-chat"
+    direction: UP
+    timeout: 8000
 - takeScreenshot: "tmp/maestro-screenshots/01-notification-preferences"
 
 # ── Normalise: alerts on, calendar unmuted ──────────────────────────────────
@@ -113,6 +163,10 @@ name: "Settings — notification preferences"
       id: "setting-mute-calendar"
     direction: DOWN
     timeout: 8000
+    # Centre it. With five mute rows the list is short enough that "scrolled until
+    # visible" can leave Calendar at the very bottom of the viewport, where the tap
+    # lands on the tab bar behind it and the flow ends up on My Work.
+    centerElement: true
 - tapOn:
     id: "setting-mute-calendar"
 - extendedWaitUntil:
@@ -151,6 +205,10 @@ name: "Settings — notification preferences"
       id: "setting-mute-calendar"
     direction: DOWN
     timeout: 8000
+    # Centre it. With five mute rows the list is short enough that "scrolled until
+    # visible" can leave Calendar at the very bottom of the viewport, where the tap
+    # lands on the tab bar behind it and the flow ends up on My Work.
+    centerElement: true
 - extendedWaitUntil:
     visible:
       id: "setting-mute-calendar"

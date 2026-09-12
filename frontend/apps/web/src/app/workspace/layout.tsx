@@ -153,30 +153,6 @@ const tabs: TabConfig[] = [
     enabled: true,
     permission: "collab.reviewEvidence",
   },
-  {
-    id: "crm",
-    label: "CRM",
-    emoji: "🤝",
-    path: "/workspace/crm",
-    shortcut: "⌘9",
-    enabled: false,
-  },
-  {
-    id: "finance",
-    label: "Finance",
-    emoji: "💰",
-    path: "/workspace/finance",
-    shortcut: "⌘-",
-    enabled: false,
-  },
-  {
-    id: "hr",
-    label: "HR",
-    emoji: "👤",
-    path: "/workspace/hr",
-    shortcut: "⌘=",
-    enabled: false,
-  },
 ];
 
 export default function WorkspaceLayout({

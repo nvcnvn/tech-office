@@ -17,13 +17,6 @@ SET client_min_messages = warning;
 SET row_security = off;
 
 --
--- Name: assets; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA assets;
-
-
---
 -- Name: calendar; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -45,24 +38,10 @@ CREATE SCHEMA collaboration;
 
 
 --
--- Name: communication; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA communication;
-
-
---
 -- Name: compliance; Type: SCHEMA; Schema: -; Owner: -
 --
 
 CREATE SCHEMA compliance;
-
-
---
--- Name: crm; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA crm;
 
 
 --
@@ -80,13 +59,6 @@ CREATE SCHEMA files;
 
 
 --
--- Name: finance; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA finance;
-
-
---
 -- Name: flows; Type: SCHEMA; Schema: -; Owner: -
 --
 
@@ -94,38 +66,10 @@ CREATE SCHEMA flows;
 
 
 --
--- Name: hiring; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA hiring;
-
-
---
 -- Name: iam; Type: SCHEMA; Schema: -; Owner: -
 --
 
 CREATE SCHEMA iam;
-
-
---
--- Name: integrations; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA integrations;
-
-
---
--- Name: inventory; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA inventory;
-
-
---
--- Name: learning; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA learning;
 
 
 --
@@ -140,41 +84,6 @@ CREATE SCHEMA notification;
 --
 
 CREATE SCHEMA organization;
-
-
---
--- Name: payroll; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA payroll;
-
-
---
--- Name: procurement; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA procurement;
-
-
---
--- Name: retention; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA retention;
-
-
---
--- Name: support; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA support;
-
-
---
--- Name: timekeeping; Type: SCHEMA; Schema: -; Owner: -
---
-
-CREATE SCHEMA timekeeping;
 
 
 --
@@ -529,7 +438,7 @@ CREATE TABLE chat.channel (
     created_by_employee_id uuid NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT slug_format CHECK (((title_slug ~ '^[a-z0-9-]+$'::text) AND (length(title_slug) <= 64))),
-    CONSTRAINT valid_channel_type CHECK ((channel_type = ANY (ARRAY['chat'::text, 'direct_message'::text, 'project_ticket_thread'::text, 'crm_deal_notes'::text, 'support_ticket'::text])))
+    CONSTRAINT valid_channel_type CHECK ((channel_type = ANY (ARRAY['chat'::text, 'direct_message'::text, 'project_ticket_thread'::text])))
 );
 
 
@@ -544,7 +453,9 @@ COMMENT ON TABLE chat.channel IS 'Communication spaces (channels) where employee
 -- Name: COLUMN channel.channel_type; Type: COMMENT; Schema: chat; Owner: -
 --
 
-COMMENT ON COLUMN chat.channel.channel_type IS 'Channel type: chat, direct_message, project_ticket_thread, crm_deal_notes, support_ticket. MUST align with backend constants in internal/chat/constants.go, proto enum rpc.v1.ChannelType, and frontend TypeScript types in packages/apis/src/chat.ts';
+COMMENT ON COLUMN chat.channel.channel_type IS 'Channel type: chat, direct_message, project_ticket_thread. MUST align with backend
+constants in internal/chat/constants.go, proto enum rpc.v1.ChannelType, and frontend
+TypeScript types in packages/apis/src/chat.ts';
 
 
 --
@@ -1860,7 +1771,7 @@ CREATE TABLE files.file_access_rule (
     access_scope text NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT file_access_rule_access_scope_check CHECK ((access_scope = ANY (ARRAY['public'::text, 'private'::text, 'department'::text]))),
-    CONSTRAINT file_access_rule_context_type_check CHECK ((context_type = ANY (ARRAY['chat_channel'::text, 'project'::text, 'department_docs'::text, 'calendar_event'::text, 'support_ticket'::text, 'crm_deal'::text])))
+    CONSTRAINT file_access_rule_context_type_check CHECK ((context_type = ANY (ARRAY['chat_channel'::text, 'project'::text, 'department_docs'::text, 'calendar_event'::text])))
 );
 
 
@@ -1875,7 +1786,11 @@ COMMENT ON TABLE files.file_access_rule IS 'Links files to their upload contexts
 -- Name: COLUMN file_access_rule.context_type; Type: COMMENT; Schema: files; Owner: -
 --
 
-COMMENT ON COLUMN files.file_access_rule.context_type IS 'Upload context type: chat_channel, project, department_docs, calendar_event, support_ticket, crm_deal. MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts. Set by domain service (e.g., ChatService for chat_channel), NOT client-controlled.';
+COMMENT ON COLUMN files.file_access_rule.context_type IS 'Access-rule context type: chat_channel, project, department_docs, calendar_event. MUST
+align with backend constants in internal/files/constants.go and the proto enum
+rpc.v1.FileContextType, which packages/apis/src/files-security.ts re-exports rather than
+restating. Set by domain service (e.g., ChatService for chat_channel), NOT
+client-controlled.';
 
 
 --
@@ -2261,7 +2176,7 @@ CREATE TABLE iam.credential (
     expires_at timestamp with time zone DEFAULT (now() + '3 days'::interval),
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    CONSTRAINT credential_credential_type_check CHECK ((credential_type = ANY (ARRAY['pin'::text, 'biometric'::text]))),
+    CONSTRAINT credential_credential_type_check CHECK ((credential_type = 'pin'::text)),
     CONSTRAINT credential_state_check CHECK ((state = ANY (ARRAY['active'::text, 'temporary'::text, 'revoked'::text])))
 );
 
@@ -2270,14 +2185,18 @@ CREATE TABLE iam.credential (
 -- Name: TABLE credential; Type: COMMENT; Schema: iam; Owner: -
 --
 
-COMMENT ON TABLE iam.credential IS 'Org-scoped credentials for PIN and biometric authentication. Supports temporary (admin-generated) and active (user-set) states. One active credential per type per identity. Temporary PINs default to 3-day expiry (configurable via column default). credential_type and state MUST align with backend constants.';
+COMMENT ON TABLE iam.credential IS 'Org-scoped credentials for PIN authentication. Supports temporary (admin-generated) and
+active (user-set) states. One active credential per type per identity. Temporary PINs
+default to 3-day expiry (configurable via column default). credential_type and state MUST
+align with backend constants.';
 
 
 --
 -- Name: COLUMN credential.credential_hash; Type: COMMENT; Schema: iam; Owner: -
 --
 
-COMMENT ON COLUMN iam.credential.credential_hash IS 'Bcrypt hash of the credential value (PIN digits, biometric key). Never stored in plaintext after initial generation.';
+COMMENT ON COLUMN iam.credential.credential_hash IS 'Bcrypt hash of the credential value (PIN digits). Never stored in plaintext after initial
+generation.';
 
 
 --
@@ -3016,7 +2935,7 @@ CREATE TABLE notification.notification (
     CONSTRAINT notification_policy_key_valid CHECK ((policy_key = ANY (ARRAY['persistent_default'::text, 'chat_message'::text, 'chat_mention'::text, 'chat_reply'::text, 'chat_typing_live'::text, 'chat_reaction_live'::text, 'chat_voice_call_incoming'::text, 'chat_voice_call_live'::text, 'chat_voice_call_record'::text, 'task_assignment'::text, 'task_comment'::text, 'task_mention'::text, 'task_status'::text, 'task_description_modified'::text, 'task_update'::text, 'document_update'::text, 'document_comment'::text, 'document_mention'::text, 'calendar_event_invite'::text, 'calendar_event_cancel'::text, 'calendar_event_change'::text, 'calendar_event_reminder'::text, 'calendar_check_in_missed'::text, 'calendar_event_digest'::text]))),
     CONSTRAINT notification_priority_check CHECK ((priority = ANY (ARRAY[0, 1, 2, 4]))),
     CONSTRAINT notification_source_category_valid CHECK ((source_category = ANY (ARRAY['activity'::text, 'mention'::text, 'system'::text]))),
-    CONSTRAINT notification_source_domain_valid CHECK ((source_domain = ANY (ARRAY['chat'::text, 'crm'::text, 'projects'::text, 'hr'::text, 'support'::text, 'finance'::text, 'docs'::text, 'system'::text, 'calendar'::text])))
+    CONSTRAINT notification_source_domain_valid CHECK ((source_domain = ANY (ARRAY['chat'::text, 'projects'::text, 'docs'::text, 'system'::text, 'calendar'::text])))
 );
 
 
@@ -3031,7 +2950,9 @@ COMMENT ON TABLE notification.notification IS 'Core notification data published 
 -- Name: COLUMN notification.source_domain; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.notification.source_domain IS 'Backend service that published notification: chat, crm, projects, hr, support, finance, system. MUST align with backend constants in internal/notification/constants.go and frontend TypeScript types in packages/apis/src/notifications.ts';
+COMMENT ON COLUMN notification.notification.source_domain IS 'Backend service that published notification: chat, projects, docs, calendar, system. MUST
+align with backend constants in internal/notification/constants.go and frontend TypeScript
+types in packages/apis/src/notification.ts';
 
 
 --
@@ -3276,7 +3197,7 @@ CREATE TABLE notification.personal_preference (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     in_app_alerts_enabled boolean DEFAULT true NOT NULL,
-    CONSTRAINT muted_domains_valid CHECK ((muted_domains <@ ARRAY['chat'::text, 'projects'::text, 'docs'::text, 'crm'::text, 'hr'::text, 'support'::text, 'finance'::text, 'system'::text, 'calendar'::text]))
+    CONSTRAINT muted_domains_valid CHECK ((muted_domains <@ ARRAY['chat'::text, 'projects'::text, 'docs'::text, 'system'::text, 'calendar'::text]))
 );
 
 
@@ -3298,7 +3219,11 @@ COMMENT ON COLUMN notification.personal_preference.dnd_enabled IS 'When true, pu
 -- Name: COLUMN personal_preference.muted_domains; Type: COMMENT; Schema: notification; Owner: -
 --
 
-COMMENT ON COLUMN notification.personal_preference.muted_domains IS 'Domains for which the employee will not receive push notifications. SSE delivery, the notification row and the unread count are unaffected, and priority-0 notifications (mentions, incoming calls) are never suppressed. MUST hold the same nine values as notification.AllSourceDomains in Go, the notification.notification source_domain CHECK, and SOURCE_DOMAINS in frontend/packages/apis.';
+COMMENT ON COLUMN notification.personal_preference.muted_domains IS 'Domains for which the employee will not receive push notifications. SSE delivery, the
+notification row and the unread count are unaffected, and priority-0 notifications
+(mentions, incoming calls) are never suppressed. MUST hold the same five values as
+notification.AllSourceDomains in Go, the notification.notification source_domain CHECK,
+and SOURCE_DOMAINS in frontend/packages/apis.';
 
 
 --

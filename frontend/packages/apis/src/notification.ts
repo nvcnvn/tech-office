@@ -92,12 +92,8 @@ export type NotificationType =
  */
 export type SourceDomain =
 	| 'chat'
-	| 'crm'
 	| 'projects'
 	| 'docs'
-	| 'hr'
-	| 'support'
-	| 'finance'
 	| 'system'
 	| 'calendar';
 
@@ -111,16 +107,16 @@ export type SourceDomain =
  * A value missing here is a domain nobody can mute, which is exactly the gap
  * feature 051 closed — calendar was a valid source domain for six months while
  * this list and the muted_domains CHECK still had eight values.
+ *
+ * A value present here that nothing publishes into is the opposite defect: a row
+ * in the mute list that can never change what a person receives. Feature 062
+ * removed the four such categories (crm, hr, support, finance).
  */
 export const SOURCE_DOMAINS: readonly SourceDomain[] = [
 	'chat',
 	'projects',
 	'calendar',
 	'docs',
-	'crm',
-	'hr',
-	'support',
-	'finance',
 	'system',
 ] as const;
 

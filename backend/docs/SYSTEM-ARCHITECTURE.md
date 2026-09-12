@@ -40,7 +40,8 @@ Tech Office is organized as a **modular monolith** following DDD principles with
 ├───────────────────────────────────────────────────────────────────┤
 │         PostgreSQL (single node, organization_id tenancy)         │
 │  Schemas: public | iam | organization | chat | notification |     │
-│           files | docs | voice | collaboration | calendar         │
+│           files | docs | voice | collaboration | calendar |       │
+│           compliance | flows                                      │
 └───────────────────────────────────────────────────────────────────┘
 ```
 

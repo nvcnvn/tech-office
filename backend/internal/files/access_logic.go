@@ -248,7 +248,7 @@ func (l *accessLogic) checkContextMembership(ctx context.Context, tx database.DB
 		}
 		return true, "", nil
 
-	case ContextTypeProject, ContextTypeCalendarEvent, ContextTypeSupportTicket, ContextTypeCRMDeal:
+	case ContextTypeProject, ContextTypeCalendarEvent:
 		// Future contexts - deny access for now
 		slog.WarnContext(ctx, "context type not yet implemented",
 			"context_type", contextType)

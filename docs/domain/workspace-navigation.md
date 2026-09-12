@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-12.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048, 050; the RPC error-mapping paragraph corrected by spec 056.
+**Status date: 2026-09-12.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048, 050, 062; the RPC error-mapping paragraph corrected by spec 056.
 
 ## Canonical resource links
 
@@ -48,8 +48,9 @@ keys are the same either way.
 
 `Service.Resolve` runs in a fixed order:
 
-1. **Normalise** — parse the canonical path, or recognise a legacy route and rewrite it
-   (`LegacyNormalized` flags this).
+1. **Normalise** — parse the canonical path. There is one grammar; a path that is not
+   `/o/{tenantKey}/r/{resourceType}/{resourceId}` is refused with
+   `unsupported canonical path`, which the HTTP handler answers as 404.
 2. **Resolve tenant** from `tenantKey`; unknown tenant → `not_found`.
 3. Build the canonical URL, the **web route** and the **mobile route**. `Resolve` carries
    no preview: card content is its own endpoint, because it is per reader and per page.
@@ -456,13 +457,33 @@ Next.js App Router, MUI v7, in `apps/web/src/app`:
   domain; `reports` and `removal-requests` are web-only by Constitution XIII, enforced by
   permissions on the RPCs rather than by hiding the links.
 
+The top navigation bar in `apps/web/src/app/workspace/layout.tsx` carries **eight entries**,
+every one of which opens a working area:
+
+| Entry | Route | Shortcut label | Gate |
+|---|---|---|---|
+| Today | `/workspace` | ⌘1 | — |
+| Notifications | `/workspace/notifications` | ⌘2 | — |
+| Chat | `/workspace/chat` | ⌘3 | — |
+| Tasks | `/workspace/tasks` | ⌘4 | — |
+| Docs | `/workspace/docs` | ⌘5 | — |
+| Files | `/workspace/files` | ⌘6 | — |
+| Organization | `/workspace/organization` | ⌘7 | `iam.inviteUser` |
+| Reviews | `/workspace/reviews` | ⌘8 | `collab.reviewEvidence` |
+
+The `⌘n` text is a **label, not a binding** — the web app registers no meta-key handler for
+it. Three further entries (CRM ⌘9, Finance ⌘-, HR ⌘=) were `enabled: false` placeholders for
+modules that do not exist; feature 062 removed them, which is what makes the run contiguous
+and leaves no advertised key that reaches nothing. The `enabled` field stays on the entry
+type: it shares a rendering path with the `permission` gate the last two entries use.
+`e2e/workspace-navigation.spec.ts` asserts both properties.
+
 E2E with Playwright in `apps/web/e2e`; `make test-frontend`.
 
 ### Review queue entry points
 
 The **Reviews** tab (`/workspace/reviews`, ⌘8, `data-testid="workspace-tab-reviews"`) is
-gated on the `collab.reviewEvidence` permission and is absent for anyone without it, which
-pushed CRM to ⌘9. Its badge (`workspace-tab-reviews-badge`) comes from
+gated on the `collab.reviewEvidence` permission and is absent for anyone without it. Its badge (`workspace-tab-reviews-badge`) comes from
 `GetEvidenceReviewQueueCount`, fetched separately from the queue itself so the count does
 not wait on the list, and renders "99+" when the server reports the count was capped. A
 project page links into the same surface narrowed to itself, `/workspace/reviews?projectId=`,
@@ -536,7 +557,7 @@ Expo Router in `apps/mobile/src/app`, five route groups:
     organization and role are shown as read-only, in words — the screen used to print the
     employee and organization UUIDs instead.
   - `(more)/settings` carries the Notifications, Safety, Legal and Account sections —
-    the in-app alert toggle and a nine-row "Mute by area" list, blocked people, abuse
+    the in-app alert toggle and a five-row "Mute by area" list, blocked people, abuse
     contact, the two published documents, and whichever of `delete-account` or
     `request-removal` this person's path is, asked of the server rather than inferred.
     The two notification controls are server-stored and follow the person across devices;
@@ -800,11 +821,6 @@ accessibility tree, so Maestro can neither see it, tap it, nor type past it, and
 AutoFill opt-out does, at the cost of password-manager fill on the credential that is the
 owner's PIN-recovery anchor. US2 and US3 therefore have backend scenario coverage but no
 passing blackbox flow.
-
-**Legacy route normalisation is open-ended.** `normalizeLegacyRoute` in
-`internal/linking/normalize.go` accepts non-canonical paths and rewrites them. Given the
-project's no-backward-compatibility stance, this is worth revisiting: every legacy shape it
-accepts is a second URL grammar to keep working.
 
 **D30 — the two clients read the same theme contract under different rules.** Mobile
 follows a later OS change while `preference_source = 'os_default'`; the web

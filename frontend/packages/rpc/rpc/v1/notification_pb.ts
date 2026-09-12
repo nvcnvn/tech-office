@@ -36,7 +36,7 @@ export type PublishNotificationRequest = Message<"rpc.v1.PublishNotificationRequ
   /**
    * Notification content
    *
-   * chat, crm, projects, hr, support, finance, system
+   * chat, projects, docs, calendar, system
    *
    * @generated from field: string source_domain = 3;
    */
@@ -305,7 +305,7 @@ export type ListNotificationsRequest = Message<"rpc.v1.ListNotificationsRequest"
   unreadOnly: boolean;
 
   /**
-   * Filter by source domain (empty = all)
+   * Filter by source domain — chat, projects, docs, calendar, system (empty = all)
    *
    * @generated from field: repeated string source_domains = 2;
    */
@@ -1348,7 +1348,7 @@ export type NotificationPreferences = Message<"rpc.v1.NotificationPreferences"> 
    * Source domains whose push notifications are suppressed for this person.
    *
    * Values are from the same set the publisher accepts as source_domain:
-   * chat, crm, projects, docs, hr, support, finance, system, calendar.
+   * chat, projects, docs, calendar, system.
    * Muting suppresses push only — SSE delivery, the notification list and the
    * unread count are unaffected — and never applies to priority 0
    * notifications, which is how mentions and incoming calls always come through.
