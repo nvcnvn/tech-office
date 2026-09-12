@@ -1,0 +1,1 @@
+Prune what nothing uses. Drop the reserved channel types and empty schemas for CRM, support, payroll and similar, the biometric credential type, and legacy route normalisation. Every reserved value is a constraint new work must route around, and the no-backward-compatibility stance makes removal free.
