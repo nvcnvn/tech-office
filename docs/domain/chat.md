@@ -4,7 +4,7 @@ Channels, messages, threads, reactions, presence-aware typing, and the per-user 
 Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RPCs) and
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
-**Status date: 2026-09-05.** Supersedes specs 009, 010, 027, 046.
+**Status date: 2026-09-12.** Supersedes specs 009, 010, 027, 046.
 
 ## Channels
 
@@ -251,3 +251,12 @@ None specific to chat. Two adjacent items land here:
   otherwise. The backend state is correct; only the surfaces are missing.
 - `crm_deal_notes` and `support_ticket` channel types are reserved in the CHECK constraint
   and the proto enum but nothing creates them; the `crm` and `support` schemas are empty.
+- **A message a task was captured from cannot be hard-deleted.** `collaboration.task`'s
+  `fk_task_source_message` is `ON DELETE SET NULL` over the composite
+  `(organization_id, source_message_id)`, and Postgres nulls every column of a composite
+  key — including `task.organization_id`, which is `NOT NULL`. The delete therefore fails
+  with `null value in column "organization_id" of relation "task"` instead of detaching
+  the task from its origin. The product's own message deletion is the soft delete above,
+  so this is not reachable from the message menu; a channel delete cascading to its
+  messages, and any job that clears messages directly, do reach it. See
+  [D75](README.md#drift-register).

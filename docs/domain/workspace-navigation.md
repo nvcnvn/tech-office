@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-05.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048, 050.
+**Status date: 2026-09-12.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048, 050.
 
 ## Canonical resource links
 
@@ -728,15 +728,18 @@ presumably affected the same way; they were left alone rather than changed as a 
 of an unrelated feature. Nothing catches this statically — the props typecheck — so only
 looking at the screen finds it.
 
-**D44 — mobile email sign-in bounces on the iOS simulator for a freshly created
-organization.** An owner account created through `RegisterOrganizationWithAdminPassword`
-signs in normally on Android and through the web app, and its `Login`, `GetProfile` and
-`GetOrganizationBySubdomain` calls all succeed against the backend directly, but on the iOS
-simulator the app returns to the workspace picker, sometimes after showing "Your session is
-no longer valid". The same build and the same credentials work on Android, so this is
-iOS-specific and lives somewhere in the sign-in screen's token-then-profile sequence rather
-than in the API. It blocks arranging a populated mobile fixture on iOS, which is how mobile
-work ends up verified on Android only.
+**Email sign-in stores the token before it asks for the profile.** `signin.tsx` and
+`signup.tsx` call `setAuthToken` with the access token the moment `login` returns, ahead of
+the `getProfile` call that resolves the membership id. The RPC auth interceptor in
+`packages/apis/src/rpc.ts` reads the token from storage rather than from the result in hand,
+so a `GetProfile` issued before the write goes out with no `Authorization` header and comes
+back `Unauthenticated` — which `rpcWrapper` turns into "Your session is no longer valid" and
+the screen reports as a failed sign-in. Both paths used to omit the write, and the fault was
+invisible on any device that still held a previous session's token: it only appeared on a
+genuinely signed-out install, which is exactly what a store reviewer has. The PIN paths in
+`(auth)/index.tsx` and `(auth)/set-pin.tsx` have always written the token first; the email
+paths now match them. Recorded as **D57** in the drift register until feature 055 found the
+cause while verifying the demo workspace on a device.
 
 **D37 — Maestro cannot drive a physical iPhone.** 2.3.0's `test` does not enumerate
 connected iPhones; 2.8.0 and 2.10.0 do, but fail to build their XCUITest driver because the

@@ -6,7 +6,7 @@ because they act on the global `iam.user` record); contracts in
 `rpc/v1/compliance.proto` (`ComplianceService`, 11 RPCs) and the deletion and terms
 additions to `rpc/v1/iam.proto`.
 
-**Status date: 2026-09-12.** Introduced by spec 036.
+**Status date: 2026-09-12.** Introduced by spec 036; the demo workspace section from spec 055.
 
 ## Why this domain exists separately
 
@@ -244,6 +244,54 @@ report status, removal-request status, account-deletion state. The TypeScript
 wrapper maps proto enums to string unions at the boundary so no screen ever
 compares a raw enum number.
 
+## The demo workspace a reviewer signs into
+
+`backend/cmd/seed_demo.go` (`go run ./cmd seed-demo-org --subdomain demo`) creates or
+refreshes the workspace the reviewer notes hand to a store reviewer. It is idempotent: a
+second run refreshes the same organization rather than creating another, and every date it
+writes derives from a single instant captured at the top of the run, so a re-seed the
+morning of a resubmission produces content that reads as current.
+
+It leaves **three sign-in credentials** and enough content that no mobile tab opens on an
+empty state:
+
+| Credential | Kind | Purpose |
+|---|---|---|
+| `owner@<subdomain>.demo.invalid` | self-registered owner | the primary credential; used for everything except the deletion |
+| `spare@<subdomain>.demo.invalid` | self-registered owner | **the account the notes nominate for deletion** |
+| `demo-worker` + permanent PIN | admin-provisioned | shows the removal-request path instead |
+
+**Two owners is the load-bearing part.** The sole-owner refusal above is correct and is not
+touched, but with one owner it made the workspace's only deletable credential undeletable,
+so a reviewer asked to demonstrate in-app account deletion could not finish. A second
+self-registered owner makes `ownerCount = 2`, the first clause of the refusal fails for
+both, and either deletion is accepted while the workspace survives with an owner and all of
+its content. The spare's rows mirror steps 2–6 of `RegisterOrganizationWithAdmin` against
+the existing organization — `iam.identity`, `organization.employee` and `iam.user` sharing
+one UUID, a recorded terms acceptance, a password credential and the organization's `owner`
+role — with `iam.user.is_org_managed` left at its `FALSE` default, which is what makes the
+settings screen offer deletion rather than a removal request.
+
+A re-run after a reviewer has performed the deletion finds no active employee at the spare's
+address, because the erase anonymised that row and destroyed its identity, and creates a
+fresh account with a new UUID. The anonymised tombstone is left exactly as it is — it is
+`is_active = FALSE`, so it is outside `CountOrganizationOwners`, `CountActiveOrganizationMembers`
+and the people directory. The demonstration is therefore repeatable.
+
+The content the seed writes, beyond the `site-updates` conversation and its reportable
+message: six standard work items in the default `General` project across two open states,
+with every credential holding two and at least one late and one due today; and a ritual-mode
+`Site operations` project holding one `Open-up checks` definition with two instances — one
+`overdue` and assigned to the worker, one scheduled for today with nobody holding it. The
+definition carries `completion_window_hours = 720` and a monthly recurrence with
+`generation_window_days = 1`, which is what keeps the reconciliation sweep from writing the
+late instance off as `missed` and the generation sweep from adding a third instance. See
+[rituals-tasks.md](rituals-tasks.md) for both sweeps.
+
+A workflow state the seed needs but cannot find is a hard failure naming the project and the
+category, not a warning: a half-shaped workspace reaching a reviewer silently is the failure
+the loudness exists to prevent.
+
 ## Review materials
 
 Four documents under `docs/compliance/` are pasted into a store console at submission,
@@ -255,6 +303,12 @@ which makes every sentence in them a claim a reviewer will check against the app
 | `permission-justifications.md` | App Review notes; Play Console Data safety and sensitive-permission declarations |
 | `data-collection-inventory.md` | App Store Connect privacy questionnaire; Play Console Data safety form |
 | `age-rating-answers.md` | Both stores' age-rating questionnaires |
+
+`reviewer-notes.md` lists the three credentials above in one place, primary first, and names
+**exactly one** of them — the spare owner — as the account to delete, in both the credential
+section and `### Account deletion`. Naming one account unmistakably is the point: a reviewer
+who deletes the primary credential instead is not blocked, because either deletion is
+accepted, but they lose the sign-in the rest of the notes assume they still have.
 
 **The device permissions the notes describe are exactly the five the app declares** —
 microphone, camera, photos, location (foreground only) and notifications. There is no

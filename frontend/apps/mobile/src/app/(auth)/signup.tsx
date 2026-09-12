@@ -33,6 +33,7 @@ import {
   login,
   normalizeSubdomain,
   registerOrganization,
+  setAuthToken,
   TERMS_VERSION,
 } from "apis";
 import {
@@ -202,6 +203,14 @@ export default function SignUpScreen() {
     try {
       const result = await login(normalizedEmail, password);
       const org = await getOrganizationBySubdomain(subdomain);
+      // The token has to be in storage before this call: the RPC auth interceptor
+      // reads it from there, not from the result in hand, so a GetProfile issued
+      // first goes out with no Authorization header and comes back Unauthenticated.
+      // It only appeared to work while a previous session's token was still stored,
+      // which is why a signed-out device — a store reviewer's fresh install — could
+      // not sign in at all. The PIN paths have always done this; see D57.
+      await setAuthToken(result.accessToken, result.expiresAt);
+
       const profile = await getProfile();
       const membership = profile.organizations.find(
         (item) => item.organizationId === org.id,

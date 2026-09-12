@@ -17,9 +17,11 @@ the same workspace rather than creating a second one.
 
 ## Sign-in credentials
 
-TechOffice has two kinds of account, and they behave differently on purpose. Please
-use the **first** one to review the app; the second exists so you can see the other
-path.
+TechOffice has two kinds of account, and they behave differently on purpose. Three
+credentials are listed below. Please use the **first** one to review the app. The
+**second** is a spare, provided so you can delete an account end to end without
+losing access to the workspace. The **third** exists so you can see the other
+account-ending path.
 
 ### 1. Self-registered owner (use this one)
 
@@ -31,9 +33,29 @@ path.
 
 Sign in with **email and password**.
 
-This is the primary credential because it is the only kind of account whose
-settings screen shows the **full account-deletion path**. If you are checking for
-in-app account deletion, this is the account to use:
+This is the primary credential because it is a self-registered account, and only a
+self-registered account's settings screen shows the **full account-deletion path**.
+Use it for everything except the deletion itself.
+
+If you are checking for in-app account deletion, **please use credential 2 below**,
+not this one. Deleting credential 1 is accepted too — the workspace survives either
+deletion — but it is the account the rest of these notes are written around, and
+you would lose the sign-in they assume you still have.
+
+### 2. Spare owner — delete this one
+
+| | |
+|---|---|
+| Workspace address | `demo` |
+| Email | `spare@demo.demo.invalid` |
+| Password | `ReviewDemo1!` |
+
+Sign in with **email and password**.
+
+This is a second self-registered owner, provided for one purpose: so you can
+perform an account deletion and see it through. Deleting it leaves the workspace
+and credential 1 fully usable — the conversation, the work and the schedule are all
+still there afterwards, and you can carry on reviewing signed in as credential 1.
 
 > More → Settings → Account → **Delete my account**
 
@@ -42,10 +64,9 @@ on mobile, or
 > Settings → **Delete my account**
 
 on the web. The confirmation screen lists exactly what is erased and what is kept,
-and asks you to type a phrase before it will proceed. It is irreversible — please
-use the second credential below if you want to keep this workspace usable.
+and asks you to type a phrase before it will proceed. It is irreversible.
 
-### 2. Admin-provisioned worker (the second path)
+### 3. Admin-provisioned worker (the second path)
 
 | | |
 |---|---|
@@ -106,7 +127,7 @@ which is a safety problem of its own in a business where the messages are about
 where to be and what to do. So the scope is direct contact, and the app says so on
 the confirmation screen before you block.
 
-To see the block working, block the other demo account and then try to start a
+To see the block working, block another demo account and then try to start a
 direct conversation with them: it is refused. Their earlier direct messages are
 hidden from your view, with a per-message reveal. Their messages in **Site updates**
 stay visible.
@@ -115,11 +136,15 @@ Blocked people are listed, and can be unblocked, at **Settings → Blocked peopl
 
 ### Account deletion
 
-Covered above. In summary: a self-registered person deletes their own account from
-inside the app with no email, no web form and no support ticket. An
-admin-provisioned worker sends an in-app removal request to the people who created
-their account. Both paths are reachable in the app; neither sends the person
-elsewhere to finish.
+**Use credential 2, `spare@demo.demo.invalid`.** It is there to be deleted, and one
+deletion is all you need — there is no second account to try afterwards, and
+credential 1 is deliberately not the one to use for this.
+
+In summary: a self-registered person deletes their own account from inside the app
+with no email, no web form and no support ticket. An admin-provisioned worker
+(credential 3) sends an in-app removal request to the people who created their
+account. Both paths are reachable in the app; neither sends the person elsewhere to
+finish.
 
 ### Permissions
 
