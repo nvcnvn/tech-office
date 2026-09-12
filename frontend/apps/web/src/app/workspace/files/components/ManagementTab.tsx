@@ -42,10 +42,11 @@ import {
 	Chip,
 	Pagination,
 } from '@mui/material';
-import { Delete } from '@mui/icons-material';
+import { Delete, Flag } from '@mui/icons-material';
 import { useThemeColors } from '@/theme/useThemeColors';
 import { listFiles, batchDeleteFiles, deleteFile } from 'apis';
 import type { FileMetadata, UploadContext } from 'apis';
+import { ReportContentDialog } from '../../components/ReportContentDialog';
 
 type SortBy = 'size' | 'updated_at';
 type SortOrder = 'asc' | 'desc';
@@ -69,6 +70,7 @@ export default function ManagementTab() {
 
 	// Deletion dialog state
 	const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+	const [reportFileId, setReportFileId] = useState<string | null>(null);
 	const [deletionReason, setDeletionReason] = useState('');
 	const [deleting, setDeleting] = useState(false);
 
@@ -357,6 +359,15 @@ export default function ManagementTab() {
 										<IconButton
 											size="small"
 											color="error"
+											aria-label="Report this file"
+											onClick={() => setReportFileId(file.id)}
+											data-testid={`file-report-btn-${file.id}`}
+										>
+											<Flag fontSize="small" />
+										</IconButton>
+										<IconButton
+											size="small"
+											color="error"
 											onClick={() => handleSingleDelete(file.id)}
 										>
 											<Delete fontSize="small" />
@@ -420,6 +431,15 @@ export default function ManagementTab() {
 					</Button>
 				</DialogActions>
 			</Dialog>
+
+			{/* The existing report dialog, told it is looking at a file (FR-014, FR-015). */}
+			<ReportContentDialog
+				open={reportFileId !== null}
+				targetKind="file"
+				targetId={reportFileId ?? ''}
+				subjectLabel="this file"
+				onClose={() => setReportFileId(null)}
+			/>
 		</Box>
 	);
 }

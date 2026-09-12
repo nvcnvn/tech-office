@@ -4,7 +4,7 @@ The cross-cutting client experience: federated search, canonical cross-platform 
 context rail, theme preferences, the feature tour, and the shape of the web and mobile
 apps.
 
-**Status date: 2026-09-12.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048, 050.
+**Status date: 2026-09-12.** Supersedes specs 011, 012, 013, 027, 030, 031, 035, 039, 040, 041, 044, 045, 046, 047, 048, 050; the RPC error-mapping paragraph corrected by spec 056.
 
 ## Canonical resource links
 
@@ -650,14 +650,23 @@ workspace-address rules `deriveSubdomain` / `isValidSubdomain` / `normalizeSubdo
 
 Every wrapper routes through `rpcCall` (`rpcWrapper.ts`), which maps Connect codes onto the
 error classes in `errors.ts`: `UNAUTHENTICATED` also notifies the auth-failure listeners,
-`PERMISSION_DENIED` and `NOT_FOUND` become an `APIError`, `INVALID_ARGUMENT` a
-`ValidationError`, and the transport codes a `NetworkError`. Two codes are deliberately
-rethrown as the original `ConnectError` instead, because their **error details** are the
-point and flattening them would leave the caller with a sentence and nothing to act on:
-`RESOURCE_EXHAUSTED` (PIN lockout, read with `extractPinAuthErrorDetail`) and `ABORTED`
-(a document save refused as a version conflict, read with
-`extractDocumentVersionConflict`). Any future surface that attaches a detail must be added
-to that list, or the detail never reaches a component.
+`PERMISSION_DENIED`, `NOT_FOUND` and `ALREADY_EXISTS` become an `APIError` (409 for the
+last), `INVALID_ARGUMENT` a `ValidationError`, and the transport codes a `NetworkError`.
+Two codes are deliberately rethrown as the original `ConnectError` instead, because their
+**error details** are the point and flattening them would leave the caller with a sentence
+and nothing to act on: `RESOURCE_EXHAUSTED` (PIN lockout, read with
+`extractPinAuthErrorDetail`) and `ABORTED` (a document save refused as a version conflict,
+read with `extractDocumentVersionConflict`). Any future surface that attaches a detail must
+be added to that list, or the detail never reaches a component.
+
+The message carried across is `ConnectError.rawMessage`, **not** `.message`: the latter is
+prefixed with the code for logs, so a server sentence written for a person to read arrived
+on screen as "[already_exists] you have already reported this item". A code that has no
+case here falls through to `NetworkError`, which is why `ALREADY_EXISTS` needed one — a
+refusal a person is meant to read was being typed as a connectivity problem, and the signup
+screen duly told them to check their internet connection when a workspace address was
+taken. `registerOrganization` converts that 409 into the `OrganizationError` its docstring
+had always promised, which is what `SignupError.tsx` branches on.
 
 ## Tests
 

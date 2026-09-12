@@ -39,7 +39,7 @@ export async function rpcCall<T>(fn: () => Promise<T>): Promise<T> {
 		if (cErr.code === Code.PermissionDenied) {
 			throw new APIError(
 				"PERMISSION_DENIED",
-				cErr.message || "You do not have permission to perform this action.",
+				cErr.rawMessage || "You do not have permission to perform this action.",
 				undefined,
 				403,
 			);
@@ -47,12 +47,19 @@ export async function rpcCall<T>(fn: () => Promise<T>): Promise<T> {
 
 		// Map invalid arguments to a ValidationError (generic)
 		if (cErr.code === Code.InvalidArgument) {
-			throw new ValidationError(cErr.message || "Invalid argument", undefined, 400);
+			throw new ValidationError(cErr.rawMessage || "Invalid argument", undefined, 400);
 		}
 
 		// Map not found to a generic APIError - domain functions should catch and convert to domain-specific errors
 		if (cErr.code === Code.NotFound) {
-			throw new APIError("NOT_FOUND", cErr.message || "Resource not found", undefined, 404);
+			throw new APIError("NOT_FOUND", cErr.rawMessage || "Resource not found", undefined, 404);
+		}
+
+		// AlreadyExists used to fall through to the NetworkError default, so a refusal a
+		// person is meant to read — "you have already reported this item; it is waiting
+		// for review" — arrived typed as a transport failure.
+		if (cErr.code === Code.AlreadyExists) {
+			throw new APIError("ALREADY_EXISTS", cErr.rawMessage || "That already exists.", undefined, 409);
 		}
 
 		// Aborted means a client-specified test-and-set failed — a document save from a
@@ -70,14 +77,14 @@ export async function rpcCall<T>(fn: () => Promise<T>): Promise<T> {
 			case Code.DeadlineExceeded:
 			case Code.Internal:
 			case Code.Unknown:
-				throw new NetworkError(cErr.message || "RPC network error", 503);
+				throw new NetworkError(cErr.rawMessage || "RPC network error", 503);
 			// Note: Code.ResourceExhausted is intentionally NOT included here.
 			// Callers of PIN-auth endpoints must handle ConnectError with code
 			// ResourceExhausted directly to extract lockout details via
 			// extractPinAuthErrorDetail().
 			default:
 				// Fallback to NetworkError for anything else we don't explicitly handle
-				throw new NetworkError(cErr.message || "RPC failure", 500);
+				throw new NetworkError(cErr.rawMessage || "RPC failure", 500);
 		}
 	}
 }

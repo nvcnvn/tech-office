@@ -2474,7 +2474,11 @@ func (s *chatLogicImpl) GetMessageById(
 		AuthorEmail:      message.AuthorEmail,
 		IsDeleted:        message.ChatMessage.IsDeleted,
 		IsEdited:         message.ChatMessage.IsEdited,
-		UpdatedAt:        timestamppb.New(message.ChatMessage.UpdatedAt.Time),
+		// A caller that cannot tell a system line from something a person said will
+		// offer to block the actor named in it.
+		MessageKind:     message.ChatMessage.MessageKind,
+		SystemEventType: pgTextString(message.ChatMessage.SystemEventType),
+		UpdatedAt:       timestamppb.New(message.ChatMessage.UpdatedAt.Time),
 	}
 
 	if message.ChatMessage.ParentMessageID.Valid {
@@ -2487,6 +2491,9 @@ func (s *chatLogicImpl) GetMessageById(
 		TitleSlug:      message.ChannelSlug,
 		DisplayName:    message.ChannelDisplayName,
 		IsPrivate:      message.ChannelIsPrivate,
+		// Without this the enum stays UNSPECIFIED, and a caller deciding between a
+		// channel message and a direct message from this response gets it wrong.
+		ChannelType: mapDBChannelTypeToProto(message.ChannelType),
 	}
 
 	slog.InfoContext(ctx, "message retrieved successfully",

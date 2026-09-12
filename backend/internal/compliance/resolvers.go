@@ -95,6 +95,13 @@ func (r *fileResolver) ResolveReportTarget(
 	if result == nil || result.File == nil {
 		return ReportTarget{}, fmt.Errorf("file metadata unavailable")
 	}
+	// A deleted file is soft-deleted, so the metadata row survives the delete and the
+	// lookup above still succeeds. Reporting it would file a report against something
+	// nobody can open, so it is refused the same way a missing file is: the person who
+	// chose a reason a moment too late is told the file is gone.
+	if result.IsDeleted {
+		return ReportTarget{}, ErrTargetNotFound
+	}
 	// A file's bytes are not the snapshot — a reviewer needs to know what was
 	// uploaded and where, and can still open the file while it exists.
 	snapshot := fmt.Sprintf("File %q (%s, %d bytes) uploaded to %s",

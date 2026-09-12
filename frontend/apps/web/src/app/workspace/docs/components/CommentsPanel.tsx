@@ -22,6 +22,7 @@ import {
 	Reply as ReplyIcon,
 	Check as ResolveIcon,
 	Delete as DeleteIcon,
+	Flag as FlagIcon,
 	ExpandMore as ExpandIcon,
 	ExpandLess as CollapseIcon,
 } from '@mui/icons-material';
@@ -35,6 +36,8 @@ import {
 	type Comment,
 } from 'apis';
 import { useThemeColors } from '@/theme/useThemeColors';
+import { useAuthState } from '@/lib/auth/hooks';
+import { ReportContentDialog } from '../../components/ReportContentDialog';
 
 interface CommentsPanelProps {
 	documentId: string;
@@ -221,6 +224,11 @@ function CommentItem({
 	isPending,
 }: CommentItemProps) {
 	const colors = useThemeColors();
+	const { user } = useAuthState();
+	const [reportOpen, setReportOpen] = useState(false);
+	// Nobody reports their own comment. membershipId is the signed-in person's
+	// employee id on web (it is derived from it), which is what the comment carries.
+	const canReport = Boolean(user?.membershipId) && comment.authorEmployeeId !== user?.membershipId;
 
 	return (
 		<ListItem
@@ -266,7 +274,26 @@ function CommentItem({
 				<IconButton size="small" onClick={onDelete} title="Delete">
 					<DeleteIcon fontSize="small" />
 				</IconButton>
+				{canReport && (
+					<IconButton
+						size="small"
+						color="error"
+						onClick={() => setReportOpen(true)}
+						title="Report this comment"
+						data-testid={`comment-report-${comment.id}`}
+					>
+						<FlagIcon fontSize="small" />
+					</IconButton>
+				)}
 			</Box>
+
+			<ReportContentDialog
+				open={reportOpen}
+				targetKind="document_comment"
+				targetId={comment.id}
+				subjectLabel="this comment"
+				onClose={() => setReportOpen(false)}
+			/>
 
 			{/* Reply form */}
 			<Collapse in={isReplying}>

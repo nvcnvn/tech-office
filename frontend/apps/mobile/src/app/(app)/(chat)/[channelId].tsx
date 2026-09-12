@@ -401,6 +401,7 @@ function MessageActionSheet({
               styles.actionSheetRow,
               pressed && styles.actionSheetRowPressed,
             ]}
+            testID="message-action-thread"
           >
             <View style={styles.actionSheetIconWrap}>
               <SFIcon
@@ -2317,6 +2318,9 @@ export default function ChannelScreen() {
           }}
           onThread={handleThreadAction}
           canBlockAuthor={
+            // A system row carries the acting employee in author_employee_id, not a
+            // speaker, so there is no person behind it to block.
+            selectedMessage?.messageKind !== "system" &&
             !!selectedMessage?.authorEmployeeId &&
             selectedMessage.authorEmployeeId !== auth.employeeId
           }

@@ -23,9 +23,12 @@ name: "Compliance — Report a message from the chat timeline"
 - tapOn:
     id: "channel-row-.*"
     index: 0
+# Wait for the composer, not for an existing bubble: the first channel in a fresh
+# workspace is an empty direct conversation, and this flow posts its own message
+# anyway. Gating on a bubble made the flow depend on content it does not need.
 - extendedWaitUntil:
     visible:
-      id: "message-bubble-.*"
+      id: "message-input"
     timeout: 10000
 
 # Send a message of our own to act on. The flow is deterministic that way: it does

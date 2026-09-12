@@ -6,7 +6,8 @@ because they act on the global `iam.user` record); contracts in
 `rpc/v1/compliance.proto` (`ComplianceService`, 11 RPCs) and the deletion and terms
 additions to `rpc/v1/iam.proto`.
 
-**Status date: 2026-09-12.** Introduced by spec 036; the demo workspace section from spec 055.
+**Status date: 2026-09-12.** Introduced by spec 036; the demo workspace section from
+spec 055; the per-surface control map from spec 056.
 
 ## Why this domain exists separately
 
@@ -160,6 +161,50 @@ deletes the reported message does not erase the evidence.
   the guard holds at the SQL layer as well.
 - Review requires `compliance.reviewReports` and is **web-only**.
 
+### Where the report control actually is
+
+Every surface that renders content somebody made carries a report control, and each
+one mounts the *same* form — `components/compliance/report-sheet.tsx` on mobile,
+`workspace/components/ReportContentDialog.tsx` on web. There is exactly one of each
+per client; a new surface adds a button, never a form.
+
+| Surface | File | Control | Test id | `targetKind` | Subject |
+|---|---|---|---|---|---|
+| Channel message (mobile) | `app/(app)/(chat)/[channelId].tsx` | action-sheet row | `message-action-report` | `direct_message` if the channel is direct, else `chat_message` | this message |
+| Chat message (web) | `workspace/chat/components/MessageItem.tsx` | ⋮ menu item | `message-menu-report` | as above | this message |
+| Thread parent and replies (mobile) | `app/(app)/(chat)/thread/[messageId].tsx` | action-sheet row | `message-action-report` | decided by the **parent conversation**'s type | this message |
+| File list row (mobile) | `app/(app)/(more)/files/index.tsx` | button beside Download | `file-report-<fileId>` | `file` | this file |
+| File detail (mobile) | `app/(app)/(more)/files/[fileId].tsx` | button beside Download | `file-detail-report` | `file` | this file |
+| Files table row (web) | `workspace/files/components/ManagementTab.tsx` | flag icon in Actions | `file-report-btn-<fileId>` | `file` | this file |
+| Document comment (web) | `workspace/docs/components/CommentsPanel.tsx` | flag icon in the comment's actions | `comment-report-<commentId>` | `document_comment` | this comment |
+
+`call_record` is an accepted target kind with a registered resolver and **no control
+anywhere** — it is reachable only by an API caller, deliberately.
+
+The thread screen's route under `(shared)/resource/chat/thread/[messageId].tsx`
+re-exports the same component, so the control is on both routes from one edit.
+
+### How a refusal reaches the person
+
+Both forms keep the content on screen and stay open on a refusal; neither ever reports a
+success the server did not give. Two things make that true in practice rather than only
+in principle:
+
+- `rpcWrapper.ts` surfaces `ConnectError.rawMessage`, not `.message` — the latter carries
+  a `[code] ` prefix meant for logs, so the mobile sheet used to read
+  "[already_exists] you have already reported this item". `AlreadyExists` also has its own
+  branch there; it used to fall through to the `NetworkError` default, typing a refusal a
+  person is meant to read as a transport failure.
+- `ReportSheet` renders the error **above** the reason list. The sheet is 85% of the
+  screen height and its body scrolls; with the error under the note field it fell below
+  the fold on a tall narrow Android screen, so a refused report looked like nothing had
+  happened. The body scrolls back to the top when an error appears.
+
+Reporting a **soft-deleted file** is refused with `COMPLIANCE_REPORT_TARGET_NOT_FOUND`:
+the metadata row survives a delete, so `fileResolver` checks `IsDeleted` explicitly
+rather than relying on the lookup to fail. A message reported *before* its author
+deletes it keeps its snapshot — that is the opposite case and still holds.
+
 ## Blocking
 
 `compliance.block` — a one-directional row per `(blocker, blocked)` pair, unique per
@@ -201,6 +246,34 @@ a per-item reveal.
 - Blocking writes only to `compliance.block` — never to channel membership.
 - There is no RPC that answers "who has blocked me". `ListBlockedPeople` returns the
   caller's own list only. The absence is the requirement.
+
+### Where the block control actually is
+
+| Surface | File | Control | Test id | Shown when |
+|---|---|---|---|---|
+| Channel message (mobile) | `app/(app)/(chat)/[channelId].tsx` | action-sheet row | `message-action-block` | `messageKind !== 'system' && authorEmployeeId && authorEmployeeId !== self` |
+| Thread message (mobile) | `app/(app)/(chat)/thread/[messageId].tsx` | action-sheet row | `message-action-block` | identical predicate |
+| Person profile (mobile) | `app/(app)/(more)/people/[employeeId].tsx` | button under the header | `person-block-button` | block list resolved, not your own entry, not already blocked |
+| Person profile (mobile) | same file | button under the header | `person-unblock-button` | block list resolved, not your own entry, already blocked |
+
+The `messageKind !== 'system'` clause matters: system rows carry the **acting**
+employee in `author_employee_id` (`internal/chat/logic.go` inserts `actorID`), not a
+speaker, so without it "X created task ABC-12" would offer "Block X". A system row
+is reportable; it is not blockable.
+
+The profile decides between Block and Unblock by reading `ListBlockedPeople` under
+the query key `["compliance","blocked-people"]` — the same key the channel screen
+uses. One `invalidateQueries` after `BlockConfirm.onDone` settles every mounted
+screen, which is why the control flips in place without navigating away. While that
+query is unresolved the profile renders **no** contact control at all, rather than
+guessing and flipping.
+
+Every mobile block and unblock goes through `components/compliance/block-confirm.tsx`;
+there is exactly one confirmation on the client.
+
+**Web cannot create a block.** `workspace/settings/blocked/page.tsx` lists blocks and
+unblocks them; there is no web surface that starts one. Recorded as a known gap in
+the drift register.
 
 ## Terms acceptance
 

@@ -62,6 +62,7 @@ export function ReportSheet({
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState("");
   const [confirmed, setConfirmed] = React.useState(false);
+  const scrollRef = React.useRef<ScrollView>(null);
 
   // Reset whenever the sheet opens, so a previous report's reason is never
   // pre-selected on the next one.
@@ -74,6 +75,13 @@ export function ReportSheet({
       setSubmitting(false);
     }
   }, [visible]);
+
+  React.useEffect(() => {
+    // The error is at the top of the form; if the person had scrolled down to reach
+    // the reason they tapped, bring it back into view rather than leaving them
+    // looking at an unchanged sheet.
+    if (error) scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [error]);
 
   const submit = async (chosen: ReportReason) => {
     setSubmitting(true);
@@ -118,12 +126,26 @@ export function ReportSheet({
               </Pressable>
             </View>
           ) : (
-            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.body}>
+            <ScrollView
+              ref={scrollRef}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.body}
+            >
               <Text style={styles.title}>Report {subjectLabel}</Text>
               <Text style={styles.subtitle}>
                 Tell us what's wrong with it. This goes to the people who run this
                 workspace. The person who posted it is not told who reported it.
               </Text>
+
+              {/* A refusal belongs above the reason list, not under the note field: the
+                  sheet is 85% of the screen and scrolls, and on a tall narrow phone an
+                  error at the bottom is below the fold — so somebody whose report was
+                  refused saw the sheet not change and assumed it had worked. */}
+              {error ? (
+                <Text style={styles.error} selectable testID="report-sheet-error">
+                  {error}
+                </Text>
+              ) : null}
 
               {REPORT_REASON_LABELS.map((option) => {
                 const selected = reason === option.value;
@@ -166,12 +188,6 @@ export function ReportSheet({
                 editable={!submitting}
                 testID="report-sheet-note"
               />
-
-              {error ? (
-                <Text style={styles.error} selectable testID="report-sheet-error">
-                  {error}
-                </Text>
-              ) : null}
 
               <Pressable
                 onPress={onClose}

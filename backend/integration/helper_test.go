@@ -588,6 +588,17 @@ func (w *testWorld) channelUnreadCount(actor testUser, channelID string) int32 {
 	return count
 }
 
+// getMessageById is the deep-link lookup the mobile thread screen opens on: it
+// returns the message together with the channel it sits in.
+func (w *testWorld) getMessageById(actor testUser, messageID string) *rpcv1.GetMessageByIdResponse {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.GetMessageByIdRequest{MessageId: messageID})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	resp, err := w.chat.GetMessageById(context.Background(), req)
+	require.NoError(w.t, err)
+	return resp.Msg
+}
+
 func (w *testWorld) replyToMessage(actor testUser, parentMessageID, text string) string {
 	w.t.Helper()
 	req := connect.NewRequest(&rpcv1.ReplyToMessageRequest{
@@ -2133,6 +2144,43 @@ func (w *testWorld) getContentIndexStatus(actor testUser, fileID string) *rpcv1.
 	resp, err := w.file.GetContentIndexStatus(context.Background(), req)
 	require.NoError(w.t, err)
 	return resp.Msg
+}
+
+// seedFile inserts a files.file_metadata row directly, the way
+// voice_communication_test.go already seeds call artifacts — a real upload needs
+// object storage the integration suite does not run.
+//
+// It also writes a public access rule, because a file with no rule is reachable only
+// by its uploader, and the scenarios that use this seed report somebody else's file.
+// Under the public scope the rule's context is not consulted, so a synthetic context
+// id is enough to make the row well-formed.
+func (w *testWorld) seedFile(uploader testUser, filename string) string {
+	w.t.Helper()
+	fileID := dbuuid.Must()
+	_, err := globalDB.Exec(context.Background(), `
+INSERT INTO files.file_metadata (
+    organization_id, id, original_filename, storage_key, size_bytes, mime_type,
+    upload_context, uploaded_by_employee_id, validation_status
+) VALUES ($1, $2, $3, $4, $5, $6, 'chat', $7, 'verified')`,
+		w.OrgID,
+		fileID,
+		filename,
+		fmt.Sprintf("org-%s/chat/%s", w.OrgID.String(), fileID.String()),
+		1024,
+		"image/png",
+		uploader.ID,
+	)
+	require.NoError(w.t, err, "seed file metadata")
+
+	_, err = globalDB.Exec(context.Background(), `
+INSERT INTO files.file_access_rule (
+    organization_id, id, file_id, context_type, context_id, access_scope
+) VALUES ($1, $2, $3, 'chat_channel', $4, 'public')`,
+		w.OrgID, dbuuid.Must(), fileID, dbuuid.Must(),
+	)
+	require.NoError(w.t, err, "seed file access rule")
+
+	return fileID.String()
 }
 
 func (w *testWorld) deleteFile(actor testUser, fileID string) {
@@ -4205,6 +4253,26 @@ func retryDelayFromError(t *testing.T, err error) (time.Duration, bool) {
 		}
 	}
 	return 0, false
+}
+
+// errorReason returns the google.rpc.ErrorInfo reason carried by an error, so a
+// scenario can assert on the stable reason rather than on message text (Principle X).
+func errorReason(t *testing.T, err error) string {
+	t.Helper()
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) {
+		return ""
+	}
+	for _, detail := range connectErr.Details() {
+		value, valueErr := detail.Value()
+		if valueErr != nil {
+			continue
+		}
+		if info, ok := value.(*errdetails.ErrorInfo); ok {
+			return info.GetReason()
+		}
+	}
+	return ""
 }
 
 // fieldViolations returns the google.rpc.BadRequest field names carried by an error.

@@ -65,7 +65,13 @@ flows=(
   $APP_DIR/.maestro/presence-ping-pong.yaml
   $APP_DIR/.maestro/compliance/legal-links.yaml
   $APP_DIR/.maestro/compliance/report-message.yaml
+  # Feature 056. Each posts or restores whatever it acts on, so they need no fixture and
+  # no particular order among themselves — but they run before delete-account.yaml, which
+  # ends the spare account they would otherwise still be signed in as.
+  $APP_DIR/.maestro/compliance/report-thread-message.yaml
+  $APP_DIR/.maestro/compliance/report-file.yaml
   $APP_DIR/.maestro/compliance/block-person.yaml
+  $APP_DIR/.maestro/compliance/block-from-profile.yaml
   $APP_DIR/.maestro/compliance/delete-account.yaml
   $APP_DIR/.maestro/compliance/removal-request.yaml
   # Feature 044, in order: the project flow creates the project the ritual flow defines a

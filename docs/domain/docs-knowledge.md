@@ -4,7 +4,7 @@ A Notion/Confluence-style document system: nested pages, full version history, t
 comments, cross-document section embeds, and live collaborative editing presence. Owned by
 `internal/docs`; contract in `rpc/v1/document.proto`, split across **eight** services.
 
-**Status date: 2026-09-05.** Supersedes specs 016, 045, 046, 049.
+**Status date: 2026-09-12.** Supersedes specs 016, 045, 046, 049.
 
 ## Services
 
@@ -139,6 +139,11 @@ no RPC and exists for the compliance domain's report snapshot: going through thi
 rather than letting compliance read `docs.comment` directly is what keeps content
 reporting free of cross-schema access (Constitution IV). See
 [compliance-safety.md](compliance-safety.md).
+
+That path is now reachable from the UI: the web comments panel carries a report control on
+every comment the reader did not write (`comment.authorEmployeeId !== user.membershipId`),
+and the report's snapshot is the comment text as it stood. Mobile has no comments panel, so
+it has no comment report control.
 
 ## Section embeds
 

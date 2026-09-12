@@ -14,6 +14,7 @@ import {
 import { Stack } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { getDownloadUrl, listFiles, type FileMetadata } from "apis";
+import { ReportSheet } from "@/components/compliance/report-sheet";
 import { formatDistanceToNow } from "date-fns";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -69,6 +70,7 @@ export default function FilesScreen() {
   const styles = useStyles();
 
   const [downloading, setDownloading] = useState<string | null>(null);
+  const [reportFileId, setReportFileId] = useState<string | null>(null);
 
   const { data, isLoading, refetch } = useQuery({
     queryKey: ["files"],
@@ -178,14 +180,26 @@ export default function FilesScreen() {
               </View>
 
               <View style={styles.fileActions}>
-                <Button
-                  label={isDownloading ? "Downloading" : "Download"}
-                  size="sm"
-                  variant="secondary"
-                  loading={isDownloading}
-                  onPress={() => handleDownload(item)}
-                  style={styles.downloadButton}
-                />
+                {/* Two buttons sharing the row, each flexing, so a narrow Android
+                    screen shrinks them evenly instead of pushing one off the card. */}
+                <View style={styles.fileActionButtons}>
+                  <Button
+                    label={isDownloading ? "Downloading" : "Download"}
+                    size="sm"
+                    variant="secondary"
+                    loading={isDownloading}
+                    onPress={() => handleDownload(item)}
+                    style={styles.fileActionButton}
+                  />
+                  <Button
+                    label="Report"
+                    size="sm"
+                    variant="secondary"
+                    onPress={() => setReportFileId(item.id)}
+                    style={styles.fileActionButton}
+                    testID={`file-report-${item.id}`}
+                  />
+                </View>
                 <View style={styles.actionHint}>
                   <SFIcon
                     name={actionIcons.download.name}
@@ -205,6 +219,15 @@ export default function FilesScreen() {
             subtitle="Files shared with your organization will appear here."
           />
         }
+      />
+
+      {/* One sheet for the whole list — only one row is being reported at a time. */}
+      <ReportSheet
+        visible={reportFileId !== null}
+        targetKind="file"
+        targetId={reportFileId ?? ""}
+        subjectLabel="this file"
+        onClose={() => setReportFileId(null)}
       />
     </>
   );
@@ -300,18 +323,18 @@ const useStyles = makeStyles((t) => ({
     color: t.text.disabled,
   },
   fileActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
     gap: spacing[1],
   },
-  downloadButton: {
-    minWidth: 116,
+  fileActionButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  fileActionButton: {
+    flex: 1,
   },
   actionHint: {
-    flex: 1,
     flexDirection: "row",
-    justifyContent: "flex-end",
     alignItems: "center",
     gap: spacing[0.5],
   },

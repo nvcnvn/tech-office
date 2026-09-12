@@ -956,6 +956,7 @@ SELECT
   c.title_slug AS channel_slug,
   c.display_name AS channel_display_name,
   c.is_private AS channel_is_private,
+  c.channel_type AS channel_type,
   (
     SELECT COALESCE(jsonb_agg(
       jsonb_build_object(
@@ -1000,6 +1001,7 @@ type GetMessageByIdWithChannelRow struct {
 	ChannelSlug        string      `json:"channel_slug"`
 	ChannelDisplayName string      `json:"channel_display_name"`
 	ChannelIsPrivate   bool        `json:"channel_is_private"`
+	ChannelType        string      `json:"channel_type"`
 	ReactionsJson      []byte      `json:"reactions_json"`
 }
 
@@ -1029,6 +1031,7 @@ func (q *Queries) GetMessageByIdWithChannel(ctx context.Context, db DBTX, arg *G
 		&i.ChannelSlug,
 		&i.ChannelDisplayName,
 		&i.ChannelIsPrivate,
+		&i.ChannelType,
 		&i.ReactionsJson,
 	)
 	return &i, err

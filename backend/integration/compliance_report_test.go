@@ -90,6 +90,95 @@ func TestContentReporting(t *testing.T) {
 		})
 	})
 
+	t.Run("when a person reports a reply inside a direct conversation's thread", func(t *testing.T) {
+		dmID := w.createOrGetDM(reporter, author.ID)
+		rootID := w.sendMessage(author, dmID, "Thread root in a direct conversation.")
+		replyID := w.replyToMessage(author, rootID, "And an unpleasant reply under it.")
+
+		t.Run("it is recorded with the direct-message target kind", func(t *testing.T) { // FR-002
+			// A report filed from inside a thread belongs to the conversation the
+			// thread hangs off, not to a generic channel message.
+			resp := w.reportContent(reporter, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_DIRECT_MESSAGE,
+				replyID, rpcv1.ReportReason_REPORT_REASON_HARASSMENT, "")
+			report := w.getReport(owner, resp.ReportId).Report
+			assert.Equal(t, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_DIRECT_MESSAGE, report.TargetKind)
+			assert.Equal(t, author.ID.String(), report.ReportedEmployeeId)
+			assert.Equal(t, "And an unpleasant reply under it.", report.ContentSnapshot)
+		})
+	})
+
+	t.Run("when a person reports an uploaded file", func(t *testing.T) {
+		fileID := w.seedFile(author, "holiday-rota.png")
+		resp := w.reportContent(reporter, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_FILE,
+			fileID, rpcv1.ReportReason_REPORT_REASON_SEXUAL_CONTENT, "")
+
+		t.Run("it is recorded with the file target kind", func(t *testing.T) { // FR-015
+			report := w.getReport(owner, resp.ReportId).Report
+			assert.Equal(t, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_FILE, report.TargetKind)
+			assert.Equal(t, fileID, report.TargetId)
+		})
+
+		t.Run("the reported author is the person who uploaded it", func(t *testing.T) { // FR-020
+			// Resolved from the files domain, not from the request, so a client
+			// cannot pin an upload on somebody else.
+			report := w.getReport(owner, resp.ReportId).Report
+			assert.Equal(t, author.ID.String(), report.ReportedEmployeeId)
+		})
+
+		t.Run("the snapshot names the file rather than quoting a message", func(t *testing.T) { // FR-015
+			report := w.getReport(owner, resp.ReportId).Report
+			assert.Contains(t, report.ContentSnapshot, "holiday-rota.png")
+			assert.Contains(t, report.ContentSnapshot, "image/png")
+		})
+
+		t.Run("it appears in the owner's report queue alongside message reports", func(t *testing.T) { // FR-017
+			list := w.listReports(owner, rpcv1.ReportStatus_REPORT_STATUS_OUTSTANDING, "", 50)
+			assert.NotNil(t, findReport(list.Reports, resp.ReportId))
+		})
+	})
+
+	t.Run("when a person reports a file that no longer exists", func(t *testing.T) {
+		fileID := w.seedFile(author, "already-gone.png")
+		w.deleteFile(author, fileID)
+		_, err := w.reportContentResult(reporter, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_FILE,
+			fileID, rpcv1.ReportReason_REPORT_REASON_SEXUAL_CONTENT, "")
+
+		t.Run("it is refused as a target that could not be found", func(t *testing.T) { // FR-019
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		})
+
+		t.Run("the refusal carries the target-not-found reason, not a raw error", func(t *testing.T) { // Principle X
+			// The sheet branches on this reason to say "the reported item could not
+			// be found" — never on the message text.
+			require.Error(t, err)
+			assert.Equal(t, "COMPLIANCE_REPORT_TARGET_NOT_FOUND", errorReason(t, err))
+		})
+	})
+
+	t.Run("when a person reports a document comment", func(t *testing.T) {
+		docID := w.createDocument(author, "Shift handover", `{"type":"doc","content":[]}`)
+		commentID := w.addDocumentComment(author, docID, "Nobody here can read anyway.")
+		resp := w.reportContent(reporter, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_DOCUMENT_COMMENT,
+			commentID, rpcv1.ReportReason_REPORT_REASON_HARASSMENT, "")
+
+		t.Run("it is recorded with the document-comment target kind", func(t *testing.T) { // FR-017
+			report := w.getReport(owner, resp.ReportId).Report
+			assert.Equal(t, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_DOCUMENT_COMMENT, report.TargetKind)
+			assert.Equal(t, commentID, report.TargetId)
+		})
+
+		t.Run("the reported author is the person who wrote the comment", func(t *testing.T) { // FR-020
+			report := w.getReport(owner, resp.ReportId).Report
+			assert.Equal(t, author.ID.String(), report.ReportedEmployeeId)
+		})
+
+		t.Run("the snapshot is the comment text as it stood", func(t *testing.T) { // FR-017
+			report := w.getReport(owner, resp.ReportId).Report
+			assert.Equal(t, "Nobody here can read anyway.", report.ContentSnapshot)
+		})
+	})
+
 	t.Run("when the reported message is later deleted by its author", func(t *testing.T) {
 		msgID := w.sendMessage(author, channelID, "This will be deleted.")
 		resp := w.reportContent(reporter, rpcv1.ReportTargetKind_REPORT_TARGET_KIND_CHAT_MESSAGE,

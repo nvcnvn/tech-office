@@ -4,7 +4,8 @@ Channels, messages, threads, reactions, presence-aware typing, and the per-user 
 Owned by `internal/chat`; contracts in `rpc/v1/chat.proto` (`ChatService`, 39 RPCs) and
 `rpc/v1/chat_files.proto` (`ChatFileService`, 2 RPCs).
 
-**Status date: 2026-09-12.** Supersedes specs 009, 010, 027, 046.
+**Status date: 2026-09-12.** Supersedes specs 009, 010, 027, 046; deep-link
+response fields corrected by spec 056.
 
 ## Channels
 
@@ -56,6 +57,27 @@ its first 48 bits, so `ORDER BY id DESC` is chronological and the index
 `(organization_id, channel_id, id DESC)` serves it directly. `ListMessages` takes a
 `ListMessagesDirection` so a client can page in either direction from an anchor —
 which is what deep-linking to a specific message needs.
+
+### Opening a message by id
+
+`GetMessageById` is what a deep link and the mobile thread screen open on: given only a
+message id it returns the message, the channel it sits in, and whether the caller is a
+member. It refuses a non-member outright, so it is safe to hand an arbitrary id.
+
+Everything a screen decides afterwards comes out of this one response, and for a long
+time two of those fields were declared but never filled in:
+
+- `channel.channel_type` — without it the enum arrives as `CHANNEL_TYPE_UNSPECIFIED`, and
+  a client mapping that to a string union lands on `chat`. A report filed from inside a
+  thread that hangs off a **direct conversation** was recorded as a channel message
+  because of this. The query now selects `c.channel_type` and the response maps it.
+- `message.message_kind` and `message.system_event_type` — without them every row looks
+  like something a person said, so a screen deciding whether there is somebody to block
+  would offer to block the employee named in a system line. `ListReplies` always
+  populated them; this path did not.
+
+`TestChatMessaging`'s "when a message is fetched by its id for a deep link" covers all
+three, and is the first integration coverage this RPC has had.
 
 ### What a message renders for a canonical link
 

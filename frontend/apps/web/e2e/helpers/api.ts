@@ -1078,6 +1078,23 @@ export async function listDocuments(
   });
 }
 
+export async function addDocumentComment(
+  user: TestUser,
+  documentId: string,
+  commentText: string,
+) {
+  return apiCall<{ comment: { id: string; commentText: string } }>(
+    user,
+    '/rpc.v1.CommentService/AddComment',
+    {
+      documentId,
+      textSelectionStart: 0,
+      textSelectionEnd: 0,
+      commentText,
+    },
+  );
+}
+
 export async function setDocumentAccess(
   user: TestUser,
   documentId: string,

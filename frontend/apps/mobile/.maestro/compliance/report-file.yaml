@@ -1,0 +1,81 @@
+appId: com.devguards.TechOffice
+name: "Compliance — Report an uploaded file"
+# FR-012, FR-015. More → Files → Report on a row → a reason. Two taps from seeing the
+# file, and the sheet calls its subject a file rather than a message.
+#
+# Unlike the message flows this one acts on whatever the first row happens to be: a
+# file is reportable whoever uploaded it, and there is no per-file rule to trip over.
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-files"
+    timeout: 8000
+- tapOn:
+    id: "menu-files"
+- extendedWaitUntil:
+    visible:
+      id: "file-report-.*"
+    timeout: 15000
+- takeScreenshot: "tmp/maestro-screenshots/compliance-26-file-list"
+
+- tapOn:
+    id: "file-report-.*"
+    index: 0
+- extendedWaitUntil:
+    visible:
+      id: "report-sheet"
+    timeout: 5000
+# FR-015: the form names what is being reported, and it is not a message.
+- assertVisible: "Report this file"
+- takeScreenshot: "tmp/maestro-screenshots/compliance-27-file-report-sheet"
+
+- tapOn:
+    id: "report-reason-other"
+
+# Two outcomes are correct here, and which one comes up depends on whether a previous
+# run already reported this row — there is no "unreport", so unlike block-from-profile
+# this flow cannot restore the state it found. Either the report is confirmed, or the
+# server refuses it as already filed and the sheet says so with the content still on
+# screen (FR-019). What must never happen is the sheet closing, or claiming a success
+# the server did not give (SC-006).
+- extendedWaitUntil:
+    visible:
+      id: "report-sheet-(confirmation|error)"
+    timeout: 8000
+- takeScreenshot: "tmp/maestro-screenshots/compliance-28-file-report-outcome"
+- runFlow:
+    when:
+      visible:
+        id: "report-sheet-error"
+    commands:
+      # A refusal is readable prose, not a transport code.
+      - assertVisible: "you have already reported this item; it is waiting for review"
+      - assertVisible:
+          id: "report-sheet"
+      # Cancel is the last thing in a scrolling sheet, so on a tall narrow screen it
+      # takes a scroll to reach — the same one a person would make.
+      - scrollUntilVisible:
+          element:
+            id: "report-sheet-cancel"
+          direction: DOWN
+          timeout: 8000
+      - tapOn:
+          id: "report-sheet-cancel"
+- runFlow:
+    when:
+      visible:
+        id: "report-sheet-confirmation"
+    commands:
+      - tapOn:
+          id: "report-sheet-done"

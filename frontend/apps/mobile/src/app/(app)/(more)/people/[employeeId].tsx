@@ -24,12 +24,14 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createOrGetDirectMessage,
   directoryDisplayName,
   getDirectoryEntry,
+  listBlockedPeople,
 } from "apis";
+import { BlockConfirm } from "@/components/compliance/block-confirm";
 import { PresenceIndicator } from "@/components/common/presence-indicator";
 import { UserAvatar } from "@/components/common/user-avatar";
 import { Button } from "@/components/ui/button";
@@ -126,7 +128,11 @@ export default function PersonEntryScreen() {
 
   const { employeeId } = useLocalSearchParams<{ employeeId: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [openingConversation, setOpeningConversation] = React.useState(false);
+  // One piece of state, not a pair of booleans: which of the two confirmations is
+  // open is a single choice, and two flags can disagree.
+  const [confirming, setConfirming] = React.useState<"block" | "unblock" | null>(null);
 
   const {
     data: entry,
@@ -138,6 +144,15 @@ export default function PersonEntryScreen() {
     queryKey: ["directory-entry", String(employeeId)],
     queryFn: () => getDirectoryEntry(String(employeeId)),
     enabled: Boolean(employeeId),
+  });
+
+  // ListBlockedPeople is the only call that answers "is this person blocked", by
+  // design. Sharing the channel screen's query key means one invalidation after a
+  // block settles every mounted screen, and the control flips here without a refetch.
+  const { data: blockedData, isSuccess: blockListLoaded } = useQuery({
+    queryKey: ["compliance", "blocked-people"],
+    queryFn: () => listBlockedPeople(),
+    staleTime: 60_000,
   });
 
   const callPerson = React.useCallback(async (phoneNumber: string) => {
@@ -228,6 +243,16 @@ export default function PersonEntryScreen() {
   const name = directoryDisplayName(entry);
   const role = entry.roleNames[0];
 
+  // `undefined` until the block list has resolved: a control that reads "Block" and
+  // flips to "Unblock" a beat later is worse than one that arrives a beat late.
+  const contactControl: "none" | "block" | "unblock" | undefined = !blockListLoaded
+    ? undefined
+    : entry.isSelf
+      ? "none"
+      : (blockedData?.blocked ?? []).some((person) => person.employeeId === entry.employeeId)
+        ? "unblock"
+        : "block";
+
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
@@ -276,6 +301,22 @@ export default function PersonEntryScreen() {
         />
       )}
 
+      {contactControl === "block" ? (
+        <Button
+          testID="person-block-button"
+          label="Block"
+          variant="destructive"
+          onPress={() => setConfirming("block")}
+        />
+      ) : contactControl === "unblock" ? (
+        <Button
+          testID="person-unblock-button"
+          label="Unblock"
+          variant="secondary"
+          onPress={() => setConfirming("unblock")}
+        />
+      ) : null}
+
       {/* Absent fields render nothing at all — see the note at the top of this file. */}
       {entry.email || (entry.phoneNumber && !entry.isSelf) ? (
         <View style={styles.card}>
@@ -301,6 +342,21 @@ export default function PersonEntryScreen() {
           ) : null}
         </View>
       ) : null}
+
+      {/* Invalidating the shared key is what flips the control in place — no local
+          state, no navigation away (FR-008). */}
+      <BlockConfirm
+        visible={confirming !== null}
+        mode={confirming ?? "block"}
+        employeeId={entry.employeeId}
+        displayName={name || "this person"}
+        onClose={() => setConfirming(null)}
+        onDone={() => {
+          void queryClient.invalidateQueries({
+            queryKey: ["compliance", "blocked-people"],
+          });
+        }}
+      />
     </ScrollView>
   );
 }

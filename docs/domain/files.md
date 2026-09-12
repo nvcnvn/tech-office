@@ -4,7 +4,7 @@ Binary storage on Cloudflare R2 with per-org quota, virus scanning, MIME validat
 context-scoped access rules, PDF conversion and content indexing. Owned by
 `internal/files`; contract in `rpc/v1/files.proto` (`FileService`, 15 RPCs).
 
-**Status date: 2026-09-04.** Supersedes specs 014, 015, 045.
+**Status date: 2026-09-12.** Supersedes specs 014, 015, 045.
 
 ## Upload flow
 
@@ -52,6 +52,15 @@ is structural, so a misrouted key is visible in the object path.
 Deletion is soft (`is_deleted = true`) with the object removed from R2;
 `files.file_deletion_log` is an immutable audit trail that deliberately has **no FK** to
 `file_metadata` so it survives a hard metadata delete.
+
+Because the delete is soft, `GetFileByID` and therefore `GetFileMetadata` still **succeed**
+for a deleted file and return `IsDeleted: true` — a caller that treats a successful lookup
+as "this file exists" is wrong. Content reporting learned this the hard way and now checks
+the flag explicitly; see [compliance-safety.md](compliance-safety.md).
+
+A file is reportable from the mobile file list row, the mobile file detail screen and the
+web files table. Reporting is the compliance domain's; what files owns is the metadata and
+the uploader identity it resolves for the report's snapshot.
 
 ## Quota
 

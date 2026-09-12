@@ -704,13 +704,32 @@ export async function listReplies(
 
 /**
  * Get message by ID with channel context (for notification deep linking)
+ *
+ * The channel's type is mapped to the ChannelType string union, like every other
+ * channel-returning wrapper here, so screens never compare a raw proto enum number.
+ *
  * @param messageId - Message UUID
  * @returns Message details with channel context and membership status
  * @throws APIError if message not found or user is not a channel member
  */
-export async function getMessageById(messageId: string): Promise<GetMessageByIdResponse> {
+export async function getMessageById(messageId: string): Promise<{
+	message: chat.Message;
+	channel: { id: string; channelType: ChannelType; displayName: string } | null;
+	isMember: boolean;
+}> {
 	return await rpcCall(async () => {
-		return await chatClient.getMessageById({ messageId }) as GetMessageByIdResponse;
+		const resp = await chatClient.getMessageById({ messageId }) as GetMessageByIdResponse;
+		return {
+			message: resp.message!,
+			channel: resp.channel
+				? {
+					id: resp.channel.id,
+					channelType: convertChannelType(resp.channel.channelType),
+					displayName: resp.channel.displayName,
+				}
+				: null,
+			isMember: resp.isMember,
+		};
 	});
 }
 

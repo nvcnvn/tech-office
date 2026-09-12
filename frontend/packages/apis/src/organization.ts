@@ -174,6 +174,15 @@ export async function registerOrganization(data: {
 				? new Date(Number(resp.organization.updatedAt.seconds) * 1000).toISOString()
 				: new Date().toISOString(),
 		};
+	}).catch((err: unknown) => {
+		// The docstring above has always promised an OrganizationError on 409, and the
+		// conversion was never written: a taken address reached the signup screen as a
+		// generic error, and before rpcCall grew an AlreadyExists case it reached it as
+		// a NetworkError, so the screen told the person to check their connection.
+		if (err instanceof APIError && err.statusCode === 409) {
+			throw new OrganizationError('SUBDOMAIN_TAKEN', err.message, 'subdomain', 409);
+		}
+		throw err;
 	});
 }
 

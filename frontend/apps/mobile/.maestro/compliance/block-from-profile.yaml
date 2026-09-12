@@ -1,0 +1,98 @@
+appId: com.devguards.TechOffice
+name: "Compliance — Block a colleague from their profile"
+# FR-005, FR-006, FR-008, FR-011. Three taps: More → People → the person, then Block.
+#
+# The assertion that matters is the last one: after confirming, the control reads
+# Unblock *without leaving the screen*. That in-place flip is FR-008, and it is the
+# part only the mobile app has — the recording, the silence and the symmetry are all
+# asserted in backend/integration/compliance_block_test.go.
+#
+# The flow unblocks again before it ends. The simulator account is shared between
+# flows, and a block left behind would refuse a later flow's direct conversation.
+env:
+  # A colleague in the test workspace who is not the signed-in person. Reused from the
+  # people directory flows; the profile's Message button is what proves it is somebody
+  # else — your own entry offers "Open your profile" instead.
+  COLLEAGUE: ${MAESTRO_DIRECTORY_PERSON_WITH_PHONE}
+---
+- runFlow: "../auth/signin.yaml"
+- runFlow:
+    when:
+      visible:
+        id: "xmark"
+    commands:
+      - tapOn:
+          id: "xmark"
+
+- tapOn:
+    id: "tab-more"
+- extendedWaitUntil:
+    visible:
+      id: "menu-people"
+    timeout: 8000
+- tapOn:
+    id: "menu-people"
+- extendedWaitUntil:
+    visible:
+      id: "people-search-input"
+    timeout: 10000
+- tapOn:
+    id: "people-search-input"
+- inputText: ${COLLEAGUE}
+- extendedWaitUntil:
+    visible:
+      id: "person-row-.*"
+    timeout: 15000
+- tapOn:
+    id: "person-row-.*"
+
+# Somebody else's profile: Message, not "Open your profile".
+- extendedWaitUntil:
+    visible:
+      id: "person-message-button"
+    timeout: 15000
+# The control renders nothing until the block list has resolved, so wait for it rather
+# than asserting on the first frame.
+- extendedWaitUntil:
+    visible:
+      id: "person-block-button"
+    timeout: 15000
+- takeScreenshot: "tmp/maestro-screenshots/compliance-23-profile-block"
+
+- tapOn:
+    id: "person-block-button"
+- extendedWaitUntil:
+    visible:
+      id: "block-confirm"
+    timeout: 8000
+# FR-009: the confirmation states the scope — direct contact stops, shared channels
+# do not, and the other person is never told.
+- assertVisible: ".*start a direct conversation or call you.*"
+- assertVisible: ".*still be in the same work channels.*"
+- assertVisible: "They are not told that you blocked them."
+- takeScreenshot: "tmp/maestro-screenshots/compliance-24-block-confirm"
+- tapOn:
+    id: "block-confirm-submit"
+
+# FR-008: the control flips in place. No navigation, no pull to refresh.
+- extendedWaitUntil:
+    visible:
+      id: "person-unblock-button"
+    timeout: 15000
+- assertNotVisible:
+    id: "person-block-button"
+- takeScreenshot: "tmp/maestro-screenshots/compliance-25-profile-unblock"
+
+# Leave the shared account as it was found.
+- tapOn:
+    id: "person-unblock-button"
+- extendedWaitUntil:
+    visible:
+      id: "block-confirm"
+    timeout: 8000
+- tapOn:
+    id: "block-confirm-submit"
+- extendedWaitUntil:
+    visible:
+      id: "person-block-button"
+    timeout: 15000

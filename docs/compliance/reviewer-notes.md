@@ -94,27 +94,61 @@ whenever review reaches it.
 
 ### Reporting objectionable content
 
+Anything one person can make, another person can report, and every one of the
+surfaces below is reachable in the demo workspace in a single session.
+
 The demo conversation ends with a deliberately rude message so you have something
-plausible to report.
+plausible to start with.
 
 Open **Site updates**, long-press (mobile) or hover and open the ⋮ menu (web) on
 the last message — *"Whoever loaded the van yesterday clearly can't count.
 Useless."* — and choose **Report**. Pick a reason. You will see a confirmation.
+On mobile that is three presses from seeing the message; on web it is two from
+opening the menu.
 
-Signed in as the owner, the report is then visible at
-**Settings → Reported content**, with a copy of the message as it stood when it was
-reported, and an action to record an outcome. The snapshot means a report stays
-reviewable even if the author deletes the original — you can verify that by
-deleting the message and reloading the queue.
+The same control is on every other place user-made content appears:
+
+| What you are reporting | Where | How to get there |
+|---|---|---|
+| A message in a channel or direct conversation | mobile, web | long-press the message (mobile) or the ⋮ menu (web) → **Report this message** |
+| A reply inside a thread, or the message the thread hangs off | mobile | long-press the message → **Report this message** — the same words, one screen deeper |
+| An uploaded file | mobile | **More → Files** → **Report** on the row, or open the file and use **Report** beside Download |
+| An uploaded file | web | **Files → Management** → the flag button in the row's Actions column |
+| A comment on a document | web | open the document → the comments panel → the flag button on somebody else's comment |
+
+The form names what you are reporting — "Report this message", "Report this file",
+"Report this comment" — so it is always clear which thing the report is about. You
+are not offered a control to report your own document comment, and reporting the
+same item twice is refused in the form with an explanation rather than silently
+accepted.
+
+Signed in as the owner, every report is then visible at
+**Settings → Reported content**, with a copy of the content as it stood when it was
+reported — the message text, the comment text, or a line naming the file, its type
+and its size — and an action to record an outcome. Each report is attributed to the
+person who made the content, not to the person who reported it; the app resolves
+that on the server so a report cannot be pinned on the wrong person. The snapshot
+means a report stays reviewable even if the author deletes the original — you can
+verify that by deleting the message and reloading the queue.
 
 Report review is a web-only screen. It is an administrative action, and this
 product deliberately keeps administrative surfaces off mobile.
 
 ### Blocking
 
-From a message menu, choose **Block this person**. The blocked person is not
-notified, and there is no screen or API anywhere in the product that tells somebody
-who has blocked them.
+Blocking is reachable two ways on mobile, and you do not need to find a message
+first:
+
+- From a colleague's profile: **More → People →** the person → **Block**. After you
+  confirm, the same button reads **Unblock** without leaving the screen.
+- From a message menu: long-press a message somebody else wrote → **Block this
+  person**.
+
+A system line — "so-and-so created a task", "a call ended" — offers **Report** but
+no **Block**, because there is no person speaking behind it.
+
+The blocked person is not notified, and there is no screen or API anywhere in the
+product that tells somebody who has blocked them.
 
 **Please read this before testing a block:** blocking in TechOffice stops **direct**
 contact — direct conversations and calls — and deliberately does **not** hide the
@@ -132,7 +166,9 @@ direct conversation with them: it is refused. Their earlier direct messages are
 hidden from your view, with a per-message reveal. Their messages in **Site updates**
 stay visible.
 
-Blocked people are listed, and can be unblocked, at **Settings → Blocked people**.
+Blocked people are listed, and can be unblocked, at **Settings → Blocked people**
+on mobile, and at **Settings → Blocked people** on the web. Creating a block is a
+mobile action today; the web client can review and undo blocks but not start one.
 
 ### Account deletion
 

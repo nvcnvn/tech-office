@@ -6,6 +6,9 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/nvcnvn/tech-office/backend/internal/chat"
+	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 )
 
 // TestChatMessaging covers sending messages, replies, mentions, reactions, and DMs.
@@ -126,6 +129,41 @@ func TestChatMessaging(t *testing.T) {
 		t.Run("the invited user can send messages in the channel", func(t *testing.T) {
 			msgID := w.sendMessage(bystander, channelID, "I was invited!")
 			require.NotEmpty(t, msgID)
+		})
+	})
+
+	// A thread screen opened from a deep link has only a message id. Everything it
+	// decides afterwards — whether a report is about a direct message, whether there
+	// is a person behind the row to block — comes out of this one response, so the
+	// fields it carries are behaviour, not plumbing.
+	t.Run("when a message is fetched by its id for a deep link", func(t *testing.T) {
+		channelID := w.createChannel(sender, "DeepLink", false)
+		w.inviteToChannel(sender, channelID, receiver.ID)
+		msgID := w.sendMessage(sender, channelID, "Something worth linking to.")
+
+		t.Run("it carries the channel it sits in, with that channel's type", func(t *testing.T) {
+			resp := w.getMessageById(receiver, msgID)
+			require.NotNil(t, resp.Channel)
+			assert.Equal(t, channelID, resp.Channel.Id)
+			assert.Equal(t, rpcv1.ChannelType_CHANNEL_TYPE_CHAT, resp.Channel.ChannelType,
+				"an unset type reads as UNSPECIFIED and every caller guesses wrong")
+		})
+
+		t.Run("a message in a direct conversation says so", func(t *testing.T) {
+			dmID := w.createOrGetDM(sender, receiver.ID)
+			dmMsgID := w.sendMessage(sender, dmID, "Just between us.")
+			resp := w.getMessageById(receiver, dmMsgID)
+			require.NotNil(t, resp.Channel)
+			// This is what lets a report filed from inside a DM's thread be recorded
+			// as a direct message rather than a channel message.
+			assert.Equal(t, rpcv1.ChannelType_CHANNEL_TYPE_DIRECT_MESSAGE, resp.Channel.ChannelType)
+		})
+
+		t.Run("it says whether the message is a system line or something a person said", func(t *testing.T) {
+			resp := w.getMessageById(receiver, msgID)
+			require.NotNil(t, resp.Message)
+			assert.Equal(t, chat.MessageKindText, resp.Message.MessageKind,
+				"an empty kind makes every system row look like a person speaking")
 		})
 	})
 

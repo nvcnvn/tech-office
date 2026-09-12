@@ -15,6 +15,7 @@ import { ActivityIndicator, Alert, ScrollView, Text, View } from "react-native";
 import { Stack, useLocalSearchParams } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { getDownloadUrl, getFileMetadata, type FileMetadata } from "apis";
+import { ReportSheet } from "@/components/compliance/report-sheet";
 import { formatDistanceToNow } from "date-fns";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
@@ -60,6 +61,7 @@ export default function FileDetailScreen() {
 
   const { fileId } = useLocalSearchParams<{ fileId: string }>();
   const [downloading, setDownloading] = useState(false);
+  const [reporting, setReporting] = useState(false);
 
   const {
     data: file,
@@ -161,14 +163,27 @@ export default function FileDetailScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Button
-            label={downloading ? "Downloading" : "Download"}
-            size="sm"
-            variant="secondary"
-            loading={downloading}
-            onPress={() => void handleDownload()}
-            testID="file-detail-download"
-          />
+          {/* Report is offered even while the safety check is pending — a person
+              should not have to wait for a scan to say something is wrong. */}
+          <View style={styles.actionButtons}>
+            <Button
+              label={downloading ? "Downloading" : "Download"}
+              size="sm"
+              variant="secondary"
+              loading={downloading}
+              onPress={() => void handleDownload()}
+              style={styles.actionButton}
+              testID="file-detail-download"
+            />
+            <Button
+              label="Report"
+              size="sm"
+              variant="secondary"
+              onPress={() => setReporting(true)}
+              style={styles.actionButton}
+              testID="file-detail-report"
+            />
+          </View>
           <View style={styles.actionHint}>
             <SFIcon
               name={actionIcons.download.name}
@@ -179,6 +194,14 @@ export default function FileDetailScreen() {
           </View>
         </View>
       </Card>
+
+      <ReportSheet
+        visible={reporting}
+        targetKind="file"
+        targetId={file.id}
+        subjectLabel="this file"
+        onClose={() => setReporting(false)}
+      />
     </ScrollView>
   );
 }
@@ -240,6 +263,14 @@ const useStyles = makeStyles((t) => ({
   },
   actions: {
     gap: spacing[1],
+  },
+  actionButtons: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[1],
+  },
+  actionButton: {
+    flex: 1,
   },
   actionHint: {
     flexDirection: "row",

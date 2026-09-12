@@ -40,6 +40,7 @@ import {
   emojiToCode,
   codeToEmoji,
   getProfile,
+  type ChannelType,
 } from "apis";
 import { useAuth } from "@/hooks/use-auth";
 import { useKeyboardHeight } from "@/hooks/use-keyboard-height";
@@ -50,6 +51,8 @@ import type { CanonicalLinkPreview } from "@tech-office/links";
 import { SFIcon } from "@/components/ui/sf-icon";
 import * as Haptics from "expo-haptics";
 import { UserAvatar } from "@/components/common/user-avatar";
+import { BlockConfirm } from "@/components/compliance/block-confirm";
+import { ReportSheet } from "@/components/compliance/report-sheet";
 import { useNotificationStream } from "@/providers/notification-stream-provider";
 import { formatMessageTime } from "@/lib/date-utils";
 import { parseChatStreamEvent } from "@/lib/chat-stream-events";
@@ -75,6 +78,7 @@ interface ThreadReply {
   parentMessageId?: string | null;
   updatedAt?: ProtoTimestamp | null;
   authorName?: string | null;
+  authorEmployeeId?: string | null;
   messageText?: string | null;
   fileIds?: string[];
   messageKind?: string;
@@ -95,6 +99,7 @@ interface ThreadParentMessageResponse {
   message?: ThreadReply | null;
   channel?: {
     id?: string | null;
+    channelType?: ChannelType | null;
   } | null;
 }
 
@@ -160,6 +165,9 @@ function ThreadMessageActionSheet({
   onMoreEmoji,
   onCopyLink,
   onMoveToChannel,
+  canBlockAuthor,
+  onReport,
+  onBlockAuthor,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -167,6 +175,9 @@ function ThreadMessageActionSheet({
   onMoreEmoji: () => void;
   onCopyLink: () => void;
   onMoveToChannel: () => void;
+  canBlockAuthor: boolean;
+  onReport: () => void;
+  onBlockAuthor: () => void;
 }) {
   const { palette } = useTheme();
   const styles = useStyles();
@@ -245,6 +256,50 @@ function ThreadMessageActionSheet({
             </View>
             <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
           </Pressable>
+
+          {/* Worded exactly as the channel timeline's sheet, so the gesture a person
+              learned in a channel means the same thing one screen deeper. */}
+          <Pressable
+            onPress={onReport}
+            style={({ pressed }) => [
+              styles.actionSheetRow,
+              pressed && styles.actionSheetRowPressed,
+            ]}
+            testID="message-action-report"
+          >
+            <View style={styles.actionSheetIconWrap}>
+              <SFIcon name="flag" size={16} color={palette.error.main} />
+            </View>
+            <View style={styles.actionSheetRowBody}>
+              <Text style={styles.actionSheetRowTitle}>Report this message</Text>
+              <Text style={styles.actionSheetRowText}>
+                Tell the people who run this workspace that something here is wrong.
+              </Text>
+            </View>
+            <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
+          </Pressable>
+
+          {canBlockAuthor ? (
+            <Pressable
+              onPress={onBlockAuthor}
+              style={({ pressed }) => [
+                styles.actionSheetRow,
+                pressed && styles.actionSheetRowPressed,
+              ]}
+              testID="message-action-block"
+            >
+              <View style={styles.actionSheetIconWrap}>
+                <SFIcon name="hand.raised" size={16} color={palette.error.main} />
+              </View>
+              <View style={styles.actionSheetRowBody}>
+                <Text style={styles.actionSheetRowTitle}>Block this person</Text>
+                <Text style={styles.actionSheetRowText}>
+                  Stop them starting a direct conversation or calling you. They are not told.
+                </Text>
+              </View>
+              <SFIcon name="chevron.right" size={14} color={palette.text.secondary} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -476,6 +531,8 @@ export default function ThreadScreen() {
   const [pickerVisible, setPickerVisible] = useState(false);
   const [selectedMessage, setSelectedMessage] = useState<ThreadReply | null>(null);
   const [pendingShareUrl, setPendingShareUrl] = useState<string | null>(null);
+  const [reportTargetId, setReportTargetId] = useState<string | null>(null);
+  const [blockTarget, setBlockTarget] = useState<{ id: string; name: string } | null>(null);
   const typingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isTypingRef = useRef(false);
   const flatListRef = useRef<FlatList<ThreadReply>>(null);
@@ -579,6 +636,17 @@ export default function ThreadScreen() {
 
   const parentChannelId = parentMessageData?.channel?.id ?? null;
   const parentMessage = parentMessageData?.message ?? null;
+  // A report filed from inside a thread belongs to the conversation the thread hangs
+  // off, so a reply in a DM's thread is recorded as a direct message (FR-002).
+  //
+  // Either lookup answers this — a thread and the message it hangs off are in the same
+  // channel — so the route's own copy covers the window before the parent's resolves.
+  // Falling back to "chat_message" while neither has is what this feature had to fix on
+  // the server, and it would be just as wrong here.
+  const parentChannelType =
+    parentMessageData?.channel?.channelType ?? routeMessageData?.channel?.channelType;
+  const reportTargetKind =
+    parentChannelType === "direct_message" ? "direct_message" : "chat_message";
   const isInitialLoading = isLoadingRouteMessage || isLoading;
   const displayedReplies = data ?? [];
 
@@ -982,6 +1050,30 @@ export default function ThreadScreen() {
     });
   }, [reactionMutation, selectedMessage]);
 
+  // Identical to the channel timeline's rule: a system row carries the acting
+  // employee in author_employee_id, not a speaker, so there is nobody to block.
+  const canBlockAuthor =
+    selectedMessage?.messageKind !== "system" &&
+    !!selectedMessage?.authorEmployeeId &&
+    selectedMessage.authorEmployeeId !== auth.employeeId;
+
+  const handleReportAction = useCallback(() => {
+    const targetId = selectedMessage?.id ?? null;
+    setActionSheetVisible(false);
+    if (targetId) setReportTargetId(targetId);
+  }, [selectedMessage]);
+
+  const handleBlockAuthorAction = useCallback(() => {
+    const target = selectedMessage?.authorEmployeeId
+      ? {
+          id: selectedMessage.authorEmployeeId,
+          name: selectedMessage.authorName || "this person",
+        }
+      : null;
+    setActionSheetVisible(false);
+    if (target) setBlockTarget(target);
+  }, [selectedMessage]);
+
   const handleMoveToChannel = useCallback(() => {
     if (!parentChannelId || !threadRootId) {
       return;
@@ -1162,6 +1254,7 @@ export default function ThreadScreen() {
           returnKeyType="default"
           placeholderTextColor={palette.text.disabled}
           accessibilityLabel="Reply input"
+          testID="thread-reply-input"
         />
         <Pressable
           onPress={handleSend}
@@ -1178,6 +1271,7 @@ export default function ThreadScreen() {
           ]}
           accessibilityRole="button"
           accessibilityLabel="Send reply"
+          testID="thread-send-button"
         >
           {sendMutation.isPending ? (
             <ActivityIndicator size="small" color={palette.primary.contrastText} />
@@ -1202,6 +1296,32 @@ export default function ThreadScreen() {
           void handleShareMessageLink();
         }}
         onMoveToChannel={handleMoveToChannel}
+        canBlockAuthor={canBlockAuthor}
+        onReport={handleReportAction}
+        onBlockAuthor={handleBlockAuthorAction}
+      />
+
+      {/* One sheet instance serves the parent card and every reply — only one
+          message is selected at a time (FR-018). */}
+      <ReportSheet
+        visible={reportTargetId !== null}
+        targetKind={reportTargetKind}
+        targetId={reportTargetId ?? ""}
+        subjectLabel="this message"
+        onClose={() => setReportTargetId(null)}
+      />
+
+      <BlockConfirm
+        visible={blockTarget !== null}
+        mode="block"
+        employeeId={blockTarget?.id ?? ""}
+        displayName={blockTarget?.name ?? "this person"}
+        onClose={() => setBlockTarget(null)}
+        onDone={() => {
+          void queryClient.invalidateQueries({
+            queryKey: ["compliance", "blocked-people"],
+          });
+        }}
       />
     </KeyboardAvoidingView>
     <Stack.Toolbar placement="right">

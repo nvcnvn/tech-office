@@ -695,6 +695,7 @@ SELECT
   c.title_slug AS channel_slug,
   c.display_name AS channel_display_name,
   c.is_private AS channel_is_private,
+  c.channel_type AS channel_type,
   (
     SELECT COALESCE(jsonb_agg(
       jsonb_build_object(
