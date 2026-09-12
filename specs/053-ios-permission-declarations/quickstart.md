@@ -94,8 +94,15 @@ as the committed manifest.
 
 Covers G1, G2, G3 — FR-006, FR-007, FR-008, SC-004.
 
-> The scratch copy carries the whole `node_modules` tree; `cp -R` is slow but
-> avoids a reinstall. Delete `/tmp/053-prebuild-check` when done.
+> **Do not `cp -R` to `/tmp`.** The copy is ~4 GB (committed `.ipa` files, a
+> 30 MB build log, `ios/Pods`, `ios/build`) and its pnpm `node_modules` entries
+> are relative symlinks into `frontend/node_modules/.pnpm/`, which break outside
+> the workspace — prebuild then resolves no plugin at all. Make the scratch
+> project at the same directory depth instead, e.g.
+> `frontend/apps/053-prebuild-check`, holding only `app.json`, `package.json`,
+> the two Google service files, and symlinks to `node_modules`, `assets`,
+> `plugins`, `app` and `src`. It takes seconds. Delete it when done — it is
+> inside the repository.
 
 ## 4. The development opt-in still works
 
@@ -176,11 +183,11 @@ Covers D1, D2, SC-001, US1-3, US1-4.
 
 ## Definition of done
 
-- [ ] Gate exits 0 with no partial-coverage notes (part 1)
-- [ ] `make test-mobile` reaches the Maestro suite (part 2)
-- [ ] Scratch regeneration agrees with the committed trees (part 3)
-- [ ] `EXPO_LOCAL_DEV_NETWORK=1` still injects the dev keys, and nothing without it (part 4)
-- [ ] All ten negative edits fail the gate by name (part 5)
-- [ ] Four prompts on device, and no others (part 6)
-- [ ] `docs/compliance/permission-justifications.md` has eight entries and no biometric justification
-- [ ] `docs/domain/compliance-safety.md` describes the gate as passing; D64 removed from the drift register in `docs/domain/README.md`
+- [x] Gate exits 0 with no partial-coverage notes (part 1)
+- [x] `make test-mobile` reaches the Maestro suite (part 2)
+- [x] Scratch regeneration agrees with the committed trees (part 3)
+- [x] `EXPO_LOCAL_DEV_NETWORK=1` still injects the dev keys, and nothing without it (part 4)
+- [x] All ten negative edits fail the gate by name (part 5)
+- [ ] Four prompts on device, and no others (part 6) — **not done**: needs a production-configuration build on a fresh device and a human counting consent sheets; see `verification-record.md`
+- [x] `docs/compliance/permission-justifications.md` has eight entries and no biometric justification
+- [x] `docs/domain/compliance-safety.md` describes the gate as passing; D64 removed from the drift register in `docs/domain/README.md`

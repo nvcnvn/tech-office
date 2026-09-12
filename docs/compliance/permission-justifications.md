@@ -52,18 +52,6 @@ library.
 
 **When it is requested**: the first time someone opens the photo picker.
 
-### `NSFaceIDUsageDescription`
-
-> Tech Office uses Face ID so you can sign in without typing your PIN each time.
-
-**Why the app needs it**: workers sign in with a short PIN, often on a shared or
-gloved-hands device. Face ID is offered as a faster alternative to re-typing it.
-Biometric data never leaves the device and is never sent to the server; the app
-only receives the operating system's success or failure.
-
-**When it is requested**: the first time someone opts in to biometric sign-in.
-Declining leaves PIN sign-in fully functional.
-
 ### `NSLocationWhenInUseUsageDescription`
 
 > Tech Office uses your location to confirm you are at the job site when you check
@@ -97,12 +85,6 @@ requires location evidence. Foreground only — the app declares neither
 `ACCESS_BACKGROUND_LOCATION` nor any foreground-location service type, and takes a
 single reading per explicit action rather than tracking.
 
-### `android.permission.USE_BIOMETRIC` and `android.permission.USE_FINGERPRINT`
-
-Optional biometric sign-in as an alternative to typing a PIN. `USE_FINGERPRINT` is
-the pre-Android-9 form of the same capability and is present for older devices.
-Biometric data stays on the device.
-
 ### `android.permission.POST_NOTIFICATIONS`
 
 Delivering messages, call invitations, task assignments and reminders. Required
@@ -124,13 +106,15 @@ because the app does not use it.
 | `android.permission.SYSTEM_ALERT_WINDOW` | Nothing in the app draws an overlay on top of other apps. |
 | `android.permission.READ_EXTERNAL_STORAGE` | Legacy broad storage access. The image picker uses scoped access, so the app reads only the files the person selects. |
 | `android.permission.WRITE_EXTERNAL_STORAGE` | The app writes nothing to shared external storage. |
+| `android.permission.USE_BIOMETRIC`, `android.permission.USE_FINGERPRINT` | There is no biometric sign-in anywhere in the app. The only secure-storage call configures at-rest key protection (`keychainAccessible`) and never requests authentication, and no biometric authentication library is a dependency. Both arrive transitively and are stripped at manifest-merge time. |
 
 ## Keys deliberately absent
 
 | Key | Why it is absent |
 |---|---|
 | `NSLocationAlwaysUsageDescription`, `NSLocationAlwaysAndWhenInUseUsageDescription` | The app never requests background location. Declaring these would ask for a capability it does not use. |
-| `NSLocalNetworkUsageDescription`, `NSBonjourServices` | Needed only to reach a development server from a debug build on a physical device. They are injected by `plugins/with-dev-local-network.js` when `EXPO_LOCAL_DEV_NETWORK=1`, and are absent from every production build. |
+| `NSFaceIDUsageDescription` | There is no biometric sign-in anywhere in the app. The only secure-storage call configures at-rest key protection (`keychainAccessible`) and never requests authentication, and no biometric authentication library is a dependency. `expo-secure-store` is configured with `faceIDPermission: false` so the key is deleted on every regeneration. |
+| `NSLocalNetworkUsageDescription`, `NSBonjourServices` | Needed only to reach a development server from a debug build on a physical device. `expo-dev-launcher`'s own config plugin writes both keys on every prebuild, so `plugins/with-dev-local-network.js` owns them outright: it deletes them unless `EXPO_LOCAL_DEV_NETWORK=1`, and writes the app's own strings when that is set. They are absent from every production build. |
 | `ACCESS_BACKGROUND_LOCATION` | Same reason as the iOS "always" keys. |
 
 ## Export compliance

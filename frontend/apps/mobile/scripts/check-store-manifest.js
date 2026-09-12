@@ -36,13 +36,10 @@ const ALLOWED_IOS_KEYS = new Set([
   "NSMicrophoneUsageDescription",
   "NSCameraUsageDescription",
   "NSPhotoLibraryUsageDescription",
-  "NSFaceIDUsageDescription",
   "NSLocationWhenInUseUsageDescription",
 ]);
 
 const ALLOWED_ANDROID_PERMISSIONS = new Set([
-  "android.permission.USE_BIOMETRIC",
-  "android.permission.USE_FINGERPRINT",
   "android.permission.RECORD_AUDIO",
   "android.permission.ACCESS_COARSE_LOCATION",
   "android.permission.ACCESS_FINE_LOCATION",
@@ -74,14 +71,20 @@ const BLOCKED_ANDROID_PERMISSIONS = [
   "android.permission.SYSTEM_ALERT_WINDOW",
   "android.permission.READ_EXTERNAL_STORAGE",
   "android.permission.WRITE_EXTERNAL_STORAGE",
+  "android.permission.USE_BIOMETRIC",
+  "android.permission.USE_FINGERPRINT",
 ];
 
 const FORBIDDEN_IOS_KEYS = [
   // The app only ever calls requestForegroundPermissionsAsync. Declaring an
-  // "always" key asks for something it never uses (FR-027).
+  // "always" key asks for something it never uses (FR-001).
   "NSLocationAlwaysUsageDescription",
   "NSLocationAlwaysAndWhenInUseUsageDescription",
-  // Development-only; must not reach a production manifest (FR-029).
+  // There is no biometric sign-in anywhere in the app: the only secure-store
+  // call configures at-rest key protection and never requests authentication
+  // (FR-002).
+  "NSFaceIDUsageDescription",
+  // Development-only; must not reach a production manifest (FR-003).
   "NSLocalNetworkUsageDescription",
   "NSBonjourServices",
 ];
@@ -114,7 +117,7 @@ const infoPlist = expo.ios?.infoPlist ?? {};
 
 for (const key of FORBIDDEN_IOS_KEYS) {
   if (key in infoPlist) {
-    fail(`app.json declares ${key}, which must not ship. See FR-027/FR-029.`);
+    fail(`app.json declares ${key}, which must not ship. See FR-001/FR-002/FR-003.`);
   }
 }
 
@@ -171,6 +174,27 @@ for (const plugin of expo.plugins ?? []) {
     if (options.isAndroidBackgroundLocationEnabled || options.isIosBackgroundLocationEnabled) {
       fail("expo-location must not enable background location: the app only calls requestForegroundPermissionsAsync (FR-027).");
     }
+  }
+}
+
+// A forbidden key can re-enter the build without ever appearing in
+// ios.infoPlist: @expo/config-plugins deletes a permission key only when the
+// plugin option is strictly `false`, and otherwise falls back to
+// `option || existingPlistValue || libraryDefault`. A missing option is
+// therefore as bad as a string one — it restores the library's own default
+// text. These three switches are what keep FR-001 and FR-002 true at the
+// source rather than only in the committed tree.
+const REQUIRED_FALSE_PLUGIN_OPTIONS = [
+  ["expo-secure-store", "faceIDPermission", "NSFaceIDUsageDescription"],
+  ["expo-location", "locationAlwaysPermission", "NSLocationAlwaysUsageDescription"],
+  ["expo-location", "locationAlwaysAndWhenInUsePermission", "NSLocationAlwaysAndWhenInUseUsageDescription"],
+];
+
+for (const [pluginName, option, key] of REQUIRED_FALSE_PLUGIN_OPTIONS) {
+  const entry = (expo.plugins ?? []).find((p) => (Array.isArray(p) ? p[0] : p) === pluginName);
+  const options = Array.isArray(entry) ? entry[1] : undefined;
+  if (!options || options[option] !== false) {
+    fail(`app.json plugin ${pluginName} must set ${option} to false; any other value — including leaving it out — makes the build declare ${key}, which must not ship. See FR-001/FR-002.`);
   }
 }
 
@@ -237,11 +261,26 @@ if (fs.existsSync(infoPlistPath)) {
   const plist = fs.readFileSync(infoPlistPath, "utf8");
   for (const key of FORBIDDEN_IOS_KEYS) {
     if (plist.includes(`<key>${key}</key>`)) {
-      fail(`Info.plist declares ${key}, which must not ship (FR-027/FR-029).`);
+      fail(`Info.plist declares ${key}, which must not ship (FR-001/FR-002/FR-003).`);
     }
   }
   if (!plist.includes("<key>ITSAppUsesNonExemptEncryption</key>")) {
     fail("Info.plist is missing ITSAppUsesNonExemptEncryption.");
+  }
+  // The committed plist is where a framework default actually lives — a
+  // placeholder like "Allow $(PRODUCT_NAME) to access your location" never
+  // appears in app.json, so checking only the Expo config missed it. The
+  // generated top-level dictionary is flat, so a regex over <key>/<string>
+  // pairs is enough and keeps this script dependency-free. Keys whose value is
+  // not a <string> (NSBonjourServices is an <array>) are covered by the
+  // forbidden-key check above.
+  for (const [, key, value] of plist.matchAll(/<key>([^<]+)<\/key>\s*<string>([^<]*)<\/string>/g)) {
+    if (!key.endsWith("UsageDescription")) continue;
+    if (!ALLOWED_IOS_KEYS.has(key)) {
+      fail(`Info.plist declares an unexpected iOS permission ${key}. Add it to ALLOWED_IOS_KEYS and to docs/compliance/permission-justifications.md, or remove it.`);
+      continue;
+    }
+    checkPermissionString(`Info.plist ${key}`, value);
   }
 } else {
   notes.push("Info.plist not found — run `npx expo prebuild --platform ios` for the full check.");

@@ -69,20 +69,8 @@
       <key>NSAllowsLocalNetworking</key>
       <true/>
     </dict>
-    <key>NSBonjourServices</key>
-    <array>
-      <string>_expo._tcp</string>
-    </array>
     <key>NSCameraUsageDescription</key>
     <string>Tech Office uses your camera to take photos to attach to messages, tasks and job records.</string>
-    <key>NSFaceIDUsageDescription</key>
-    <string>Tech Office uses Face ID so you can sign in without typing your PIN each time.</string>
-    <key>NSLocalNetworkUsageDescription</key>
-    <string>Expo Dev Launcher uses the local network to discover and connect to development servers running on your computer.</string>
-    <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
-    <key>NSLocationAlwaysUsageDescription</key>
-    <string>Allow $(PRODUCT_NAME) to access your location</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Tech Office uses your location to confirm you are at the job site when you check in or complete a task. It is only used while the app is open.</string>
     <key>NSMicrophoneUsageDescription</key>

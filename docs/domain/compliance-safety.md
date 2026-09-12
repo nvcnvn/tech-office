@@ -6,7 +6,7 @@ because they act on the global `iam.user` record); contracts in
 `rpc/v1/compliance.proto` (`ComplianceService`, 11 RPCs) and the deletion and terms
 additions to `rpc/v1/iam.proto`.
 
-**Status date: 2026-09-05.** Introduced by spec 036.
+**Status date: 2026-09-12.** Introduced by spec 036.
 
 ## Why this domain exists separately
 
@@ -253,4 +253,4 @@ missing `POST_NOTIFICATIONS`, a development-only permission string, or a
 disagreement between the manifest and
 `docs/compliance/permission-justifications.md`.
 
-It does **not** pass at HEAD (D64), so `make test-mobile` aborts on the gate before running any Maestro flow and the suite has to be reached through `frontend/apps/mobile/scripts/run-maestro-suite.sh` directly. Four of the five complaints are keys in the committed `ios/` prebuild that the Expo dev client and LiveKit need in order to reach Metro over the LAN, which is why removing them by hand is the wrong fix.
+It passes at HEAD, so `make test-mobile` is the suite's entry point again. Feature 053 removed the five declarations it was complaining about — the two `NSLocationAlways*` keys, `NSFaceIDUsageDescription`, and the `NSLocalNetworkUsageDescription`/`NSBonjourServices` pair — at their source in `app.json` (`locationAlwaysPermission: false`, `locationAlwaysAndWhenInUsePermission: false`, `faceIDPermission: false`, and the two biometric Android permissions added to `blockedPermissions`), so a regeneration reproduces the removal rather than undoing it. The local-network keys are needed only by a debug build reaching Metro over the LAN. They are not simply *not added*: `expo-dev-launcher`'s config plugin, autolinked through `expo-dev-client`, writes `NSBonjourServices` and `NSLocalNetworkUsageDescription` on **every** prebuild and strips them again only in a non-Debug Xcode build phase — too late for a committed prebuild, which is the artifact EAS builds and the gate reads. `plugins/with-dev-local-network.js` therefore owns both keys outright: it deletes them unless `EXPO_LOCAL_DEV_NETWORK=1`, and writes the app's own strings when that is set. The gate now also reads purpose strings out of the committed `ios/TechOffice/Info.plist`, not only out of `app.json` — which is where the framework placeholder `Allow $(PRODUCT_NAME) to access your location` actually lived.
