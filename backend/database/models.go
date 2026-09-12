@@ -3108,7 +3108,9 @@ type FilesFileContentIndex struct {
 	FileID         dbuuid.UUID `json:"file_id"`
 	// Plain text content extracted from file. PGroonga automatically tokenizes and indexes for multilingual full-text search (handles Latin, CJK, and all other scripts).
 	ExtractedText string `json:"extracted_text"`
-	// Method used to extract text: office_parser (DOCX/XLSX/PPTX), pdf_parser (PDF), image_ocr (future), plain_text. MUST align with backend constants in internal/files/constants.go
+	// Method used to extract text: office_parser (word processor, spreadsheet and presentation
+	// formats, read via their Gotenberg-converted PDF), pdf_parser (PDF), plain_text (text/*,
+	// JSON, XML). MUST align with backend constants in internal/files/constants.go.
 	ExtractionMethod string `json:"extraction_method"`
 	// Indexing status: pending (queued), in_progress (extracting), completed (done), failed (error). MUST align with backend constants in internal/files/constants.go and frontend TypeScript types in packages/apis/src/files.ts
 	IndexingStatus     string             `json:"indexing_status"`

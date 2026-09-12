@@ -364,6 +364,25 @@ graph LR
 - **Consumed by**: Chat, Collaboration via `FileLogic` interface
 - **Workflow**: File validation and post-processing run as async `flows` jobs
 
+**Post-processing is two ordered steps in one workflow**, and the order is load-bearing:
+
+1. `convert-file-to-pdf/v1` — office formats → PDF via Gotenberg, recorded in
+   `file_pdf_conversion`.
+2. `extract-file-content/v1` — text extraction into `file_content_index`. Plain text is
+   read directly and PDFs with `ledongthuc/pdf`; **office documents are read from the PDF
+   step 1 just produced**, handed over in memory as `ExtractContentInput.PDFStorageKey`.
+   One extractor therefore covers PDF, OOXML, legacy binary Office and OpenDocument, and
+   step 2 inherits step 1's availability — an absent converted PDF is recorded as a
+   failure, not as a document containing no text.
+
+Both steps are non-blocking and skippable. The job's `processing_status` is `completed`
+when no step failed, including when every step was legitimately skipped; a file type the
+system does not convert or index is not a failed job.
+
+All three upload paths enqueue through the single `files.EnqueueFilePostProcessing`, which
+writes the `pending` content-index row and begins the workflow in the caller's
+transaction.
+
 #### `preference` (User Settings)
 - **Schema**: Operates on `iam.user_preference`
 - **Role**: Theme mode, user settings

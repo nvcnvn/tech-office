@@ -45,19 +45,26 @@ type ConvertFileToPDFOutput struct {
 	PDFStorageKey string `json:"pdf_storage_key,omitempty"`
 }
 
-// ExtractContentInput contains input for content extraction
+// ExtractContentInput contains input for content extraction.
+//
+// PDFStorageKey carries step 1's output into step 2 so an office document is read from
+// the PDF the workflow has already produced, rather than looked up again. MimeType is
+// what the client declared at upload; the step re-reads the detected type and prefers it.
 type ExtractContentInput struct {
 	OrganizationID dbuuid.UUID `json:"organization_id"`
 	FileID         dbuuid.UUID `json:"file_id"`
 	StorageKey     string      `json:"storage_key"`
 	MimeType       string      `json:"mime_type"`
+	PDFStorageKey  string      `json:"pdf_storage_key,omitempty"`
 }
 
 // ExtractContentOutput contains content extraction result
 type ExtractContentOutput struct {
 	Skipped          bool   `json:"skipped"`
+	Failed           bool   `json:"failed,omitempty"`
 	Reason           string `json:"reason,omitempty"`
-	ExtractedText    string `json:"extracted_text,omitempty"`
+	TextLength       int    `json:"text_length,omitempty"`
+	Truncated        bool   `json:"truncated,omitempty"`
 	ExtractionMethod string `json:"extraction_method,omitempty"`
 }
 
@@ -68,7 +75,7 @@ type FilePostProcessingServices struct {
 	R2Client        *R2Client
 	PDFLogic        PDFLogic
 	GotenbergClient *GotenbergClient
-	// TODO: Add ContentExtractor when implemented
+	IndexLogic      IndexLogic
 }
 
 func filenameForMimeType(mimeType string) string {
@@ -247,45 +254,113 @@ func NewFilePostProcessingSteps(svc *FilePostProcessingServices) *FilePostProces
 		},
 
 		ExtractContent: func(ctx context.Context, input *ExtractContentInput) (*ExtractContentOutput, error) {
-			// Check if content extraction is supported for this MIME type
-			// Supported: text/plain, PDFs, office documents (DOCX, XLSX, PPTX)
-			supportedTypes := map[string]string{
-				"text/plain":      ExtractionMethodPlainText,
-				"application/pdf": ExtractionMethodPDFParser,
-				"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   ExtractionMethodOfficeParser,
-				"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         ExtractionMethodOfficeParser,
-				"application/vnd.openxmlformats-officedocument.presentationml.presentation": ExtractionMethodOfficeParser,
+			if svc.AdminPool == nil || svc.Queries == nil || svc.R2Client == nil || svc.IndexLogic == nil {
+				return nil, fmt.Errorf("content extraction dependencies not configured")
 			}
 
-			extractionMethod, supported := supportedTypes[input.MimeType]
-			if !supported {
-				slog.DebugContext(ctx, "content extraction not supported for MIME type",
-					"mime_type", input.MimeType,
-					"file_id", input.FileID)
+			file, err := svc.Queries.GetFileByID(ctx, svc.AdminPool, &database.GetFileByIDParams{
+				OrganizationID: input.OrganizationID,
+				ID:             input.FileID,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("load file metadata: %w", err)
+			}
+
+			// FR-006: the client's claim about a file's type does not decide how it is read.
+			// Detection runs in a concurrent workflow, so wait for it to settle rather than
+			// racing it; on timeout fall back to the declared type, which is still better
+			// than failing a file because a scanner was slow.
+			file = awaitDetectedType(ctx, svc, file)
+			mimeType := file.MimeType
+			if file.DetectedMimeType.Valid && file.DetectedMimeType.String != "" {
+				mimeType = file.DetectedMimeType.String
+			}
+
+			method := svc.IndexLogic.ExtractionMethodFor(mimeType)
+			if method == "" {
+				// Not a type whose text we read. This is the designed outcome for every
+				// image, video and archive in the system — debug, not error (SC-007).
+				//
+				// Any pending row written from a wrong declared type is deleted, so the
+				// status derives to "not content-indexed" rather than sitting at "queued"
+				// for a file nothing will ever pick up.
+				if delErr := svc.Queries.DeleteFileContentIndex(ctx, svc.AdminPool, &database.DeleteFileContentIndexParams{
+					OrganizationID: input.OrganizationID,
+					FileID:         input.FileID,
+				}); delErr != nil {
+					return nil, fmt.Errorf("clear stale content index: %w", delErr)
+				}
+				slog.DebugContext(ctx, "content extraction skipped",
+					"file_id", input.FileID,
+					"mime_type", mimeType)
 				return &ExtractContentOutput{
 					Skipped: true,
-					Reason:  fmt.Sprintf("Content extraction not supported for %s", input.MimeType),
+					Reason:  fmt.Sprintf("%s is not a content-indexed file type", mimeType),
 				}, nil
 			}
 
-			slog.InfoContext(ctx, "content extraction requested",
+			slog.InfoContext(ctx, "content extraction started",
 				"file_id", input.FileID,
-				"mime_type", input.MimeType,
-				"extraction_method", extractionMethod)
+				"mime_type", mimeType,
+				"extraction_method", method)
 
-			// TODO: Implement actual content extraction
-			// 1. Download file from R2
-			// 2. Extract text based on MIME type:
-			//    - text/plain: Read directly
-			//    - PDF: Use PDF parser library
-			//    - Office: Use office document parser
-			// 3. Store extracted text in file_content_index table
-			// 4. Update indexing status
+			if _, err := svc.IndexLogic.UpsertContentIndex(ctx, svc.AdminPool, input.OrganizationID, input.FileID,
+				"", method, IndexingStatusInProgress, "", 0); err != nil {
+				return nil, fmt.Errorf("mark indexing in progress: %w", err)
+			}
+
+			start := time.Now()
+			extractCtx, cancel := context.WithTimeout(ctx, ExtractionTimeout)
+			text, err := extractText(extractCtx, svc, method, input)
+			cancel()
+			durationMs := int32(time.Since(start).Milliseconds())
+
+			if err != nil {
+				// The full error goes to the log, where an operator can read it. Only the
+				// short mapped reason is stored, where a tenant can (FR-018).
+				reason := callerSafeReason(err)
+				slog.ErrorContext(ctx, "content extraction failed",
+					"error", err,
+					"file_id", input.FileID,
+					"mime_type", mimeType,
+					"extraction_method", method,
+					"stored_reason", reason)
+				if _, upErr := svc.IndexLogic.UpsertContentIndex(ctx, svc.AdminPool, input.OrganizationID, input.FileID,
+					"", method, IndexingStatusFailed, reason, durationMs); upErr != nil {
+					return nil, fmt.Errorf("record extraction failure: %w", upErr)
+				}
+				// Recorded, not returned as an error: a failed extraction is a terminal
+				// outcome the status RPC reports, not a reason to retry the whole workflow
+				// and overwrite the reason with the same one.
+				return &ExtractContentOutput{
+					Failed:           true,
+					Reason:           reason,
+					ExtractionMethod: method,
+				}, nil
+			}
+
+			text = collapseWhitespace(text)
+			text, truncated := truncateToBytes(text, MaxExtractedTextBytes)
+
+			// An empty result is a legitimate completion, not a failure: an empty document,
+			// a blank page, or a scan with no selectable text. Success also writes an empty
+			// reason, which clears any reason a previous failed attempt left behind.
+			if _, err := svc.IndexLogic.UpsertContentIndex(ctx, svc.AdminPool, input.OrganizationID, input.FileID,
+				text, method, IndexingStatusCompleted, "", durationMs); err != nil {
+				return nil, fmt.Errorf("store extracted text: %w", err)
+			}
+
+			slog.InfoContext(ctx, "content extraction completed",
+				"file_id", input.FileID,
+				"extraction_method", method,
+				"text_length", len(text),
+				"truncated", truncated,
+				"duration_ms", durationMs)
 
 			return &ExtractContentOutput{
-				Skipped:       true,
-				Reason:        "Content extraction pending implementation",
-				ExtractedText: "",
+				TextLength:       len(text),
+				Truncated:        truncated,
+				ExtractionMethod: method,
 			}, nil
 		},
 
@@ -309,50 +384,79 @@ func (w *filePostProcessingWorkflow) Name() string {
 }
 
 func (w *filePostProcessingWorkflow) Run(ctx context.Context, wf *flows.Context, input *FilePostProcessingWorkflowInput) (*FilePostProcessingWorkflowOutput, error) {
-	pdfConverted := false
-	contentIndexed := false
-	processingStatus := "completed"
+	// Each step lands in exactly one bucket. "Skipped" is not a bad outcome: a JPEG is
+	// neither convertible to PDF nor content-indexed, and a job that reports that as a
+	// failure is crying wolf on every image upload in the system (FR-019, SC-007).
+	okCount, failedCount := 0, 0
+	record := func(failed bool) {
+		if failed {
+			failedCount++
+		} else {
+			okCount++
+		}
+	}
 
 	// Step 1: PDF Conversion (async, non-blocking)
+	pdfConverted := false
+	pdfStorageKey := ""
 	pdfResult, err := flows.Execute(ctx, wf, "convert-file-to-pdf/v1", w.steps.ConvertFileToPDF, &ConvertFileToPDFInput{
 		OrganizationID: input.OrganizationID,
 		FileID:         input.FileID,
 		StorageKey:     input.StorageKey,
 		MimeType:       input.MimeType,
 	}, w.steps.ConvertFileToPDFRetry)
-	if err != nil {
+	switch {
+	case err != nil:
 		slog.ErrorContext(ctx, "PDF conversion failed",
 			"error", err,
 			"file_id", input.FileID)
-		processingStatus = "partial"
-	} else if pdfResult != nil && !pdfResult.Skipped {
+		record(true)
+	case pdfResult == nil || pdfResult.Skipped:
+		record(false)
+	default:
 		pdfConverted = true
+		pdfStorageKey = pdfResult.PDFStorageKey
+		record(false)
 		slog.InfoContext(ctx, "PDF conversion completed",
 			"file_id", input.FileID,
 			"pdf_storage_key", pdfResult.PDFStorageKey)
 	}
 
-	// Step 2: Content Extraction (async, non-blocking)
+	// Step 2: Content Extraction. It receives step 1's converted PDF directly, which is
+	// how an office document gets read without a second conversion or a second lookup.
+	contentIndexed := false
 	contentResult, err := flows.Execute(ctx, wf, "extract-file-content/v1", w.steps.ExtractContent, &ExtractContentInput{
 		OrganizationID: input.OrganizationID,
 		FileID:         input.FileID,
 		StorageKey:     input.StorageKey,
 		MimeType:       input.MimeType,
+		PDFStorageKey:  pdfStorageKey,
 	}, w.steps.ExtractContentRetry)
-	if err != nil {
-		slog.ErrorContext(ctx, "content extraction failed",
+	switch {
+	case err != nil:
+		slog.ErrorContext(ctx, "content extraction step failed",
 			"error", err,
 			"file_id", input.FileID)
-		processingStatus = "partial"
-	} else if contentResult != nil && !contentResult.Skipped {
+		record(true)
+	case contentResult == nil:
+		record(true)
+	case contentResult.Failed:
+		// Recorded against the file and reported by the status RPC; the job is partial,
+		// not silently fine.
+		record(true)
+	case contentResult.Skipped:
+		record(false)
+	default:
 		contentIndexed = true
-		slog.InfoContext(ctx, "content extraction completed",
-			"file_id", input.FileID,
-			"extraction_method", contentResult.ExtractionMethod)
+		record(false)
 	}
 
-	if !pdfConverted && !contentIndexed {
+	processingStatus := "completed"
+	switch {
+	case failedCount > 0 && okCount == 0:
 		processingStatus = "failed"
+	case failedCount > 0:
+		processingStatus = "partial"
 	}
 
 	return &FilePostProcessingWorkflowOutput{

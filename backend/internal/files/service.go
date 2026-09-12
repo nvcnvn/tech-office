@@ -1243,25 +1243,15 @@ func (s *FileServiceServer) TriggerPDFConversion(
 			Status:         rpcv1.ConversionStatus_CONVERSION_STATUS_PENDING,
 		}
 
-		pgxTx, ok := tx.(pgx.Tx)
-		if !ok {
-			return fmt.Errorf("internal error: expected pgx.Tx for workflow enqueue")
-		}
-		if s.postProcess == nil {
-			return fmt.Errorf("postprocessing workflow not configured")
-		}
-
-		_, enqueueErr := flows.BeginTx(ctx, s.flowsClient, pgxTx, s.postProcess, &FilePostProcessingWorkflowInput{
-			OrganizationID: orgID,
-			FileID:         fileID,
-			StorageKey:     fileMetadata.StorageKey,
-			MimeType:       fileMetadata.MimeType,
-		})
-		if enqueueErr != nil {
-			return fmt.Errorf("failed to enqueue postprocessing workflow: %w", enqueueErr)
-		}
-
-		return nil
+		// An explicit trigger surfaces an enqueue failure rather than reporting success
+		// for work that was never queued.
+		return EnqueueFilePostProcessing(ctx, s.flowsClient, tx, s.postProcess, s.indexLogic,
+			&FilePostProcessingWorkflowInput{
+				OrganizationID: orgID,
+				FileID:         fileID,
+				StorageKey:     fileMetadata.StorageKey,
+				MimeType:       fileMetadata.MimeType,
+			})
 	})
 
 	if err != nil {
@@ -1304,33 +1294,64 @@ func (s *FileServiceServer) GetContentIndexStatus(
 		"organization_id", orgID,
 		"file_id", fileID)
 
+	// The file's own metadata has to be loaded first. Without it the handler cannot tell
+	// a file that does not exist from one that exists and was never indexed, which is why
+	// it used to answer UNSPECIFIED to both (FR-016).
+	var file *database.FilesFileMetadatum
 	var indexStatus *ContentIndex
 	err = txn.WithTxn(ctx, s.TenantPool, func(ctx context.Context, tx database.DBTX) error {
-		// Create index logic instance (temporary - should be injected)
+		meta, txErr := s.queries.GetFileByID(ctx, tx, &database.GetFileByIDParams{
+			OrganizationID: orgID,
+			ID:             fileID,
+		})
+		if txErr != nil {
+			return txErr
+		}
+		file = meta
 
 		status, txErr := s.indexLogic.GetContentIndexStatus(ctx, tx, orgID, fileID)
-		indexStatus = status
-		return txErr
-	})
-
-	var indexInfo *rpcv1.ContentIndexInfo
-
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			// No index record exists
-			indexInfo = &rpcv1.ContentIndexInfo{
-				IndexId:          "",
-				FileId:           fileID.String(),
-				Status:           rpcv1.IndexingStatus_INDEXING_STATUS_UNSPECIFIED,
-				ExtractionMethod: rpcv1.ExtractionMethod_EXTRACTION_METHOD_UNSPECIFIED,
+		if txErr != nil {
+			if errors.Is(txErr, ErrContentIndexNotFound) {
+				return nil
 			}
-
-			return connect.NewResponse(&rpcv1.GetContentIndexStatusResponse{
-				IndexInfo: indexInfo,
-			}), nil
+			return txErr
+		}
+		indexStatus = status
+		return nil
+	})
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("file not found"))
 		}
 		slog.ErrorContext(ctx, "failed to get content index status", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get index status: %w", err))
+	}
+
+	// No row: nothing was ever recorded for this file. Which of the two honest answers
+	// applies is decided by the file's own type, not by writing a row per JPEG.
+	if indexStatus == nil {
+		derived := rpcv1.IndexingStatus_INDEXING_STATUS_NEVER_INDEXED
+		mimeType := file.MimeType
+		if file.DetectedMimeType.Valid && file.DetectedMimeType.String != "" {
+			mimeType = file.DetectedMimeType.String
+		}
+		if !s.indexLogic.IsIndexable(mimeType) {
+			derived = rpcv1.IndexingStatus_INDEXING_STATUS_NOT_APPLICABLE
+		}
+
+		slog.DebugContext(ctx, "content index status derived from file type",
+			"file_id", fileID,
+			"mime_type", mimeType,
+			"status", derived)
+
+		return connect.NewResponse(&rpcv1.GetContentIndexStatusResponse{
+			IndexInfo: &rpcv1.ContentIndexInfo{
+				IndexId:          "",
+				FileId:           fileID.String(),
+				Status:           derived,
+				ExtractionMethod: rpcv1.ExtractionMethod_EXTRACTION_METHOD_UNSPECIFIED,
+			},
+		}), nil
 	}
 
 	// Convert status to proto enum
@@ -1355,15 +1376,15 @@ func (s *FileServiceServer) GetContentIndexStatus(
 		protoMethod = rpcv1.ExtractionMethod_EXTRACTION_METHOD_OFFICE_PARSER
 	case ExtractionMethodPDFParser:
 		protoMethod = rpcv1.ExtractionMethod_EXTRACTION_METHOD_PDF_PARSER
-	case ExtractionMethodImageOCR:
-		protoMethod = rpcv1.ExtractionMethod_EXTRACTION_METHOD_IMAGE_OCR
 	case ExtractionMethodPlainText:
 		protoMethod = rpcv1.ExtractionMethod_EXTRACTION_METHOD_PLAIN_TEXT
 	default:
 		protoMethod = rpcv1.ExtractionMethod_EXTRACTION_METHOD_UNSPECIFIED
 	}
 
-	indexInfo = &rpcv1.ContentIndexInfo{
+	// ErrorMessage is the short mapped reason the extraction step stored, never the
+	// internal error, which stays in the worker log (FR-018).
+	indexInfo := &rpcv1.ContentIndexInfo{
 		IndexId:          indexStatus.ID.String(),
 		FileId:           fileID.String(),
 		Status:           protoStatus,
@@ -1371,7 +1392,9 @@ func (s *FileServiceServer) GetContentIndexStatus(
 		ErrorMessage:     indexStatus.IndexingError,
 		DurationMs:       indexStatus.IndexingDurationMs,
 		TextLength:       int32(len(indexStatus.ExtractedText)),
-		UpdatedAt:        nil, // No timestamp in ContentIndex struct
+	}
+	if !indexStatus.UpdatedAt.IsZero() {
+		indexInfo.UpdatedAt = timestamppb.New(indexStatus.UpdatedAt)
 	}
 
 	slog.InfoContext(ctx, "content index status retrieved",

@@ -168,7 +168,7 @@ row rather than multiplying schedules.
 | `ritual_shift_resolution_sweep` | every 2 min | one platform-wide pass binding, rebinding and escalating the pool slots of ritual instances whose department pool uses the `on_shift` strategy. Bounded at 500 slots per org per pass, oldest scheduled date first. Every write is a compare-and-set on `resolution_state`, so overlapping passes assign once and notify once. Registered **after** `collaborationLogic.SetShiftCoverageReader(calendarLogic)` in `cmd/server.go`, so a first pass can never run against a nil reader |
 | `CalendarReminderWorkflow` | every 1 min | polls due `calendar.event_reminder` rows and publishes reminders |
 | `FileValidation` | on demand, concurrency 9 | MIME sniffing + ClamAV scan after upload |
-| `FilePostProcessing` | on demand | PDF conversion / content indexing (partly skeleton) |
+| `FilePostProcessing` | on demand | PDF conversion, then text extraction into the content index |
 | `compliance-account-deletion/v1` | on demand | resumable account erase, one run per organization the deleted person belongs to |
 
 Non-flows goroutines started by `notificationService.Start()` and the server: the SSE

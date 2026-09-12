@@ -245,14 +245,19 @@ func (ConversionStatus) EnumDescriptor() ([]byte, []int) {
 	return file_rpc_v1_files_proto_rawDescGZIP(), []int{3}
 }
 
+// The first four values are stored in files.file_content_index.indexing_status.
+// The last two are derived at the RPC from the absence of a row and the file's own
+// MIME type; they are never stored. UNSPECIFIED is unreachable.
 type IndexingStatus int32
 
 const (
-	IndexingStatus_INDEXING_STATUS_UNSPECIFIED IndexingStatus = 0
-	IndexingStatus_INDEXING_STATUS_PENDING     IndexingStatus = 1 // Queued for indexing
-	IndexingStatus_INDEXING_STATUS_IN_PROGRESS IndexingStatus = 2 // Currently extracting text
-	IndexingStatus_INDEXING_STATUS_COMPLETED   IndexingStatus = 3 // Indexing successful
-	IndexingStatus_INDEXING_STATUS_FAILED      IndexingStatus = 4 // Indexing failed
+	IndexingStatus_INDEXING_STATUS_UNSPECIFIED    IndexingStatus = 0
+	IndexingStatus_INDEXING_STATUS_PENDING        IndexingStatus = 1 // Queued for indexing
+	IndexingStatus_INDEXING_STATUS_IN_PROGRESS    IndexingStatus = 2 // Currently extracting text
+	IndexingStatus_INDEXING_STATUS_COMPLETED      IndexingStatus = 3 // Done; extracted text may legitimately be empty
+	IndexingStatus_INDEXING_STATUS_FAILED         IndexingStatus = 4 // Indexing failed; error_message says why, briefly
+	IndexingStatus_INDEXING_STATUS_NOT_APPLICABLE IndexingStatus = 5 // This file type is never content-indexed
+	IndexingStatus_INDEXING_STATUS_NEVER_INDEXED  IndexingStatus = 6 // Indexable, but no attempt was ever recorded
 )
 
 // Enum value maps for IndexingStatus.
@@ -263,13 +268,17 @@ var (
 		2: "INDEXING_STATUS_IN_PROGRESS",
 		3: "INDEXING_STATUS_COMPLETED",
 		4: "INDEXING_STATUS_FAILED",
+		5: "INDEXING_STATUS_NOT_APPLICABLE",
+		6: "INDEXING_STATUS_NEVER_INDEXED",
 	}
 	IndexingStatus_value = map[string]int32{
-		"INDEXING_STATUS_UNSPECIFIED": 0,
-		"INDEXING_STATUS_PENDING":     1,
-		"INDEXING_STATUS_IN_PROGRESS": 2,
-		"INDEXING_STATUS_COMPLETED":   3,
-		"INDEXING_STATUS_FAILED":      4,
+		"INDEXING_STATUS_UNSPECIFIED":    0,
+		"INDEXING_STATUS_PENDING":        1,
+		"INDEXING_STATUS_IN_PROGRESS":    2,
+		"INDEXING_STATUS_COMPLETED":      3,
+		"INDEXING_STATUS_FAILED":         4,
+		"INDEXING_STATUS_NOT_APPLICABLE": 5,
+		"INDEXING_STATUS_NEVER_INDEXED":  6,
 	}
 )
 
@@ -304,10 +313,10 @@ type ExtractionMethod int32
 
 const (
 	ExtractionMethod_EXTRACTION_METHOD_UNSPECIFIED   ExtractionMethod = 0
-	ExtractionMethod_EXTRACTION_METHOD_OFFICE_PARSER ExtractionMethod = 1 // DOCX/XLSX/PPTX parser
-	ExtractionMethod_EXTRACTION_METHOD_PDF_PARSER    ExtractionMethod = 2 // PDF text extraction
-	ExtractionMethod_EXTRACTION_METHOD_IMAGE_OCR     ExtractionMethod = 3 // OCR for images (future)
-	ExtractionMethod_EXTRACTION_METHOD_PLAIN_TEXT    ExtractionMethod = 4 // Plain text files
+	ExtractionMethod_EXTRACTION_METHOD_OFFICE_PARSER ExtractionMethod = 1 // Word processor, spreadsheet and presentation
+	// formats, read via their converted PDF
+	ExtractionMethod_EXTRACTION_METHOD_PDF_PARSER ExtractionMethod = 2 // PDF text extraction
+	ExtractionMethod_EXTRACTION_METHOD_PLAIN_TEXT ExtractionMethod = 4 // Plain text, Markdown, CSV, HTML, XML, JSON
 )
 
 // Enum value maps for ExtractionMethod.
@@ -316,14 +325,12 @@ var (
 		0: "EXTRACTION_METHOD_UNSPECIFIED",
 		1: "EXTRACTION_METHOD_OFFICE_PARSER",
 		2: "EXTRACTION_METHOD_PDF_PARSER",
-		3: "EXTRACTION_METHOD_IMAGE_OCR",
 		4: "EXTRACTION_METHOD_PLAIN_TEXT",
 	}
 	ExtractionMethod_value = map[string]int32{
 		"EXTRACTION_METHOD_UNSPECIFIED":   0,
 		"EXTRACTION_METHOD_OFFICE_PARSER": 1,
 		"EXTRACTION_METHOD_PDF_PARSER":    2,
-		"EXTRACTION_METHOD_IMAGE_OCR":     3,
 		"EXTRACTION_METHOD_PLAIN_TEXT":    4,
 	}
 )
@@ -2910,19 +2917,20 @@ const file_rpc_v1_files_proto_rawDesc = "" +
 	"\x19CONVERSION_STATUS_PENDING\x10\x01\x12!\n" +
 	"\x1dCONVERSION_STATUS_IN_PROGRESS\x10\x02\x12\x1f\n" +
 	"\x1bCONVERSION_STATUS_COMPLETED\x10\x03\x12\x1c\n" +
-	"\x18CONVERSION_STATUS_FAILED\x10\x04*\xaa\x01\n" +
+	"\x18CONVERSION_STATUS_FAILED\x10\x04*\xf1\x01\n" +
 	"\x0eIndexingStatus\x12\x1f\n" +
 	"\x1bINDEXING_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17INDEXING_STATUS_PENDING\x10\x01\x12\x1f\n" +
 	"\x1bINDEXING_STATUS_IN_PROGRESS\x10\x02\x12\x1d\n" +
 	"\x19INDEXING_STATUS_COMPLETED\x10\x03\x12\x1a\n" +
-	"\x16INDEXING_STATUS_FAILED\x10\x04*\xbf\x01\n" +
+	"\x16INDEXING_STATUS_FAILED\x10\x04\x12\"\n" +
+	"\x1eINDEXING_STATUS_NOT_APPLICABLE\x10\x05\x12!\n" +
+	"\x1dINDEXING_STATUS_NEVER_INDEXED\x10\x06*\xa4\x01\n" +
 	"\x10ExtractionMethod\x12!\n" +
 	"\x1dEXTRACTION_METHOD_UNSPECIFIED\x10\x00\x12#\n" +
 	"\x1fEXTRACTION_METHOD_OFFICE_PARSER\x10\x01\x12 \n" +
-	"\x1cEXTRACTION_METHOD_PDF_PARSER\x10\x02\x12\x1f\n" +
-	"\x1bEXTRACTION_METHOD_IMAGE_OCR\x10\x03\x12 \n" +
-	"\x1cEXTRACTION_METHOD_PLAIN_TEXT\x10\x042\xd0\f\n" +
+	"\x1cEXTRACTION_METHOD_PDF_PARSER\x10\x02\x12 \n" +
+	"\x1cEXTRACTION_METHOD_PLAIN_TEXT\x10\x04\"\x04\b\x03\x10\x032\xd0\f\n" +
 	"\vFileService\x12e\n" +
 	"\x0eGetDownloadUrl\x12\x1d.rpc.v1.GetDownloadUrlRequest\x1a\x1e.rpc.v1.GetDownloadUrlResponse\"\x14\x82\xf9+\x10\n" +
 	"\x0efiles.download\x12l\n" +

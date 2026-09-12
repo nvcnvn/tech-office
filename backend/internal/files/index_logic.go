@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -28,6 +29,7 @@ type ContentIndex struct {
 	IndexingStatus     string
 	IndexingError      string
 	IndexingDurationMs int32
+	UpdatedAt          time.Time
 }
 
 // IndexLogic defines business logic for content indexing operations
@@ -36,14 +38,17 @@ type IndexLogic interface {
 	// GetContentIndexStatus retrieves indexing status for a file
 	GetContentIndexStatus(ctx context.Context, tx database.DBTX, orgID, fileID dbuuid.UUID) (*ContentIndex, error)
 
-	// CreateContentIndex creates a new content index record
-	CreateContentIndex(ctx context.Context, tx database.DBTX, orgID, fileID dbuuid.UUID, extractedText, extractionMethod, status string) (*ContentIndex, error)
-
-	// UpdateIndexStatus updates the indexing status and metadata
-	UpdateIndexStatus(ctx context.Context, tx database.DBTX, orgID, indexID dbuuid.UUID, status string, errorMsg string, durationMs int32) (*ContentIndex, error)
+	// UpsertContentIndex writes the current state of a file's content index. One row
+	// per file: a retry replaces the stored result rather than adding a second one, and
+	// an empty errorMsg on success clears a previous failure's reason.
+	UpsertContentIndex(ctx context.Context, tx database.DBTX, orgID, fileID dbuuid.UUID, extractedText, extractionMethod, status, errorMsg string, durationMs int32) (*ContentIndex, error)
 
 	// IsIndexable checks if a file type is eligible for content indexing
 	IsIndexable(mimeType string) bool
+
+	// ExtractionMethodFor names how a file type's text is read, or "" when the type is
+	// not content-indexed. It is the same table IsIndexable answers from.
+	ExtractionMethodFor(mimeType string) string
 }
 
 // indexLogic implements IndexLogic interface
@@ -87,6 +92,7 @@ func (l *indexLogic) GetContentIndexStatus(ctx context.Context, tx database.DBTX
 		ExtractedText:    index.ExtractedText,
 		ExtractionMethod: index.ExtractionMethod,
 		IndexingStatus:   index.IndexingStatus,
+		UpdatedAt:        index.UpdatedAt.Time,
 	}
 
 	// Handle nullable fields
@@ -100,53 +106,17 @@ func (l *indexLogic) GetContentIndexStatus(ctx context.Context, tx database.DBTX
 	return result, nil
 }
 
-// CreateContentIndex creates a new content index record
-func (l *indexLogic) CreateContentIndex(ctx context.Context, tx database.DBTX, orgID, fileID dbuuid.UUID, extractedText, extractionMethod, status string) (*ContentIndex, error) {
-	slog.DebugContext(ctx, "IndexLogic.CreateContentIndex",
+// UpsertContentIndex writes the current state of a file's content index.
+func (l *indexLogic) UpsertContentIndex(ctx context.Context, tx database.DBTX, orgID, fileID dbuuid.UUID, extractedText, extractionMethod, status, errorMsg string, durationMs int32) (*ContentIndex, error) {
+	slog.DebugContext(ctx, "IndexLogic.UpsertContentIndex",
 		"organization_id", orgID,
 		"file_id", fileID,
 		"extraction_method", extractionMethod,
 		"status", status,
 		"text_length", len(extractedText))
 
-	index, err := l.queries.InsertFileContentIndex(ctx, tx, &database.InsertFileContentIndexParams{
-		OrganizationID:   orgID,
-		FileID:           fileID,
-		ExtractedText:    extractedText,
-		ExtractionMethod: extractionMethod,
-		IndexingStatus:   status,
-	})
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to create content index",
-			"error", err,
-			"file_id", fileID)
-		return nil, fmt.Errorf("failed to create content index: %w", err)
-	}
-
-	slog.InfoContext(ctx, "content index record created",
-		"index_id", index.ID,
-		"file_id", fileID,
-		"status", status)
-
-	return &ContentIndex{
-		ID:               index.ID,
-		OrganizationID:   index.OrganizationID,
-		FileID:           index.FileID,
-		ExtractedText:    index.ExtractedText,
-		ExtractionMethod: index.ExtractionMethod,
-		IndexingStatus:   index.IndexingStatus,
-	}, nil
-}
-
-// UpdateIndexStatus updates the indexing status and metadata
-func (l *indexLogic) UpdateIndexStatus(ctx context.Context, tx database.DBTX, orgID, indexID dbuuid.UUID, status string, errorMsg string, durationMs int32) (*ContentIndex, error) {
-	slog.DebugContext(ctx, "IndexLogic.UpdateIndexStatus",
-		"organization_id", orgID,
-		"index_id", indexID,
-		"status", status,
-		"duration_ms", durationMs)
-
-	// Prepare nullable fields
+	// An empty reason writes NULL, which is how a later success clears a previous
+	// failure's reason: the upsert passes this through EXCLUDED, never COALESCE.
 	var indexingError pgtype.Text
 	if errorMsg != "" {
 		indexingError = pgtype.Text{String: errorMsg, Valid: true}
@@ -157,36 +127,21 @@ func (l *indexLogic) UpdateIndexStatus(ctx context.Context, tx database.DBTX, or
 		indexingDuration = pgtype.Int4{Int32: durationMs, Valid: true}
 	}
 
-	// Update indexing status
-	err := l.queries.UpdateContentIndexStatus(ctx, tx, &database.UpdateContentIndexStatusParams{
+	index, err := l.queries.UpsertFileContentIndex(ctx, tx, &database.UpsertFileContentIndexParams{
 		OrganizationID:     orgID,
-		ID:                 indexID,
+		FileID:             fileID,
+		ExtractedText:      extractedText,
+		ExtractionMethod:   extractionMethod,
 		IndexingStatus:     status,
 		IndexingError:      indexingError,
 		IndexingDurationMs: indexingDuration,
 	})
 	if err != nil {
-		slog.ErrorContext(ctx, "failed to update indexing status",
+		slog.ErrorContext(ctx, "failed to upsert content index",
 			"error", err,
-			"index_id", indexID)
-		return nil, fmt.Errorf("failed to update indexing status: %w", err)
+			"file_id", fileID)
+		return nil, fmt.Errorf("failed to upsert content index: %w", err)
 	}
-
-	// Retrieve updated index
-	index, err := l.queries.GetFileContentIndexByID(ctx, tx, &database.GetFileContentIndexByIDParams{
-		OrganizationID: orgID,
-		ID:             indexID,
-	})
-	if err != nil {
-		slog.ErrorContext(ctx, "failed to get updated content index",
-			"error", err,
-			"index_id", indexID)
-		return nil, fmt.Errorf("failed to get updated content index: %w", err)
-	}
-
-	slog.InfoContext(ctx, "content index status updated",
-		"index_id", indexID,
-		"status", status)
 
 	result := &ContentIndex{
 		ID:               index.ID,
@@ -195,8 +150,8 @@ func (l *indexLogic) UpdateIndexStatus(ctx context.Context, tx database.DBTX, or
 		ExtractedText:    index.ExtractedText,
 		ExtractionMethod: index.ExtractionMethod,
 		IndexingStatus:   index.IndexingStatus,
+		UpdatedAt:        index.UpdatedAt.Time,
 	}
-
 	if index.IndexingError.Valid {
 		result.IndexingError = index.IndexingError.String
 	}
@@ -207,52 +162,49 @@ func (l *indexLogic) UpdateIndexStatus(ctx context.Context, tx database.DBTX, or
 	return result, nil
 }
 
-// IsIndexable checks if a file type is eligible for content indexing
-// Eligible types: office docs, PDFs, plain text
-// Ineligible: images, videos, audio, archives
+// indexableTypes maps every content-indexed MIME type to the method used to read it.
+// Absence from this table is what "not content-indexed" means: images, video, audio and
+// archives are not here, and neither is anything the system cannot turn into text.
+//
+// Office types are read via the PDF that Gotenberg produced in step 1 of the same
+// post-processing workflow — office_parser names the file that was read, not the route.
+var indexableTypes = map[string]string{
+	// Plain text
+	"text/plain":       ExtractionMethodPlainText,
+	"text/markdown":    ExtractionMethodPlainText,
+	"text/csv":         ExtractionMethodPlainText,
+	"text/html":        ExtractionMethodPlainText,
+	"text/xml":         ExtractionMethodPlainText,
+	"application/json": ExtractionMethodPlainText,
+	"application/xml":  ExtractionMethodPlainText,
+
+	// PDF
+	"application/pdf": ExtractionMethodPDFParser,
+
+	// Microsoft Office (Office Open XML)
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   ExtractionMethodOfficeParser, // .docx
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         ExtractionMethodOfficeParser, // .xlsx
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": ExtractionMethodOfficeParser, // .pptx
+
+	// Legacy Microsoft Office
+	"application/msword":            ExtractionMethodOfficeParser, // .doc
+	"application/vnd.ms-excel":      ExtractionMethodOfficeParser, // .xls
+	"application/vnd.ms-powerpoint": ExtractionMethodOfficeParser, // .ppt
+
+	// OpenDocument
+	"application/vnd.oasis.opendocument.text":         ExtractionMethodOfficeParser, // .odt
+	"application/vnd.oasis.opendocument.spreadsheet":  ExtractionMethodOfficeParser, // .ods
+	"application/vnd.oasis.opendocument.presentation": ExtractionMethodOfficeParser, // .odp
+}
+
+// ExtractionMethodFor names how a file type's text is read, or "" when it is not read.
+func (l *indexLogic) ExtractionMethodFor(mimeType string) string {
+	return indexableTypes[strings.ToLower(strings.TrimSpace(mimeType))]
+}
+
+// IsIndexable checks if a file type is eligible for content indexing.
+// Eligible: office documents, PDFs, plain text. Ineligible: images, video, audio,
+// archives — anything absent from indexableTypes.
 func (l *indexLogic) IsIndexable(mimeType string) bool {
-	// Normalize MIME type to lowercase
-	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
-
-	// Indexable document types
-	indexableTypes := []string{
-		// Plain text
-		"text/plain",
-		"text/markdown",
-		"text/csv",
-		"text/html",
-		"text/xml",
-		"application/json",
-		"application/xml",
-
-		// PDF
-		"application/pdf",
-
-		// Microsoft Office (Office Open XML)
-		"application/vnd.openxmlformats-officedocument.wordprocessingml.document",   // .docx
-		"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",         // .xlsx
-		"application/vnd.openxmlformats-officedocument.presentationml.presentation", // .pptx
-
-		// Legacy Microsoft Office
-		"application/msword",            // .doc
-		"application/vnd.ms-excel",      // .xls
-		"application/vnd.ms-powerpoint", // .ppt
-
-		// OpenDocument
-		"application/vnd.oasis.opendocument.text",         // .odt
-		"application/vnd.oasis.opendocument.spreadsheet",  // .ods
-		"application/vnd.oasis.opendocument.presentation", // .odp
-	}
-
-	for _, eligible := range indexableTypes {
-		if mimeType == eligible {
-			slog.Debug("IsIndexable: file type is eligible for content indexing",
-				"mime_type", mimeType)
-			return true
-		}
-	}
-
-	slog.Debug("IsIndexable: file type not eligible for content indexing",
-		"mime_type", mimeType)
-	return false
+	return l.ExtractionMethodFor(mimeType) != ""
 }

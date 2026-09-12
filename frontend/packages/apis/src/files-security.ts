@@ -109,9 +109,16 @@ function normalizeConversionStatus(rawStatus: string): ConversionStatusString {
  * Content index information
  */
 export interface ContentIndexInfo {
-	status: string; // "pending" | "in_progress" | "completed" | "failed"
+	// "pending" | "in_progress" | "completed" | "failed" | "not_applicable" | "never_indexed".
+	// The last two are derived by the server from the file's own type and the absence of
+	// an index record; they are never stored.
+	status: string;
 	error?: string;
 	duration?: number; // Milliseconds
+	// "office_parser" | "pdf_parser" | "plain_text", absent when nothing was indexed.
+	method?: string;
+	textLength?: number; // Bytes of extracted text actually stored
+	updatedAt?: Date; // When the indexing status last changed
 }
 
 /**
@@ -364,9 +371,14 @@ export async function getContentIndexStatus(fileId: string): Promise<ContentInde
 		throw new Error("Index info not returned from server");
 	}
 
+	const method = files.ExtractionMethod[info.extractionMethod];
+
 	return {
 		status: files.IndexingStatus[info.status].toLowerCase(),
 		error: info.errorMessage || undefined,
 		duration: info.durationMs || undefined,
+		method: info.extractionMethod ? method.toLowerCase() : undefined,
+		textLength: info.textLength || undefined,
+		updatedAt: info.updatedAt ? protoTimestampToDate(info.updatedAt) : undefined,
 	};
 }

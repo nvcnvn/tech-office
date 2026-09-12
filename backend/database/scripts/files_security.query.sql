@@ -69,28 +69,28 @@ WHERE organization_id = $1 AND original_file_id = $2;
 -- Content Indexing Queries
 -- ============================================================================
 
--- name: InsertFileContentIndex :one
+-- name: UpsertFileContentIndex :one
+-- One row per file under retry: the extraction step writes the current state of a
+-- file's index and nothing else. indexing_error passes through EXCLUDED rather than
+-- COALESCE so a later success clears a previous failure's reason. Same reasoning as
+-- InsertPDFConversion above: DO UPDATE rather than DO NOTHING, because a :one query
+-- must return a row.
 INSERT INTO files.file_content_index (
     organization_id, file_id, extracted_text,
-    extraction_method, indexing_status
-) VALUES ($1, $2, $3, $4, $5)
+    extraction_method, indexing_status, indexing_error, indexing_duration_ms
+) VALUES ($1, $2, $3, $4, $5, sqlc.narg('indexing_error'), sqlc.narg('indexing_duration_ms'))
+ON CONFLICT (organization_id, file_id) DO UPDATE
+    SET extracted_text       = EXCLUDED.extracted_text,
+        extraction_method    = EXCLUDED.extraction_method,
+        indexing_status      = EXCLUDED.indexing_status,
+        indexing_error       = EXCLUDED.indexing_error,
+        indexing_duration_ms = EXCLUDED.indexing_duration_ms,
+        updated_at           = now()
 RETURNING *;
 
 -- name: GetFileContentIndex :one
 SELECT * FROM files.file_content_index
 WHERE organization_id = $1 AND file_id = $2;
-
--- name: GetFileContentIndexByID :one
-SELECT * FROM files.file_content_index
-WHERE organization_id = $1 AND id = $2;
-
--- name: UpdateContentIndexStatus :exec
-UPDATE files.file_content_index
-SET indexing_status = $3,
-    indexing_error = sqlc.narg('indexing_error'),
-    indexing_duration_ms = sqlc.narg('indexing_duration_ms'),
-    updated_at = now()
-WHERE organization_id = $1 AND id = $2;
 
 -- name: DeleteFileContentIndex :exec
 DELETE FROM files.file_content_index

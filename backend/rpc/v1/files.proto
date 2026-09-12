@@ -299,20 +299,26 @@ message ContentIndexInfo {
   google.protobuf.Timestamp updated_at = 8;
 }
 
+// The first four values are stored in files.file_content_index.indexing_status.
+// The last two are derived at the RPC from the absence of a row and the file's own
+// MIME type; they are never stored. UNSPECIFIED is unreachable.
 enum IndexingStatus {
   INDEXING_STATUS_UNSPECIFIED = 0;
-  INDEXING_STATUS_PENDING = 1;      // Queued for indexing
-  INDEXING_STATUS_IN_PROGRESS = 2;  // Currently extracting text
-  INDEXING_STATUS_COMPLETED = 3;    // Indexing successful
-  INDEXING_STATUS_FAILED = 4;       // Indexing failed
+  INDEXING_STATUS_PENDING = 1;         // Queued for indexing
+  INDEXING_STATUS_IN_PROGRESS = 2;     // Currently extracting text
+  INDEXING_STATUS_COMPLETED = 3;       // Done; extracted text may legitimately be empty
+  INDEXING_STATUS_FAILED = 4;          // Indexing failed; error_message says why, briefly
+  INDEXING_STATUS_NOT_APPLICABLE = 5;  // This file type is never content-indexed
+  INDEXING_STATUS_NEVER_INDEXED = 6;   // Indexable, but no attempt was ever recorded
 }
 
 enum ExtractionMethod {
   EXTRACTION_METHOD_UNSPECIFIED = 0;
-  EXTRACTION_METHOD_OFFICE_PARSER = 1;  // DOCX/XLSX/PPTX parser
+  EXTRACTION_METHOD_OFFICE_PARSER = 1;  // Word processor, spreadsheet and presentation
+                                        // formats, read via their converted PDF
   EXTRACTION_METHOD_PDF_PARSER = 2;     // PDF text extraction
-  EXTRACTION_METHOD_IMAGE_OCR = 3;      // OCR for images (future)
-  EXTRACTION_METHOD_PLAIN_TEXT = 4;     // Plain text files
+  reserved 3;                           // was EXTRACTION_METHOD_IMAGE_OCR
+  EXTRACTION_METHOD_PLAIN_TEXT = 4;     // Plain text, Markdown, CSV, HTML, XML, JSON
 }
 
 // ============================================================================

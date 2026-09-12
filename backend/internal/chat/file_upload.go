@@ -8,7 +8,6 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"github.com/nvcnvn/flows"
 	"github.com/nvcnvn/tech-office/backend/database"
 	dbuuid "github.com/nvcnvn/tech-office/backend/database/dbuuid"
 	"github.com/nvcnvn/tech-office/backend/database/txn"
@@ -234,27 +233,19 @@ func (s *ChatServiceConnect) ConfirmChannelFileUpload(
 		// Trigger async workflows for file post-processing (PDF conversion, content indexing)
 		// Enqueue within same transaction for atomicity (workflow runs after commit)
 		if s.PostProcess != nil {
-			pgxTx, ok := tx.(pgx.Tx)
-			if !ok {
-				return fmt.Errorf("internal error: expected pgx.Tx for workflow enqueue")
-			}
-
-			_, enqueueErr := flows.BeginTx(ctx, s.FlowsClient, pgxTx, s.PostProcess, &files.FilePostProcessingWorkflowInput{
-				OrganizationID: orgID,
-				FileID:         dbuuid.UUID(fileID),
-				StorageKey:     metadata.StorageKey,
-				MimeType:       metadata.MimeType,
-			})
+			enqueueErr := files.EnqueueFilePostProcessing(ctx, s.FlowsClient, tx, s.PostProcess,
+				files.NewIndexLogic(s.Queries), &files.FilePostProcessingWorkflowInput{
+					OrganizationID: orgID,
+					FileID:         dbuuid.UUID(fileID),
+					StorageKey:     metadata.StorageKey,
+					MimeType:       metadata.MimeType,
+				})
 			if enqueueErr != nil {
+				// Don't fail the upload - post-processing is an enhancement.
+				// User can manually trigger conversion later via TriggerPDFConversion RPC.
 				slog.WarnContext(ctx, "failed to enqueue post-processing workflow",
 					"error", enqueueErr,
 					"file_id", fileID)
-				// Don't fail the upload - post-processing is optional enhancement
-				// User can manually trigger conversion later via TriggerPDFConversion RPC
-			} else {
-				slog.InfoContext(ctx, "post-processing workflow enqueued",
-					"file_id", fileID,
-					"mime_type", metadata.MimeType)
 			}
 		}
 

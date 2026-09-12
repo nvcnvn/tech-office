@@ -156,33 +156,6 @@ func (q *Queries) GetFileContentIndex(ctx context.Context, db DBTX, arg *GetFile
 	return &i, err
 }
 
-const getFileContentIndexByID = `-- name: GetFileContentIndexByID :one
-SELECT id, organization_id, file_id, extracted_text, extraction_method, indexing_status, indexing_error, indexing_duration_ms, updated_at FROM files.file_content_index
-WHERE organization_id = $1 AND id = $2
-`
-
-type GetFileContentIndexByIDParams struct {
-	OrganizationID dbuuid.UUID `json:"organization_id"`
-	ID             dbuuid.UUID `json:"id"`
-}
-
-func (q *Queries) GetFileContentIndexByID(ctx context.Context, db DBTX, arg *GetFileContentIndexByIDParams) (*FilesFileContentIndex, error) {
-	row := db.QueryRow(ctx, getFileContentIndexByID, arg.OrganizationID, arg.ID)
-	var i FilesFileContentIndex
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.FileID,
-		&i.ExtractedText,
-		&i.ExtractionMethod,
-		&i.IndexingStatus,
-		&i.IndexingError,
-		&i.IndexingDurationMs,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
 const getFilesByContext = `-- name: GetFilesByContext :many
 SELECT fm.id, fm.organization_id, fm.original_filename, fm.storage_key, fm.size_bytes, fm.mime_type, fm.upload_context, fm.uploaded_by_employee_id, fm.validation_status, fm.validation_message, fm.detected_mime_type, fm.is_deleted, fm.updated_at FROM files.file_metadata fm
 JOIN files.file_access_rule far ON (fm.organization_id, fm.id) = (far.organization_id, far.file_id)
@@ -336,49 +309,6 @@ func (q *Queries) InsertFileAccessRule(ctx context.Context, db DBTX, arg *Insert
 		&i.ContextType,
 		&i.ContextID,
 		&i.AccessScope,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const insertFileContentIndex = `-- name: InsertFileContentIndex :one
-
-INSERT INTO files.file_content_index (
-    organization_id, file_id, extracted_text,
-    extraction_method, indexing_status
-) VALUES ($1, $2, $3, $4, $5)
-RETURNING id, organization_id, file_id, extracted_text, extraction_method, indexing_status, indexing_error, indexing_duration_ms, updated_at
-`
-
-type InsertFileContentIndexParams struct {
-	OrganizationID   dbuuid.UUID `json:"organization_id"`
-	FileID           dbuuid.UUID `json:"file_id"`
-	ExtractedText    string      `json:"extracted_text"`
-	ExtractionMethod string      `json:"extraction_method"`
-	IndexingStatus   string      `json:"indexing_status"`
-}
-
-// ============================================================================
-// Content Indexing Queries
-// ============================================================================
-func (q *Queries) InsertFileContentIndex(ctx context.Context, db DBTX, arg *InsertFileContentIndexParams) (*FilesFileContentIndex, error) {
-	row := db.QueryRow(ctx, insertFileContentIndex,
-		arg.OrganizationID,
-		arg.FileID,
-		arg.ExtractedText,
-		arg.ExtractionMethod,
-		arg.IndexingStatus,
-	)
-	var i FilesFileContentIndex
-	err := row.Scan(
-		&i.ID,
-		&i.OrganizationID,
-		&i.FileID,
-		&i.ExtractedText,
-		&i.ExtractionMethod,
-		&i.IndexingStatus,
-		&i.IndexingError,
-		&i.IndexingDurationMs,
 		&i.UpdatedAt,
 	)
 	return &i, err
@@ -551,34 +481,6 @@ func (q *Queries) SearchFilesByNameAndContent(ctx context.Context, db DBTX, arg 
 	return items, nil
 }
 
-const updateContentIndexStatus = `-- name: UpdateContentIndexStatus :exec
-UPDATE files.file_content_index
-SET indexing_status = $3,
-    indexing_error = $4,
-    indexing_duration_ms = $5,
-    updated_at = now()
-WHERE organization_id = $1 AND id = $2
-`
-
-type UpdateContentIndexStatusParams struct {
-	OrganizationID     dbuuid.UUID `json:"organization_id"`
-	ID                 dbuuid.UUID `json:"id"`
-	IndexingStatus     string      `json:"indexing_status"`
-	IndexingError      pgtype.Text `json:"indexing_error"`
-	IndexingDurationMs pgtype.Int4 `json:"indexing_duration_ms"`
-}
-
-func (q *Queries) UpdateContentIndexStatus(ctx context.Context, db DBTX, arg *UpdateContentIndexStatusParams) error {
-	_, err := db.Exec(ctx, updateContentIndexStatus,
-		arg.OrganizationID,
-		arg.ID,
-		arg.IndexingStatus,
-		arg.IndexingError,
-		arg.IndexingDurationMs,
-	)
-	return err
-}
-
 const updatePDFConversionStatus = `-- name: UpdatePDFConversionStatus :exec
 UPDATE files.file_pdf_conversion
 SET conversion_status = $3,
@@ -608,4 +510,63 @@ func (q *Queries) UpdatePDFConversionStatus(ctx context.Context, db DBTX, arg *U
 		arg.ConversionDurationMs,
 	)
 	return err
+}
+
+const upsertFileContentIndex = `-- name: UpsertFileContentIndex :one
+
+INSERT INTO files.file_content_index (
+    organization_id, file_id, extracted_text,
+    extraction_method, indexing_status, indexing_error, indexing_duration_ms
+) VALUES ($1, $2, $3, $4, $5, $6, $7)
+ON CONFLICT (organization_id, file_id) DO UPDATE
+    SET extracted_text       = EXCLUDED.extracted_text,
+        extraction_method    = EXCLUDED.extraction_method,
+        indexing_status      = EXCLUDED.indexing_status,
+        indexing_error       = EXCLUDED.indexing_error,
+        indexing_duration_ms = EXCLUDED.indexing_duration_ms,
+        updated_at           = now()
+RETURNING id, organization_id, file_id, extracted_text, extraction_method, indexing_status, indexing_error, indexing_duration_ms, updated_at
+`
+
+type UpsertFileContentIndexParams struct {
+	OrganizationID     dbuuid.UUID `json:"organization_id"`
+	FileID             dbuuid.UUID `json:"file_id"`
+	ExtractedText      string      `json:"extracted_text"`
+	ExtractionMethod   string      `json:"extraction_method"`
+	IndexingStatus     string      `json:"indexing_status"`
+	IndexingError      pgtype.Text `json:"indexing_error"`
+	IndexingDurationMs pgtype.Int4 `json:"indexing_duration_ms"`
+}
+
+// ============================================================================
+// Content Indexing Queries
+// ============================================================================
+// One row per file under retry: the extraction step writes the current state of a
+// file's index and nothing else. indexing_error passes through EXCLUDED rather than
+// COALESCE so a later success clears a previous failure's reason. Same reasoning as
+// InsertPDFConversion above: DO UPDATE rather than DO NOTHING, because a :one query
+// must return a row.
+func (q *Queries) UpsertFileContentIndex(ctx context.Context, db DBTX, arg *UpsertFileContentIndexParams) (*FilesFileContentIndex, error) {
+	row := db.QueryRow(ctx, upsertFileContentIndex,
+		arg.OrganizationID,
+		arg.FileID,
+		arg.ExtractedText,
+		arg.ExtractionMethod,
+		arg.IndexingStatus,
+		arg.IndexingError,
+		arg.IndexingDurationMs,
+	)
+	var i FilesFileContentIndex
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.FileID,
+		&i.ExtractedText,
+		&i.ExtractionMethod,
+		&i.IndexingStatus,
+		&i.IndexingError,
+		&i.IndexingDurationMs,
+		&i.UpdatedAt,
+	)
+	return &i, err
 }

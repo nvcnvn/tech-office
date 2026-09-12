@@ -336,14 +336,14 @@ func startServer(ctx context.Context, cmd *cli.Command) error {
 	fileValidationWorkflows := files.NewFileValidationWorkflows(fileValidationSteps)
 	flows.Register(flowsRegistry, fileValidationWorkflows.FileValidation, flows.WithConcurrency(9))
 
-	// Post-processing workflow is currently a skeleton (conversion/indexing pending),
-	// but we still register it so the worker can execute runs if/when they are enqueued.
+	// Post-processing converts office documents to PDF and extracts searchable text.
 	filePostProcessingServices := &files.FilePostProcessingServices{
 		Queries:         queries,
 		AdminPool:       adminPool,
 		R2Client:        r2Client,
 		PDFLogic:        pdfLogic,
 		GotenbergClient: files.NewGotenbergClient(cfg.GotenbergURL),
+		IndexLogic:      indexLogic,
 	}
 	filePostProcessingSteps := files.NewFilePostProcessingSteps(filePostProcessingServices)
 	filePostProcessingWorkflows := files.NewFilePostProcessingWorkflows(filePostProcessingSteps)

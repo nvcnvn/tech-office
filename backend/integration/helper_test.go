@@ -2183,6 +2183,211 @@ INSERT INTO files.file_access_rule (
 	return fileID.String()
 }
 
+// waitForContentIndex polls a file's content-index status until it reaches a terminal
+// answer — completed, failed or not-content-indexed — and returns it.
+//
+// Polling rather than sleeping a fixed five seconds: extraction takes tens of
+// milliseconds for a text file and several seconds for an office document that has to go
+// through Gotenberg first, so any single constant is either slow or flaky.
+func (w *testWorld) waitForContentIndex(actor testUser, fileID string, timeout time.Duration) *rpcv1.ContentIndexInfo {
+	w.t.Helper()
+
+	deadline := time.Now().Add(timeout)
+	var last *rpcv1.ContentIndexInfo
+	for time.Now().Before(deadline) {
+		last = w.getContentIndexStatus(actor, fileID).IndexInfo
+		switch last.GetStatus() {
+		case rpcv1.IndexingStatus_INDEXING_STATUS_COMPLETED,
+			rpcv1.IndexingStatus_INDEXING_STATUS_FAILED,
+			rpcv1.IndexingStatus_INDEXING_STATUS_NOT_APPLICABLE:
+			return last
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	require.NotNil(w.t, last, "content index status never returned")
+	w.t.Fatalf("content index for %s never settled: last status %s", fileID, last.GetStatus())
+	return nil
+}
+
+// fileIsFound reports whether a search for query returns fileID for this actor.
+func (w *testWorld) fileIsFound(actor testUser, query, fileID string) bool {
+	w.t.Helper()
+	for _, r := range w.searchFiles(actor, query, 20).Results {
+		if r.FileId == fileID {
+			return true
+		}
+	}
+	return false
+}
+
+// countFileInResults reports how many times fileID appears in a search for query.
+func (w *testWorld) countFileInResults(actor testUser, query, fileID string) int {
+	w.t.Helper()
+	n := 0
+	for _, r := range w.searchFiles(actor, query, 20).Results {
+		if r.FileId == fileID {
+			n++
+		}
+	}
+	return n
+}
+
+// seedIndexedFileWithoutAccessRule inserts a file and a completed content index row
+// carrying phrase, and deliberately writes NO files.file_access_rule row.
+//
+// A real upload always writes a rule, so this is the only way to exercise the property
+// that matters: stored text is not a route to a file. The search query joins the access
+// rule unconditionally, so a file without one must be reachable by nobody.
+func (w *testWorld) seedIndexedFileWithoutAccessRule(uploader testUser, filename, phrase string) string {
+	w.t.Helper()
+	// The uploader's own org, not w.OrgID: helpers such as withUsersFromDifferentOrgs
+	// move the world's current org, and a seed that follows the cursor instead of the
+	// actor writes a row the actor cannot own.
+	orgID := uploader.OrgID
+	fileID := dbuuid.Must()
+	_, err := globalDB.Exec(context.Background(), `
+INSERT INTO files.file_metadata (
+    organization_id, id, original_filename, storage_key, size_bytes, mime_type,
+    upload_context, uploaded_by_employee_id, validation_status
+) VALUES ($1, $2, $3, $4, $5, 'text/plain', 'chat', $6, 'verified')`,
+		orgID,
+		fileID,
+		filename,
+		fmt.Sprintf("org-%s/chat/%s", orgID.String(), fileID.String()),
+		int64(len(phrase)),
+		uploader.ID,
+	)
+	require.NoError(w.t, err, "seed file metadata")
+
+	_, err = globalDB.Exec(context.Background(), `
+INSERT INTO files.file_content_index (
+    organization_id, file_id, extracted_text, extraction_method, indexing_status
+) VALUES ($1, $2, $3, 'plain_text', 'completed')`,
+		orgID, fileID, "Unreachable body text. "+phrase+" is stored but not granted.",
+	)
+	require.NoError(w.t, err, "seed content index")
+
+	return fileID.String()
+}
+
+// seedIndexableFileWithoutIndex inserts a text file with no content-index row at all,
+// standing in for a file uploaded before content indexing existed.
+func (w *testWorld) seedIndexableFileWithoutIndex(uploader testUser, filename string) string {
+	w.t.Helper()
+	orgID := uploader.OrgID
+	fileID := dbuuid.Must()
+	_, err := globalDB.Exec(context.Background(), `
+INSERT INTO files.file_metadata (
+    organization_id, id, original_filename, storage_key, size_bytes, mime_type,
+    upload_context, uploaded_by_employee_id, validation_status
+) VALUES ($1, $2, $3, $4, 128, 'text/plain', 'chat', $5, 'verified')`,
+		orgID, fileID, filename,
+		fmt.Sprintf("org-%s/chat/%s", orgID.String(), fileID.String()),
+		uploader.ID,
+	)
+	require.NoError(w.t, err, "seed file metadata")
+	return fileID.String()
+}
+
+// seedFailedContentIndex inserts a file whose indexing is recorded as having failed,
+// so a later success has a reason to clear.
+func (w *testWorld) seedFailedContentIndex(uploader testUser, filename, reason string) string {
+	w.t.Helper()
+	fileID := w.seedIndexableFileWithoutIndex(uploader, filename)
+	_, err := globalDB.Exec(context.Background(), `
+INSERT INTO files.file_content_index (
+    organization_id, file_id, extracted_text, extraction_method,
+    indexing_status, indexing_error, indexing_duration_ms
+) VALUES ($1, $2, '', 'plain_text', 'failed', $3, 12)`,
+		uploader.OrgID, dbuuid.MustParse(fileID), reason,
+	)
+	require.NoError(w.t, err, "seed failed content index")
+	return fileID
+}
+
+// reindexFileContent replays what a successful second attempt writes: the same upsert the
+// extraction step uses, carrying text and an empty reason.
+func (w *testWorld) reindexFileContent(uploader testUser, fileID, phrase string) {
+	w.t.Helper()
+	_, err := globalDB.Exec(context.Background(), `
+INSERT INTO files.file_content_index (
+    organization_id, file_id, extracted_text, extraction_method,
+    indexing_status, indexing_error, indexing_duration_ms
+) VALUES ($1, $2, $3, 'plain_text', 'completed', NULL, 7)
+ON CONFLICT (organization_id, file_id) DO UPDATE
+    SET extracted_text       = EXCLUDED.extracted_text,
+        extraction_method    = EXCLUDED.extraction_method,
+        indexing_status      = EXCLUDED.indexing_status,
+        indexing_error       = EXCLUDED.indexing_error,
+        indexing_duration_ms = EXCLUDED.indexing_duration_ms,
+        updated_at           = now()`,
+		uploader.OrgID, dbuuid.MustParse(fileID), "Recovered body text. "+phrase,
+	)
+	require.NoError(w.t, err, "reindex content")
+}
+
+// countContentIndexRows counts the stored index rows for a file. The table is uniquely
+// keyed, so anything but one after a retry means the upsert is not an upsert.
+func (w *testWorld) countContentIndexRows(uploader testUser, fileID string) int {
+	w.t.Helper()
+	var n int
+	err := globalDB.QueryRow(context.Background(),
+		`SELECT count(*) FROM files.file_content_index WHERE organization_id = $1 AND file_id = $2`,
+		uploader.OrgID, dbuuid.MustParse(fileID)).Scan(&n)
+	require.NoError(w.t, err, "count content index rows")
+	return n
+}
+
+// postProcessingOutcome returns the processing_status the post-processing workflow
+// recorded for a file, read from the flows run's output.
+func (w *testWorld) postProcessingOutcome(fileID string) string {
+	w.t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	var status string
+	for time.Now().Before(deadline) {
+		err := globalDB.QueryRow(context.Background(), `
+SELECT coalesce(output_json->>'processing_status', '')
+FROM flows.runs
+WHERE input_json->>'file_id' = $1 AND output_json IS NOT NULL
+ORDER BY updated_at DESC
+LIMIT 1`, fileID).Scan(&status)
+		if err == nil && status != "" {
+			return status
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	w.t.Fatalf("post-processing run for %s never recorded an outcome", fileID)
+	return ""
+}
+
+// getContentIndexStatusError returns the error from a content index status query.
+func (w *testWorld) getContentIndexStatusError(actor testUser, fileID string) error {
+	w.t.Helper()
+	req := connect.NewRequest(&rpcv1.GetContentIndexStatusRequest{FileId: fileID})
+	req.Header().Set("Authorization", "Bearer "+actor.Token)
+	_, err := w.file.GetContentIndexStatus(context.Background(), req)
+	return err
+}
+
+// pngBytes returns the smallest valid PNG: a 1x1 image. Used where a test needs a file
+// whose magic bytes say "image" regardless of the MIME type the client declared.
+func pngBytes() []byte {
+	return []byte{
+		0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,
+		0x00, 0x00, 0x00, 0x0d, 'I', 'H', 'D', 'R',
+		0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
+		0x08, 0x06, 0x00, 0x00, 0x00, 0x1f, 0x15, 0xc4,
+		0x89,
+		0x00, 0x00, 0x00, 0x0a, 'I', 'D', 'A', 'T',
+		0x78, 0x9c, 0x63, 0x00, 0x01, 0x00, 0x00, 0x05,
+		0x00, 0x01,
+		0x0d, 0x0a, 0x2d, 0xb4,
+		0x00, 0x00, 0x00, 0x00, 'I', 'E', 'N', 'D',
+		0xae, 0x42, 0x60, 0x82,
+	}
+}
+
 func (w *testWorld) deleteFile(actor testUser, fileID string) {
 	w.t.Helper()
 	req := connect.NewRequest(&rpcv1.DeleteFileRequest{FileId: fileID})

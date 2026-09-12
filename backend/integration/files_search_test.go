@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	rpcv1 "github.com/nvcnvn/tech-office/backend/rpc/v1"
 )
 
 // TestFileSearch covers filename search, content search, and pagination.
@@ -61,6 +63,32 @@ func TestFileSearch(t *testing.T) {
 		t.Run("another org does not see the files", func(t *testing.T) {
 			resp := w.searchFiles(otherUser, slug, 10)
 			assert.Empty(t, resp.Results)
+		})
+	})
+
+	// FR-012: one search, one ranked list. A searcher asks for a term, not for "a term in
+	// a filename" — so a file matched on its name and a file matched on its contents come
+	// back together, and the response says nothing about which field matched.
+	t.Run("when one file matches on filename and another on content", func(t *testing.T) {
+		term := uniqueSlug("SHARED")
+
+		byName := w.uploadChannelFile(owner, chID, term+"-agenda.txt", "text/plain",
+			[]byte("This body mentions nothing in particular."))
+		byContent := w.uploadChannelFile(owner, chID, uniqueSlug("notes")+".txt", "text/plain",
+			[]byte("Discussion of "+term+" followed the review."))
+
+		require.Equal(t, rpcv1.IndexingStatus_INDEXING_STATUS_COMPLETED,
+			w.waitForContentIndex(owner, byContent, 60*time.Second).GetStatus())
+
+		results := w.searchFiles(owner, term, 20).Results
+
+		t.Run("both appear in a single ranked list", func(t *testing.T) {
+			ids := make([]string, 0, len(results))
+			for _, r := range results {
+				ids = append(ids, r.FileId)
+			}
+			assert.Contains(t, ids, byName, "the filename match must be in the list")
+			assert.Contains(t, ids, byContent, "the content match must be in the same list")
 		})
 	})
 }

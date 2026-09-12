@@ -1899,7 +1899,7 @@ CREATE TABLE files.file_content_index (
     indexing_error text,
     indexing_duration_ms integer,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT file_content_index_extraction_method_check CHECK ((extraction_method = ANY (ARRAY['office_parser'::text, 'pdf_parser'::text, 'image_ocr'::text, 'plain_text'::text]))),
+    CONSTRAINT file_content_index_extraction_method_check CHECK ((extraction_method = ANY (ARRAY['office_parser'::text, 'pdf_parser'::text, 'plain_text'::text]))),
     CONSTRAINT file_content_index_indexing_status_check CHECK ((indexing_status = ANY (ARRAY['pending'::text, 'in_progress'::text, 'completed'::text, 'failed'::text])))
 );
 
@@ -1922,7 +1922,9 @@ COMMENT ON COLUMN files.file_content_index.extracted_text IS 'Plain text content
 -- Name: COLUMN file_content_index.extraction_method; Type: COMMENT; Schema: files; Owner: -
 --
 
-COMMENT ON COLUMN files.file_content_index.extraction_method IS 'Method used to extract text: office_parser (DOCX/XLSX/PPTX), pdf_parser (PDF), image_ocr (future), plain_text. MUST align with backend constants in internal/files/constants.go';
+COMMENT ON COLUMN files.file_content_index.extraction_method IS 'Method used to extract text: office_parser (word processor, spreadsheet and presentation
+formats, read via their Gotenberg-converted PDF), pdf_parser (PDF), plain_text (text/*,
+JSON, XML). MUST align with backend constants in internal/files/constants.go.';
 
 
 --

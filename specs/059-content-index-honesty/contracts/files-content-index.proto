@@ -1,0 +1,67 @@
+// Contract delta for feature 059-content-index-honesty.
+//
+// This file is NOT compiled. It is the reviewable statement of what changes in
+// backend/rpc/v1/files.proto, which stays the single source of truth. Regenerate with
+// `buf generate` from backend/ after applying; that rewrites backend/rpc/v1/files.pb.go
+// and frontend/packages/rpc/rpc/v1/files_pb.ts together.
+
+syntax = "proto3";
+package rpc.v1;
+
+// ---------------------------------------------------------------------------
+// CHANGED: ExtractionMethod — image_ocr removed (FR-005, SC-006)
+//
+// BREAKING. No compatibility shim, no deprecation window: all clients in this
+// repository release together. Nothing has ever written this value, so no stored
+// record and no live client depends on it. `reserved 3` keeps the tag from being
+// quietly reused for a different meaning later.
+// ---------------------------------------------------------------------------
+enum ExtractionMethod {
+  EXTRACTION_METHOD_UNSPECIFIED = 0;
+  EXTRACTION_METHOD_OFFICE_PARSER = 1;  // Word processor, spreadsheet and presentation
+                                        // formats, read via their converted PDF
+  EXTRACTION_METHOD_PDF_PARSER = 2;     // PDF text extraction
+  reserved 3;                           // was EXTRACTION_METHOD_IMAGE_OCR
+  EXTRACTION_METHOD_PLAIN_TEXT = 4;     // Plain text, Markdown, CSV, HTML, XML, JSON
+}
+
+// ---------------------------------------------------------------------------
+// CHANGED: IndexingStatus — two values added (FR-016)
+//
+// The first four are stored in files.file_content_index.indexing_status and are
+// unchanged. The last two are derived at the RPC and never stored; see
+// data-model.md. UNSPECIFIED becomes unreachable — it is today's answer in 100%
+// of cases and must become the answer in none of them (SC-005).
+// ---------------------------------------------------------------------------
+enum IndexingStatus {
+  INDEXING_STATUS_UNSPECIFIED = 0;
+  INDEXING_STATUS_PENDING = 1;         // Queued: the upload enqueued indexing
+  INDEXING_STATUS_IN_PROGRESS = 2;     // Extracting
+  INDEXING_STATUS_COMPLETED = 3;       // Done — extracted_text may legitimately be empty
+  INDEXING_STATUS_FAILED = 4;          // Failed; error_message says why, briefly
+  INDEXING_STATUS_NOT_APPLICABLE = 5;  // This file type is never content-indexed
+  INDEXING_STATUS_NEVER_INDEXED = 6;   // Indexable, but no attempt was ever recorded
+}
+
+// ---------------------------------------------------------------------------
+// UNCHANGED shape, newly truthful contents (FR-017)
+//
+// extraction_method is UNSPECIFIED in every response today; updated_at is null in
+// every response today. Both must carry real values whenever a row exists.
+// ---------------------------------------------------------------------------
+message ContentIndexInfo {
+  string index_id = 1;                        // "" when no row exists
+  string file_id = 2;
+  IndexingStatus status = 3;
+  ExtractionMethod extraction_method = 4;     // UNSPECIFIED only when no row exists
+  string error_message = 5;                   // FR-018: short; never a hostname,
+                                              // credential, storage key or stack trace
+  int32 duration_ms = 6;
+  int32 text_length = 7;                      // bytes of extracted_text actually stored
+  google.protobuf.Timestamp updated_at = 8;   // FR-017: the row's updated_at
+}
+
+// GetContentIndexStatus keeps its existing access_control option. Behavioural change:
+// an unknown file_id in the caller's organization now returns NOT_FOUND instead of an
+// UNSPECIFIED ContentIndexInfo, because the handler must load the file's metadata to
+// answer NOT_APPLICABLE versus NEVER_INDEXED at all.

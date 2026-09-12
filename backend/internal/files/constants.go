@@ -1,5 +1,7 @@
 package files
 
+import "time"
+
 // Upload Context Constants
 // MUST align with:
 // - Database CHECK constraint in files.file_metadata.upload_context
@@ -102,11 +104,31 @@ const (
 // - Database CHECK constraint in files.file_content_index.extraction_method
 // - Proto enum rpc.v1.ExtractionMethod
 // - Frontend TypeScript types in packages/apis/src/files.ts
+//
+// office_parser names the file that was read, not the route: office documents are read
+// via the PDF that Gotenberg produced in step 1 of the same post-processing workflow.
 const (
 	ExtractionMethodOfficeParser = "office_parser"
 	ExtractionMethodPDFParser    = "pdf_parser"
-	ExtractionMethodImageOCR     = "image_ocr"
 	ExtractionMethodPlainText    = "plain_text"
+)
+
+// Content extraction bounds (Feature 059).
+const (
+	// MaxExtractedTextBytes caps what is stored in file_content_index.extracted_text.
+	// 1 MiB is a few hundred pages of prose. Exceeding it truncates on a rune boundary
+	// and still completes: the file stays findable on the portion kept.
+	MaxExtractedTextBytes = 1 << 20
+
+	// MaxSourceReadBytes caps what is read out of object storage. The PDF reader needs
+	// an io.ReaderAt, so the object is buffered in memory; beyond this bound the file
+	// records failed rather than consuming the worker.
+	MaxSourceReadBytes = 64 << 20
+
+	// ExtractionTimeout bounds extraction wall clock. 30s matches --api-timeout=30s
+	// already set on the Gotenberg container in docker-compose.yml, so the two limits
+	// cannot disagree about how long a document may take.
+	ExtractionTimeout = 30 * time.Second
 )
 
 const (

@@ -268,7 +268,6 @@ type IAMServiceClient interface {
 	//   - no filter        -> the whole active roster, alphabetical, cursor-paginated
 	//   - department_id    -> the active members of that department, alphabetical
 	//   - employee_ids     -> exactly those people (used for the person entry screen)
-	//
 	// A non-empty `query` narrows any of the three by fuzzy multilingual name matching
 	// and returns a single relevance-ordered page with an empty next_cursor.
 	//
@@ -340,12 +339,11 @@ type IAMServiceClient interface {
 	// Authenticated, no additional permission.
 	GetAccountDeletionPreview(context.Context, *connect.Request[v1.GetAccountDeletionPreviewRequest]) (*connect.Response[v1.GetAccountDeletionPreviewResponse], error)
 	// DeleteMyAccount: erase this person's account.
-	//   - Refuses when iam.user.is_org_managed is true; that person's path is
-	//     ComplianceService.RequestAccountRemoval.
-	//   - Refuses with the SoleOwnerBlocksDeletion detail when the caller is the sole
-	//     owner of an organization that still has other members.
-	//   - Otherwise invalidates every session synchronously and enqueues the erase.
-	//
+	// - Refuses when iam.user.is_org_managed is true; that person's path is
+	//   ComplianceService.RequestAccountRemoval.
+	// - Refuses with the SoleOwnerBlocksDeletion detail when the caller is the sole
+	//   owner of an organization that still has other members.
+	// - Otherwise invalidates every session synchronously and enqueues the erase.
 	// Deleting an account never deletes an organization.
 	// Authenticated, no additional permission.
 	DeleteMyAccount(context.Context, *connect.Request[v1.DeleteMyAccountRequest]) (*connect.Response[v1.DeleteMyAccountResponse], error)
@@ -1032,7 +1030,6 @@ type IAMServiceHandler interface {
 	//   - no filter        -> the whole active roster, alphabetical, cursor-paginated
 	//   - department_id    -> the active members of that department, alphabetical
 	//   - employee_ids     -> exactly those people (used for the person entry screen)
-	//
 	// A non-empty `query` narrows any of the three by fuzzy multilingual name matching
 	// and returns a single relevance-ordered page with an empty next_cursor.
 	//
@@ -1104,12 +1101,11 @@ type IAMServiceHandler interface {
 	// Authenticated, no additional permission.
 	GetAccountDeletionPreview(context.Context, *connect.Request[v1.GetAccountDeletionPreviewRequest]) (*connect.Response[v1.GetAccountDeletionPreviewResponse], error)
 	// DeleteMyAccount: erase this person's account.
-	//   - Refuses when iam.user.is_org_managed is true; that person's path is
-	//     ComplianceService.RequestAccountRemoval.
-	//   - Refuses with the SoleOwnerBlocksDeletion detail when the caller is the sole
-	//     owner of an organization that still has other members.
-	//   - Otherwise invalidates every session synchronously and enqueues the erase.
-	//
+	// - Refuses when iam.user.is_org_managed is true; that person's path is
+	//   ComplianceService.RequestAccountRemoval.
+	// - Refuses with the SoleOwnerBlocksDeletion detail when the caller is the sole
+	//   owner of an organization that still has other members.
+	// - Otherwise invalidates every session synchronously and enqueues the erase.
 	// Deleting an account never deletes an organization.
 	// Authenticated, no additional permission.
 	DeleteMyAccount(context.Context, *connect.Request[v1.DeleteMyAccountRequest]) (*connect.Response[v1.DeleteMyAccountResponse], error)

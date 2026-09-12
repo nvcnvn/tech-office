@@ -4,7 +4,7 @@ Binary storage on Cloudflare R2 with per-org quota, virus scanning, MIME validat
 context-scoped access rules, PDF conversion and content indexing. Owned by
 `internal/files`; contract in `rpc/v1/files.proto` (`FileService`, 15 RPCs).
 
-**Status date: 2026-09-12.** Supersedes specs 014, 015, 045.
+**Status date: 2026-09-12.** Supersedes specs 014, 015, 045, 059.
 
 ## Upload flow
 
@@ -148,12 +148,85 @@ and the custom domain.
 1. **`convert-file-to-pdf/v1`** — Office/other formats → PDF via **Gotenberg**
    (`GOTENBERG_URL`). Tracked in `files.file_pdf_conversion`; status `pending →
    processing → completed | failed`. `GetPDFConversionStatus`, `TriggerPDFConversion`.
-2. **`extract-content/v1`** — text extraction into `files.file_content_index`
-   (`extraction_method IN ('office_parser','pdf_parser','image_ocr','plain_text')`,
-   `indexing_status`, `indexing_duration_ms`). `GetContentIndexStatus`.
+2. **`extract-file-content/v1`** — text extraction into `files.file_content_index`
+   (`extraction_method IN ('office_parser','pdf_parser','plain_text')`,
+   `indexing_status`, `indexing_error`, `indexing_duration_ms`).
+   `GetContentIndexStatus`.
 
-The `cmd/server.go` comment notes the post-processing workflow is partly a skeleton; it is
-registered so runs execute if enqueued.
+### What is read, and how
+
+The step re-reads the file's `detected_mime_type` (falling back to `mime_type`) at
+execution time, so eligibility follows what the server found in the bytes rather than what
+the client declared at upload. Detection runs in the concurrent validation workflow, so the
+step waits up to 15 s for `validation_status` to leave `pending` before deciding, and falls
+back to the declared type if it does not.
+
+| Family | Types | Method | How |
+|---|---|---|---|
+| Plain text | `text/*`, `application/json`, `application/xml` | `plain_text` | read directly |
+| PDF | `application/pdf` | `pdf_parser` | `ledongthuc/pdf`, wrapped in a `recover` because the library can panic on malformed input |
+| Office | the nine OOXML, legacy binary Office and OpenDocument types | `office_parser` | read from the PDF **step 1 produced**, passed in memory as `ExtractContentInput.PDFStorageKey` |
+
+`office_parser` names the file that was read, not the route it took. Office extraction
+therefore inherits conversion's availability: when step 1 skipped or failed, step 2 records
+`failed` with reason `office conversion unavailable` rather than reporting success with no
+text. Anything not in the table — images, video, audio, archives — is not content-indexed,
+and no row is written for it.
+
+Bounds, all in `internal/files/constants.go`: extracted text is whitespace-collapsed and
+capped at **1 MiB** (`MaxExtractedTextBytes`, truncated on a rune boundary — a truncated
+file is `completed`, not `failed`, and stays findable on the portion kept); the source
+object read is capped at **64 MiB** (`MaxSourceReadBytes`, because the PDF reader needs an
+`io.ReaderAt` and so the object is buffered); extraction wall clock is capped at **30 s**
+(`ExtractionTimeout`, matching `--api-timeout=30s` on the Gotenberg container).
+
+`completed` with empty text is a legitimate terminal state — an empty document, a blank
+page, or a scan with no selectable text. There is no OCR; a scanned page yields nothing and
+says so. `image_ocr` was removed from the constraint, the constants, the proto enum and the
+clients in feature 059, because nothing ever performed it.
+
+### Status, and what it is allowed to say
+
+`GetContentIndexStatus` returns six distinct answers. Four are stored in
+`indexing_status`; two are derived at the RPC from the absence of a row and the file's own
+type, so no row is written per JPEG:
+
+| Answer | Stored | When |
+|---|---|---|
+| `PENDING` | yes | queued — written at upload time by `files.EnqueueFilePostProcessing` |
+| `IN_PROGRESS` | yes | extracting |
+| `COMPLETED` | yes | done; the text may legitimately be empty |
+| `FAILED` | yes | `error_message` carries a short, caller-safe reason |
+| `NOT_APPLICABLE` | derived | no row, and the detected type is not one we read |
+| `NEVER_INDEXED` | derived | no row, but the type is indexable — e.g. uploaded before feature 059 |
+
+`UNSPECIFIED` is unreachable. An unknown `file_id` in the caller's organization returns
+`NOT_FOUND`, because the handler loads the file's metadata to answer at all. The response
+carries the extraction method, the stored text length, the duration and the last-changed
+time; before feature 059 the method and the timestamp were absent from every response.
+
+The reason stored in `indexing_error` is a short mapped phrase — "file too large to
+index", "office conversion unavailable", "the document could not be read" — never a
+hostname, a credential, a storage key or a stack trace. The full internal error goes to the
+worker log only.
+
+### Writes and job outcome
+
+Every write to `files.file_content_index` goes through one `UpsertFileContentIndex` on
+`unique_file_index (organization_id, file_id)`. A retry replaces the stored result rather
+than adding a second one, and because `indexing_error` passes through `EXCLUDED` rather
+than `COALESCE`, a later success clears a previous failure's reason.
+
+All three upload paths — chat, project task and the explicit `TriggerPDFConversion` RPC —
+enqueue through `files.EnqueueFilePostProcessing`, which writes the `pending` row and
+begins the workflow in the caller's transaction. An upload logs an enqueue failure and
+carries on; the explicit trigger surfaces it.
+
+The workflow's `processing_status` is `completed` when no step failed — **including when
+every step was legitimately skipped** — `partial` when some failed, and `failed` only when
+every applicable step failed. A JPEG that is neither convertible nor indexable is a
+completed job. Before feature 059 it was reported as a failed one, on every image upload
+in the system.
 
 ## Search
 
@@ -200,3 +273,8 @@ nothing in the repo writes it, because the calendar domain stores `evidence_file
 Note that `context_type` on `files.file_access_rule` is a *different* enum with its own
 broader value set (`calendar_event`, `support_ticket`, `crm_deal`) — do not conflate the
 two.
+
+`testWorld.seedFile` in the integration suite seeds against the world's *current*
+organisation rather than the uploader's own, so a seed taken after a helper that registers
+a new org writes a row the actor does not own. The content-indexing helpers key off
+`uploader.OrgID` instead; `seedFile` has not been changed. See D83 in the drift register.
