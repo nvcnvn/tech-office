@@ -70,11 +70,35 @@ test.describe('Legal surface', () => {
       await page.getByLabel('Last Name').fill('Gate');
       await page.getByLabel('Last Name').blur();
 
+      // CORRECTED ASSERTION (feature 061). This used to read
+      // `await expect(submit).toBeDisabled()`, and it failed — the button is enabled.
+      // The assertion was wrong about the product, not the other way round: SignupForm
+      // deliberately does NOT gate the submit button on formState.isValid, and says why
+      // in a comment on the button. The form validates on blur, so isValid lagged a field
+      // the user had just typed and not yet left; they typed the last field, clicked, and
+      // nothing happened. handleSubmit validates the whole form and shows the errors,
+      // which is the same protection without the dead first click.
+      //
+      // FR-010 is about what the product must refuse, not about which control is greyed
+      // out, so the corrected assertion checks the refusal itself: clicking submit with
+      // the box unticked must not create anything, and must say why. That is a stronger
+      // guard than the original — a disabled button proves nothing about what the
+      // submit handler would have done.
       const submit = page.getByRole('button', { name: /create organization/i });
-      await expect(submit).toBeDisabled();
+      const acknowledgement = page.getByRole('checkbox');
+      await expect(acknowledgement).not.toBeChecked();
+
+      await submit.click();
+      await expect(
+        page.getByText('You must accept the terms of service and privacy policy'),
+      ).toBeVisible();
+      await expect(page).toHaveURL(/\/signup/);
 
       // Ticking the box is the only thing standing between here and a valid form.
-      await page.getByRole('checkbox').check();
+      await acknowledgement.check();
+      await expect(
+        page.getByText('You must accept the terms of service and privacy policy'),
+      ).toHaveCount(0);
       await expect(submit).toBeEnabled();
     });
   });

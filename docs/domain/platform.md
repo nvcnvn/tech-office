@@ -392,42 +392,115 @@ Schemas reserved but unused so far: `timekeeping`, `learning`, `compliance`, `pa
 
 | Command | What it runs |
 |---|---|
-| `make test-backend` | Go integration tests in `backend/integration` (89 files) against a live Postgres |
-| `make test-frontend` | two static assertion checks — the mobile palette's WCAG contrast sweep and the mobile theme resolution table — then Playwright E2E against web |
+| `make test-backend` | Go integration tests in `backend/integration` against a live Postgres |
+| `make test-frontend` | three static assertion checks — the mobile palette's WCAG contrast sweep, the mobile theme resolution table and SSO availability — then Playwright E2E against web |
 | `make test-frontend-one F=<spec>` | one Playwright spec |
-| `make test-mobile` | Maestro flows against the Expo app |
+| `make test-mobile` | the 27-flow standing Maestro suite against the Expo app |
 | `make test-mobile-one F=<flow> [MAESTRO_DEVICE=<udid>]` | one Maestro flow; `MAESTRO_DEVICE` names the simulator or emulator, and with it the same command covers both platforms |
-| `make test` | all three |
+| `make test` | backend + frontend |
 | `make test-db-purge` | drops test organizations left behind |
+| `make lint-tenancy` | the multi-tenant schema discipline check; green |
+| `make check-tracked-files` | binary and oversized-blob audit |
+
+### Which of these CI enforces
+
+One, and it is the cheapest. `.github/workflows/checks.yml` runs `pnpm run typecheck:mobile`
+on every pull request against `main` and every push to it. It needs no database, backend,
+device or browser, so it runs on a stock `ubuntu-latest` runner in a few minutes.
+
+The workflow is `checks.yml` with a **named job** rather than `typecheck-mobile.yml`, so the
+heavier gates can be added as further jobs without renaming it or re-pointing a branch
+protection rule. There is deliberately no `paths` filter: a required check skipped by a path
+filter reports as *pending*, not *passing*, and blocks the merge it was meant to wave through.
+
+The other gates are not in CI, each for its own reason. `make test-backend` and
+`make test-frontend` need a live Postgres and a backend; `make test-mobile` needs a device;
+`pnpm lint` is itself red (D67), and a gate that fails on the default branch cannot be made
+required without blocking every pull request.
+
+Three things made the mobile check unreproducible outside the tree of a developer who had
+already built once, and all three had to be fixed before it could be enforced at all:
+`pnpm/action-setup` resolves `packageManager` from the **repository root**'s package.json,
+which this repository does not have; the `typecheck:mobile` script called a bare `tsc` that
+the root workspace does not declare; and every workspace package points `types` at a
+gitignored `dst/`, so a clean checkout has no type declarations until `packages/` is built.
+"It passes on my machine" was true and meant nothing.
+
+### How the Maestro fixture is created
+
+One command, run from `backend/` against a migrated database:
+
+```
+go run ./cmd seed-maestro-fixture > ../frontend/apps/mobile/.maestro/.env
+```
+
+It creates or refreshes the `maestro` workspace the standing suite signs into and prints a
+complete `.env` body to **stdout**; every progress and diagnostic line goes to **stderr**, so
+the redirect above yields a usable file rather than one with log lines in it. It is
+idempotent — a second run refreshes the same workspace rather than creating a second one, and
+re-emits the ids that changed — and it refuses `--subdomain demo`, because that address
+belongs to `seed-demo-org` and a store-review fixture must not share state with a suite that
+mutates it.
+
+The fixture carries what the 27 standing flows read: a primary account holding
+`iam.inviteUser` with **both** a password and a permanent PIN (the two sign-in flows address
+the same account by different credentials), a second account *without* that permission for
+the worker feature tour, two directory colleagues that differ only in whether a phone number
+is recorded, a department, a ritual project with one overdue assigned instance and one
+unassigned instance due today, a chat channel, and a document, work item, event and file that
+all match one nonsense search word.
+
+`make test-mobile` refuses to launch a flow while any of the thirteen required variables is
+missing **or empty**, naming the ones it cannot find and the command that produces them. The
+empty case matters: the runner skips keys with an empty value, so a presence-only check passes
+and the failure surfaces several flows later as a confusing assertion.
+
+### What these gates can and cannot say today
+
+`make test-frontend` starts and runs. It used to abort before executing a single spec,
+because it gated on `check-frontend` — `curl -sf http://localhost:13000` — which probes a dev
+server the suite does not use; Playwright starts and owns its own server on :3100. That guard
+is gone (D71).
+
+On a **warm** Next build cache the suite passes: a measured full run was 235 passed, 2 failed,
+and both failures were real spec defects that have since been fixed and observed passing. On a
+**cold** cache it is not yet reliable: `next dev` compiles each route on first visit, and a
+navigation that arrives mid-compile gets a placeholder page or exceeds its timeout. That is
+D54, and it is open with its cost measured — a production build and a route-warming setup were
+both tried and both cost more than the gate is worth in their current form. `retries` is
+deliberately not used: a suite that cannot be trusted to say no is not improved by retrying.
+
+The E2E web server uses its own build directory (`NEXT_DIST_DIR=.next-e2e`) so that it cannot
+share a compilation cache with a developer's `pnpm --filter web dev`. Two `next dev` processes
+pointed at one `.next` evict each other's compiled routes continuously; with a stale dev
+server running, a full-suite run went from nine minutes to hours.
+
+`make test-backend` carries its own load-dependence. A handful of tests assert a latency
+budget on a round trip rather than on a query and share one local Postgres with everything
+else running at the same time, so they measure the machine's load as much as the code —
+`TestEvidenceReviewQueuePerformance`'s 2 s first-page budget is the one that fails in
+practice, and it passes in isolation.
+
+`make check-tracked-files` is **not** green: `backend/tenancylint` is a committed 13.9 MB
+executable that the audit rejects and that nothing needs, since `lint-tenancy` runs the tool
+with `go run`. See D72.
 
 Integration tests use the shared `testWorld` fixture (`integration/helper_test.go`) and run
 with `t.Parallel()`; each test provisions its own organization so parallel runs cannot
 collide. The suite — not unit tests — is the primary correctness gate, per Constitution
 principle II.
 
-That parallelism has a cost the wall-clock assertions do not account for. A handful of tests
-assert a latency budget on a round trip rather than on the query, and they share one local
-Postgres with everything else running at the same time, so they measure the machine's load
-as much as the code — `TestEvidenceReviewQueuePerformance`'s 2 s first-page budget is the
-one that fails in practice, and it passes in isolation. `make test-backend` and
-`make test-frontend` are therefore both not reliably green on a clean tree; the open rows in
-the drift register say which failures are expected, and a failure outside that list is the
-one worth chasing.
-
-Both frontend targets also gate on `check-frontend`, which requires `curl -sf` to succeed
-against `http://localhost:13000`. The dev server answers `/` with a 404 carrying Next's
-`missing required error components` placeholder, so that guard fails and the target aborts
-before Playwright runs, even when the app is serving every real route normally. Invoking
-`pnpm --filter web exec playwright test --config=e2e/playwright.config.ts <spec>` from
-`frontend/` bypasses the guard and works. See D71.
-
-Two repository gates sit outside the test targets. `make lint-tenancy` builds and runs
-`backend/tools/tenancylint` over `schema.sql` and the sqlc queries, and is green.
-`make check-tracked-files` audits every tracked file for binaries and oversized blobs, and
-is **not** green: `backend/tenancylint` is a committed 13.9 MB executable that the audit
-rejects and that nothing needs, since `lint-tenancy` runs the tool with `go run`. See D72.
-
 ## Known drift
+
+**The development database is stored in an anonymous Docker volume.** The `postgres` service
+in `backend/docker-compose.yml` declares no volume, so its data lives in an anonymous volume
+created fresh with each container. `docker compose down`, or any removal of that container,
+silently replaces a populated development database with an empty one. The old data is not
+destroyed — `docker rm` without `-v` leaves the volume behind — but it survives only as an
+unnamed dangling volume among dozens, which is a poor place to keep the only copy of a
+workspace somebody spent an afternoon seeding. A named volume would fix it and would also
+make `docker compose down -v` the single explicit way to discard it. See D86.
+
 
 **schema.sql no longer leads the migrations.** `schema.sql` used to be hand-written
 alongside the migrations, so the two could disagree: permission rows were added to it

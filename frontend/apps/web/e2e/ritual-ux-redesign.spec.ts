@@ -668,7 +668,13 @@ test.describe('Ritual UX Redesign', () => {
 				'data-highlighted-requirement',
 				'true'
 			);
-			await expect(page).not.toHaveURL(new RegExp('/workspace/tasks/.+\?view=review'));
+			// A regex LITERAL, not new RegExp(...) over a single-quoted string. In the
+			// string form the `\?` collapses to a plain `?`, so the pattern compiled to
+			// `.+?view=review` — a lazy quantifier followed by a literal `view=review`,
+			// not an escaped query separator. The assertion passed, but for the wrong
+			// reason, and could not have caught a URL that reached `view=review` by
+			// another path. See D42.
+			await expect(page).not.toHaveURL(/\/workspace\/tasks\/.+\?view=review/);
 		});
 
 		test('dual-role users see separate proof and review sections', async ({ page }) => {

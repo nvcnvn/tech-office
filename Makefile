@@ -136,9 +136,17 @@ test-db-purge: check-postgres
 # ---------------------------------------------------------------------------
 # Frontend E2E tests (Playwright)
 # ---------------------------------------------------------------------------
+#
+# These targets gate on check-backend but NOT on check-frontend. Playwright starts
+# and owns its own web server on :3100 (see e2e/playwright.config.ts `webServer`),
+# so the port-13000 dev server check-frontend probes has nothing to do with the
+# run. Leaving it in place meant the whole target aborted before a single spec
+# executed unless a developer happened to have `pnpm --filter web dev` running —
+# which is drift D71, and the reason "make test-frontend is red" and "make
+# test-frontend never started" looked the same from the outside.
 
 .PHONY: test-frontend
-test-frontend: check-backend check-frontend
+test-frontend: check-backend
 	@echo "\n=== Running frontend static checks ==="
 	cd frontend && pnpm --filter @tech-office/theme-tokens check:contrast
 	cd frontend && pnpm --filter mobile check:theme-resolution
@@ -148,23 +156,23 @@ test-frontend: check-backend check-frontend
 
 # Run a single spec file: make test-frontend-one F=project-team
 .PHONY: test-frontend-one
-test-frontend-one: check-backend check-frontend
+test-frontend-one: check-backend
 	@echo "\n=== Running frontend E2E: $(F).spec.ts ==="
 	cd frontend && pnpm --filter web exec playwright test --config=e2e/playwright.config.ts "$(F)"
 
 # Run with headed browser for debugging
 .PHONY: test-frontend-headed
-test-frontend-headed: check-backend check-frontend
+test-frontend-headed: check-backend
 	cd frontend && pnpm --filter web e2e:headed
 
 # Run with Playwright UI mode
 .PHONY: test-frontend-ui
-test-frontend-ui: check-backend check-frontend
+test-frontend-ui: check-backend
 	cd frontend && pnpm --filter web e2e:ui
 
 # Run with screenshots enabled
 .PHONY: test-frontend-screenshots
-test-frontend-screenshots: check-backend check-frontend
+test-frontend-screenshots: check-backend
 	E2E_SCREENSHOTS=1 cd frontend && pnpm --filter web e2e
 
 # ---------------------------------------------------------------------------
@@ -234,10 +242,48 @@ check-maestro:
 		|| (echo "✗ maestro not found. Install: brew tap mobile-dev-inc/tap && brew install maestro"; exit 1)
 	@echo "✓ maestro ($$($(MAESTRO_BIN) --version 2>&1 | head -1))"
 
+# The thirteen names the 27 flows in the standing suite read. The check runs BEFORE
+# the first flow launches, because the alternative — discovering a missing value as
+# an assertion failure four flows in — is how "the fixture drifted" and "the app
+# broke" became indistinguishable (Feature 061 FR-018).
+#
+# `^VAR=.` and not `^VAR=`: the runner skips keys with an empty value
+# (run-maestro-suite.sh), so a bare `VAR=` passes a presence check and then
+# produces exactly the confusing mid-suite failure this guard exists to prevent.
+MAESTRO_SUITE_VARS = \
+	MAESTRO_TEST_SUBDOMAIN \
+	MAESTRO_TEST_EMAIL \
+	MAESTRO_TEST_PASSWORD \
+	MAESTRO_TEST_PIN \
+	MAESTRO_OWNER_PASSWORD \
+	MAESTRO_OWNER_PIN \
+	MAESTRO_TEAM_TASK_ID \
+	MAESTRO_SEARCH_WORD \
+	MAESTRO_SEARCH_DOCUMENT_TITLE \
+	MAESTRO_DIRECTORY_PERSON_WITH_PHONE \
+	MAESTRO_DIRECTORY_PERSON_NO_PHONE \
+	MAESTRO_DIRECTORY_DEPARTMENT \
+	MAESTRO_WORKER_EMAIL \
+	MAESTRO_WORKER_PASSWORD
+
+MAESTRO_SEED_CMD = cd backend && go run ./cmd seed-maestro-fixture > ../frontend/apps/mobile/.maestro/.env
+
 .PHONY: check-maestro-env
 check-maestro-env:
 	@test -f $(MAESTRO_ENV) \
-		|| (echo "✗ $(MAESTRO_ENV) not found. Copy from .env.example and fill in credentials."; exit 1)
+		|| (echo "✗ $(MAESTRO_ENV) not found."; \
+		    echo "  Produce it with:"; \
+		    echo "    $(MAESTRO_SEED_CMD)"; exit 1)
+	@missing_vars=""; \
+	for var in $(MAESTRO_SUITE_VARS); do \
+		grep -q "^$$var=." $(MAESTRO_ENV) || missing_vars="$$missing_vars $$var"; \
+	done; \
+	if [ -n "$$missing_vars" ]; then \
+		echo "✗ Missing or empty Maestro fixture vars in $(MAESTRO_ENV):$$missing_vars"; \
+		echo "  Produce them with:"; \
+		echo "    $(MAESTRO_SEED_CMD)"; \
+		exit 1; \
+	fi
 	@echo "✓ maestro env loaded"
 
 .PHONY: check-maestro-canonical-env
@@ -250,7 +296,7 @@ check-maestro-canonical-env: check-maestro-env
 		MAESTRO_CANONICAL_NOT_FOUND_OPEN_LINK \
 		MAESTRO_CANONICAL_TASK_READY_TEXT \
 		MAESTRO_CANONICAL_PREVIEW_CHANNEL_ID; do \
-			grep -q "^$$var=" $(MAESTRO_ENV) || missing_vars="$$missing_vars $$var"; \
+			grep -q "^$$var=." $(MAESTRO_ENV) || missing_vars="$$missing_vars $$var"; \
 	done; \
 	if [ -n "$$missing_vars" ]; then \
 		echo "✗ Missing canonical Maestro vars in $(MAESTRO_ENV):$$missing_vars"; \
@@ -268,7 +314,7 @@ check-maestro-link-preview-env: check-maestro-env
 		MAESTRO_CANONICAL_TASK_READY_TEXT \
 		MAESTRO_LINK_PREVIEW_DOCUMENT_LINK \
 		MAESTRO_LINK_PREVIEW_DOCUMENT_TITLE; do \
-			grep -q "^$$var=" $(MAESTRO_ENV) || missing_vars="$$missing_vars $$var"; \
+			grep -q "^$$var=." $(MAESTRO_ENV) || missing_vars="$$missing_vars $$var"; \
 	done; \
 	if [ -n "$$missing_vars" ]; then \
 		echo "✗ Missing link-preview Maestro vars in $(MAESTRO_ENV):$$missing_vars"; \

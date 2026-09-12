@@ -1,0 +1,78 @@
+# The repository's quality-check workflow.
+#
+# Today it holds one job: the mobile TypeScript check. That gate already passed on every
+# developer's machine and was enforced nowhere, which is how three type errors survived
+# several features before anyone noticed (drift D34). It needs no database, backend,
+# device or browser — it reads files and exits — so it is the cheapest of the three gates
+# Constitution II and XIII name, and the only one that belongs on a GitHub-hosted runner
+# as it stands.
+#
+# The file is `checks.yml` with a named job rather than `typecheck-mobile.yml` so the
+# gates deferred by feature 061 — the Go integration suite, the web E2E suite, `pnpm lint`
+# (D67) — can be added as further jobs without renaming the workflow or re-pointing a
+# branch protection rule.
+#
+# There is deliberately no `paths` / `paths-ignore` filter. A required status check
+# skipped by a path filter reports as *pending*, not *passing*, and blocks the merge it
+# was meant to wave through. The job is a few seconds of `tsc` plus a cached install, so
+# running it on every change is both simpler and well inside the five-minute budget.
+name: Checks
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A rapid push sequence supersedes rather than queues.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck-mobile:
+    name: Mobile typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No `version` input: frontend/package.json's `packageManager` field pins pnpm, so
+      # CI and a developer's machine cannot drift on the version. `package_json_file` is
+      # required to point at it — the action defaults to the REPOSITORY ROOT's
+      # package.json, and this repository has none (the pnpm workspace is rooted at
+      # frontend/). Without it the step fails with "No pnpm version is specified".
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: frontend/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      # --frozen-lockfile makes a lockfile that does not match package.json a failure
+      # rather than a silent re-resolution, so "CI passed" and "it passed locally" mean
+      # the same thing.
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      # Every workspace package points `types` at a built `dst/index.d.ts`, and `dst/` is
+      # gitignored. Without this step the mobile typecheck fails on a clean checkout with
+      # ~100 "Cannot find module '@tech-office/theme-tokens'" errors — which is exactly
+      # how the gate came to "pass locally": a developer's tree still holds the artifacts
+      # from a build they ran weeks ago. Filtered to packages/ because building the apps
+      # is a different, much more expensive job.
+      - name: Build workspace packages
+        working-directory: frontend
+        run: pnpm --filter "./packages/*" run build
+
+      # tsc writes each diagnostic as `path(LINE,COL): error TSxxxx: message` and exits
+      # non-zero, so the file, line and error are in the log with no reporter config.
+      - name: Typecheck mobile
+        working-directory: frontend
+        run: pnpm run typecheck:mobile

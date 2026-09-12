@@ -12,6 +12,38 @@ const API_BASE = process.env.E2E_API_URL || 'http://localhost:18080';
 const REPO_ROOT = resolve(process.cwd(), '../../..');
 const BACKEND_COMPOSE_FILE = resolve(REPO_ROOT, 'backend/docker-compose.yml');
 
+/**
+ * The calendar date the BACKEND is currently living in, as `YYYY-MM-DD`.
+ *
+ * Not every "today" in this suite belongs to the same clock, and conflating them is what
+ * D45 was. Two different readers decide what "today" means:
+ *
+ *   - the web app, for anything it computes in the browser (`TodayView`), and
+ *   - the Go server, for anything bucketed server-side — `GetAssignedWorkSummary` takes
+ *     its `as_of_date` from `time.Now()` in the backend process
+ *     (`internal/collaboration/context_rail_logic.go`).
+ *
+ * A fixture has to agree with whichever of the two will read it. This helper is for the
+ * second kind. It deliberately ignores a `TZ` override on the test process — the suite is
+ * run under a shifted `TZ` on purpose, to prove the browser-side fixtures are
+ * timezone-independent, and that override must not drag the server-side ones with it. The
+ * backend is an ordinary process on this machine with no such override, so asking the OS
+ * with `TZ` removed from the environment is exactly its calendar day.
+ */
+export function backendToday(): string {
+  const env = { ...process.env };
+  delete env.TZ;
+  return execFileSync('date', ['+%Y-%m-%d'], { encoding: 'utf8', env }).trim();
+}
+
+/** `backendToday()` shifted by whole days, still on the backend's calendar. */
+export function backendDateOffset(days: number): string {
+  const [year, month, day] = backendToday().split('-').map(Number);
+  const shifted = new Date(Date.UTC(year, month - 1, day + days));
+  return shifted.toISOString().slice(0, 10);
+}
+
+
 // ---------------------------------------------------------------------------
 // Generic RPC call
 // ---------------------------------------------------------------------------
@@ -447,14 +479,39 @@ WHERE id = '${taskId}'::uuid;
   }
 }
 
+/**
+ * Marks a standard task due "today" — where today means the same day the BROWSER will
+ * call today, not the day the database container calls today.
+ *
+ * This used to write `CURRENT_DATE + interval '6 hour'`. `CURRENT_DATE` is evaluated by
+ * Postgres, whose server timezone is `Etc/UTC`, while `TodayView` derives "today" from the
+ * browser's local midnight. Whenever the machine's local calendar date runs ahead of UTC's
+ * — on a UTC+7 machine, between 00:00 and 07:00 local — the two disagreed by a day and the
+ * task this helper had just marked due today was filtered out of the view as yesterday's.
+ * The spec then failed for part of every day, on a machine in the right timezone, with
+ * nothing wrong with the product. See D45.
+ *
+ * The writer and the reader now share one clock: the date is computed from the test
+ * process's own local time (Playwright's browser inherits the same TZ), formatted as a
+ * local calendar date, and sent as a literal rather than derived in SQL. `toISOString()`
+ * is deliberately NOT used to format it — that converts to UTC and would reintroduce
+ * exactly the bug being removed.
+ */
 export function setStandardTaskDueToday(taskId: string) {
   if (!/^[0-9a-f-]{36}$/i.test(taskId)) {
     throw new Error(`Invalid standard task id: ${taskId}`);
   }
 
+  const now = new Date();
+  const localToday = [
+    String(now.getFullYear()).padStart(4, '0'),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+
   const sql = `
 UPDATE collaboration.task
-SET due_date = CURRENT_DATE + interval '6 hour',
+SET due_date = TIMESTAMP '${localToday} 06:00:00',
     updated_at = now()
 WHERE id = '${taskId}'::uuid
   AND task_kind = 'standard';

@@ -2,7 +2,7 @@ import { execSync } from 'node:child_process';
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
 import { createTestEmployee, createTestOrg, loginAs, type TestUser } from './helpers/auth';
-import { assignTask, createChannel, createEvent, createOrGetDirectMessage, createProject, createTask, updateTask } from './helpers/api';
+import { assignTask, backendDateOffset, backendToday, createChannel, createEvent, createOrGetDirectMessage, createProject, createTask, updateTask } from './helpers/api';
 
 type WorkspaceRoute = {
   path: string;
@@ -153,11 +153,32 @@ test.describe('Workspace context rail', () => {
   test.describe('when viewing the calendar route', () => {
     // FR-006, FR-007, FR-008, FR-009, FR-010, FR-016, FR-017, SC-002, SC-005
     test('the rail renders live global blocks and removes mock quick-info content', async ({ page }) => {
-      const now = new Date();
-      const inOneHour = new Date(now.getTime() + 60 * 60 * 1000);
-      const inTwoHours = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-      const inThreeHours = new Date(now.getTime() + 3 * 60 * 60 * 1000);
-      const inFourHours = new Date(now.getTime() + 4 * 60 * 60 * 1000);
+      // Anchored to fixed hours of a whole future day rather than to Date.now() offsets.
+      // With offsets, a run starting after about 20:00 local pushed the later event past
+      // local midnight, and the "+ 1 more today" assertion — which counts events sharing
+      // a calendar day with the first upcoming one — lost its second event. The baseline
+      // run for this feature started at 19:03 and was within an hour of that.
+      //
+      // Tomorrow, not today, because both events must be in the FUTURE for "Next Up" and
+      // on the SAME local day as each other; a fixed hour today is in the past for any
+      // run that starts after it. The rail's query window is 30 days, so tomorrow is well
+      // inside it.
+      const localTomorrow = new Date();
+      localTomorrow.setDate(localTomorrow.getDate() + 1);
+      const atLocalHour = (hour: number) =>
+        new Date(
+          localTomorrow.getFullYear(),
+          localTomorrow.getMonth(),
+          localTomorrow.getDate(),
+          hour,
+          0,
+          0,
+          0,
+        );
+      const standupStart = atLocalHour(9);
+      const standupEnd = atLocalHour(10);
+      const planningStart = atLocalHour(11);
+      const planningEnd = atLocalHour(12);
 
       const project = await createProject(owner, { name: 'Context Rail Global Blocks' });
       const taskA = await createTask(owner, project.project.id, 'Owner overdue follow-up', {
@@ -169,19 +190,23 @@ test.describe('Workspace context rail', () => {
 
       await assignTask(owner, taskA.task.id, owner.id);
       await assignTask(owner, taskB.task.id, owner.id);
-      await updateTask(owner, taskA.task.id, { dueDate: new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString().slice(0, 10) });
-      await updateTask(owner, taskB.task.id, { dueDate: now.toISOString().slice(0, 10) });
+      // These two dates are read by the SERVER, not the browser: GetAssignedWorkSummary
+      // buckets on an as_of_date taken from time.Now() in the backend process. They must
+      // therefore be on the backend's calendar, which `toISOString().slice(0, 10)` is not
+      // — that is the UTC date, a day behind local wherever the machine is ahead of UTC.
+      await updateTask(owner, taskA.task.id, { dueDate: backendDateOffset(-1) });
+      await updateTask(owner, taskB.task.id, { dueDate: backendToday() });
 
       await createEvent(owner, {
         title: 'Context Rail Standup',
-        startTime: inOneHour.toISOString(),
-        endTime: inTwoHours.toISOString(),
+        startTime: standupStart.toISOString(),
+        endTime: standupEnd.toISOString(),
         requiredAttendeeIds: [owner.id],
       });
       await createEvent(owner, {
         title: 'Context Rail Planning',
-        startTime: inThreeHours.toISOString(),
-        endTime: inFourHours.toISOString(),
+        startTime: planningStart.toISOString(),
+        endTime: planningEnd.toISOString(),
         requiredAttendeeIds: [owner.id],
       });
 

@@ -10,6 +10,8 @@
 
 # next.js
 **/.next/
+# The E2E harness's own build directory (see frontend/apps/web/next.config.ts).
+**/.next-e2e/
 **/out/
 
 # production

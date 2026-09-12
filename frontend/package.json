@@ -13,7 +13,7 @@
 	"scripts": {
 		"lint": "eslint .",
 		"format": "prettier --write .",
-		"typecheck:mobile": "tsc -p apps/mobile/tsconfig.json --noEmit",
+		"typecheck:mobile": "pnpm --filter mobile exec tsc -p tsconfig.json --noEmit",
 		"web": "pnpm --filter web",
 		"brand": "node scripts/generate-brand-assets.mjs"
 	},

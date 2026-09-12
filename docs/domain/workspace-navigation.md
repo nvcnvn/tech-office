@@ -582,6 +582,32 @@ top-level surface (`chat`, `today`, `my-work`, `schedule`, `alerts`, `more`), `a
 (`auth/signin-known-device`, `onboarding/owner-signup`), then the screen sweep, then the
 behavioural flows the runner names.
 
+The workspace those flows sign into is produced by one backend command, not assembled by
+hand:
+
+```
+cd backend && go run ./cmd seed-maestro-fixture > ../frontend/apps/mobile/.maestro/.env
+```
+
+It creates or refreshes the `maestro` workspace and writes a complete `.env` to stdout, with
+progress on stderr so the redirect stays clean; a second run refreshes the same workspace
+rather than creating another. It seeds what the standing flows actually read: a primary
+account holding `iam.inviteUser` with **both** a password and a permanent PIN — `signin.yaml`
+is the email+password path and `signin-known-device.yaml` is the PIN path, and both address
+the same account — a second account *without* that permission for the worker feature tour,
+two directory colleagues differing only in whether a phone number is recorded, a department,
+a ritual project carrying one overdue assigned instance and one unassigned instance due
+today, a chat channel, and a document, work item, event and file that all match one nonsense
+search word. It refuses `--subdomain demo`: that address belongs to `seed-demo-org`, and a
+store-review workspace must not share state with a suite that blocks people and deactivates
+accounts.
+
+`make test-mobile` refuses to launch a flow while any of the thirteen required `MAESTRO_*`
+values is missing **or empty**, naming the ones it cannot find and the command that produces
+them. Empty matters as much as missing: the runner skips keys with an empty value, so a
+presence-only check passes and the failure then surfaces several flows later as an assertion
+that looks like a product bug.
+
 Every flow that starts from a fresh install begins with `auth/dev-client-bootstrap.yaml`,
 which clears state and then **opens the Metro bundle URL directly** rather than tapping a
 server in the dev-client launcher. The launcher only lists a server it can discover on the
@@ -720,12 +746,19 @@ dev menu instead. Maestro reports the tap as completed and then fails on the nex
 which reads as a missing element. Switch it off in the dev menu (shake, or the ✕ overlay)
 before running flows against a new emulator. Not present in a release build.
 
-**D47 — three older mobile flows still wait on a screen title that no longer exists.**
+**D51 — three older mobile flows still wait on a screen title that no longer exists.**
 `ritual-submission-flow.yaml`, `ritual-procedure-doc.yaml` and
 `tasks/evidence-review-approve.yaml` each `assertVisible: "Focus"` after opening the tasks
 tab; the tab root is titled **My Work**. Feature 044's flows wait on the `task-mode-toggle`
 testID instead. The three were left alone rather than changing assertions in flows unrelated
-to that feature, and they cannot run at all while D40 stands.
+to that feature. The fixture they need is now produced by one command
+(`go run ./cmd seed-maestro-fixture`), so the stale assertion is the remaining obstacle rather
+than the missing workspace it used to be. They stay unfixed because correcting three flows is
+feature 044's follow-up, not feature 061's, and none of them is in the standing suite.
+
+This section was headed "D47" until feature 061. The register gives D47 to the deep-link
+cold-start problem and D51 to this one, so a reader following either reference landed on the
+wrong page.
 
 **D43 — `Link asChild` silently drops a function `style` on mobile.** Under expo-router 55,
 a `Pressable` nested in `<Link asChild>` with `style={({ pressed }) => [...]}` renders with

@@ -11,6 +11,7 @@
  * and any previous run of it is dropped first so this is re-runnable.
  */
 import { test, expect, type Page } from '@playwright/test';
+import { TERMS_VERSION } from 'apis';
 import { loginAs, type TestUser } from './helpers/auth';
 import * as api from './helpers/api';
 import { execFileSync } from 'node:child_process';
@@ -103,6 +104,13 @@ async function registerOwner(): Promise<TestUser> {
 			adminPassword: password,
 			adminGivenName: 'Dana',
 			adminFamilyName: 'Whitfield',
+			// Omitting this entirely is what made this spec's whole beforeAll fail with
+			// "those are not the terms currently in force" — the server validates the
+			// field and an empty string is not the current version. Imported rather
+			// than written as a date literal, the way helpers/auth.ts already does it,
+			// so the fixture cannot drift from iam.CurrentTermsVersion the next time
+			// the terms are revised (Constitution VIII).
+			acceptedTermsVersion: TERMS_VERSION,
 		},
 	);
 	const login = await rpc<{ accessToken: string; expiresAt: string; user: { id: string } }>(
