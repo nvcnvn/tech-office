@@ -1,0 +1,1 @@
+Finish or cut file content indexing. Post-processing is partly a skeleton while file search advertises content matching. Either make text and PDF extraction work end to end and drop OCR, or remove the content index and search by filename only. A half-working feature costs more trust than an honestly absent one.
