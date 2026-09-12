@@ -3,7 +3,7 @@
 Who a person is, how they prove it, which organizations they belong to, and what they are
 allowed to do. Owned by `internal/iam` and `rpc/v1/iam.proto` (`IAMService`, 45 RPCs).
 
-**Status date: 2026-09-05.** Supersedes specs 001, 002, 018, 020, 024, 035.
+**Status date: 2026-09-12.** Supersedes specs 001, 002, 018, 020, 024, 035, 058.
 
 ## The identity model
 
