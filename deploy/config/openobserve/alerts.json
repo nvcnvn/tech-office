@@ -106,14 +106,14 @@
   },
   {
     "name": "HighServerErrorRate",
-    "description": "More than 5% of requests to a service are returning 5xx.",
+    "description": "More than 5% of requests to a service are returning 5xx. The denominator is floored at 0.2 req/s (60 requests per 5 minutes) so that a lone bot probe hitting a 500 during an idle window is not a 100% error rate. Below that volume it takes three 5xx in five minutes to fire.",
     "stream_type": "metrics",
     "stream_name": "traefik_service_requests_total",
     "is_real_time": false,
     "enabled": true,
     "query_condition": {
       "type": "promql",
-      "promql": "sum(rate(traefik_service_requests_total{code=~\"5..\"}[5m])) / sum(rate(traefik_service_requests_total[5m]))",
+      "promql": "sum(rate(traefik_service_requests_total{code=~\"5..\"}[5m])) / clamp_min(sum(rate(traefik_service_requests_total[5m])), 0.2)",
       "promql_condition": {"column": "value", "operator": ">", "value": 0.05}
     },
     "trigger_condition": {"period": 10, "frequency": 10, "frequency_type": "minutes", "operator": ">=", "threshold": 1, "silence": 120},
