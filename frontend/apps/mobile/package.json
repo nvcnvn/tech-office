@@ -16,7 +16,8 @@
 		"check:voice-state": "node --experimental-strip-types src/hooks/channel-voice-call-state.check.ts",
 		"check:doc-rows": "node --experimental-strip-types src/lib/doc-rows.check.ts",
 		"check:device-timezone": "node --experimental-strip-types src/lib/device-timezone.check.ts",
-		"check:theme-resolution": "node --experimental-strip-types src/lib/theme-resolution.check.ts"
+		"check:theme-resolution": "node --experimental-strip-types src/lib/theme-resolution.check.ts",
+		"check:sso-availability": "node --experimental-strip-types src/lib/sso-availability.check.ts"
 	},
 	"dependencies": {
 		"@connectrpc/connect": "^2.1.0",

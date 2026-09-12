@@ -142,6 +142,7 @@ test-frontend: check-backend check-frontend
 	@echo "\n=== Running frontend static checks ==="
 	cd frontend && pnpm --filter @tech-office/theme-tokens check:contrast
 	cd frontend && pnpm --filter mobile check:theme-resolution
+	cd frontend && pnpm --filter mobile check:sso-availability
 	@echo "\n=== Running frontend E2E tests ==="
 	cd frontend && pnpm --filter web e2e
 

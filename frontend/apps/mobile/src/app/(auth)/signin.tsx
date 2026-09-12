@@ -48,13 +48,13 @@ import {
 import { getCanonicalInAppRoute } from "../../lib/canonical-links";
 import { consumePendingAuthSubdomain, consumePendingPostSignInRedirect } from "../../lib/auth-redirect-handoff";
 import { makeStyles, useTheme } from "@/lib/theme";
+import {
+  GOOGLE_ANDROID_CLIENT_ID,
+  GOOGLE_IOS_CLIENT_ID,
+} from "../../lib/sso-availability";
+import { useSSOAvailability } from "../../lib/use-sso-availability";
 
 WebBrowser.maybeCompleteAuthSession();
-
-const GOOGLE_IOS_CLIENT_ID =
-  "751712281610-7o8j91k1b6kqpnp6a6mt1g95sfk6h9fv.apps.googleusercontent.com";
-const GOOGLE_ANDROID_CLIENT_ID =
-  process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
 
 interface SignInForm {
   email: string;
@@ -65,6 +65,11 @@ interface SignInForm {
 export default function SignInScreen() {
   const { palette } = useTheme();
   const styles = useStyles();
+
+  // A provider that cannot complete a sign-in on this build and device is not
+  // offered at all, so nobody spends a tap finding that out (spec 058).
+  const { google: googleAvailable, apple: appleAvailable, any: anySSOAvailable } =
+    useSSOAvailability();
 
   const router = useRouter();
   const params = useLocalSearchParams<{ postSignIn?: string; redirect?: string; subdomain?: string }>();
@@ -115,7 +120,10 @@ export default function SignInScreen() {
     if (googleResponse?.type !== "success") {
       if (googleResponse?.type === "error") {
         setSsoLoadingProvider(null);
-        Alert.alert("Google Sign In Failed", "Google sign-in did not complete.");
+        Alert.alert(
+          "Google Sign In Failed",
+          "Google sign-in didn't work this time. Sign in with your email and password above."
+        );
       }
       return;
     }
@@ -125,7 +133,7 @@ export default function SignInScreen() {
       setSsoLoadingProvider(null);
       Alert.alert(
         "Google Sign In Failed",
-        "Google did not return an ID token for this app."
+        "Google sign-in didn't finish. Sign in with your email and password above."
       );
       return;
     }
@@ -194,7 +202,7 @@ export default function SignInScreen() {
     try {
       const normalizedSubdomain = getValues("subdomain").trim().toLowerCase();
       if (!normalizedSubdomain) {
-        throw new Error("Workspace subdomain is required before using SSO.");
+        throw new Error("Enter your workspace subdomain above, then try again.");
       }
 
       const org = await getOrganizationBySubdomain(normalizedSubdomain);
@@ -226,9 +234,12 @@ export default function SignInScreen() {
       rememberAuthSubdomain(normalizedSubdomain);
       router.replace(await resolvePostSignInRedirect(result.accessToken));
     } catch (err) {
+      // The provider's or the network's own message is kept verbatim — it is
+      // the only thing that says what actually went wrong — and this app's way
+      // through is appended rather than substituted for it.
       Alert.alert(
         provider === "apple" ? "Apple Sign In Failed" : "Google Sign In Failed",
-        err instanceof Error ? err.message : "An error occurred"
+        `${err instanceof Error ? err.message : "Something went wrong."} Sign in with your email and password above.`
       );
     } finally {
       setSsoLoadingProvider(null);
@@ -238,19 +249,13 @@ export default function SignInScreen() {
   const onAppleSignIn = async () => {
     if (!auth) return;
 
-    if (Platform.OS !== "ios") {
-      Alert.alert(
-        "Apple Sign In Unavailable",
-        "Apple sign-in is only available on iOS devices."
-      );
-      return;
-    }
-
+    // The button is only rendered when Apple is available, but a device can
+    // withdraw Sign in with Apple between mount and tap, so the guard stays.
     const isAvailable = await AppleAuthentication.isAvailableAsync();
     if (!isAvailable) {
       Alert.alert(
         "Apple Sign In Unavailable",
-        "This iOS build does not have Sign in with Apple enabled yet. Rebuild the app after syncing native changes."
+        "Apple sign-in isn't available on this device. Sign in with your email and password above."
       );
       return;
     }
@@ -282,7 +287,7 @@ export default function SignInScreen() {
       setSsoLoadingProvider(null);
       Alert.alert(
         "Apple Sign In Failed",
-        err instanceof Error ? err.message : "An error occurred"
+        `${err instanceof Error ? err.message : "Something went wrong."} Sign in with your email and password above.`
       );
     }
   };
@@ -290,10 +295,12 @@ export default function SignInScreen() {
   const onGoogleSignIn = async () => {
     if (!auth) return;
 
-    if (Platform.OS === "android" && !GOOGLE_ANDROID_CLIENT_ID) {
+    // Same reasoning as the Apple guard: a stale render must not be able to
+    // start a request that cannot succeed.
+    if (!googleAvailable) {
       Alert.alert(
         "Google Sign In Unavailable",
-        "Google sign-in for Android still needs EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID in the app environment."
+        "Google sign-in isn't available on this device. Sign in with your email and password above."
       );
       return;
     }
@@ -516,60 +523,66 @@ export default function SignInScreen() {
           </Pressable>
         </View>
 
-        {/* Divider */}
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or continue with</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        {/* SSO sign-in */}
-        <View style={styles.card}>
-          <View style={styles.ssoButtonsRow}>
-            <Pressable
-              testID="google-sso-button"
-              onPress={() => void onGoogleSignIn()}
-              disabled={loading || ssoLoadingProvider !== null}
-              style={({ pressed }) => [
-                styles.ssoButton,
-                pressed && styles.ssoButtonPressed,
-                (loading || ssoLoadingProvider !== null) && styles.disabledButton,
-              ]}
-            >
-              {ssoLoadingProvider === "google" ? (
-                <ActivityIndicator color={palette.primary.main} />
-              ) : (
-                <>
-                  <Image
-                    source={require("@/../assets/google-g-logo.png")}
-                    style={styles.googleLogo}
-                  />
-                  <Text style={styles.ssoButtonText}>Continue with Google</Text>
-                </>
-              )}
-            </Pressable>
-
-            {Platform.OS === "ios" ? (
-              ssoLoadingProvider === "apple" ? (
-                <View style={[styles.ssoButton, styles.ssoButtonDark, { justifyContent: "center" }]}>
-                  <ActivityIndicator color={palette.primary.contrastText} />
-                </View>
-              ) : (
-                <AppleAuthentication.AppleAuthenticationButton
-                  buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
-                  buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
-                  cornerRadius={radius.lg}
-                  style={styles.appleButton}
-                  onPress={() => void onAppleSignIn()}
-                />
-              )
-            ) : null}
+        {anySSOAvailable ? (
+          <>
+          {/* Divider */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or continue with</Text>
+            <View style={styles.dividerLine} />
           </View>
 
-          <Text style={styles.supportText}>
-            SSO uses the workspace above. Use the same invited email so the provider identity attaches to the same account.
-          </Text>
-        </View>
+          {/* SSO sign-in */}
+          <View style={styles.card}>
+            <View style={styles.ssoButtonsRow}>
+              {googleAvailable ? (
+                <Pressable
+                  testID="google-sso-button"
+                  onPress={() => void onGoogleSignIn()}
+                  disabled={loading || ssoLoadingProvider !== null}
+                  style={({ pressed }) => [
+                    styles.ssoButton,
+                    pressed && styles.ssoButtonPressed,
+                    (loading || ssoLoadingProvider !== null) && styles.disabledButton,
+                  ]}
+                >
+                  {ssoLoadingProvider === "google" ? (
+                    <ActivityIndicator color={palette.primary.main} />
+                  ) : (
+                    <>
+                      <Image
+                        source={require("@/../assets/google-g-logo.png")}
+                        style={styles.googleLogo}
+                      />
+                      <Text style={styles.ssoButtonText}>Continue with Google</Text>
+                    </>
+                  )}
+                </Pressable>
+              ) : null}
+
+              {appleAvailable ? (
+                ssoLoadingProvider === "apple" ? (
+                  <View style={[styles.ssoButton, styles.ssoButtonDark, { justifyContent: "center" }]}>
+                    <ActivityIndicator color={palette.primary.contrastText} />
+                  </View>
+                ) : (
+                  <AppleAuthentication.AppleAuthenticationButton
+                    buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+                    buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
+                    cornerRadius={radius.lg}
+                    style={styles.appleButton}
+                    onPress={() => void onAppleSignIn()}
+                  />
+                )
+              ) : null}
+            </View>
+
+            <Text style={styles.supportText}>
+              SSO uses the workspace above. Use the same invited email so the provider identity attaches to the same account.
+            </Text>
+          </View>
+          </>
+        ) : null}
 
         <View style={styles.footerActions}>
           <Pressable
