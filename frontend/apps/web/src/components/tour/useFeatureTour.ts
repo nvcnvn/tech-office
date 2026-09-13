@@ -34,6 +34,19 @@ import { resolveTourRoute, ritualRouteFallsBackToProject } from "@/lib/tour-rout
 const WORKSPACE_HOME_PATHS = ["/workspace", "/workspace/calendar"];
 
 /**
+ * The app is configured with trailing slashes, so `usePathname` returns
+ * "/workspace/calendar/" and a route literal is written without the slash. Compared
+ * without it, since the slash is routing config rather than anything about where the
+ * person is.
+ */
+function normalizePath(path: string): string {
+  const withoutQuery = path.split("?")[0];
+  return withoutQuery.length > 1
+    ? withoutQuery.replace(/\/+$/, "")
+    : withoutQuery;
+}
+
+/**
  * What the tour is currently doing.
  *
  * `offer` is the "would you like a quick tour?" prompt, shown only to someone who has
@@ -79,20 +92,24 @@ export function useFeatureTour(): UseFeatureTourResult {
    * Set when the person acts on a stop. It is what separates "closed because they left"
    * — which should reopen on return — from "closed because they dismissed it", which
    * should not.
+   *
+   * Two phases, because `router.push` does not update `usePathname` synchronously. While
+   * the push is still in flight the pathname is the home the person acted *from*, and
+   * `/workspace` and `/workspace/calendar` are both home — so a single boolean lets the
+   * reopen effect below fire immediately and the card pops straight back up on the next
+   * stop instead of waiting for them to come back. `leaving` holds it shut until the
+   * pathname actually changes; `armed` is what the old boolean meant.
    */
-  const [resumeOnReturn, setResumeOnReturn] = useState(false);
+  const [resume, setResume] = useState<
+    { phase: "leaving"; from: string } | { phase: "armed" } | null
+  >(null);
   /**
    * Set when the person asked for the tour themselves. It lifts the home-surface gate:
    * someone who clicks "Take the tour" from the settings page means it.
    */
   const [requested, setRequested] = useState(false);
 
-  // The app is configured with trailing slashes, so usePathname returns
-  // "/workspace/calendar/". Compared without it, since the slash is routing config rather
-  // than anything about where the person is.
-  const atWorkspaceHome = WORKSPACE_HOME_PATHS.includes(
-    pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname,
-  );
+  const atWorkspaceHome = WORKSPACE_HOME_PATHS.includes(normalizePath(pathname));
 
   // A deep link is being followed: the person asked for something specific and the tour
   // must not interrupt it (FR-013).
@@ -138,10 +155,17 @@ export function useFeatureTour(): UseFeatureTourResult {
   // Reopening after an action (FR-012). No progress write: the stored current_stop
   // already says where to resume, and writing again would only churn updated_at.
   useEffect(() => {
-    if (!resumeOnReturn || !atWorkspaceHome || followingDeepLink) return;
-    setResumeOnReturn(false);
+    if (!resume) return;
+    if (resume.phase === "leaving") {
+      // The push has landed once the pathname is no longer the one acted from. Only then
+      // does "back at the workspace home" mean they returned, rather than never left.
+      if (normalizePath(pathname) !== resume.from) setResume({ phase: "armed" });
+      return;
+    }
+    if (!atWorkspaceHome || followingDeepLink) return;
+    setResume(null);
     setPhase("running");
-  }, [atWorkspaceHome, followingDeepLink, resumeOnReturn]);
+  }, [atWorkspaceHome, followingDeepLink, pathname, resume]);
 
   const stops = tour?.stops ?? [];
   const currentStop = stops[stopIndex];
@@ -184,7 +208,7 @@ export function useFeatureTour(): UseFeatureTourResult {
 
   const dismiss = useCallback(() => {
     setPhase("hidden");
-    setResumeOnReturn(false);
+    setResume(null);
     writeProgress("dismissed", stopIndex);
   }, [stopIndex, writeProgress]);
 
@@ -198,13 +222,28 @@ export function useFeatureTour(): UseFeatureTourResult {
     setStopIndex(index);
     writeProgress("in_progress", index);
     setPhase("hidden");
-    setResumeOnReturn(true);
+    // A stop whose surface is the one already open — the calendar stop acted on from the
+    // calendar — produces no pathname change to wait for, so there is nothing to wait for.
+    const here = normalizePath(pathname);
+    setResume(
+      normalizePath(route) === here
+        ? { phase: "armed" }
+        : { phase: "leaving", from: here },
+    );
     router.push(route);
-  }, [currentStop, routeContext, router, stopIndex, stops.length, writeProgress]);
+  }, [
+    currentStop,
+    pathname,
+    routeContext,
+    router,
+    stopIndex,
+    stops.length,
+    writeProgress,
+  ]);
 
   const restart = useCallback(() => {
     setStopIndex(0);
-    setResumeOnReturn(false);
+    setResume(null);
     setRequested(true);
     setPhase("running");
     writeProgress("in_progress", 0);

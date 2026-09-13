@@ -74,3 +74,7 @@ postgres_data/
 vendor/
 **/*.log
 *.ipa
+
+# Compiled output of backend/tools/tenancylint. `make lint-tenancy` runs it with
+# `go run`, so the built binary is never needed in the tree (drift D72/D82).
+backend/tenancylint

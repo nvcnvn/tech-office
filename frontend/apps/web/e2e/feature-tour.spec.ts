@@ -358,8 +358,14 @@ test.describe('Feature tour on web', () => {
 async function advanceToStop(page: Page, key: string): Promise<void> {
   const card = page.getByTestId('feature-tour');
   for (let i = 0; i < 10; i++) {
-    if ((await card.getAttribute('data-tour-stop')) === key) return;
+    const current = await card.getAttribute('data-tour-stop');
+    if (current === key) return;
     await page.getByTestId('feature-tour-next').click();
+    // Wait for the card to actually move before reading again. Reading straight after the
+    // click races the re-render: a stale read clicks Next a second time for the same stop
+    // and the helper walks past the one it was asked for — which is how this landed on the
+    // calendar stop's surface while still believing it was on the ritual stop.
+    await expect(card).not.toHaveAttribute('data-tour-stop', current ?? '');
   }
   throw new Error(`tour never reached the "${key}" stop`);
 }
