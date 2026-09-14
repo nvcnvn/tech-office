@@ -16,10 +16,10 @@ The subdomain is the short name your staff type when they sign in. Bright Bean C
 `brightbean`. Keep it short and easy to say out loud over the noise of an espresso machine
 — your staff will read it off a card taped next to the till.
 
-**The password must be at least 16 characters** and contain at least one letter and one
-number. The form shows the three rules as you type and keeps **Create Organization** greyed
-out until all of them are green — including after the last field, so if the button looks
-dead, click once to leave the field and again to submit.
+**The password must be at least 8 characters** and contain at least one letter and one
+number. The form shows the rules as you type, along with a strength indicator — a password
+that only just clears the minimum is honestly reported as weak. The same rule applies on
+the phone and on the web.
 
 The account you create here is the **owner**. It holds every permission, including the ones
 you cannot grant to anyone else: bulk employee import, storage quota, role management, and

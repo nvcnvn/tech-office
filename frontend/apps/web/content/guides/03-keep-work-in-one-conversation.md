@@ -94,12 +94,27 @@ past can still ping your phone: TechOffice is not convinced you dealt with it.
 
 ### Turning the noise down
 
-Under **Settings → Notifications** you can set a do-not-disturb window and mute whole areas
-of the product. Muting affects **push only** — the workspace stays live and up to date when
-you open it, your phone just stays quiet.
+In the **mobile app**, under **More → Settings → Notifications**, you can set a
+do-not-disturb window and mute whole areas: chat, tasks and projects, calendar, documents
+and system. Muting affects **push only** — the workspace stays live and up to date when you
+open it, your phone just stays quiet. These settings are stored against you, not the
+handset, so they follow you to a new phone.
 
-Under **Settings → Presence** you choose who can see whether you are online: everyone, only
-people in your department, or nobody. Store staff usually want *departments*.
+Three things do not obey do-not-disturb, on purpose: an **@mention**, an **incoming call**,
+and an **event reminder**. All three are things you asked to be interrupted for — muting the
+calendar area stops the invites and changes, not the reminder for a shift you are about to
+be late for.
+
+There is also an **In-App Alerts** switch there. It only stops the banner that slides in
+while you are using the app — it is not a do-not-disturb setting, and everything still
+arrives, counts as unread and pushes.
+
+On the **web**, Settings → Notifications lists the devices that are registered for push, so
+you can revoke one you no longer use. The do-not-disturb window and the mute list are set in
+the mobile app.
+
+Under **Settings → Presence** (both clients) you choose who can see whether you are online:
+everyone, only people in your department, or nobody. Store staff usually want *departments*.
 
 ## What "connected" actually means here
 
@@ -120,12 +135,21 @@ who needed it, and every piece of it is still findable next month.
 
 ![Search results for "opening" across the workspace](images/employee-search.png)
 
-The search box at the top searches **people, departments, channels and messages**. It is
-fuzzy and multilingual, so a near-miss on a name still finds the person.
+The search box at the top searches **everything**: people, departments, channels, messages,
+documents, files, work items and calendar events — eight kinds, one ranked list. It is
+fuzzy and multilingual, so a near-miss on a name still finds the person, and a document or a
+message is matched on its content, not just its title.
 
-Be aware of the current limit: search does **not** yet cover documents, files, tasks or
-calendar events. To find a document, use the search box inside **Docs**; to find a task,
-use the project's task list. This is a known gap rather than a design choice.
+The list is built so that **every kind's best hit comes before any kind's second-best**. One
+matching document is on the first screen even against a hundred matching messages, so the
+loudest area of your workspace cannot bury the quiet one. Tabs across the top narrow it to a
+single kind, each showing how many it found.
+
+You only ever see what you could open anyway: a document you have not been granted, a
+private channel you are not in, a file outside your channels and a task in a project you are
+not a member of are all simply absent — not shown and refused.
+
+On the phone, search is the pill at the top of Chat, Today, My Work and Schedule.
 
 ## Next
 

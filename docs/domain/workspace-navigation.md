@@ -458,11 +458,12 @@ Next.js App Router, MUI v7, in `apps/web/src/app`:
   permissions on the RPCs rather than by hiding the links.
 
 The top navigation bar in `apps/web/src/app/workspace/layout.tsx` carries **eight entries**,
-every one of which opens a working area:
+every one of which opens a working area. `/workspace` itself is a `redirect` to
+`/workspace/calendar` (`workspace/page.tsx`) and is not an entry of its own:
 
 | Entry | Route | Shortcut label | Gate |
 |---|---|---|---|
-| Today | `/workspace` | ⌘1 | — |
+| Calendar | `/workspace/calendar` | ⌘1 | — |
 | Notifications | `/workspace/notifications` | ⌘2 | — |
 | Chat | `/workspace/chat` | ⌘3 | — |
 | Tasks | `/workspace/tasks` | ⌘4 | — |

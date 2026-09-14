@@ -48,6 +48,15 @@ authoritative for their subjects:
 - `backend/docs/VOICE-COMMUNICATION-ARCHITECTURE.md`
 - `backend/docs/PRODUCTION-RUNTIME-SERVICES.md`, `PRODUCTION-DAY1-CHECKLIST.md`
 
+`docs/testing/manual-test-plan.md` is the manual pass derived from these snapshots: one
+short set of cases per feature area, citing the `specs/NNN-*/quickstart.md` that covers the
+same ground in more depth rather than repeating it. Its *Known gap* rows are the
+user-visible half of the drift register below, and are deleted together when one is fixed.
+
+The end-user documentation is `frontend/apps/web/content/guides/`. It is a product surface,
+not an internal note, so a behaviour change that alters what a user should expect updates a
+guide in the same change set — the same Definition of Done that applies to these snapshots.
+
 ## Drift register
 
 Inconsistencies found while writing these snapshots and not yet fixed. Each is described in

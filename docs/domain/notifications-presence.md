@@ -52,9 +52,13 @@ These are different signals and the distinction matters:
 `PriorityAlways` is not "important", it is "reach them whatever it takes":
 `ShouldSendPush` returns true before it looks at presence or at which channel the
 recipient is viewing, `ShouldSuppressPush` returns before do-not-disturb and domain mute,
-and `rescuePushWindowForRequest` collapses the rescue delay to zero. Only `mention` and
-`voice_call_incoming` earn it — an @you and a ringing phone are both things a person has
-asked to be interrupted for.
+and `rescuePushWindowForRequest` collapses the rescue delay to zero. Three things earn it:
+`mention`, `voice_call_incoming`, and `calendar_event_reminder` (`Priority: 0` in
+`internal/calendar/reminder_workflow.go`) — an @you, a ringing phone and the reminder for a
+shift you are about to miss are all things a person has asked to be interrupted for. The
+consequence for the reminder is that muting the `calendar` domain silences invites, changes
+and cancellations but **not** the reminder; see [calendar.md](calendar.md#reminders) for why
+any higher number would suppress it for exactly the person it is for.
 
 Ordinary chat (`message`, `reply`) publishes at `PriorityDefault`. It used to publish at 0,
 which meant a DM pushed someone who was reading that very conversation and no setting

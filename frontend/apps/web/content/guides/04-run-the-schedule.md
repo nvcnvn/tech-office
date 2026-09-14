@@ -48,6 +48,20 @@ only, TechOffice asks whether you mean **this occurrence**, **this and following
 whole series** — and records which you chose, with who changed it and when. "Who moved my
 Tuesday" has an answer.
 
+**The rota can drive your checklists.** A ritual assigned to a department "on shift" reads
+these events: whoever is rostered that day gets the run, and it rebinds if you change the
+rota. Two details matter when you publish:
+
+- An **overnight** shift (22:00 Friday → 06:00 Saturday) covers both days.
+- The **organiser is not counted as working the shift.** Whoever publishes the rota is
+  written onto every event they create, so counting that row would roster them onto every
+  shift in the store. The consequence is a real limit: a manager who genuinely works a shift
+  they published themselves will not be picked for its checklist. The workaround today is to
+  have somebody else create that one event, or to assign that ritual to named people instead.
+
+Someone who has **declined** the shift does not count as covering it; pending, tentative and
+accepted all do. See [Run your daily checklists](02-run-your-daily-checklists.md).
+
 Cancelling never deletes. A cancelled event stays visible as cancelled, so nobody turns up
 to a shift that was quietly removed.
 
@@ -105,15 +119,13 @@ Grant it, and revoke it when the cover ends.
 
 Every attendee gets a reminder before an event — fifteen minutes by default.
 
-### Known limits
+The reminder **names the event** — *"Riverside opening shift starts in 15 minutes"* — because
+on a lock screen the text is all you see, and tapping it takes you to the event. It is
+delivered whether or not you have the app open, and it is deliberately one of the few things
+that is not suppressed by muting the calendar area: a reminder you asked for is not noise.
 
-Two things to be aware of today:
-
-- Event reminders are currently delivered **only to people whose app is open**. If your
-  phone is asleep, the reminder will not wake it. Do not rely on the reminder alone for a
-  shift start; the shift is on the calendar and in the Today view either way.
-- The reminder says *"You have an upcoming event in N minutes"* without naming the event.
-  Tapping it takes you to the right event.
+For that to reach a sleeping phone, push has to be configured for your deployment. If your
+staff get reminders only while the app is open, that is the thing to check.
 
 ## Next
 

@@ -68,17 +68,30 @@ quote is a **snapshot** — it shows the target as it was when you quoted it, so
 source never silently rewrites the document that cited it. You can also see which documents
 cite the one you are reading.
 
-**Per-document access.** By default everyone in the workspace can read a document. You can
-grant read-and-comment or write access to specific people or a whole department, and you can
-explicitly deny. Use this for anything with pay, discipline or supplier pricing in it.
+**Per-document access.** A new document is **private** by default — you can read it, and
+nobody else can until you say so. Switch it to public to let the whole workspace read it, or
+grant read-and-comment or write access to specific people or a whole department. You can
+also explicitly **deny** a person, and that deny wins over everything else, including a
+public document. Use it for anything with pay, discipline or supplier pricing in it.
+
+One thing to know: the **titles** in the Docs sidebar are not access-scoped yet. Someone
+without access sees that a document called *Supplier pricing 2026* exists; they cannot open
+it, search it, comment on it or see a word of its content. If a title itself is sensitive,
+name the document something duller.
 
 ### Editing together
 
 Several people can have a document open at once and you will see who is in it and where
-their cursor is. Be aware that TechOffice does **not** merge simultaneous edits
-character-by-character — if two people type in the same paragraph at the same time, the last
-save wins. In practice: for a small business this is fine, but do not have two people
-rewriting the same section at the same time. Say so in the channel first.
+their cursor is. Up to ten people at once.
+
+TechOffice does **not** merge simultaneous edits character-by-character, and it does not
+quietly let the last save win either — the second save is **refused**. Whoever saves second
+sees a message naming who saved before them and when, and their unsaved text stays on the
+screen with two buttons: copy my changes, or load the current version. Nothing is lost and
+nothing is silently overwritten.
+
+In practice: still say so in the channel before two people rewrite the same section. The
+refusal is a safety net, not a workflow.
 
 ## Files
 
@@ -112,11 +125,34 @@ pastry case photo across two stores is 700+ photos a year. Check **Files** occas
 clear out what you no longer need. Photos attached to proof that has already been approved
 and reported on are usually safe to remove after your record-keeping period.
 
-## Known limit
+## Finding a document again
 
-The main workspace search box does **not** search documents. Use the search box inside
-**Docs** to find a document by title or content. Document search itself works well —
-including across languages — it is just not wired into the global search box yet.
+The main workspace search box covers documents — by title and by content, across languages —
+alongside everything else, so you do not have to be in Docs to find one. It only ever
+returns documents you are allowed to open. The search inside Docs is still there when you
+already know you are looking for a document.
+
+## Attaching a procedure to a checklist
+
+This is the connection that makes writing things down worth the effort: a ritual definition
+can point at one document as its **written procedure**. The worker doing the checklist gets
+a link to it on every run — on the phone it opens as a sheet over what they were doing, so a
+half-typed note or an attached photo is not lost — and the reviewer sees the same link in
+the review queue.
+
+Two things make it work the way you want:
+
+- **They read it without being granted it.** Anyone who can see the checklist can read that
+  one document, even with no access to it otherwise. They do not get it in their Docs tree,
+  their search, its comments or its history, and they cannot edit it. The moment you detach
+  it, that ends.
+- **You can only attach a document you can already open yourself.** Attaching hands sight of
+  it to everyone who can see the ritual, so the check is against *your* access.
+
+Nothing is snapshotted: correcting the document corrects every open run at once, so there is
+never an old copy of a procedure in circulation.
+
+Attaching, replacing and removing is done on the web, in the ritual definition editor.
 
 ## Next
 

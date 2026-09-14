@@ -57,15 +57,26 @@ is the field that matters.
 
 ### Assigning the work
 
-You can assign a ritual two ways:
+You can assign a ritual three ways:
 
 - **To named people.** Simple, right for a single store: the opening checklist is Leo's.
 - **To a department, with a rotation.** TechOffice picks the assignee when each run is
   created, either **round-robin** through the department or by giving it to whoever has
   been assigned **least**. Right when you have a rota and no fixed owner.
+- **To a department, following the shift.** TechOffice gives the run to whoever has a shift
+  on the calendar covering that date. This is the one to use when the closing count must
+  land on whoever is actually in — round-robin will happily give it to someone who is off.
 
-Either way, every generated run has a concrete person's name on it. There is no such thing
-as a checklist assigned to "someone".
+The first two put a name on the run the moment it is created. On-shift is different, and
+deliberately so: runs are created up to 30 days ahead while rotas are usually published a
+week or two ahead, so the run waits and says *waiting for the rota* until a shift covering
+that date is published. It then binds to that person, and rebinds if the rota changes. It
+never falls back to round-robin — falling back is exactly the problem it exists to remove.
+If the date arrives with nobody rostered, the run stays unassigned and the project's owners
+are told.
+
+On-shift assignment depends on shift events actually being published for that department.
+See [Run the schedule](04-run-the-schedule.md).
 
 ## 2. Decide what counts as proof
 
@@ -124,7 +135,13 @@ reading as a note, takes the pastry case photo with his phone camera, and moves 
 ## 4. Reviewing without opening everything
 
 Mai, the Riverside manager, does not want to open eleven runs to find the one that needs
-her. She opens the project's **Review** tab.
+her. She opens **Reviews** in the top bar — one queue across every project she reviews for,
+with a count on the tab. The project's own **Review** tab is the same queue narrowed to that
+project. On her phone it is a card at the top of **My Work**, with the photo at full device
+width and approve and reject as the only buttons, so a decision never needs a second screen.
+
+If you cannot review proof anywhere, the Reviews tab is not there at all — it is not a
+disabled button.
 
 ![The review queue listing one ritual run with pending proof](images/manager-review-backlog.png)
 
@@ -171,12 +188,23 @@ work is deleted.
 and give a reason. The reason stays on the record. That is much better than a gap you
 cannot explain six months later.
 
-## Known limit
+## Lateness is told to you, not just shown
 
-TechOffice marks a run **overdue** when you look at it — the today view, the health report
-and the review queue all compute lateness at the moment you read them. It does not
-currently send a notification the instant a deadline passes with nothing submitted. Check
-the Today and Health views rather than waiting to be told.
+A run whose deadline passes with nothing submitted becomes **overdue** on its own, within
+about five minutes, and the person it is on — plus its reviewer and approver — are notified.
+One completion window later it becomes **missed**, which is final.
+
+Two deliberate choices worth knowing:
+
+- **Owners are not alerted when a run goes overdue.** Escalating every late checklist to the
+  owner is how an alert becomes noise, and noise is how the alert gets muted. Owners *are*
+  told when a run is **missed** and nobody was holding it.
+- **A run nobody was assigned produces no overdue alert** — there is nobody to tell — but its
+  missed transition still reaches the project's owners, so an unassigned checklist cannot
+  fail silently.
+
+Deploying this for the first time does not alert everyone about last month: a deadline more
+than seven days old changes state without notifying anybody.
 
 ## Next
 
