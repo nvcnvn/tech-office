@@ -304,7 +304,9 @@ jobs:
       # log lives in a file no one can reach once the runner is gone.
       - name: Backend log
         if: failure()
-        run: cat "${RUNNER_TEMP}/backend.log"
+        # The log only exists once the server has been started, and a failure before that
+        # should be read as the failure it is rather than as a missing file.
+        run: cat "${RUNNER_TEMP}/backend.log" || echo "no backend log — the run failed before the server was started"
 
       - name: Dependency logs
         if: failure()
