@@ -119,3 +119,5 @@ const useStyles = makeStyles((t) => ({
 		color: t.text.primary,
 	},
 }));
+// TEMPORARY: deliberate type error to verify the CI gate fails. Reverted immediately.
+const ciGateProbe: number = 'this is not a number';
