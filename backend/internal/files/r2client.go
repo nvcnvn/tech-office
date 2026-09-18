@@ -311,17 +311,6 @@ func (r *R2Client) GetReader(ctx context.Context, storageKey string) (io.ReadClo
 	return result.Body, nil
 }
 
-type countingReader struct {
-	r io.Reader
-	n int64
-}
-
-func (c *countingReader) Read(p []byte) (int, error) {
-	n, err := c.r.Read(p)
-	c.n += int64(n)
-	return n, err
-}
-
 // PutObject uploads an object to R2 from a streaming reader.
 // Returns the number of bytes read from body.
 func (r *R2Client) PutObject(ctx context.Context, storageKey string, contentType string, body io.Reader) (int64, error) {
@@ -344,13 +333,18 @@ func (r *R2Client) PutObject(ctx context.Context, storageKey string, contentType
 	}
 
 	contentLength := int64(len(buf))
-	br := bytes.NewReader(buf)
-	cr := &countingReader{r: br}
 
+	// The body is a *bytes.Reader rather than a plain io.Reader, and that matters: it is
+	// an io.ReadSeeker. When the endpoint is reached over plain HTTP the SDK cannot use
+	// SigV4's unsigned-payload shortcut, so it has to hash the body, which means seeking
+	// it back to the start afterwards. Wrapping it in a non-seekable reader failed every
+	// such upload with "failed to compute payload hash: failed to seek body to start" —
+	// invisible against Cloudflare R2 over HTTPS, and fatal against the local MinIO the
+	// tests and CI run on. Being seekable is also what lets the SDK retry the request.
 	putObjectInput := &s3.PutObjectInput{
 		Bucket:        aws.String(r.bucketName),
 		Key:           aws.String(storageKey),
-		Body:          cr,
+		Body:          bytes.NewReader(buf),
 		ContentType:   aws.String(contentType),
 		ContentLength: &contentLength,
 	}
@@ -360,13 +354,14 @@ func (r *R2Client) PutObject(ctx context.Context, storageKey string, contentType
 		slog.ErrorContext(ctx, "failed to upload object to R2",
 			"error", err,
 			"storage_key", storageKey)
-		return cr.n, fmt.Errorf("failed to put object: %w", err)
+		return 0, fmt.Errorf("failed to put object: %w", err)
 	}
 
 	slog.InfoContext(ctx, "uploaded object to R2",
 		"storage_key", storageKey,
-		"bytes", cr.n,
 		"content_length", contentLength)
 
-	return cr.n, nil
+	// The whole body was buffered above, so its length is the byte count; counting reads
+	// instead would over-report as soon as the SDK retried and re-read the body.
+	return contentLength, nil
 }

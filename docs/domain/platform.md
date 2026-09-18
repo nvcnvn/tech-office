@@ -408,31 +408,54 @@ cannot quietly reappear.
 | `make test` | backend + frontend |
 | `make test-db-purge` | drops test organizations left behind |
 | `make lint-tenancy` | the multi-tenant schema discipline check; green |
-| `make check-tracked-files` | binary and oversized-blob audit |
+| `make check-tracked-files` | binary and oversized-blob audit; green |
 
 ### Which of these CI enforces
 
-One, and it is the cheapest. `.github/workflows/checks.yml` runs `pnpm run typecheck:mobile`
-on every pull request against `main` and every push to it. It needs no database, backend,
-device or browser, so it runs on a stock `ubuntu-latest` runner in a few minutes.
+`.github/workflows/checks.yml` runs four jobs on every pull request against `main` and every
+push to it:
 
-The workflow is `checks.yml` with a **named job** rather than `typecheck-mobile.yml`, so the
-heavier gates can be added as further jobs without renaming it or re-pointing a branch
-protection rule. There is deliberately no `paths` filter: a required check skipped by a path
-filter reports as *pending*, not *passing*, and blocks the merge it was meant to wave through.
+| Job | What it runs | Roughly |
+|---|---|---|
+| Tracked files audit | `make check-tracked-files` | seconds |
+| Backend static checks | `go build`, `go vet`, the non-integration Go tests, `make lint-tenancy` | 1 min |
+| Mobile typecheck | `pnpm run typecheck:mobile` | 1 min |
+| Backend integration suite | the whole dependency stack in Docker, then `go test ./integration/...` | 4–5 min |
 
-The other gates are not in CI, each for its own reason. `make test-backend` and
-`make test-frontend` need a live Postgres and a backend; `make test-mobile` needs a device;
-`pnpm lint` is itself red (D67), and a gate that fails on the default branch cannot be made
-required without blocking every pull request.
+The integration job is Constitution II's primary gate and it reproduces the local setup
+step for step — the same `backend/docker-compose.yml`, the same forward-only migration
+runner, the same server started from source — because a gate whose pass means something
+different from a local pass is not worth having. The suite itself is about ninety seconds;
+the rest of the job is building the custom PostgreSQL image, which is cached between runs.
 
-Three things made the mobile check unreproducible outside the tree of a developer who had
-already built once, and all three had to be fixed before it could be enforced at all:
+Two differences from a developer's machine are deliberate and both are about the runner's
+four shared cores. The suite runs at `-parallel 4` rather than the Makefile's 8, which was
+measured on developer hardware and oversubscribes a runner that is also hosting PostgreSQL,
+ClamAV, Gotenberg, LiveKit, MinIO and the backend under test. And
+`EVIDENCE_QUEUE_P95_BUDGET` raises SC-005's 2 s first-page ceiling to 6 s, because that
+assertion exists to catch a query plan that went quadratic — which over 500 rows costs tens
+of seconds — and a healthy plan measured 2.54 s there.
+
+There is deliberately no `paths` filter anywhere in the workflow: a required check skipped
+by a path filter reports as *pending*, not *passing*, and blocks the merge it was meant to
+wave through.
+
+Two gates are still outside CI. `make test-mobile` needs a device. `make test-frontend`
+starts a `next dev` server that compiles routes on demand, so it pays minutes of compilation
+before its first assertion and can still lose a race with the compiler (D90). `pnpm lint` is
+itself red (D67), and a gate that fails on the default branch cannot be made required
+without blocking every pull request.
+
+Getting each gate into CI has meant fixing what made it unreproducible outside the tree of a
+developer who had already built once. For the mobile check that was three things:
 `pnpm/action-setup` resolves `packageManager` from the **repository root**'s package.json,
 which this repository does not have; the `typecheck:mobile` script called a bare `tsc` that
 the root workspace does not declare; and every workspace package points `types` at a
 gitignored `dst/`, so a clean checkout has no type declarations until `packages/` is built.
-"It passes on my machine" was true and meant nothing.
+For the integration suite it was that the server refuses to start without the four `R2_*`
+settings and `backend/.env.example` left all four empty, so a fresh clone could not run the
+backend at all — `backend/docker-compose.yml` now carries MinIO and a one-shot service that
+creates the bucket. "It passes on my machine" was true and meant nothing in both cases.
 
 ### How the Maestro fixture is created
 
@@ -487,11 +510,14 @@ server running, a full-suite run went from nine minutes to hours.
 budget on a round trip rather than on a query and share one local Postgres with everything
 else running at the same time, so they measure the machine's load as much as the code —
 `TestEvidenceReviewQueuePerformance`'s 2 s first-page budget is the one that fails in
-practice, and it passes in isolation.
+practice, and it passes in isolation. Its two percentile assertions read
+`EVIDENCE_QUEUE_P95_BUDGET` when it is set, which is how CI holds the same plan to a ceiling
+its four shared cores can meet; unset, the budget is SC-005's 2 s.
 
-`make check-tracked-files` is **not** green: `backend/tenancylint` is a committed 13.9 MB
-executable that the audit rejects and that nothing needs, since `lint-tenancy` runs the tool
-with `go run`. See D72.
+`make check-tracked-files` is green and runs in CI on every pull request. It was red for a
+long time on one entry — `backend/tenancylint`, a committed 13.9 MB executable that nothing
+needs, since `lint-tenancy` runs the tool with `go run` — which is now untracked and
+gitignored.
 
 Integration tests use the shared `testWorld` fixture (`integration/helper_test.go`) and run
 with `t.Parallel()`; each test provisions its own organization so parallel runs cannot

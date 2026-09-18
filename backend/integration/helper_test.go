@@ -2346,10 +2346,15 @@ func (w *testWorld) postProcessingOutcome(fileID string) string {
 	deadline := time.Now().Add(30 * time.Second)
 	var status string
 	for time.Now().Before(deadline) {
+		// More than one workflow carries the same file_id in its input — validation and
+		// post-processing both do — so "the newest run with any output" is the wrong
+		// row about half the time, and the wrongness depends on which worker finished
+		// last. Selecting on the presence of the key names what this helper is actually
+		// looking for: the run that recorded a post-processing outcome.
 		err := globalDB.QueryRow(context.Background(), `
-SELECT coalesce(output_json->>'processing_status', '')
+SELECT output_json->>'processing_status'
 FROM flows.runs
-WHERE input_json->>'file_id' = $1 AND output_json IS NOT NULL
+WHERE input_json->>'file_id' = $1 AND output_json ? 'processing_status'
 ORDER BY updated_at DESC
 LIMIT 1`, fileID).Scan(&status)
 		if err == nil && status != "" {

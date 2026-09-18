@@ -36,10 +36,16 @@ services:
     environment:
       CLAMAV_NO_FRESHCLAM_ON_STARTUP: "true" # Speed up startup for dev
     healthcheck:
-      test: ["CMD", "clamdscan", "--ping"]
-      interval: 30s
+      # `clamdscan --ping` without an argument exits non-zero with "option `--ping'
+      # requires an argument", so this container reported `health: starting` forever and
+      # then unhealthy. The count says how many attempts to make before giving up.
+      test: ["CMD", "clamdscan", "--ping", "1"]
+      interval: 10s
       timeout: 10s
-      retries: 3
+      retries: 12
+      # The daemon loads its signature database before it answers, which takes upwards of
+      # a minute on a cold container.
+      start_period: 120s
   gotenberg:
     image: gotenberg/gotenberg:8
     ports:
@@ -55,6 +61,47 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # Object storage for local development and CI.
+  #
+  # The server refuses to start without R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+  # R2_BUCKET_NAME and R2_ENDPOINT (internal/files/r2client.go validateR2Config), so
+  # before this service existed a fresh clone could not run the backend at all without
+  # somebody's Cloudflare credentials — and a pull request from a fork can never have
+  # them. MinIO speaks the same S3 API, and the R2 client resolves its endpoint with
+  # HostnameImmutable, which means the bucket goes in the path and MinIO needs no
+  # virtual-host DNS.
+  minio:
+    # quay.io, not Docker Hub: MinIO publishes its images there, and `docker pull
+    # minio/mc` fails outright with "repository does not exist".
+    image: quay.io/minio/minio:latest
+    command: ["server", "/data", "--address", ":9000", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Creates the bucket and exits. Separate from `minio` because the server has to be
+  # listening before a bucket can be made, and `--ignore-existing` keeps a second
+  # `docker compose up` from failing on the bucket left by the first.
+  minio-init:
+    image: quay.io/minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint:
+      - sh
+      - -c
+      - >-
+        mc alias set local http://minio:9000 minioadmin minioadmin &&
+        mc mb --ignore-existing local/tech-office
 
   whisper:
     image: fedirz/faster-whisper-server:latest-cpu
