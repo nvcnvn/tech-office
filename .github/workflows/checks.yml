@@ -1,21 +1,29 @@
 # The repository's quality-check workflow.
 #
-# Today it holds one job: the mobile TypeScript check. That gate already passed on every
-# developer's machine and was enforced nowhere, which is how three type errors survived
-# several features before anyone noticed (drift D34). It needs no database, backend,
-# device or browser — it reads files and exits — so it is the cheapest of the three gates
-# Constitution II and XIII name, and the only one that belongs on a GitHub-hosted runner
-# as it stands.
+# Constitution II names the backend integration suite and the web E2E suite as the
+# correctness gate, and feature 061 added the first job here — the mobile TypeScript
+# check — while deliberately deferring the heavier gates because each needs a database,
+# a backend or a browser. This file is where they land as they are wired up.
 #
-# The file is `checks.yml` with a named job rather than `typecheck-mobile.yml` so the
-# gates deferred by feature 061 — the Go integration suite, the web E2E suite, `pnpm lint`
-# (D67) — can be added as further jobs without renaming the workflow or re-pointing a
-# branch protection rule.
+# What runs today, cheapest first:
 #
-# There is deliberately no `paths` / `paths-ignore` filter. A required status check
-# skipped by a path filter reports as *pending*, not *passing*, and blocks the merge it
-# was meant to wave through. The job is a few seconds of `tsc` plus a cached install, so
-# running it on every change is both simpler and well inside the five-minute budget.
+#   tracked-files        git metadata only, a second or two
+#   backend-static       go build / go vet / the non-integration Go tests / tenancy lint
+#   typecheck-mobile     tsc over the Expo app
+#   backend-integration  the real gate: PostgreSQL, the supporting services and a real
+#                        backend process, with backend/integration/... run against them
+#
+# Still not here: the web E2E suite and `pnpm lint`. The E2E suite drives a Next.js dev
+# server that compiles routes on demand — see the comment in
+# frontend/apps/web/e2e/playwright.config.ts for why a production build was measured and
+# rejected — so it is minutes of compilation before the first assertion and it is not yet
+# reliable enough to block a merge on. `pnpm lint` is drift D67: it fails with 184
+# pre-existing errors, so turning it on would fail every pull request for reasons that
+# have nothing to do with the change.
+#
+# There is deliberately no `paths` / `paths-ignore` filter anywhere in this file. A
+# required status check skipped by a path filter reports as *pending*, not *passing*, and
+# blocks the merge it was meant to wave through.
 name: Checks
 
 on:
@@ -33,9 +41,61 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Guards the repository against the one mistake that cannot be undone by a later
+  # commit: a large or binary file entering history. Runs first because it costs nothing.
+  tracked-files:
+    name: Tracked files audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Audit tracked files
+        run: make check-tracked-files
+
+  # Everything about the Go code that can be checked without a database. Fast enough
+  # (under two minutes with a warm module cache) that it gives a pull request a verdict
+  # long before the integration suite finishes.
+  backend-static:
+    name: Backend static checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      # go.work is the single place the toolchain version is pinned, so CI cannot drift
+      # from a developer's machine. cache-dependency-path has to name backend/go.sum
+      # explicitly: the module lives in backend/, not at the repository root.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: backend/go.sum
+
+      - name: Build
+        working-directory: backend
+        run: go build ./...
+
+      - name: Vet
+        working-directory: backend
+        run: go vet ./...
+
+      # ./integration/... is excluded here by design — it needs the running stack that
+      # the backend-integration job builds. Everything else is pure logic and runs in
+      # about a second.
+      - name: Unit tests
+        working-directory: backend
+        run: go test -count=1 $(go list ./... | grep -v '/integration')
+
+      # Verifies the multi-tenant schema discipline: every tenant table pinned to an
+      # organization_id parameter, every unique key leading with it. Reads the generated
+      # schema snapshot, so it also catches a migration landing without a
+      # backend/scripts/regen-schema.sh run.
+      - name: Tenancy lint
+        run: make lint-tenancy
+
   typecheck-mobile:
     name: Mobile typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -76,3 +136,177 @@ jobs:
       - name: Typecheck mobile
         working-directory: frontend
         run: pnpm run typecheck:mobile
+
+  # The gate Constitution II actually names.
+  #
+  # The suite talks to a real backend over HTTP on :18080 and to the database directly on
+  # :15432, exactly as it does on a developer's machine — there are no mocks and no
+  # in-process server to substitute. So this job reproduces the documented local setup
+  # (CONTRIBUTING.md "Local development") step for step: dependencies in Docker via
+  # backend/docker-compose.yml, migrations through the same forward-only runner, and the
+  # server started from source. A pass here therefore means the same thing as a pass on a
+  # developer's machine, which is the only way the gate is worth having.
+  backend-integration:
+    name: Backend integration suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.work
+          cache-dependency-path: backend/go.sum
+
+      # PostgreSQL is not a stock image: backend/docker/postgres.Dockerfile adds pgroonga
+      # and pg_textsearch, both of which the search migrations CREATE EXTENSION on. It is
+      # built here rather than pulled so that a change to that Dockerfile is exercised by
+      # the same run that ships it, and cached in the Actions cache so the apt and
+      # release downloads are paid for once rather than on every push.
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the PostgreSQL image
+        uses: docker/build-push-action@v6
+        with:
+          context: backend/docker
+          file: backend/docker/postgres.Dockerfile
+          tags: tech-office-postgres:latest
+          load: true
+          cache-from: type=gha,scope=ci-postgres
+          cache-to: type=gha,mode=max,scope=ci-postgres
+
+      # `docker compose up` reuses the image tagged above rather than rebuilding it.
+      # ClamAV and Gotenberg back the file-upload scan and Office-to-PDF paths, LiveKit
+      # backs the voice tests, and MinIO stands in for Cloudflare R2 — the server refuses
+      # to start without S3 credentials, and no real R2 bucket may be reachable from a
+      # fork's pull request.
+      - name: Start the dependencies
+        working-directory: backend
+        run: docker compose up -d postgres clamav gotenberg livekit minio minio-init
+
+      # Every one of these is waited for, not just the database. ClamAV loads its
+      # signature database before it answers and takes over a minute to do it, and
+      # Gotenberg starts LibreOffice; running the suite against a service that is still
+      # coming up produces failures that look like product defects — "office conversion
+      # unavailable" on a machine where the converter is merely not ready yet.
+      - name: Wait for the dependencies
+        working-directory: backend
+        run: |
+          set -u
+          fail() {
+            echo "::error::$1 did not become ready"
+            docker compose logs --tail=100
+            exit 1
+          }
+
+          for _ in $(seq 1 60); do
+            pg_isready -h localhost -p 15432 -q && break
+            sleep 2
+          done
+          pg_isready -h localhost -p 15432 -q || fail PostgreSQL
+
+          # Compose reports each container's own healthcheck, which is the same signal a
+          # developer sees in `docker compose ps`.
+          for service in clamav gotenberg minio; do
+            for _ in $(seq 1 90); do
+              cid="$(docker compose ps -q "$service")"
+              [ -n "$cid" ] || { sleep 2; continue; }
+              state="$(docker inspect -f '{{.State.Health.Status}}' "$cid" 2>/dev/null || echo unknown)"
+              [ "$state" = "healthy" ] && break
+              sleep 2
+            done
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$(docker compose ps -q "$service")" 2>/dev/null)" = "healthy" ] \
+              || fail "$service"
+          done
+
+          echo "all dependencies are ready"
+
+      # The same forward-only runner the deployment's migrate image entrypoints.
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://postgres:tech_office_password@localhost:15432/tech_office_db?sslmode=disable
+        run: backend/scripts/migrate.sh up
+
+      # The integration package finds this key by walking up from its working directory
+      # (helper_test.go findJWTKey), and it is gitignored, so it has to be made here.
+      - name: Generate the development JWT key
+        working-directory: backend
+        run: go run ./cmd tools keygen
+
+      # APP_ENV=development is what makes the production safety gate log warnings instead
+      # of refusing to start (feature 060). PUBLIC_LIVEKIT_URL is pinned rather than
+      # derived from the host's LAN IP the way backend/scripts/dev/voice-env.sh does it,
+      # because the tests assert on the exact URL the server hands to clients and both
+      # sides here are on the runner's loopback.
+      - name: Start the backend
+        working-directory: backend
+        env:
+          APP_ENV: development
+          DATABASE_URL: postgres://postgres:tech_office_password@localhost:15432/tech_office_db?sslmode=disable
+          FLOW_SHARD_COUNT: "1"
+          JWT_PRIVATE_KEY_PATH: .dev-keys/jwt-private.pem
+          WEBAPP_URL: http://localhost:13000
+          LIVEKIT_URL: ws://localhost:7880
+          PUBLIC_LIVEKIT_URL: ws://127.0.0.1:7880
+          LIVEKIT_API_KEY: devkey
+          LIVEKIT_API_SECRET: devsecretdevsecretdevsecretdevsecret
+          R2_ACCESS_KEY_ID: minioadmin
+          R2_SECRET_ACCESS_KEY: minioadmin
+          R2_BUCKET_NAME: tech-office
+          R2_ENDPOINT: http://localhost:9000
+          CLAMAV_HOST: localhost
+          CLAMAV_PORT: "3310"
+          GOTENBERG_URL: http://localhost:18081
+        run: |
+          # Built rather than `go run`, so that the process this step leaves behind is the
+          # server itself and not a compiler wrapper around it, and nohup'd so that the
+          # step's shell exiting does not take it down with a SIGHUP.
+          go build -o "${RUNNER_TEMP}/tech-office" ./cmd
+          nohup "${RUNNER_TEMP}/tech-office" server >"${RUNNER_TEMP}/backend.log" 2>&1 &
+          echo $! >"${RUNNER_TEMP}/backend.pid"
+          for _ in $(seq 1 90); do
+            if curl -sf -o /dev/null --max-time 3 http://localhost:18080/healthz; then
+              echo "backend is up"
+              exit 0
+            fi
+            # A crash on startup — a missing setting, an unmigrated schema — should be
+            # reported as itself rather than as ninety failed curls.
+            if ! kill -0 "$(cat "${RUNNER_TEMP}/backend.pid")" 2>/dev/null; then
+              echo "backend exited during startup" >&2
+              cat "${RUNNER_TEMP}/backend.log"
+              exit 1
+            fi
+            sleep 2
+          done
+          echo "backend did not become healthy" >&2
+          cat "${RUNNER_TEMP}/backend.log"
+          exit 1
+
+      - name: Run the integration suite
+        working-directory: backend
+        env:
+          DATABASE_URL: postgres://postgres:tech_office_password@localhost:15432/tech_office_db?sslmode=disable
+          TECH_OFFICE_PG_PORT: "15432"
+          LIVEKIT_URL: ws://localhost:7880
+          PUBLIC_LIVEKIT_URL: ws://127.0.0.1:7880
+          LIVEKIT_API_KEY: devkey
+          LIVEKIT_API_SECRET: devsecretdevsecretdevsecretdevsecret
+          R2_ACCESS_KEY_ID: minioadmin
+          R2_SECRET_ACCESS_KEY: minioadmin
+          R2_BUCKET_NAME: tech-office
+          R2_ENDPOINT: http://localhost:9000
+        # -parallel 8 is the value the Makefile settled on by measurement; the floor is
+        # the slowest single test (a presence test that waits out two real 20s ping
+        # intervals), not the queue, so a larger number does not help.
+        run: go test -count=1 -parallel 8 -timeout 900s ./integration/...
+
+      # A failing assertion is usually explained by a line in the server's log, and the
+      # log lives in a file no one can reach once the runner is gone.
+      - name: Backend log
+        if: failure()
+        run: cat "${RUNNER_TEMP}/backend.log"
+
+      - name: Dependency logs
+        if: failure()
+        working-directory: backend
+        run: docker compose logs --tail=200

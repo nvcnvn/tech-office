@@ -362,7 +362,7 @@ voice-dev-infra-up:
 	@echo "Starting local voice infra..."
 	@eval "$$(bash backend/scripts/dev/voice-env.sh)"; \
 		echo "  PUBLIC_LIVEKIT_URL=$$PUBLIC_LIVEKIT_URL"; \
-		cd backend && docker compose up -d postgres livekit clamav gotenberg
+		cd backend && docker compose up -d postgres livekit clamav gotenberg minio minio-init
 
 .PHONY: voice-dev-backend
 voice-dev-backend:
@@ -374,7 +374,7 @@ voice-dev-backend:
 .PHONY: infra-up
 infra-up:
 	@echo "Starting PostgreSQL + supporting services..."
-	cd backend && docker compose up -d postgres clamav gotenberg
+	cd backend && docker compose up -d postgres clamav gotenberg minio minio-init
 
 .PHONY: infra-down
 infra-down:

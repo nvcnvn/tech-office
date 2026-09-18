@@ -10,7 +10,7 @@ it in the same pull request as your change.
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| Go | 1.25.0 | Pinned in `go.work` |
+| Go | 1.27.0 | Pinned in `go.work`, which is also what CI reads |
 | Node.js | 20 or newer | |
 | pnpm | 10.15.1 | Pinned via `packageManager` in `frontend/package.json`; `corepack enable` picks it up |
 | Docker | any recent | Runs PostgreSQL and the other backend dependencies |
@@ -49,16 +49,47 @@ That keeps rebuilds fast and debuggers attachable.
 > for local development: they run prebuilt images, hide the backend behind Traefik on
 > `*.localhost`, and occupy host ports that the dev setup needs.
 
-### 1. Start the dependencies
+### 1. Create the backend's environment file
+
+```sh
+cp backend/.env.example backend/.env
+```
+
+The defaults in it point at the services `make infra-up` starts. The four `R2_*` values
+matter most: the backend refuses to start without them, and the example file points them
+at the local MinIO rather than at Cloudflare R2.
+
+### 2. Start the dependencies
 
 ```sh
 make infra-up
 ```
 
-This starts PostgreSQL (host port **15432**), clamav and gotenberg from
-`backend/docker-compose.yml`. `make infra-down` stops them again.
+This starts PostgreSQL (host port **15432**), clamav, gotenberg and MinIO (S3 API on
+**9000**, console on **9001**, credentials `minioadmin` / `minioadmin`) from
+`backend/docker-compose.yml`, and creates the `tech-office` bucket. `make infra-down`
+stops them again.
 
-### 2. Start the backend
+### 3. Apply the database migrations
+
+```sh
+DATABASE_URL='postgres://postgres:tech_office_password@localhost:15432/tech_office_db?sslmode=disable' \
+  backend/scripts/migrate.sh up
+```
+
+The runner is forward-only; `backend/scripts/migrate.sh status` prints where you are.
+
+### 4. Generate the development signing key
+
+```sh
+cd backend && go run ./cmd tools keygen
+```
+
+This writes `backend/.dev-keys/jwt-private.pem`, which is git-ignored and which both the
+server and the integration suite look for. Skip it and the server mints an ephemeral key
+that no restart survives.
+
+### 5. Start the backend
 
 ```sh
 make voice-dev-backend
@@ -73,14 +104,14 @@ curl http://localhost:18080/healthz
 If you prefer live reload, [`air`](https://github.com/air-verse/air) works too — it
 serves the same port.
 
-### 3. Start the web client
+### 6. Start the web client
 
 ```sh
 cd frontend && pnpm install
 pnpm --filter web dev
 ```
 
-### 4. Verify everything is up
+### 7. Verify everything is up
 
 ```sh
 make check-servers
@@ -173,6 +204,30 @@ it reads the generated schema snapshot — so after writing a migration, run
 
 `backend/database/scripts/schema.sql` is generated from the forward-only migrations in
 `backend/database/migrations/`. Never hand-edit it.
+
+## What CI runs
+
+`.github/workflows/checks.yml` runs on every pull request against `main` and on every
+push to `main`:
+
+| Job | What it does | Roughly |
+| --- | --- | --- |
+| Tracked files audit | `make check-tracked-files` — no large or binary files entering history | seconds |
+| Backend static checks | `go build`, `go vet`, the non-integration Go tests, `make lint-tenancy` | 1–2 min |
+| Mobile typecheck | `pnpm run typecheck:mobile` | 2–3 min |
+| Backend integration suite | the whole local stack in Docker, then `go test ./integration/...` | 15–30 min |
+
+The integration job reproduces the local setup above step for step — same compose file,
+same migration runner, same server started from source — so a CI pass and a local pass
+mean the same thing.
+
+Two gates are deliberately *not* in CI yet. The web E2E suite drives a Next.js dev server
+that compiles routes on demand, which is minutes of compilation before the first
+assertion and still loses the occasional race with the compiler. `pnpm lint` fails with
+184 pre-existing errors (drift D67). Both are tracked in `docs/domain/README.md`.
+
+Images are published by `.github/workflows/publish-images.yml`, which runs only on a
+`v*` tag (or a manual dispatch) — not on pull requests.
 
 ## Before opening a pull request
 
