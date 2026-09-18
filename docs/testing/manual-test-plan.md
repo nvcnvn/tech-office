@@ -362,8 +362,8 @@ Not everything above needs running every time. For a release:
 
 Known gates that are **not** green at HEAD and why are listed in `docs/domain/platform.md`
 under *Testing* and in the drift register — check there before treating a red run as a
-regression. `make check-tracked-files` and `pnpm lint` are both red for pre-existing
-reasons (D82, D67).
+regression. `pnpm lint` is red for pre-existing reasons (D67). `make check-tracked-files`, the Go
+checks and the backend integration suite are green and run in CI.
 
 ## Keeping this current
 
